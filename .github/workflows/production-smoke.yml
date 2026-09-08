@@ -1,0 +1,94 @@
+name: PlaceAI Production Smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/production-smoke.yml"
+      - "MANIFEST.sha256"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: placeai-production-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Verify production root and database health
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check production deployment
+        env:
+          PLACEAI_PRODUCTION_URL: https://placeai-rxpp-git-main-skj1200519-gmailcoms-projects.vercel.app
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${PLACEAI_PRODUCTION_URL%/}"
+          root_body="$(mktemp)"
+          health_body="$(mktemp)"
+
+          echo "Checking ${base}"
+          root_code="$(curl --location --silent --show-error \
+            --connect-timeout 10 --max-time 20 \
+            --output "${root_body}" --write-out '%{http_code}' \
+            "${base}/" || true)"
+          echo "Root HTTP status: ${root_code}"
+          if [[ "${root_code}" != "200" ]]; then
+            echo "::error::PlaceAI production root returned HTTP ${root_code}"
+            sed -n '1,40p' "${root_body}" || true
+            exit 1
+          fi
+
+          # A Git push and the Vercel production promotion can race. Poll /health
+          # long enough for the main-branch alias to move to the new deployment.
+          for attempt in $(seq 1 24); do
+            health_code="$(curl --location --silent --show-error \
+              --connect-timeout 10 --max-time 20 \
+              --output "${health_body}" --write-out '%{http_code}' \
+              "${base}/health" || true)"
+            echo "Health attempt ${attempt}/24: HTTP ${health_code}"
+
+            if [[ "${health_code}" == "200" ]]; then
+              if python - "${health_body}" <<'PY'
+          import json
+          import sys
+
+          path = sys.argv[1]
+          with open(path, "r", encoding="utf-8") as handle:
+              payload = json.load(handle)
+
+          expected = {
+              "status": "healthy",
+              "service": "PlaceAI",
+              "version": "3.1.3",
+              "database": "ok",
+          }
+          missing = {
+              key: (payload.get(key), value)
+              for key, value in expected.items()
+              if payload.get(key) != value
+          }
+          if missing:
+              raise SystemExit(f"Unexpected health payload: {payload!r}; mismatches={missing!r}")
+          print("Verified health payload:", payload)
+          PY
+              then
+                exit 0
+              fi
+            fi
+
+            if [[ "${attempt}" -lt 24 ]]; then
+              sleep 10
+            fi
+          done
+
+          echo "::error::PlaceAI production /health did not become healthy"
+          echo "Last response:"
+          sed -n '1,80p' "${health_body}" || true
+          exit 1
