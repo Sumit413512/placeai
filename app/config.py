@@ -31,7 +31,13 @@ class Settings:
             default_database_url = f"sqlite:///{temp_database_path}"
         else:
             default_database_url = "sqlite:///./placeai.db"
-        self.database_url = os.getenv("DATABASE_URL", default_database_url)
+        database_url = os.getenv("DATABASE_URL", default_database_url).strip()
+        # Supabase and most Postgres dashboards emit postgresql:// URLs. PlaceAI
+        # ships psycopg3, so normalize the generic scheme to SQLAlchemy's psycopg3
+        # dialect instead of accidentally requiring the legacy psycopg2 driver.
+        if database_url.startswith("postgresql://"):
+            database_url = "postgresql+psycopg://" + database_url[len("postgresql://") :]
+        self.database_url = database_url
         self.jwt_secret_key = os.getenv("JWT_SECRET_KEY", "dev-access-secret-change-me")
         self.jwt_refresh_secret_key = os.getenv("JWT_REFRESH_SECRET_KEY", "dev-refresh-secret-change-me")
         self.access_token_minutes = int(os.getenv("ACCESS_TOKEN_MINUTES", "30"))
@@ -75,8 +81,8 @@ class Settings:
                 raise RuntimeError("JWT_REFRESH_SECRET_KEY must be a strong production secret (32+ chars).")
             if self.jwt_secret_key == self.jwt_refresh_secret_key:
                 raise RuntimeError("JWT access and refresh secrets must be different.")
-            if self.database_url.startswith("sqlite") or not self.database_url.startswith(("postgresql://", "postgresql+psycopg://")):
-                raise RuntimeError("Production requires a persistent PostgreSQL DATABASE_URL; SQLite is development-only.")
+            if self.database_url.startswith("sqlite") or not self.database_url.startswith("postgresql+psycopg://"):
+                raise RuntimeError("Production requires a persistent PostgreSQL DATABASE_URL using psycopg3; SQLite is development-only.")
             if self.auto_create_schema:
                 raise RuntimeError("AUTO_CREATE_SCHEMA must be false in production; use reviewed migrations instead.")
             if not self.base_url.startswith("https://"):

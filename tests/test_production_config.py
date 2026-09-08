@@ -5,8 +5,10 @@ import subprocess
 import sys
 
 import pytest
+from sqlalchemy.pool import NullPool
 
 from app.config import Settings
+from app.database import build_engine_kwargs
 
 
 def test_vercel_defaults_to_production_and_fails_closed(monkeypatch):
@@ -81,6 +83,36 @@ def test_vercel_framework_discovery_can_import_without_runtime_secrets():
 
     assert result.returncode == 0, result.stderr
     assert "PlaceAI API" in result.stdout
+
+
+def test_supabase_postgresql_url_is_normalized_to_psycopg3(monkeypatch):
+    monkeypatch.delenv("VERCEL", raising=False)
+    monkeypatch.delenv("VERCEL_ENV", raising=False)
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://postgres.example:placeholder@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres",
+    )
+
+    settings = Settings()
+
+    assert settings.database_url.startswith("postgresql+psycopg://")
+    assert "pooler.supabase.com:6543/postgres" in settings.database_url
+
+
+def test_vercel_postgres_disables_prepared_statements_and_local_pool(monkeypatch):
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("VERCEL_ENV", "preview")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://postgres.example:placeholder@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres",
+    )
+
+    settings = Settings()
+    kwargs = build_engine_kwargs(settings)
+
+    assert kwargs["poolclass"] is NullPool
+    assert kwargs["connect_args"]["prepare_threshold"] is None
+    assert kwargs["pool_pre_ping"] is True
 
 
 def test_local_default_remains_development(monkeypatch):
