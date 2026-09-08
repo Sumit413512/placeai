@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 import os
+import tempfile
 
 from dotenv import load_dotenv
 
@@ -14,15 +15,18 @@ class Settings:
         self.app_name = os.getenv("APP_NAME", "PlaceAI")
         self.environment = os.getenv("ENVIRONMENT", "development").lower()
         self.running_on_vercel = bool(os.getenv("VERCEL"))
-        default_database_url = "sqlite:////tmp/placeai.db" if self.running_on_vercel else "sqlite:///./placeai.db"
+        if self.running_on_vercel:
+            temp_database_path = Path(tempfile.gettempdir()) / "placeai.db"
+            default_database_url = f"sqlite:///{temp_database_path}"
+        else:
+            default_database_url = "sqlite:///./placeai.db"
         self.database_url = os.getenv("DATABASE_URL", default_database_url)
         self.jwt_secret_key = os.getenv("JWT_SECRET_KEY", "dev-access-secret-change-me")
         self.jwt_refresh_secret_key = os.getenv("JWT_REFRESH_SECRET_KEY", "dev-refresh-secret-change-me")
         self.access_token_minutes = int(os.getenv("ACCESS_TOKEN_MINUTES", "30"))
         self.refresh_token_days = int(os.getenv("REFRESH_TOKEN_DAYS", "14"))
         self.allowed_origins = [x.strip() for x in os.getenv("ALLOWED_ORIGINS", "http://localhost:8000").split(",") if x.strip()]
-        default_upload_dir = "/tmp/placeai/uploads/resumes" if self.running_on_vercel else "uploads/resumes"
-        self.upload_dir = Path(os.getenv("UPLOAD_DIR", default_upload_dir))
+        self.upload_dir = Path(os.getenv("UPLOAD_DIR", "uploads/resumes"))
         self.max_resume_mb = int(os.getenv("MAX_RESUME_MB", "5"))
         self.public_recruiter_signup = os.getenv("PUBLIC_RECRUITER_SIGNUP", "false").lower() == "true"
         self.allow_talent_pool_search = os.getenv("ALLOW_TALENT_POOL_SEARCH", "false").lower() == "true"
