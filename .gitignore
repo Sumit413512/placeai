@@ -1,0 +1,24 @@
+.env
+*.db
+*.sqlite
+*.sqlite3
+*.log
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+uploads/*
+!uploads/resumes/
+uploads/resumes/*
+!uploads/resumes/.gitkeep
+.DS_Store
+.vscode/
+.idea/
+
+# Vercel local project metadata
+.vercel/

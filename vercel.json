@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "app/app.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{tests/**,docs/**,scripts/**,alembic/**,**/__pycache__/**,**/*.pyc,PlaceAI_API.postman_collection.json}"
+    }
+  }
+}

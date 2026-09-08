@@ -1,0 +1,14 @@
+[tool.fastapi]
+entrypoint = "app.app:app"
+
+[tool.vercel]
+entrypoint = "app.app:app"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"

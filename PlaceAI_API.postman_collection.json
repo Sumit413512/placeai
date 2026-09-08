@@ -1,0 +1,2132 @@
+{
+  "info": {
+    "name": "PlaceAI – Student Placement Platform",
+    "_postman_id": "placeai-placement-v1",
+    "description": "Complete API collection for the FastAPI Student Placement & Recruitment Platform.\n\n## Quick Start\n1. Run the server: `cd FastAPI-JWT-Authentication && .venv/bin/uvicorn app.app:app --reload`\n2. Import this collection into Postman\n3. Run **Auth / Signup (Student)** → copy `access_token` → set the collection variable `student_token`\n4. Run **Auth / Signup (Recruiter)** → copy `access_token` → set `recruiter_token`\n5. Use the pre-built flows in order within each folder\n\n## Variables\n| Variable | Description |\n|---|---|\n| `base_url` | API root (default: http://localhost:8000) |\n| `student_token` | JWT for a student user |\n| `recruiter_token` | JWT for a recruiter user |\n| `job_id` | ID of a created job (fill after POST /jobs) |\n| `application_id` | ID of an application (fill after POST apply) |\n| `student_profile_id` | Student profile ID from GET /students/profile |",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "student_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "recruiter_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "job_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "application_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "student_profile_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tpo_token",
+      "value": ""
+    },
+    {
+      "key": "platform_token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "🔑 Auth",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "response": [],
+          "_description": "Verify the API is running before anything else."
+        },
+        {
+          "name": "Signup — Student",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.id) {",
+                  "  pm.test('Student signup successful', () => pm.expect(pm.response.code).to.equal(201));",
+                  "  pm.collectionVariables.set('student_email', r.email);",
+                  "  console.log('✅ Student created:', r.email, '| role:', r.role);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"student_demo\",\n  \"email\": \"student@demo.com\",\n  \"password\": \"Password123!\",\n  \"role\": \"student\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/signup",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "signup"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Signup — Recruiter",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.id) {",
+                  "  pm.test('Recruiter signup successful', () => pm.expect(pm.response.code).to.equal(201));",
+                  "  console.log('✅ Recruiter created:', r.email, '| role:', r.role);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"recruiter_demo\",\n  \"email\": \"recruiter@demo.com\",\n  \"password\": \"Password123!\",\n  \"role\": \"recruiter\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/signup",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "signup"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login — Student  ✦ sets student_token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test('Login successful', () => pm.expect(pm.response.code).to.equal(200));",
+                  "if (r.access_token) {",
+                  "  pm.collectionVariables.set('student_token', r.access_token);",
+                  "  pm.collectionVariables.set('student_refresh_token', r.refresh_token);",
+                  "  console.log('✅ student_token set');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "student@demo.com"
+                },
+                {
+                  "key": "password",
+                  "value": "Password123!"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "_description": "NOTE: /auth/login uses application/x-www-form-urlencoded (OAuth2 standard). The 'username' field holds the email.",
+          "response": []
+        },
+        {
+          "name": "Login — Recruiter  ✦ sets recruiter_token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test('Login successful', () => pm.expect(pm.response.code).to.equal(200));",
+                  "if (r.access_token) {",
+                  "  pm.collectionVariables.set('recruiter_token', r.access_token);",
+                  "  pm.collectionVariables.set('recruiter_refresh_token', r.refresh_token);",
+                  "  console.log('✅ recruiter_token set');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "recruiter@demo.com"
+                },
+                {
+                  "key": "password",
+                  "value": "Password123!"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token (Student)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{student_refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User (Student)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User (Recruiter)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Google OAuth Sign-In",
+          "_description": "Send the ID token from Google Identity Services. The role field only matters for new users.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"credential\": \"<PASTE_GOOGLE_ID_TOKEN_HERE>\",\n  \"role\": \"student\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/google",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "google"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🎓 Students",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.id) {",
+                  "  pm.collectionVariables.set('student_profile_id', r.id);",
+                  "  console.log('student_profile_id set:', r.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/students/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "students",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update My Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Demo Student\",\n  \"phone\": \"+91 98765 43210\",\n  \"college\": \"IIT Bombay\",\n  \"degree\": \"B.Tech\",\n  \"branch\": \"Computer Science\",\n  \"graduation_year\": 2025,\n  \"cgpa\": 8.7,\n  \"bio\": \"Passionate about backend development and machine learning.\",\n  \"skills\": [\"Python\", \"FastAPI\", \"React\", \"SQL\", \"Docker\"],\n  \"desired_roles\": [\"Backend Developer\", \"Full Stack Developer\"],\n  \"linkedin_url\": \"https://linkedin.com/in/demostudent\",\n  \"github_url\": \"https://github.com/demostudent\",\n  \"portfolio_url\": \"https://demostudent.dev\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/students/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "students",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Resume (PDF)",
+          "_description": "Select a PDF file in the Body → form-data → key 'file' (type: File).",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/your/resume.pdf",
+                  "description": "Select your PDF resume file here"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/students/resume",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "students",
+                "resume"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Resume Info",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/students/resume",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "students",
+                "resume"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Browse Jobs (all)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/students/jobs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "students",
+                "jobs"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Browse Jobs (with filters)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/students/jobs?search=backend&job_type=Full-time&skills=Python,FastAPI",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "students",
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "backend"
+                },
+                {
+                  "key": "job_type",
+                  "value": "Full-time"
+                },
+                {
+                  "key": "skills",
+                  "value": "Python,FastAPI"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Apply to a Job  ✦ needs job_id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.id) {",
+                  "  pm.collectionVariables.set('application_id', r.id);",
+                  "  console.log('application_id set:', r.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cover_note\": \"I am very excited about this opportunity. I have 2 years of experience with Python and FastAPI, and I believe my skills closely match your requirements.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/students/jobs/{{job_id}}/apply",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "students",
+                "jobs",
+                "{{job_id}}",
+                "apply"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "My Applications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/students/applications",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "students",
+                "applications"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🏢 Recruiters",
+      "item": [
+        {
+          "name": "Get Recruiter Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/recruiters/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "recruiters",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Recruiter Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Jane Recruiter\",\n  \"company_name\": \"TechCorp India Pvt Ltd\",\n  \"company_website\": \"https://techcorp.in\",\n  \"industry\": \"Technology\",\n  \"designation\": \"HR Manager\",\n  \"phone\": \"+91 91234 56789\",\n  \"linkedin_url\": \"https://linkedin.com/in/janerecruiter\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/recruiters/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "recruiters",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search Students (all)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/recruiters/students/search",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "recruiters",
+                "students",
+                "search"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search Students (filtered)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/recruiters/students/search?skills=Python,React&min_cgpa=7.5&graduation_year=2025&sort_by=cgpa",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "recruiters",
+                "students",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "skills",
+                  "value": "Python,React"
+                },
+                {
+                  "key": "min_cgpa",
+                  "value": "7.5"
+                },
+                {
+                  "key": "graduation_year",
+                  "value": "2025"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "cgpa"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Student Profile by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/recruiters/students/{{student_profile_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "recruiters",
+                "students",
+                "{{student_profile_id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "💼 Jobs",
+      "item": [
+        {
+          "name": "List All Active Jobs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/jobs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jobs"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Jobs (search + filter)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/jobs?search=backend&job_type=Full-time",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "backend"
+                },
+                {
+                  "key": "job_type",
+                  "value": "Full-time"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "My Job Listings (Recruiter)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/jobs/my/listings",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jobs",
+                "my",
+                "listings"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Job Posting  ✦ sets job_id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "pm.test('Job created (201)', () => pm.expect(pm.response.code).to.equal(201));",
+                  "if (r.id) {",
+                  "  pm.collectionVariables.set('job_id', r.id);",
+                  "  console.log('✅ job_id set:', r.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Backend Engineer – Python & FastAPI\",\n  \"description\": \"We are looking for a skilled Backend Engineer to design and implement scalable APIs using Python and FastAPI. You will work closely with the product team to build reliable backend services.\",\n  \"location\": \"Bangalore / Remote\",\n  \"job_type\": \"Full-time\",\n  \"salary_range\": \"₹8–15 LPA\",\n  \"experience_required\": \"0–2 years\",\n  \"required_skills\": [\"Python\", \"FastAPI\", \"SQL\", \"REST APIs\", \"Docker\"],\n  \"preferred_roles\": [\"Backend Developer\", \"API Developer\"],\n  \"deadline\": \"2025-08-31\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/jobs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jobs"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Single Job  ✦ needs job_id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/jobs/{{job_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jobs",
+                "{{job_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Job  ✦ needs job_id",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Senior Backend Engineer – Python & FastAPI\",\n  \"salary_range\": \"₹12–20 LPA\",\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/jobs/{{job_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jobs",
+                "{{job_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Toggle Job Active/Inactive",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/jobs/{{job_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jobs",
+                "{{job_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Applicants for Job  ✦ Recruiter",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/jobs/{{job_id}}/applicants",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jobs",
+                "{{job_id}}",
+                "applicants"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Applicants (filter by status)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/jobs/{{job_id}}/applicants?status_filter=applied",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jobs",
+                "{{job_id}}",
+                "applicants"
+              ],
+              "query": [
+                {
+                  "key": "status_filter",
+                  "value": "applied"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Application Status  ✦ Recruiter",
+          "_description": "Values: applied | shortlisted | rejected | hired",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"shortlisted\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/jobs/{{job_id}}/applicants/{{application_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jobs",
+                "{{job_id}}",
+                "applicants",
+                "{{application_id}}",
+                "status"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Job  ✦ needs job_id",
+          "_description": "Returns 204 No Content on success.",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/jobs/{{job_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jobs",
+                "{{job_id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🤖 AI Features",
+      "item": [
+        {
+          "name": "Parse Resume (Student)  ✦ upload PDF first",
+          "_description": "Sends uploaded resume to Gemini AI. Extracts skills, experience, education, certifications. Auto-updates student skills.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/ai/parse-resume",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "parse-resume"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Match Jobs (Student)  ✦ needs skills on profile",
+          "_description": "AI recommends best-fit active jobs for the student. Needs skills on profile or a parsed resume.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/ai/match-jobs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "match-jobs"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Skill Gap Analysis  ✦ needs job_id",
+          "_description": "Compares student skills vs job requirements. Returns matching/missing skills + learning resources.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/ai/skill-gap/{{job_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "skill-gap",
+                "{{job_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Generate Professional Summary (Student)",
+          "_description": "Generates a polished 3-4 sentence summary of the student for recruiters. Saves to profile.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/ai/generate-summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "generate-summary"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "AI Rank Candidates  ✦ Recruiter, needs job_id",
+          "_description": "Scores all applicants for a job 0-100 using Gemini. Saves scores to DB.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/ai/rank-candidates/{{job_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "rank-candidates",
+                "{{job_id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔥 Full E2E Flow (run in order)",
+      "_description": "Run these requests in order to test the complete student→recruiter flow.",
+      "item": [
+        {
+          "name": "Step 1 — Signup Student",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"e2e_student\",\n  \"email\": \"e2e_student@test.com\",\n  \"password\": \"Test@1234\",\n  \"role\": \"student\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/signup",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "signup"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 2 — Signup Recruiter",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"e2e_recruiter\",\n  \"email\": \"e2e_recruiter@test.com\",\n  \"password\": \"Test@1234\",\n  \"role\": \"recruiter\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/signup",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "signup"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 3 — Login Student (auto-saves token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.access_token) pm.collectionVariables.set('student_token', r.access_token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "e2e_student@test.com"
+                },
+                {
+                  "key": "password",
+                  "value": "Test@1234"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 4 — Login Recruiter (auto-saves token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.access_token) pm.collectionVariables.set('recruiter_token', r.access_token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "e2e_recruiter@test.com"
+                },
+                {
+                  "key": "password",
+                  "value": "Test@1234"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 5 — Update Student Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"E2E Student\",\n  \"college\": \"IIT Madras\",\n  \"degree\": \"B.Tech\",\n  \"branch\": \"CS\",\n  \"graduation_year\": 2025,\n  \"cgpa\": 9.1,\n  \"skills\": [\"Python\", \"FastAPI\", \"React\", \"SQL\"],\n  \"desired_roles\": [\"Backend Developer\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/students/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "students",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 6 — Recruiter: Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"E2E Recruiter\",\n  \"company_name\": \"E2E Corp\",\n  \"industry\": \"Technology\",\n  \"designation\": \"HR Head\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/recruiters/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "recruiters",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 7 — Recruiter: Post Job (auto-saves job_id)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.id) {",
+                  "  pm.collectionVariables.set('job_id', r.id);",
+                  "  console.log('job_id:', r.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Python Developer\",\n  \"description\": \"Build scalable backend services.\",\n  \"location\": \"Remote\",\n  \"job_type\": \"Full-time\",\n  \"salary_range\": \"₹8-12 LPA\",\n  \"experience_required\": \"0-2 years\",\n  \"required_skills\": [\"Python\", \"FastAPI\", \"SQL\"],\n  \"preferred_roles\": [\"Backend Developer\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/jobs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jobs"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 8 — Student: Browse Jobs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/students/jobs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "students",
+                "jobs"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 9 — Student: Apply to Job",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.id) pm.collectionVariables.set('application_id', r.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cover_note\": \"I am a great fit for this role!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/students/jobs/{{job_id}}/apply",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "students",
+                "jobs",
+                "{{job_id}}",
+                "apply"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 10 — Recruiter: View Applicants",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/jobs/{{job_id}}/applicants",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jobs",
+                "{{job_id}}",
+                "applicants"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 11 — Recruiter: AI Rank Candidates",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/ai/rank-candidates/{{job_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "rank-candidates",
+                "{{job_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 12 — Recruiter: Shortlist Applicant",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{recruiter_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"shortlisted\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/jobs/{{job_id}}/applicants/{{application_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jobs",
+                "{{job_id}}",
+                "applicants",
+                "{{application_id}}",
+                "status"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 13 — Student: AI Match Jobs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/ai/match-jobs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "match-jobs"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 14 — Student: Skill Gap Analysis",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/ai/skill-gap/{{job_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "skill-gap",
+                "{{job_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 15 — Student: Generate AI Summary",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/ai/generate-summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "generate-summary"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "⚠️ Error Cases",
+      "item": [
+        {
+          "name": "Duplicate Signup (expect 400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"student_demo\",\n  \"email\": \"student@demo.com\",\n  \"password\": \"anything\",\n  \"role\": \"student\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/signup",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "signup"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Wrong Password (expect 401)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "student@demo.com"
+                },
+                {
+                  "key": "password",
+                  "value": "wrongpassword"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "No Token — Protected Route (expect 401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/students/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "students",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Student accessing Recruiter route (expect 403)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/recruiters/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "recruiters",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Apply to Same Job Twice (expect 400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cover_note\": \"Applying again — should fail!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/students/jobs/{{job_id}}/apply",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "students",
+                "jobs",
+                "{{job_id}}",
+                "apply"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Job Not Found (expect 404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/jobs/nonexistent-job-id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "jobs",
+                "nonexistent-job-id"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🏫 Institution / TPO",
+      "item": [
+        {
+          "name": "Institution Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tpo_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/institutions/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "institutions",
+                "dashboard"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Students",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tpo_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/institutions/students",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "institutions",
+                "students"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Recruiters",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tpo_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/institutions/recruiters",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "institutions",
+                "recruiters"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Campus Jobs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tpo_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/institutions/jobs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "institutions",
+                "jobs"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Placement Drives",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tpo_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/institutions/drives",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "institutions",
+                "drives"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Institution Audit Log",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tpo_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/institutions/audit",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "institutions",
+                "audit"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Applications / Outcomes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tpo_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/institutions/applications",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "institutions",
+                "applications"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🛡️ Platform Admin",
+      "item": [
+        {
+          "name": "Platform Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/platform/overview",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "platform",
+                "overview"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Institutions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/platform/organizations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "platform",
+                "organizations"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Demo Requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/platform/demo-requests",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "platform",
+                "demo-requests"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📣 Public Sales",
+      "item": [
+        {
+          "name": "Request Product Walkthrough",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/public/demo-requests",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "public",
+                "demo-requests"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact_name\": \"Placement Officer\",\n  \"work_email\": \"placement@example.edu\",\n  \"organization_name\": \"Example Institute\",\n  \"role_title\": \"TPO\",\n  \"student_count\": 800,\n  \"message\": \"We want to modernize campus placements.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+# Local / development artifacts
+.env
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+uploads/
+tests/
+docs/
+scripts/
+alembic/
+Dockerfile
+docker-compose.yml
+PlaceAI_API.postman_collection.json
+MANIFEST.sha256
