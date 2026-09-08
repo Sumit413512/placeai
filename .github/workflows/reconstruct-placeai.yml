@@ -1,0 +1,121 @@
+name: Reconstruct PlaceAI source tree
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/reconstruct-placeai.yml'
+      - 'bundle/**'
+      - 'bundle4/**'
+      - 'bundle8/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reconstruct-placeai-source
+  cancel-in-progress: false
+
+jobs:
+  reconstruct:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout private PlaceAI repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct validated source bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          extract_bundle() {
+            local dir="$1"
+            local parts=("$dir"/part*.txt)
+            if [ ${#parts[@]} -eq 0 ]; then
+              echo "No parts found for $dir; skipping."
+              return 0
+            fi
+
+            local work="/tmp/placeai-${dir}"
+            rm -rf "$work"
+            mkdir -p "$work/extracted"
+
+            cat "${parts[@]}" | tr -d '\r\n' | base64 --decode > "$work/archive.xz"
+
+            if tar -tJf "$work/archive.xz" >/dev/null 2>&1; then
+              tar -xJf "$work/archive.xz" -C "$work/extracted"
+            else
+              xz -dc "$work/archive.xz" > "$work/payload"
+              if unzip -t "$work/payload" >/dev/null 2>&1; then
+                unzip -q "$work/payload" -d "$work/extracted"
+              else
+                echo "Unsupported reconstructed payload in $dir" >&2
+                file "$work/payload" || true
+                exit 1
+              fi
+            fi
+
+            local src="$work/extracted"
+            mapfile -t top_entries < <(find "$src" -mindepth 1 -maxdepth 1 -printf '%P\n')
+            if [ ${#top_entries[@]} -eq 1 ] && [ -d "$src/${top_entries[0]}" ]; then
+              src="$src/${top_entries[0]}"
+            fi
+
+            rsync -a --exclude='.git/' --exclude='.github/workflows/reconstruct-placeai.yml' "$src/" ./
+          }
+
+          extract_bundle bundle
+          extract_bundle bundle4
+          extract_bundle bundle8
+
+          rm -rf bundle bundle4 bundle8
+          rm -rf .pytest_cache placeai.db
+          find . -type d -name '__pycache__' -prune -exec rm -rf {} +
+          find . -type f -name '*.pyc' -delete
+          rm -rf uploads/student-documents uploads/communication-attachments uploads/offer-letters
+
+          test -f app/app.py
+          test -f requirements.txt
+          test -f vercel.json
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install verification dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements-dev.txt
+
+      - name: Verify PlaceAI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q app scripts tests
+          find . -type d -name '__pycache__' -prune -exec rm -rf {} +
+          find . -type f -name '*.pyc' -delete
+          pytest -q
+          rm -rf .pytest_cache placeai.db
+          find . -type d -name '__pycache__' -prune -exec rm -rf {} +
+          find . -type f -name '*.pyc' -delete
+          rm -rf uploads/student-documents uploads/communication-attachments uploads/offer-letters
+          python scripts/release_check.py
+
+      - name: Commit real PlaceAI source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No reconstruction changes to commit.'
+            exit 0
+          fi
+          git commit -m 'Reconstruct verified PlaceAI source tree'
+          git push origin HEAD:main
