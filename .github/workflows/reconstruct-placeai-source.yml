@@ -5,6 +5,8 @@ on:
     branches:
       - repair/placeai-v313-production-hardening
     paths:
+      - 'bundle/**'
+      - 'bundle4/**'
       - 'bundle8/**'
       - '.github/workflows/reconstruct-placeai-source.yml'
 
@@ -20,13 +22,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Reconstruct validated runtime payload
+      - name: Reconstruct newest complete PlaceAI payload
         shell: bash
         run: |
           set -euo pipefail
-          test -d bundle8
-          cat bundle8/part*.txt | tr -d '\r\n' | base64 --decode > /tmp/placeai_payload.xz
-          xz -dc /tmp/placeai_payload.xz > /tmp/placeai_payload
+          selected=''
+          for candidate in bundle8 bundle bundle4; do
+            [ -d "$candidate" ] || continue
+            cat "$candidate"/part*.txt | tr -d '\r\n' | base64 --decode > "/tmp/${candidate}.xz" || continue
+            if xz -t "/tmp/${candidate}.xz" >/dev/null 2>&1; then
+              selected="$candidate"
+              break
+            fi
+            echo "Skipping incomplete archive candidate: $candidate"
+          done
+          test -n "$selected"
+          echo "Selected complete payload: $selected"
+          xz -dc "/tmp/${selected}.xz" > /tmp/placeai_payload
+          rm -rf /tmp/placeai_extract
           mkdir -p /tmp/placeai_extract
 
           if tar -tf /tmp/placeai_payload >/dev/null 2>&1; then
@@ -34,7 +47,7 @@ jobs:
           elif python -m zipfile -t /tmp/placeai_payload >/dev/null 2>&1; then
             python -m zipfile -e /tmp/placeai_payload /tmp/placeai_extract
           else
-            echo 'Validated payload is neither tar nor zip after XZ decompression.' >&2
+            echo 'Complete XZ payload is neither tar nor zip after decompression.' >&2
             file /tmp/placeai_payload >&2 || true
             exit 1
           fi
