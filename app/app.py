@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -13,11 +14,19 @@ from app.database import Base, engine
 from app.routers import ai, auth, enterprise, institutions, jobs, platform, public, recruiters, students
 
 settings = get_settings()
-settings.validate_for_startup()
-if settings.auto_create_schema:
-    Base.metadata.create_all(bind=engine)
-if not settings.uses_database_file_storage:
-    settings.upload_dir.mkdir(parents=True, exist_ok=True)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Vercel imports the module during build/framework discovery. Keep import side effects
+    # build-safe while still failing closed when a real application instance starts.
+    settings.validate_for_startup()
+    if settings.auto_create_schema:
+        Base.metadata.create_all(bind=engine)
+    if not settings.uses_database_file_storage:
+        settings.upload_dir.mkdir(parents=True, exist_ok=True)
+    yield
+
 
 app = FastAPI(
     title=f"{settings.app_name} API",
@@ -25,6 +34,7 @@ app = FastAPI(
     version="3.1.3",
     docs_url="/docs" if not settings.is_production else "/api/docs",
     redoc_url=None,
+    lifespan=lifespan,
 )
 
 app.add_middleware(
