@@ -13,8 +13,9 @@ load_dotenv()
 class Settings:
     def __init__(self) -> None:
         self.app_name = os.getenv("APP_NAME", "PlaceAI")
-        self.environment = os.getenv("ENVIRONMENT", "development").lower()
         self.running_on_vercel = bool(os.getenv("VERCEL"))
+        default_environment = "production" if self.running_on_vercel else "development"
+        self.environment = os.getenv("ENVIRONMENT", default_environment).lower()
         if self.running_on_vercel:
             temp_database_path = Path(tempfile.gettempdir()) / "placeai.db"
             default_database_url = f"sqlite:///{temp_database_path}"
