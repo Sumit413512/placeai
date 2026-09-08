@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'placeai_v313_release.b64'
+      - 'placeai_v313_release.part*.b64'
       - '.github/workflows/publish-placeai-v313.yml'
   workflow_dispatch:
 
@@ -28,8 +28,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f placeai_v313_release.b64
-          base64 --decode placeai_v313_release.b64 > /tmp/placeai-v313.tar.xz
+          parts=(placeai_v313_release.part*.b64)
+          test ${#parts[@]} -eq 4
+          cat "${parts[@]}" | base64 --decode > /tmp/placeai-v313.tar.xz
           echo 'ba9d5fcf259f4b25c3236ca81fc2dd6a8720455cc8221bd683b40baae1e93755  /tmp/placeai-v313.tar.xz' | sha256sum -c -
           xz -t /tmp/placeai-v313.tar.xz
           rm -rf /tmp/placeai-v313
