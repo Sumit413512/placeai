@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 import os
+import tempfile
 
 from dotenv import load_dotenv
 
@@ -14,7 +15,11 @@ class Settings:
         self.app_name = os.getenv("APP_NAME", "PlaceAI")
         self.environment = os.getenv("ENVIRONMENT", "development").lower()
         self.running_on_vercel = bool(os.getenv("VERCEL"))
-        default_database_url = "sqlite:////tmp/placeai.db" if self.running_on_vercel else "sqlite:///./placeai.db"
+        if self.running_on_vercel:
+            temp_database_path = Path(tempfile.gettempdir()) / "placeai.db"
+            default_database_url = f"sqlite:///{temp_database_path}"
+        else:
+            default_database_url = "sqlite:///./placeai.db"
         self.database_url = os.getenv("DATABASE_URL", default_database_url)
         self.jwt_secret_key = os.getenv("JWT_SECRET_KEY", "dev-access-secret-change-me")
         self.jwt_refresh_secret_key = os.getenv("JWT_REFRESH_SECRET_KEY", "dev-refresh-secret-change-me")
