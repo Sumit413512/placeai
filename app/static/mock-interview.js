@@ -68,7 +68,7 @@
     state.session = data;
     $('#interview-title').textContent = `${data.job_title} mock interview`;
     $('#interview-context').textContent = `${data.company_name || 'Opportunity'} · ${data.focus} focus · ${data.questions.length} questions`;
-    $('#question-list').innerHTML = data.questions.map((q, index) => `<article class="question-card"><div class="question-meta"><span class="question-number">${index + 1}</span><span class="category">${esc(q.category || 'interview')}</span></div><h3>${esc(q.question)}</h3><label>Your answer<textarea name="answer-${q.question_id}" data-question-id="${q.question_id}" data-question="${esc(q.question)}" required maxlength="8000" placeholder="Answer as you would in the interview. Use concrete examples and explain your reasoning."></textarea></label></article>`).join('');
+    $('#question-list').innerHTML = data.questions.map((q, index) => `<article class="question-card"><div class="question-meta"><span class="question-number">${index + 1}</span><span class="category">${esc(q.category || 'interview')}</span></div><h3>${esc(q.question)}</h3><label>Your answer<textarea name="answer-${q.question_id}" data-question-id="${q.question_id}" required maxlength="8000" placeholder="Answer as you would in the interview. Use concrete examples and explain your reasoning."></textarea></label></article>`).join('');
     $('#setup-panel').classList.add('hidden');
     $('#result-panel').classList.add('hidden');
     $('#interview-panel').classList.remove('hidden');
@@ -108,16 +108,15 @@
   $('#interview-form').addEventListener('submit', async event => {
     event.preventDefault();
     const form = event.currentTarget;
-    if (!state.session) return;
+    if (!state.session?.interview_id) return;
     const answers = [...form.querySelectorAll('textarea[data-question-id]')].map(node => ({
       question_id:Number(node.dataset.questionId),
-      question:node.dataset.question,
       answer:node.value.trim()
     }));
     if (answers.some(item => !item.answer)) { toast('Answer every question before evaluation.','error'); return; }
     setBusy(form,true,'Evaluating…');
     try {
-      const result = await api('/mock-interview/evaluate',{method:'POST',body:JSON.stringify({job_id:state.session.job_id,answers})});
+      const result = await api('/mock-interview/evaluate',{method:'POST',body:JSON.stringify({interview_id:state.session.interview_id,answers})});
       renderResult(result);
     } catch (error) {
       toast(error.message,'error');
