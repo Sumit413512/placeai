@@ -30,15 +30,23 @@ jobs:
         run: |
           set -euo pipefail
           base="${PLACEAI_PRODUCTION_URL%/}"
-          root_body="$(mktemp)"
-          health_body="$(mktemp)"
+          diag_dir="${RUNNER_TEMP}/placeai-smoke"
+          mkdir -p "${diag_dir}"
+          root_body="${diag_dir}/root-body.txt"
+          health_body="${diag_dir}/health-body.txt"
+          summary="${diag_dir}/summary.txt"
+          : > "${root_body}"
+          : > "${health_body}"
+          : > "${summary}"
 
           echo "Checking ${base}"
+          echo "base=${base}" >> "${summary}"
           root_code="$(curl --location --silent --show-error \
             --connect-timeout 10 --max-time 20 \
             --output "${root_body}" --write-out '%{http_code}' \
             "${base}/" || true)"
           echo "Root HTTP status: ${root_code}"
+          echo "root_http=${root_code}" >> "${summary}"
           if [[ "${root_code}" != "200" ]]; then
             echo "::error::PlaceAI production root returned HTTP ${root_code}"
             sed -n '1,40p' "${root_body}" || true
@@ -53,6 +61,7 @@ jobs:
               --output "${health_body}" --write-out '%{http_code}' \
               "${base}/health" || true)"
             echo "Health attempt ${attempt}/24: HTTP ${health_code}"
+            echo "health_attempt_${attempt}=${health_code}" >> "${summary}"
 
             if [[ "${health_code}" == "200" ]]; then
               if python - "${health_body}" <<'PY'
@@ -79,6 +88,7 @@ jobs:
           print("Verified health payload:", payload)
           PY
               then
+                echo "health_verified=true" >> "${summary}"
                 exit 0
               fi
             fi
@@ -88,7 +98,17 @@ jobs:
             fi
           done
 
+          echo "health_verified=false" >> "${summary}"
           echo "::error::PlaceAI production /health did not become healthy"
           echo "Last response:"
           sed -n '1,80p' "${health_body}" || true
           exit 1
+
+      - name: Preserve smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: placeai-production-smoke-diagnostics
+          path: ${{ runner.temp }}/placeai-smoke
+          if-no-files-found: error
+          retention-days: 7
