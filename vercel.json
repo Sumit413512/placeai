@@ -1,8 +1,3 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "fastapi",
-  "buildCommand": null,
-  "installCommand": null,
-  "outputDirectory": null,
-  "devCommand": null
+  "$schema": "https://openapi.vercel.sh/vercel.json"
 }
