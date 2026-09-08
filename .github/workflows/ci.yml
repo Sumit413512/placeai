@@ -1,0 +1,60 @@
+name: PlaceAI CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Verify release manifest
+        run: sha256sum -c MANIFEST.sha256
+
+      - name: Compile Python
+        run: python -m compileall -q app scripts tests alembic
+
+      - name: Check frontend JavaScript
+        run: node --check app/static/app.js
+
+      - name: Critical Python static analysis
+        run: ruff check app scripts tests alembic --select E9,F63,F7,F82
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Clean test artifacts
+        run: |
+          rm -rf .pytest_cache .coverage placeai.db
+          rm -rf uploads/student-documents uploads/communication-attachments uploads/offer-letters
+          find . -type d -name '__pycache__' -prune -exec rm -rf {} +
+          find . -type f -name '*.pyc' -delete
+
+      - name: Release hygiene
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/placeai-release-check
+          mkdir -p /tmp/placeai-release-check
+          git archive HEAD | tar -x -C /tmp/placeai-release-check
+          (cd /tmp/placeai-release-check && python scripts/release_check.py)
+          git diff --check
