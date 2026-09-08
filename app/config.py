@@ -21,8 +21,7 @@ class Settings:
         self.access_token_minutes = int(os.getenv("ACCESS_TOKEN_MINUTES", "30"))
         self.refresh_token_days = int(os.getenv("REFRESH_TOKEN_DAYS", "14"))
         self.allowed_origins = [x.strip() for x in os.getenv("ALLOWED_ORIGINS", "http://localhost:8000").split(",") if x.strip()]
-        default_upload_dir = "/tmp/placeai/uploads/resumes" if self.running_on_vercel else "uploads/resumes"
-        self.upload_dir = Path(os.getenv("UPLOAD_DIR", default_upload_dir))
+        self.upload_dir = Path(os.getenv("UPLOAD_DIR", "uploads/resumes"))
         self.max_resume_mb = int(os.getenv("MAX_RESUME_MB", "5"))
         self.public_recruiter_signup = os.getenv("PUBLIC_RECRUITER_SIGNUP", "false").lower() == "true"
         self.allow_talent_pool_search = os.getenv("ALLOW_TALENT_POOL_SEARCH", "false").lower() == "true"
