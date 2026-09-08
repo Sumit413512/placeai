@@ -8,6 +8,7 @@ on:
       - 'pages/**'
       - '.nojekyll'
       - '.github/workflows/pages.yml'
+      - 'MANIFEST.sha256'
   push:
     branches: [main]
     paths:
@@ -15,6 +16,7 @@ on:
       - 'pages/**'
       - '.nojekyll'
       - '.github/workflows/pages.yml'
+      - 'MANIFEST.sha256'
   workflow_dispatch:
 
 permissions:
@@ -67,6 +69,24 @@ jobs:
               raise SystemExit('Capability inventory unexpectedly regressed below 50 items.')
           print('PlaceAI Pages structure verified.')
           PY
+
+      - name: Generate Pages integrity evidence
+        shell: bash
+        run: |
+          sha256sum \
+            .github/workflows/pages.yml \
+            index.html \
+            pages/assets/placeai-pages.css \
+            pages/assets/placeai-pages.js \
+            > pages-integrity.sha256
+          cat pages-integrity.sha256
+
+      - name: Upload Pages integrity evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: placeai-pages-integrity
+          path: pages-integrity.sha256
+          retention-days: 7
 
   deploy:
     name: Deploy GitHub Pages
