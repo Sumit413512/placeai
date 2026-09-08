@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'placeai_v313_release.part15.b64'
+      - '.github/workflows/publish-placeai-v313.yml'
   workflow_dispatch:
 
 permissions:
@@ -23,12 +24,56 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Repair and verify transport integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          path = Path('placeai_v313_release.part00.b64')
+          expected = 'e24de49d893fa2e5e041eaf021d7fbd4087ef368'
+          data = path.read_bytes()
+
+          def git_blob_sha(payload: bytes) -> str:
+              header = f'blob {len(payload)}\0'.encode()
+              return hashlib.sha1(header + payload).hexdigest()
+
+          current = git_blob_sha(data)
+          if current != expected:
+              if len(data) != 11767:
+                  raise SystemExit(f'Unexpected part00 length: {len(data)}')
+              alphabet = b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
+              repaired = None
+              for pos in range(len(data) + 1):
+                  left, right = data[:pos], data[pos:]
+                  for char in alphabet:
+                      candidate = left + bytes((char,)) + right
+                      if git_blob_sha(candidate) == expected:
+                          repaired = candidate
+                          print(f'Recovered missing Base64 byte at offset {pos}: {chr(char)!r}')
+                          break
+                  if repaired is not None:
+                      break
+              if repaired is None:
+                  raise SystemExit('Unable to repair part00 to its expected Git blob SHA')
+              path.write_bytes(repaired)
+              data = repaired
+
+          if git_blob_sha(data) != expected:
+              raise SystemExit('part00 integrity verification failed after repair')
+          print('part00 Git blob SHA verified:', expected)
+          PY
+
+          parts=(placeai_v313_release.part*.b64)
+          test ${#parts[@]} -eq 16
+
       - name: Verify and extract release
         shell: bash
         run: |
           set -euo pipefail
           parts=(placeai_v313_release.part*.b64)
-          test ${#parts[@]} -eq 16
           cat "${parts[@]}" | base64 --decode > /tmp/placeai-v313.tar.xz
           echo 'ba9d5fcf259f4b25c3236ca81fc2dd6a8720455cc8221bd683b40baae1e93755  /tmp/placeai-v313.tar.xz' | sha256sum -c -
           xz -t /tmp/placeai-v313.tar.xz
