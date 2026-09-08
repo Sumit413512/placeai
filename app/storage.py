@@ -28,9 +28,7 @@ _MIME_BY_EXTENSION = {
 
 
 def database_storage_enabled() -> bool:
-    # Vercel's filesystem is ephemeral. Production also defaults to durable DB storage
-    # unless the application is explicitly kept in development mode.
-    return settings.running_on_vercel or settings.is_production
+    return settings.uses_database_file_storage
 
 
 def safe_upload_filename(filename: str | None, fallback: str = "file") -> str:
