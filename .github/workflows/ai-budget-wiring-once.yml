@@ -1,0 +1,107 @@
+name: PlaceAI AI Budget Wiring Once
+
+on:
+  push:
+    branches: [hardening/ai-request-budgets]
+    paths:
+      - '.github/workflows/ai-budget-wiring-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Wire guards, verify budgets, synchronize release manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          ai = Path('app/routers/ai.py')
+          text = ai.read_text(encoding='utf-8')
+          import_anchor = 'from app.database import get_db\n'
+          guard_import = 'from app.ai_rate_limit import authenticated_ai_guard, recruiter_ai_guard, student_ai_guard\n'
+          if guard_import not in text:
+              if import_anchor not in text:
+                  raise SystemExit('AI import insertion point not found')
+              text = text.replace(import_anchor, guard_import + import_anchor, 1)
+
+          route_guards = {
+              '/parse-resume': 'student_ai_guard',
+              '/rank-candidates/{job_id}': 'recruiter_ai_guard',
+              '/match-jobs': 'student_ai_guard',
+              '/generate-summary': 'student_ai_guard',
+              '/skill-gap/{job_id}': 'student_ai_guard',
+              '/interview/questions': 'student_ai_guard',
+              '/interview/evaluate': 'student_ai_guard',
+          }
+          for route, guard in route_guards.items():
+              pattern = re.compile(r'(@router\.(?:post|get)\(\n\s*"' + re.escape(route) + r'",\n)(?!\s*dependencies=)')
+              text, count = pattern.subn(r'\1    dependencies=[Depends(' + guard + r')],\n', text, count=1)
+              if count != 1 and f'dependencies=[Depends({guard})]' not in text[text.find(f'"{route}"'):text.find(f'"{route}"') + 300]:
+                  raise SystemExit(f'Could not wire AI guard for {route}')
+
+          old_assistant = '@router.post("/assistant", summary="Role-aware PlaceAI placement assistant")'
+          new_assistant = '@router.post("/assistant", summary="Role-aware PlaceAI placement assistant", dependencies=[Depends(authenticated_ai_guard)])'
+          if old_assistant in text:
+              text = text.replace(old_assistant, new_assistant, 1)
+          elif new_assistant not in text:
+              raise SystemExit('Assistant guard insertion point not found')
+          ai.write_text(text, encoding='utf-8')
+
+          mock = Path('app/routers/mock_interview.py')
+          text = mock.read_text(encoding='utf-8')
+          import_anchor = 'from app.database import get_db\n'
+          guard_import = 'from app.ai_rate_limit import student_ai_guard\n'
+          if guard_import not in text:
+              if import_anchor not in text:
+                  raise SystemExit('Mock interview import insertion point not found')
+              text = text.replace(import_anchor, guard_import + import_anchor, 1)
+          replacements = {
+              '@router.post("/start")': '@router.post("/start", dependencies=[Depends(student_ai_guard)])',
+              '@router.post("/evaluate")': '@router.post("/evaluate", dependencies=[Depends(student_ai_guard)])',
+          }
+          for old, new in replacements.items():
+              if old in text:
+                  text = text.replace(old, new, 1)
+              elif new not in text:
+                  raise SystemExit(f'Mock interview guard insertion point not found: {old}')
+          mock.write_text(text, encoding='utf-8')
+          PY
+
+          python -m pip install -q -r requirements-dev.txt
+          python -m pytest -q tests/test_ai_rate_limits.py
+          python -m compileall -q app tests
+          node --check app/static/app.js
+          node --check app/static/mock-interview.js
+
+          git rm .github/workflows/ai-budget-wiring-once.yml
+          python - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+          import subprocess
+
+          files = subprocess.check_output(['git', 'ls-files'], text=True).splitlines()
+          files = [p for p in files if p not in {'MANIFEST.sha256', '.github/workflows/ai-budget-wiring-once.yml'}]
+          lines = []
+          for rel in sorted(files):
+              path = Path(rel)
+              if path.is_file():
+                  lines.append(f"{sha256(path.read_bytes()).hexdigest()}  {rel}")
+          Path('MANIFEST.sha256').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
+          sha256sum -c MANIFEST.sha256
+          git add app/ai_rate_limit.py app/routers/ai.py app/routers/mock_interview.py tests/test_ai_rate_limits.py MANIFEST.sha256
+          git commit -m 'Add durable AI request budgets'
+          git push origin HEAD:hardening/ai-request-budgets
