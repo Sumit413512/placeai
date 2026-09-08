@@ -1,0 +1,44 @@
+name: Vercel Production Runtime Smoke
+
+on:
+  push:
+    branches:
+      - diagnostic/vercel-runtime-smoke
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify production root and health
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://placeai-rxpp-git-main-skj1200519-gmailcoms-projects.vercel.app"
+
+          root_code=$(curl -sS -L --connect-timeout 10 --max-time 30 -o /tmp/root.html -w '%{http_code}' "$BASE/")
+          echo "ROOT_HTTP_STATUS=$root_code"
+          head -c 300 /tmp/root.html || true
+          echo
+          test "$root_code" = "200"
+
+          health_code=$(curl -sS -L --connect-timeout 10 --max-time 30 -o /tmp/health.json -w '%{http_code}' "$BASE/health")
+          echo "HEALTH_HTTP_STATUS=$health_code"
+          cat /tmp/health.json
+          echo
+          test "$health_code" = "200"
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path('/tmp/health.json').read_text())
+          assert payload.get('service') == 'PlaceAI', payload
+          assert payload.get('version') == '3.1.3', payload
+          assert payload.get('status') == 'healthy', payload
+          assert payload.get('database') == 'ok', payload
+          print('PLACEAI_RUNTIME_SMOKE=PASS')
+          PY
