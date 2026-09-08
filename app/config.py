@@ -14,7 +14,17 @@ class Settings:
     def __init__(self) -> None:
         self.app_name = os.getenv("APP_NAME", "PlaceAI")
         self.running_on_vercel = bool(os.getenv("VERCEL"))
-        default_environment = "production" if self.running_on_vercel else "development"
+        self.vercel_environment = os.getenv("VERCEL_ENV", "").strip().lower()
+        if not self.running_on_vercel:
+            default_environment = "development"
+        elif self.vercel_environment == "preview":
+            default_environment = "test"
+        elif self.vercel_environment == "development":
+            default_environment = "development"
+        else:
+            # VERCEL_ENV=production is the normal production path. Unknown/missing
+            # Vercel environment values deliberately fail closed as production.
+            default_environment = "production"
         self.environment = os.getenv("ENVIRONMENT", default_environment).lower()
         if self.running_on_vercel:
             temp_database_path = Path(tempfile.gettempdir()) / "placeai.db"
