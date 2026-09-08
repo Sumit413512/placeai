@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.ai_rate_limit import student_ai_guard
 from app.database import get_db
 from app.dependencies import require_student
 from app.models import ApprovalStatus, Job, MockInterview, StudentProfile, User
@@ -108,7 +109,7 @@ def mock_interview_jobs(
     ]
 
 
-@router.post("/start")
+@router.post("/start", dependencies=[Depends(student_ai_guard)])
 def start_mock_interview(
     body: MockInterviewStart,
     current_user: User = Depends(require_student),
@@ -189,7 +190,7 @@ Desired roles: {json.dumps(profile.desired_roles)}
     }
 
 
-@router.post("/evaluate")
+@router.post("/evaluate", dependencies=[Depends(student_ai_guard)])
 def evaluate_mock_interview(
     body: MockInterviewEvaluation,
     current_user: User = Depends(require_student),

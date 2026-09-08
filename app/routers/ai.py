@@ -20,6 +20,7 @@ try:
 except ImportError:
     pypdf = None
 
+from app.ai_rate_limit import authenticated_ai_guard, recruiter_ai_guard, student_ai_guard
 from app.database import get_db
 from app.config import get_settings
 from app.models import User, StudentProfile, Resume, Job, Application, RecruiterProfile, MockInterview, ApprovalStatus
@@ -180,6 +181,7 @@ def extract_pdf_text(data: bytes) -> str:
 # ─────────────────────────────────────────────────────────────
 @router.post(
     "/parse-resume",
+    dependencies=[Depends(student_ai_guard)],
     summary="🤖 AI: Parse your resume and extract structured data",
     response_model=AIResumeParseResult,
 )
@@ -266,6 +268,7 @@ Resume Text:
 # ─────────────────────────────────────────────────────────────
 @router.post(
     "/rank-candidates/{job_id}",
+    dependencies=[Depends(recruiter_ai_guard)],
     summary="🤖 AI: Rank all applicants for a job by match score",
     response_model=AIRankResult,
 )
@@ -379,6 +382,7 @@ Candidates:
 # ─────────────────────────────────────────────────────────────
 @router.get(
     "/match-jobs",
+    dependencies=[Depends(student_ai_guard)],
     summary="🤖 AI: Get AI-recommended jobs based on your profile",
     response_model=AIJobMatchResult,
 )
@@ -477,6 +481,7 @@ Available Jobs:
 # ─────────────────────────────────────────────────────────────
 @router.post(
     "/generate-summary",
+    dependencies=[Depends(student_ai_guard)],
     summary="🤖 AI: Generate a professional recruiter-facing summary",
     response_model=AISummaryResult,
 )
@@ -532,6 +537,7 @@ Student Details:
 # ─────────────────────────────────────────────────────────────
 @router.get(
     "/skill-gap/{job_id}",
+    dependencies=[Depends(student_ai_guard)],
     summary="🤖 AI: Identify skill gaps between you and a job requirement",
     response_model=AISkillGapResult,
 )
@@ -604,6 +610,7 @@ Job role context: {job.title}
 # ─────────────────────────────────────────────────────────────
 @router.post(
     "/interview/questions",
+    dependencies=[Depends(student_ai_guard)],
     summary="🤖 AI: Generate technical & behavioral interview questions",
     response_model=InterviewQuestionsResponse,
 )
@@ -665,6 +672,7 @@ Return ONLY a valid JSON object matching this exact structure:
 
 @router.post(
     "/interview/evaluate",
+    dependencies=[Depends(student_ai_guard)],
     summary="🤖 AI: Evaluate student answers to interview questions",
     response_model=InterviewEvaluationResponse,
 )
@@ -837,7 +845,7 @@ def get_mock_interview_details(
 # ─────────────────────────────────────────────────────────────
 # 9. Role-aware Placement Assistant
 # ─────────────────────────────────────────────────────────────
-@router.post("/assistant", summary="Role-aware PlaceAI placement assistant")
+@router.post("/assistant", summary="Role-aware PlaceAI placement assistant", dependencies=[Depends(authenticated_ai_guard)])
 def placement_assistant(
     data: __import__('app.schemas', fromlist=['AssistantQuery']).AssistantQuery,
     current_user: User = Depends(get_current_user),
