@@ -35,6 +35,7 @@ jobs:
           root_body="${diag_dir}/root-body.txt"
           health_body="${diag_dir}/health-body.txt"
           summary="${diag_dir}/summary.txt"
+          sha256sum .github/workflows/production-smoke.yml > "${diag_dir}/workflow.sha256"
           : > "${root_body}"
           : > "${health_body}"
           : > "${summary}"
