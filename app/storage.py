@@ -14,6 +14,8 @@ from app.models import StoredFile
 
 settings = get_settings()
 DB_PREFIX = "dbfile:"
+OOXML_MAX_MEMBERS = 1024
+OOXML_MAX_UNCOMPRESSED_BYTES = 64 * 1024 * 1024
 
 _MIME_BY_EXTENSION = {
     ".pdf": "application/pdf",
@@ -41,12 +43,40 @@ def trusted_mime_type(extension: str, fallback: str = "application/octet-stream"
     return _MIME_BY_EXTENSION.get(extension.lower(), fallback)
 
 
+def _validate_ooxml_archive(archive: zipfile.ZipFile, extension: str) -> None:
+    """Bound an OOXML ZIP container before CRC testing/decompression.
+
+    DOCX/XLSX are ZIP packages. Uploaded bytes are already request-size limited by
+    callers, but a small compressed archive can advertise a much larger expanded
+    payload. Inspect central-directory metadata first so `testzip()` never expands an
+    unbounded package in a serverless worker.
+    """
+    infos = archive.infolist()
+    if len(infos) > OOXML_MAX_MEMBERS:
+        raise ValueError("too many Office package members")
+    if any(info.flag_bits & 0x1 for info in infos):
+        raise ValueError("encrypted Office package members are not supported")
+
+    total_uncompressed = sum(max(0, int(info.file_size)) for info in infos)
+    if total_uncompressed > OOXML_MAX_UNCOMPRESSED_BYTES:
+        raise ValueError("Office package expands beyond the allowed size")
+
+    names = {info.filename for info in infos}
+    required = "word/document.xml" if extension == ".docx" else "xl/workbook.xml"
+    if required not in names or "[Content_Types].xml" not in names:
+        raise ValueError("missing Office package members")
+
+    bad_member = archive.testzip()
+    if bad_member is not None:
+        raise ValueError(f"Office package CRC failure: {bad_member}")
+
+
 def validate_upload_signature(data: bytes, extension: str) -> str:
     """Validate file content against its extension and return a server-trusted MIME type.
 
     This is deliberately conservative. Legacy OLE Office formats (.doc/.xls) are rejected;
-    modern Office documents must be valid ZIP containers with the expected package member.
-    Text uploads must be UTF-8 and may not contain NUL bytes.
+    modern Office documents must be bounded, valid ZIP containers with the expected
+    package member. Text uploads must be UTF-8 and may not contain NUL bytes.
     """
     ext = extension.lower()
     if ext not in _MIME_BY_EXTENSION:
@@ -66,12 +96,7 @@ def validate_upload_signature(data: bytes, extension: str) -> str:
     elif ext in {".docx", ".xlsx"}:
         try:
             with zipfile.ZipFile(io.BytesIO(data)) as archive:
-                names = set(archive.namelist())
-                # Reject malformed/ambiguous archives and require the canonical OOXML payload.
-                archive.testzip()
-                required = "word/document.xml" if ext == ".docx" else "xl/workbook.xml"
-                if required not in names or "[Content_Types].xml" not in names:
-                    raise ValueError("missing Office package members")
+                _validate_ooxml_archive(archive, ext)
         except (zipfile.BadZipFile, RuntimeError, ValueError):
             label = "Word" if ext == ".docx" else "Excel"
             raise HTTPException(status_code=400, detail=f"The uploaded file is not a valid {label} document")
