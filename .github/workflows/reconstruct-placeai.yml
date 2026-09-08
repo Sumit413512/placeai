@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   reconstruct:
-    if: ${{ github.actor != 'github-actions[bot]' }}
+    if: ${{ github.actor != 'github-actions[bot]' && github.event.repository.private == true }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout private PlaceAI repository
