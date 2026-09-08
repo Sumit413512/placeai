@@ -29,7 +29,7 @@ jobs:
         run: |
           set -euo pipefail
           parts=(placeai_v313_release.part*.b64)
-          test ${#parts[@]} -eq 4
+          test ${#parts[@]} -eq 16
           cat "${parts[@]}" | base64 --decode > /tmp/placeai-v313.tar.xz
           echo 'ba9d5fcf259f4b25c3236ca81fc2dd6a8720455cc8221bd683b40baae1e93755  /tmp/placeai-v313.tar.xz' | sha256sum -c -
           xz -t /tmp/placeai-v313.tar.xz
