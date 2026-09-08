@@ -1,10 +1,18 @@
 name: PlaceAI GitHub Pages
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'pages/**'
+      - '.nojekyll'
+      - '.github/workflows/pages.yml'
   push:
     branches: [main]
     paths:
       - 'index.html'
+      - 'pages/**'
       - '.nojekyll'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
@@ -15,11 +23,55 @@ permissions:
   id-token: write
 
 concurrency:
-  group: placeai-pages
+  group: placeai-pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  validate:
+    name: Validate public product surface
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate JavaScript syntax
+        run: node --check pages/assets/placeai-pages.js
+
+      - name: Validate Pages structure and role portals
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s index.html
+          test -s pages/assets/placeai-pages.css
+          test -s pages/assets/placeai-pages.js
+          python - <<'PY'
+          from pathlib import Path
+
+          html = Path('index.html').read_text(encoding='utf-8')
+          required = [
+              './pages/assets/placeai-pages.css',
+              './pages/assets/placeai-pages.js',
+              'data-portal-link="student"',
+              'data-portal-link="recruiter"',
+              'data-portal-link="institution"',
+              'data-portal-link="admin"',
+              'id="capabilities"',
+              'id="security"',
+          ]
+          missing = [item for item in required if item not in html]
+          if missing:
+              raise SystemExit(f'Missing required Pages elements: {missing}')
+          if '/static/app.' in html:
+              raise SystemExit('GitHub Pages must not depend on FastAPI /static assets.')
+          if html.count('class="capability"') < 50:
+              raise SystemExit('Capability inventory unexpectedly regressed below 50 items.')
+          print('PlaceAI Pages structure verified.')
+          PY
+
   deploy:
+    name: Deploy GitHub Pages
+    if: github.event_name != 'pull_request'
+    needs: validate
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -33,10 +85,13 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf _site
-          mkdir -p _site
+          mkdir -p _site/pages
           cp index.html _site/index.html
+          cp -R pages/assets _site/pages/assets
           touch _site/.nojekyll
           test -s _site/index.html
+          test -s _site/pages/assets/placeai-pages.css
+          test -s _site/pages/assets/placeai-pages.js
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
