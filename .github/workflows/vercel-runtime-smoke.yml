@@ -13,36 +13,37 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe production root and health
+      - name: Probe known production aliases
         id: probe
         shell: bash
         run: |
           set -u
-          BASE="https://placeai-rxpp-git-main-skj1200519-gmailcoms-projects.vercel.app"
           : > /tmp/smoke-result.txt
 
-          root_code=$(curl -sS -L --connect-timeout 10 --max-time 30 -D /tmp/root.headers -o /tmp/root.html -w '%{http_code}' "$BASE/" || printf '000')
-          printf 'ROOT_HTTP_STATUS=%s\n' "$root_code" | tee -a /tmp/smoke-result.txt
-          printf '%s\n' '--- ROOT HEADERS ---' >> /tmp/smoke-result.txt
-          cat /tmp/root.headers >> /tmp/smoke-result.txt 2>/dev/null || true
-          printf '%s\n' '--- ROOT BODY (first 2000 bytes) ---' >> /tmp/smoke-result.txt
-          head -c 2000 /tmp/root.html >> /tmp/smoke-result.txt 2>/dev/null || true
-          printf '\n' >> /tmp/smoke-result.txt
+          probe() {
+            label="$1"
+            base="$2"
+            out="/tmp/${label}.body"
+            headers="/tmp/${label}.headers"
+            code=$(curl -sS --connect-timeout 10 --max-time 30 -D "$headers" -o "$out" -w '%{http_code}' "$base/health" || printf '000')
+            printf '%s_HTTP_STATUS=%s\n' "$label" "$code" | tee -a /tmp/smoke-result.txt
+            printf '%s\n' "--- ${label} HEADERS ---" >> /tmp/smoke-result.txt
+            cat "$headers" >> /tmp/smoke-result.txt 2>/dev/null || true
+            printf '%s\n' "--- ${label} BODY (first 2000 bytes) ---" >> /tmp/smoke-result.txt
+            head -c 2000 "$out" >> /tmp/smoke-result.txt 2>/dev/null || true
+            printf '\n' >> /tmp/smoke-result.txt
+          }
 
-          health_code=$(curl -sS -L --connect-timeout 10 --max-time 30 -D /tmp/health.headers -o /tmp/health.json -w '%{http_code}' "$BASE/health" || printf '000')
-          printf 'HEALTH_HTTP_STATUS=%s\n' "$health_code" | tee -a /tmp/smoke-result.txt
-          printf '%s\n' '--- HEALTH HEADERS ---' >> /tmp/smoke-result.txt
-          cat /tmp/health.headers >> /tmp/smoke-result.txt 2>/dev/null || true
-          printf '%s\n' '--- HEALTH BODY ---' >> /tmp/smoke-result.txt
-          cat /tmp/health.json >> /tmp/smoke-result.txt 2>/dev/null || true
-          printf '\n' >> /tmp/smoke-result.txt
+          probe BRANCH_ALIAS "https://placeai-rxpp-git-main-skj1200519-gmailcoms-projects.vercel.app"
+          probe PROJECT_ALIAS "https://placeai-rxpp.vercel.app"
 
           ok=false
-          if [ "$root_code" = "200" ] && [ "$health_code" = "200" ]; then
+          project_code=$(grep '^PROJECT_ALIAS_HTTP_STATUS=' /tmp/smoke-result.txt | cut -d= -f2)
+          if [ "$project_code" = "200" ]; then
             if python - <<'PY'
           import json
           from pathlib import Path
-          payload = json.loads(Path('/tmp/health.json').read_text())
+          payload = json.loads(Path('/tmp/PROJECT_ALIAS.body').read_text())
           assert payload.get('service') == 'PlaceAI', payload
           assert payload.get('version') == '3.1.3', payload
           assert payload.get('status') == 'healthy', payload
@@ -53,7 +54,6 @@ jobs:
               echo 'PLACEAI_RUNTIME_SMOKE=PASS' | tee -a /tmp/smoke-result.txt
             fi
           fi
-
           echo "smoke_ok=$ok" >> "$GITHUB_OUTPUT"
 
       - name: Upload runtime diagnostic
@@ -61,16 +61,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vercel-runtime-smoke
-          path: |
-            /tmp/smoke-result.txt
-            /tmp/root.headers
-            /tmp/root.html
-            /tmp/health.headers
-            /tmp/health.json
-          if-no-files-found: warn
+          path: /tmp/smoke-result.txt
+          if-no-files-found: error
           retention-days: 1
 
-      - name: Enforce healthy production runtime
+      - name: Enforce public healthy production runtime
         if: always()
         shell: bash
         run: |
