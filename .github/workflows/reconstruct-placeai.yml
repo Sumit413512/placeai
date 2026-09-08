@@ -44,8 +44,13 @@ jobs:
             local work="/tmp/placeai-${dir}"
             rm -rf "$work"
             mkdir -p "$work/extracted"
+            : > "$work/archive.xz"
 
-            cat "${parts[@]}" | tr -d '\r\n' | base64 --decode > "$work/archive.xz"
+            # Each part is independently base64 encoded. Decode each part first,
+            # then concatenate the binary fragments in lexical part order.
+            for part in "${parts[@]}"; do
+              tr -d '\r\n' < "$part" | base64 --decode >> "$work/archive.xz"
+            done
 
             if tar -tJf "$work/archive.xz" >/dev/null 2>&1; then
               tar -xJf "$work/archive.xz" -C "$work/extracted"
