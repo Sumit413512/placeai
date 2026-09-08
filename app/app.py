@@ -11,7 +11,7 @@ from sqlalchemy import text
 
 from app.config import get_settings
 from app.database import Base, engine
-from app.routers import ai, auth, enterprise, institutions, jobs, platform, public, recruiters, students
+from app.routers import ai, auth, enterprise, institutions, jobs, mock_interview, platform, public, recruiters, students
 
 settings = get_settings()
 
@@ -79,6 +79,7 @@ app.include_router(students.router)
 app.include_router(recruiters.router)
 app.include_router(jobs.router)
 app.include_router(ai.router)
+app.include_router(mock_interview.router)
 app.include_router(institutions.router)
 app.include_router(platform.router)
 app.include_router(public.router)
@@ -92,6 +93,11 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 @app.get("/", include_in_schema=False)
 def root():
     return FileResponse(TEMPLATE_DIR / "index.html")
+
+
+@app.get("/mock-interview", include_in_schema=False)
+def mock_interview_page():
+    return FileResponse(TEMPLATE_DIR / "mock-interview.html")
 
 
 @app.get("/health", tags=["System"])
