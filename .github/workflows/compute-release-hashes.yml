@@ -1,0 +1,24 @@
+name: Compute PlaceAI Release Hashes
+
+on:
+  push:
+    branches:
+      - fix/vercel-supabase-pooler
+
+permissions:
+  contents: read
+
+jobs:
+  hashes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute changed-file hashes
+        run: |
+          sha256sum app/config.py app/database.py tests/test_production_config.py > /tmp/release-hashes.txt
+          cat /tmp/release-hashes.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-hashes
+          path: /tmp/release-hashes.txt
+          retention-days: 1
