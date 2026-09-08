@@ -118,9 +118,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Block publication on undefined names, invalid control flow, and other
-          # correctness-level findings. Formatting/style normalization is handled
-          # separately and must not prevent a tested production release.
           ruff check app scripts tests alembic --select E9,F63,F7,F82
 
       - name: Run PlaceAI automated tests
@@ -137,7 +134,7 @@ jobs:
           rm -rf uploads/student-documents uploads/communication-attachments uploads/offer-letters
           find . -type d -name '__pycache__' -prune -exec rm -rf {} +
           find . -type f -name '*.pyc' -delete
-          python scripts/release_check.py
+          (cd /tmp/placeai-v313 && python scripts/release_check.py)
           git diff --check
 
       - name: Commit canonical PlaceAI source
