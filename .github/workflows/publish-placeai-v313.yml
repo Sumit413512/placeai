@@ -4,8 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'placeai_v313_release.part*.b64'
-      - '.github/workflows/publish-placeai-v313.yml'
+      - 'placeai_v313_release.part15.b64'
   workflow_dispatch:
 
 permissions:
