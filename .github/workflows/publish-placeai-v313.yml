@@ -1,0 +1,82 @@
+name: Publish verified PlaceAI 3.1.3 source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'placeai_v313_release.b64'
+      - '.github/workflows/publish-placeai-v313.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: placeai-v313-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify and extract release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f placeai_v313_release.b64
+          base64 --decode placeai_v313_release.b64 > /tmp/placeai-v313.tar.xz
+          echo 'ba9d5fcf259f4b25c3236ca81fc2dd6a8720455cc8221bd683b40baae1e93755  /tmp/placeai-v313.tar.xz' | sha256sum -c -
+          xz -t /tmp/placeai-v313.tar.xz
+          rm -rf /tmp/placeai-v313
+          mkdir -p /tmp/placeai-v313
+          tar -xJf /tmp/placeai-v313.tar.xz -C /tmp/placeai-v313
+          test -f /tmp/placeai-v313/app/app.py
+          test -f /tmp/placeai-v313/vercel.json
+          test "$(cat /tmp/placeai-v313/VERSION)" = '3.1.3'
+
+      - name: Replace transport bundles with real source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rsync -a --delete --exclude='.git/' /tmp/placeai-v313/ ./
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install verification dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Verify release
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q app scripts tests alembic
+          node --check app/static/app.js
+          ruff check app scripts tests alembic
+          pytest -q
+          rm -rf .pytest_cache .coverage placeai.db
+          rm -rf uploads/student-documents uploads/communication-attachments uploads/offer-letters
+          find . -type d -name '__pycache__' -prune -exec rm -rf {} +
+          find . -type f -name '*.pyc' -delete
+          python scripts/release_check.py
+          sha256sum -c MANIFEST.sha256
+
+      - name: Commit canonical PlaceAI source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Publish verified PlaceAI 3.1.3 source tree'
+          git push origin HEAD:main
