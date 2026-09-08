@@ -1,0 +1,75 @@
+name: PlaceAI Mock Interview Nav Once
+
+on:
+  push:
+    branches: [feature/mock-interview-nav]
+    paths:
+      - '.github/workflows/mock-interview-nav-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Wire coach into student navigation and synchronize manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/static/app.js')
+          text = path.read_text(encoding='utf-8')
+
+          old_nav = "['Campus','offers','Offers'],['Career','readiness','Readiness score'],['Career','resume','Resume & AI']"
+          new_nav = "['Campus','offers','Offers'],['Career','readiness','Readiness score'],['Career','mock-interview','Mock interview coach'],['Career','resume','Resume & AI']"
+          if old_nav not in text:
+              raise SystemExit('Student navigation insertion point not found')
+          text = text.replace(old_nav, new_nav, 1)
+
+          old_icon = "  const navIcon = id => `<span class=\"nav-icon\">${navIcons[id] || navIcons.dashboard}</span>`;"
+          new_icon = "  navIcons['mock-interview'] = navIcons.interviews;\n" + old_icon
+          if old_icon not in text:
+              raise SystemExit('Navigation icon insertion point not found')
+          text = text.replace(old_icon, new_icon, 1)
+
+          old_navigate = "  async function navigate(view) {\n    state.view = view;\n    mountNav();"
+          new_navigate = "  async function navigate(view) {\n    if (view === 'mock-interview') { window.location.assign('/mock-interview'); return; }\n    state.view = view;\n    mountNav();"
+          if old_navigate not in text:
+              raise SystemExit('Navigate insertion point not found')
+          text = text.replace(old_navigate, new_navigate, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          node --check app/static/app.js
+          grep -q "mock-interview','Mock interview coach" app/static/app.js
+          grep -q "window.location.assign('/mock-interview')" app/static/app.js
+
+          git rm .github/workflows/mock-interview-nav-once.yml
+          python - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+          import subprocess
+
+          files = subprocess.check_output(['git', 'ls-files'], text=True).splitlines()
+          files = [p for p in files if p not in {'MANIFEST.sha256', '.github/workflows/mock-interview-nav-once.yml'}]
+          lines = []
+          for rel in sorted(files):
+              path = Path(rel)
+              if path.is_file():
+                  lines.append(f"{sha256(path.read_bytes()).hexdigest()}  {rel}")
+          Path('MANIFEST.sha256').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
+          sha256sum -c MANIFEST.sha256
+          git add app/static/app.js MANIFEST.sha256
+          git commit -m 'Expose mock interview coach in student navigation'
+          git push origin HEAD:feature/mock-interview-nav
