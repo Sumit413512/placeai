@@ -44,6 +44,7 @@
     'custom-fields':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h5"/><path d="M17 14v5M14.5 16.5h5"/></svg>',
     reports:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18H5zM8 16v-4M12 16V8M16 16v-6"/></svg>'
   };
+  navIcons['mock-interview'] = navIcons.interviews;
   const navIcon = id => `<span class="nav-icon">${navIcons[id] || navIcons.dashboard}</span>`;
 
   const state = {
@@ -116,7 +117,7 @@
 
   const navByRole = {
     student: [
-      ['Workspace','dashboard','Dashboard'],['Workspace','opportunities','Opportunities'],['Workspace','applications','Applications'],['Campus','drives','Placement drives'],['Campus','interviews','Interviews'],['Campus','offers','Offers'],['Career','readiness','Readiness score'],['Career','resume','Resume & AI'],['Career','documents','Document vault'],['Career','assistant','AI placement assistant'],['Planning','calendar','Placement calendar'],['Updates','announcements','Announcements'],['Updates','notifications','Notifications'],['Safety','incidents','Report an issue'],['Account','approvals','Profile approvals'],['Account','profile','Profile']
+      ['Workspace','dashboard','Dashboard'],['Workspace','opportunities','Opportunities'],['Workspace','applications','Applications'],['Campus','drives','Placement drives'],['Campus','interviews','Interviews'],['Campus','offers','Offers'],['Career','readiness','Readiness score'],['Career','mock-interview','Mock interview coach'],['Career','resume','Resume & AI'],['Career','documents','Document vault'],['Career','assistant','AI placement assistant'],['Planning','calendar','Placement calendar'],['Updates','announcements','Announcements'],['Updates','notifications','Notifications'],['Safety','incidents','Report an issue'],['Account','approvals','Profile approvals'],['Account','profile','Profile']
     ],
     recruiter: [
       ['Workspace','dashboard','Dashboard'],['Hiring','jobs','Jobs'],['Hiring','pipeline','Drive pipeline'],['Hiring','candidates','Candidates'],['Hiring','interviews','Interviews'],['Hiring','offers','Offers'],['Trust','verification','Company verification'],['Collaboration','communications','Placement office messages'],['Insights','analytics','Analytics'],['Insights','assistant','AI placement assistant'],['Updates','notifications','Notifications'],['Account','profile','Company profile']
@@ -248,6 +249,7 @@
   }
 
   async function navigate(view) {
+    if (view === 'mock-interview') { window.location.assign('/mock-interview'); return; }
     state.view = view;
     mountNav();
     $('#app-content').innerHTML = `<div class="loading-state"><span class="loader"></span><p>Loading workspace…</p></div>`;
