@@ -50,6 +50,10 @@ class Settings:
     def is_production(self) -> bool:
         return self.environment == "production"
 
+    @property
+    def uses_database_file_storage(self) -> bool:
+        return self.running_on_vercel or self.is_production
+
     def validate_for_startup(self) -> None:
         if self.environment not in {"development", "test", "production"}:
             raise RuntimeError("ENVIRONMENT must be development, test, or production.")

@@ -16,7 +16,8 @@ settings = get_settings()
 settings.validate_for_startup()
 if settings.auto_create_schema:
     Base.metadata.create_all(bind=engine)
-settings.upload_dir.mkdir(parents=True, exist_ok=True)
+if not settings.uses_database_file_storage:
+    settings.upload_dir.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(
     title=f"{settings.app_name} API",

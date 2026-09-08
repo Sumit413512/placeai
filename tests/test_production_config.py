@@ -20,6 +20,7 @@ def test_vercel_defaults_to_production_and_fails_closed(monkeypatch):
     assert settings.running_on_vercel is True
     assert settings.environment == "production"
     assert settings.is_production is True
+    assert settings.uses_database_file_storage is True
     assert settings.auto_create_schema is False
 
     with pytest.raises(RuntimeError, match="JWT_SECRET_KEY"):
@@ -35,3 +36,4 @@ def test_local_default_remains_development(monkeypatch):
     assert settings.running_on_vercel is False
     assert settings.environment == "development"
     assert settings.is_production is False
+    assert settings.uses_database_file_storage is False
