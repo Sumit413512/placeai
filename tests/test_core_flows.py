@@ -733,3 +733,98 @@ def test_auth_input_bounds_pdf_limits_and_frontend_token_hygiene():
     assert "sessionStorage" not in js
     assert 'minlength="8"' not in js + html
     assert 'accept=".pdf,.doc,.docx,.xls,.xlsx' not in js
+
+
+
+def test_mock_interview_server_issued_session_integrity(monkeypatch):
+    import json
+    import app.routers.mock_interview as mock_router
+    from app.models import Job, MockInterview, StudentProfile
+
+    student = login("student@northstar.example.com", "StudentPass123!")
+    db = SessionLocal()
+    try:
+        job = db.query(Job).filter(Job.title == "Graduate Software Engineer").first()
+        assert job is not None
+        job_id = job.id
+        student_user = db.query(User).filter(User.email == "student@northstar.example.com").first()
+        profile = db.query(StudentProfile).filter(StudentProfile.user_id == student_user.id).first()
+        scored_before = db.query(MockInterview).filter(MockInterview.student_id == profile.id, MockInterview.overall_score.isnot(None)).count()
+    finally:
+        db.close()
+
+    def fake_ai(_client, prompt):
+        if "Generate exactly" in prompt:
+            return json.dumps({"questions": [
+                {"question_id": 1, "question": "Explain a production API decision you made.", "category": "technical"},
+                {"question_id": 2, "question": "How would you debug a failing service?", "category": "situational"},
+                {"question_id": 3, "question": "Describe a disagreement you resolved.", "category": "behavioral"},
+            ]})
+        return json.dumps({
+            "overall_score": 82,
+            "overall_feedback": "Strong structured practice response.",
+            "dimensions": {
+                "relevance": 84, "clarity": 82, "structure": 80, "language_precision": 81,
+                "role_knowledge": 85, "problem_solving": 83, "professionalism": 79
+            },
+            "strengths": ["Relevant reasoning"],
+            "improvements": ["Add measurable outcomes"],
+            "evaluations": [
+                {"question_id": 1, "score": 83, "feedback": "Good", "better_answer_outline": "Context → decision → result"},
+                {"question_id": 2, "score": 82, "feedback": "Good", "better_answer_outline": "Triage → isolate → verify"},
+                {"question_id": 3, "score": 81, "feedback": "Good", "better_answer_outline": "Situation → action → result"},
+            ],
+        })
+
+    monkeypatch.setattr(mock_router, "call_gemini", fake_ai)
+
+    started = client.post("/mock-interview/start", headers=auth(student), json={
+        "job_id": job_id, "focus": "balanced", "question_count": 3
+    })
+    assert started.status_code == 200, started.text
+    payload = started.json()
+    assert payload["interview_id"]
+    assert len(payload["questions"]) == 3
+
+    dashboard = client.get("/students/dashboard", headers=auth(student))
+    assert dashboard.status_code == 200
+    assert dashboard.json()["interviews_completed"] == scored_before
+
+    incomplete = client.post("/mock-interview/evaluate", headers=auth(student), json={
+        "interview_id": payload["interview_id"],
+        "answers": [{"question_id": 1, "answer": "Only one answer"}],
+    })
+    assert incomplete.status_code == 422
+
+    injected = client.post("/mock-interview/evaluate", headers=auth(student), json={
+        "interview_id": payload["interview_id"],
+        "job_id": job_id,
+        "answers": [
+            {"question_id": q["question_id"], "question": "Replace with an easier question", "answer": "Answer"}
+            for q in payload["questions"]
+        ],
+    })
+    assert injected.status_code == 422
+
+    answers = [
+        {"question_id": q["question_id"], "answer": f"Structured answer for question {q['question_id']}"}
+        for q in payload["questions"]
+    ]
+    evaluated = client.post("/mock-interview/evaluate", headers=auth(student), json={
+        "interview_id": payload["interview_id"], "answers": answers
+    })
+    assert evaluated.status_code == 200, evaluated.text
+    assert evaluated.json()["overall_score"] == 82
+
+    repeated = client.post("/mock-interview/evaluate", headers=auth(student), json={
+        "interview_id": payload["interview_id"], "answers": answers
+    })
+    assert repeated.status_code == 409
+
+    history = client.get("/mock-interview/history", headers=auth(student))
+    assert history.status_code == 200
+    assert any(row["id"] == payload["interview_id"] and row["overall_score"] == 82 for row in history.json())
+
+    dashboard = client.get("/students/dashboard", headers=auth(student))
+    assert dashboard.status_code == 200
+    assert dashboard.json()["interviews_completed"] == scored_before + 1

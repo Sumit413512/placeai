@@ -17,7 +17,6 @@ from app.services import application_out, create_notification, drive_out, evalua
 from app.storage import delete_file, file_download_response, save_file, safe_upload_filename, validate_upload_signature
 
 settings = get_settings()
-settings.upload_dir.mkdir(parents=True, exist_ok=True)
 router = APIRouter(prefix="/students", tags=["Students"])
 
 
@@ -36,9 +35,9 @@ def dashboard(current_user: User = Depends(require_student), db: Session = Depen
     profile = get_or_create_profile(current_user, db)
     applications = profile.applications
     active = sum(1 for a in applications if a.status.value not in {"rejected", "hired", "withdrawn"})
-    interviews = len(profile.mock_interviews)
-    avg_interview = None
     scores = [i.overall_score for i in profile.mock_interviews if i.overall_score is not None]
+    interviews = len(scores)
+    avg_interview = None
     if scores:
         avg_interview = round(sum(scores) / len(scores), 1)
     completion_fields = [profile.full_name, profile.college, profile.degree, profile.branch, profile.graduation_year, profile.cgpa, profile.skills, profile.resume]

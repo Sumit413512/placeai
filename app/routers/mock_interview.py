@@ -16,17 +16,23 @@ router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])
 
 
 class MockInterviewStart(BaseModel):
+    model_config = {"extra": "forbid"}
+
     job_id: str
     focus: str = Field(default="balanced", pattern="^(balanced|technical|behavioral|hr)$")
     question_count: int = Field(default=5, ge=3, le=8)
 
 
 class MockInterviewAnswer(BaseModel):
+    model_config = {"extra": "forbid"}
+
     question_id: int
     answer: str = Field(min_length=1, max_length=8000)
 
 
 class MockInterviewEvaluation(BaseModel):
+    model_config = {"extra": "forbid"}
+
     interview_id: str
     answers: list[MockInterviewAnswer] = Field(min_length=1, max_length=8)
 
