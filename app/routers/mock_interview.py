@@ -16,19 +16,24 @@ router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])
 
 
 class MockInterviewStart(BaseModel):
+    model_config = {"extra": "forbid"}
+
     job_id: str
     focus: str = Field(default="balanced", pattern="^(balanced|technical|behavioral|hr)$")
     question_count: int = Field(default=5, ge=3, le=8)
 
 
 class MockInterviewAnswer(BaseModel):
+    model_config = {"extra": "forbid"}
+
     question_id: int
-    question: str = Field(min_length=3, max_length=2000)
     answer: str = Field(min_length=1, max_length=8000)
 
 
 class MockInterviewEvaluation(BaseModel):
-    job_id: str
+    model_config = {"extra": "forbid"}
+
+    interview_id: str
     answers: list[MockInterviewAnswer] = Field(min_length=1, max_length=8)
 
 
@@ -52,6 +57,32 @@ def _accessible_job(profile: StudentProfile, job_id: str, db: Session) -> Job:
     if profile.organization_id and job.target_organization_id == profile.organization_id:
         return job
     raise HTTPException(status_code=404, detail="Job not found")
+
+
+def _issued_questions(row: MockInterview) -> list[dict[str, Any]]:
+    try:
+        questions = json.loads(row.questions_json or "[]")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=409, detail="Interview question set is unavailable") from exc
+    if not isinstance(questions, list) or not questions:
+        raise HTTPException(status_code=409, detail="Interview question set is unavailable")
+    normalized = []
+    for item in questions:
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=409, detail="Interview question set is unavailable")
+        try:
+            question_id = int(item["question_id"])
+            question = str(item["question"]).strip()
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail="Interview question set is unavailable") from exc
+        if not question:
+            raise HTTPException(status_code=409, detail="Interview question set is unavailable")
+        normalized.append({
+            "question_id": question_id,
+            "question": question,
+            "category": str(item.get("category", "interview")).strip().lower(),
+        })
+    return normalized
 
 
 @router.get("/jobs")
@@ -131,7 +162,25 @@ Desired roles: {json.dumps(profile.desired_roles)}
         })
     if len(normalized) < 3:
         raise HTTPException(status_code=502, detail="AI service returned an incomplete interview set")
+
+    # Persist the server-issued question set before it reaches the browser. Evaluation
+    # is later bound to this student-owned row so clients cannot substitute easier
+    # questions and save an artificial coaching score.
+    interview = MockInterview(
+        student_id=profile.id,
+        job_id=job.id,
+        questions_json=json.dumps(normalized),
+        answers_json="[]",
+        evaluation_json=None,
+        overall_score=None,
+        overall_feedback=None,
+    )
+    db.add(interview)
+    db.commit()
+    db.refresh(interview)
+
     return {
+        "interview_id": interview.id,
         "job_id": job.id,
         "job_title": job.title,
         "company_name": job.recruiter.company_name if job.recruiter else None,
@@ -147,8 +196,35 @@ def evaluate_mock_interview(
     db: Session = Depends(get_db),
 ):
     profile = _profile(current_user, db)
-    job = _accessible_job(profile, body.job_id, db)
-    answers_payload = [item.model_dump() for item in body.answers]
+    interview = db.query(MockInterview).filter(
+        MockInterview.id == body.interview_id,
+        MockInterview.student_id == profile.id,
+    ).first()
+    if not interview:
+        raise HTTPException(status_code=404, detail="Mock interview not found")
+    if interview.overall_score is not None:
+        raise HTTPException(status_code=409, detail="This mock interview has already been evaluated")
+
+    job = db.query(Job).filter(Job.id == interview.job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Interview role is no longer available")
+
+    issued = _issued_questions(interview)
+    expected_by_id = {item["question_id"]: item for item in issued}
+    submitted_by_id = {item.question_id: item for item in body.answers}
+    if len(submitted_by_id) != len(body.answers):
+        raise HTTPException(status_code=422, detail="Duplicate interview answers are not allowed")
+    if set(submitted_by_id) != set(expected_by_id):
+        raise HTTPException(status_code=422, detail="Answers must match the server-issued interview question set")
+
+    answers_payload = [
+        {
+            "question_id": item["question_id"],
+            "question": item["question"],
+            "answer": submitted_by_id[item["question_id"]].answer,
+        }
+        for item in issued
+    ]
 
     prompt = f"""
 {PROMPT_GUARDRAIL}
@@ -185,7 +261,7 @@ Title: {job.title}
 Description: {job.description[:6000]}
 Required skills: {json.dumps(job.required_skills)}
 
-ANSWERS
+SERVER-ISSUED QUESTIONS AND ANSWERS
 {json.dumps(answers_payload, indent=2)[:30000]}
 """
     raw = call_gemini(get_gemini_client(), prompt)
@@ -203,12 +279,14 @@ ANSWERS
     dimension_keys = ["relevance", "clarity", "structure", "language_precision", "role_knowledge", "problem_solving", "professionalism"]
     normalized_dimensions = {key: clamp(dimensions.get(key)) for key in dimension_keys}
     evaluations = []
-    for index, answer in enumerate(body.answers, start=1):
-        source = next((item for item in data.get("evaluations", []) if isinstance(item, dict) and item.get("question_id") == answer.question_id), {})
+    ai_evaluations = data.get("evaluations") if isinstance(data.get("evaluations"), list) else []
+    for item in issued:
+        question_id = item["question_id"]
+        source = next((candidate for candidate in ai_evaluations if isinstance(candidate, dict) and candidate.get("question_id") == question_id), {})
         evaluations.append({
-            "question_id": answer.question_id,
-            "question": answer.question,
-            "answer": answer.answer,
+            "question_id": question_id,
+            "question": item["question"],
+            "answer": submitted_by_id[question_id].answer,
             "score": clamp(source.get("score")),
             "feedback": str(source.get("feedback", "No detailed feedback returned."))[:4000],
             "better_answer_outline": str(source.get("better_answer_outline", ""))[:4000],
@@ -225,19 +303,13 @@ ANSWERS
         "disclaimer": "Text-only coaching signal; not a measure of spoken communication, accent, personality, or employability.",
     }
 
-    row = MockInterview(
-        student_id=profile.id,
-        job_id=job.id,
-        questions_json=json.dumps([{"question_id": a.question_id, "question": a.question} for a in body.answers]),
-        answers_json=json.dumps([{"question_id": a.question_id, "answer": a.answer} for a in body.answers]),
-        evaluation_json=json.dumps(result),
-        overall_score=overall_score,
-        overall_feedback=result["overall_feedback"],
-    )
-    db.add(row)
+    interview.answers_json = json.dumps(answers_payload)
+    interview.evaluation_json = json.dumps(result)
+    interview.overall_score = overall_score
+    interview.overall_feedback = result["overall_feedback"]
     db.commit()
-    db.refresh(row)
-    return {"interview_id": row.id, "job_title": job.title, **result}
+    db.refresh(interview)
+    return {"interview_id": interview.id, "job_title": job.title, **result}
 
 
 @router.get("/history")
@@ -246,7 +318,10 @@ def mock_interview_history(
     db: Session = Depends(get_db),
 ):
     profile = _profile(current_user, db)
-    rows = db.query(MockInterview).filter(MockInterview.student_id == profile.id).order_by(MockInterview.created_at.desc()).limit(50).all()
+    rows = db.query(MockInterview).filter(
+        MockInterview.student_id == profile.id,
+        MockInterview.overall_score.isnot(None),
+    ).order_by(MockInterview.created_at.desc()).limit(50).all()
     result = []
     for row in rows:
         evaluation = {}
