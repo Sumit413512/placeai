@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+
 import pytest
 
 from app.config import Settings
@@ -25,6 +29,33 @@ def test_vercel_defaults_to_production_and_fails_closed(monkeypatch):
 
     with pytest.raises(RuntimeError, match="JWT_SECRET_KEY"):
         settings.validate_for_startup()
+
+
+def test_vercel_framework_discovery_can_import_without_runtime_secrets():
+    env = os.environ.copy()
+    env["VERCEL"] = "1"
+    for name in (
+        "ENVIRONMENT",
+        "DATABASE_URL",
+        "JWT_SECRET_KEY",
+        "JWT_REFRESH_SECRET_KEY",
+        "BASE_URL",
+        "ALLOWED_ORIGINS",
+        "AUTO_CREATE_SCHEMA",
+    ):
+        env.pop(name, None)
+
+    result = subprocess.run(
+        [sys.executable, "-c", "import app.app; print(app.app.app.title)"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "PlaceAI API" in result.stdout
 
 
 def test_local_default_remains_development(monkeypatch):
