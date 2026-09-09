@@ -1,0 +1,46 @@
+name: PlaceAI Post-Retirement Production Smoke
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify canonical production after legacy retirement
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://placeai-rxpp.vercel.app'
+
+          curl -fsS "$BASE/health" -o /tmp/health.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/health.json'))
+          assert d.get('status') == 'healthy', d
+          assert d.get('database') == 'ok', d
+          assert d.get('configuration') == 'ok', d
+          PY
+
+          curl -fsS "$BASE/" -o /tmp/root.html
+          grep -q '/static/access-portal.js' /tmp/root.html
+          curl -fsS "$BASE/static/access-portal.js" -o /tmp/access.js
+          for role in 'Student' 'Recruiter' 'Institution Admin' 'Platform Admin'; do
+            grep -q "$role" /tmp/access.js
+          done
+
+          old_code=$(curl -sS -o /tmp/old.json -w '%{http_code}' -X POST \
+            -H 'Content-Type: application/json' \
+            -d '{}' "$BASE/public/demo-requests")
+          test "$old_code" = '404'
+
+          access_get_code=$(curl -sS -o /tmp/access-get.json -w '%{http_code}' "$BASE/public/access-requests")
+          test "$access_get_code" = '405'
+
+          ! grep -q 'demoNotificationsByRole' /tmp/access.js
+          echo 'Post-retirement canonical production smoke passed.'
