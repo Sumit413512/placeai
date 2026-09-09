@@ -10,9 +10,10 @@ from app.utils import get_hashed_password
 
 client = TestClient(app)
 
-STUDENT_EMAIL = "role.student@placeai.test"
-RECRUITER_EMAIL = "role.recruiter@placeai.test"
-PLATFORM_EMAIL = "role.platform@placeai.test"
+STUDENT_EMAIL = "role.student@placeai.example.com"
+RECRUITER_EMAIL = "role.recruiter@placeai.example.com"
+PLATFORM_EMAIL = "role.platform@placeai.example.com"
+REQUEST_EMAIL = "request.recruiter@placeai.example.com"
 PASSWORD = "RoleAccessPass123!"
 
 
@@ -53,7 +54,7 @@ def teardown_module() -> None:
         ]
         if user_ids:
             db.query(RefreshSession).filter(RefreshSession.user_id.in_(user_ids)).delete(synchronize_session=False)
-        db.query(AccessRequest).filter(AccessRequest.work_email == "request.recruiter@placeai.test").delete(synchronize_session=False)
+        db.query(AccessRequest).filter(AccessRequest.work_email == REQUEST_EMAIL).delete(synchronize_session=False)
         db.query(User).filter(User.email.in_([STUDENT_EMAIL, RECRUITER_EMAIL, PLATFORM_EMAIL])).delete(synchronize_session=False)
         db.commit()
     finally:
@@ -82,7 +83,7 @@ def test_public_privileged_signup_remains_blocked() -> None:
         "/auth/signup",
         json={
             "username": "blocked_platform_signup",
-            "email": "blocked.platform@placeai.test",
+            "email": "blocked.platform@placeai.example.com",
             "password": PASSWORD,
             "role": "platform_admin",
         },
@@ -96,7 +97,7 @@ def test_real_access_request_is_persisted_and_platform_admin_can_review() -> Non
         json={
             "requested_role": "recruiter",
             "full_name": "Recruiter Access Test",
-            "work_email": "request.recruiter@placeai.test",
+            "work_email": REQUEST_EMAIL,
             "organization_name": "Access Test Company",
             "message": "Production access verification",
         },
