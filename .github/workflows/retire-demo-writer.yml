@@ -20,6 +20,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app/routers/platform.py')
+          p.write_text(p.read_text(encoding='utf-8').rstrip()+'\n', encoding='utf-8')
+          PY
           git diff --check
           if git diff --quiet && git diff --cached --quiet; then
             echo 'No further changes required.'
