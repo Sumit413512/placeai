@@ -1,0 +1,46 @@
+name: Run remaining demo cleanup
+
+on:
+  push:
+    branches: ["fix/retire-demo-source"]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: fix/retire-demo-source
+          fetch-depth: 0
+      - name: Transform remaining source
+        run: python scripts/retire_remaining_demo.py
+      - name: Validate transformed release
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q app tests alembic
+          node --check app/static/app.js
+          node --check app/static/access-portal.js
+          node --check pages/assets/placeai-pages.js
+          sha256sum -c MANIFEST.sha256
+          pytest -q
+          python scripts/release_check.py
+      - name: Audit current release for prohibited demo mechanisms
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -RniE 'ENABLE_AI_DEMO_FALLBACK|enable_ai_demo_fallback|seed_demo\.py|SALES_DEMO\.md|/public/demo-requests|/platform/demo-requests|demoNotificationsByRole' app .env.example README.md docs index.html PlaceAI_API.postman_collection.json || exit 1
+      - name: Commit transformed release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Remove remaining demo sources and synthetic AI fallback"
+          git push origin HEAD:fix/retire-demo-source
