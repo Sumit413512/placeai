@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import importlib
 import logging
 from pathlib import Path
 
@@ -13,13 +14,12 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
 from app.database import Base, engine, engine_initialization_error_code
-from app.routers import ai, auth, auth_refresh_atomic, enterprise, institutions, interview_compat, jobs, mock_interview, platform, public, recruiters, report_export_safe, students
 
 logger = logging.getLogger("placeai")
 settings = get_settings()
-runtime_configuration_errors = settings.configuration_error_codes()
-if engine_initialization_error_code and engine_initialization_error_code not in runtime_configuration_errors:
-    runtime_configuration_errors.append(engine_initialization_error_code)
+runtime_readiness_errors = settings.configuration_error_codes()
+if engine_initialization_error_code and engine_initialization_error_code not in runtime_readiness_errors:
+    runtime_readiness_errors.append(engine_initialization_error_code)
 
 
 @asynccontextmanager
@@ -28,9 +28,9 @@ async def lifespan(_: FastAPI):
     # a lifespan exception terminates the Python worker and Vercel can only surface
     # FUNCTION_INVOCATION_FAILED. Keep the worker alive for /health diagnostics while
     # the request guard below refuses protected traffic until configuration is valid.
-    if runtime_configuration_errors:
-        for code in runtime_configuration_errors:
-            logger.error("PlaceAI runtime configuration blocked: %s", code)
+    if runtime_readiness_errors:
+        for code in runtime_readiness_errors:
+            logger.error("PlaceAI runtime readiness blocked: %s", code)
     else:
         if settings.auto_create_schema:
             Base.metadata.create_all(bind=engine)
@@ -63,7 +63,7 @@ _DIAGNOSTIC_PATHS = {"/", "/health"}
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     path = request.url.path
-    if runtime_configuration_errors and path not in _DIAGNOSTIC_PATHS and not path.startswith("/static/"):
+    if runtime_readiness_errors and path not in _DIAGNOSTIC_PATHS and not path.startswith("/static/"):
         response = JSONResponse(
             status_code=503,
             content={
@@ -110,53 +110,93 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     raise exc
 
 
+def _import_router(name: str):
+    """Import one router without allowing an import-time failure to kill Vercel."""
+    try:
+        return importlib.import_module(f"app.routers.{name}")
+    except Exception:
+        code = f"ROUTER_IMPORT_{name.upper()}_FAILED"
+        logger.exception("PlaceAI router bootstrap failed: %s", name)
+        if code not in runtime_readiness_errors:
+            runtime_readiness_errors.append(code)
+        return None
+
+
+def _include_router(module) -> None:
+    if module is not None and getattr(module, "router", None) is not None:
+        app.include_router(module.router)
+
+
+# Import routers individually so one environment-specific import failure cannot terminate
+# the entire serverless worker before /health exists.
+auth_refresh_atomic = _import_router("auth_refresh_atomic")
+auth = _import_router("auth")
+students = _import_router("students")
+recruiters = _import_router("recruiters")
+jobs = _import_router("jobs")
+interview_compat = _import_router("interview_compat")
+ai = _import_router("ai")
+mock_interview = _import_router("mock_interview")
+institutions = _import_router("institutions")
+platform = _import_router("platform")
+public = _import_router("public")
+report_export_safe = _import_router("report_export_safe")
+enterprise = _import_router("enterprise")
+
 # The original V2 AI interview endpoints accepted client-supplied question text during
 # scoring. Keep their implementation in source for migration history, but do not register
 # those unsafe routes. A small compatibility router owns the retired POST surface and the
 # read-only history routes, while the canonical coach lives under /mock-interview.
-_RETIRED_AI_INTERVIEW_PATHS = {
-    "/ai/interview/questions",
-    "/ai/interview/evaluate",
-    "/ai/interviews",
-    "/ai/interviews/{interview_id}",
-}
-ai.router.routes = [
-    route for route in ai.router.routes
-    if getattr(route, "path", "") not in _RETIRED_AI_INTERVIEW_PATHS
-]
-mock_interview.router.routes = [
-    route for route in mock_interview.router.routes
-    if getattr(route, "path", "") != "/mock-interview/history"
-]
+if ai is not None:
+    _RETIRED_AI_INTERVIEW_PATHS = {
+        "/ai/interview/questions",
+        "/ai/interview/evaluate",
+        "/ai/interviews",
+        "/ai/interviews/{interview_id}",
+    }
+    ai.router.routes = [
+        route for route in ai.router.routes
+        if getattr(route, "path", "") not in _RETIRED_AI_INTERVIEW_PATHS
+    ]
+if mock_interview is not None:
+    mock_interview.router.routes = [
+        route for route in mock_interview.router.routes
+        if getattr(route, "path", "") != "/mock-interview/history"
+    ]
 
 # The original refresh route validates rotation state without locking the session row.
 # Register one PostgreSQL row-locking implementation so a refresh token cannot produce
 # multiple valid successors under concurrent requests.
-auth.router.routes = [
-    route for route in auth.router.routes
-    if getattr(route, "path", "") != "/auth/refresh"
-]
+if auth is not None:
+    auth.router.routes = [
+        route for route in auth.router.routes
+        if getattr(route, "path", "") != "/auth/refresh"
+    ]
 
 # Spreadsheet reports contain institution-controlled and user-controlled text. Replace the
 # legacy CSV/XLSX route with the formula-neutralizing exporter before registering enterprise.
-enterprise.router.routes = [
-    route for route in enterprise.router.routes
-    if getattr(route, "path", "") != "/enterprise/reports/{kind}.{fmt}"
-]
+if enterprise is not None:
+    enterprise.router.routes = [
+        route for route in enterprise.router.routes
+        if getattr(route, "path", "") != "/enterprise/reports/{kind}.{fmt}"
+    ]
 
-app.include_router(auth_refresh_atomic.router)
-app.include_router(auth.router)
-app.include_router(students.router)
-app.include_router(recruiters.router)
-app.include_router(jobs.router)
-app.include_router(interview_compat.router)
-app.include_router(ai.router)
-app.include_router(mock_interview.router)
-app.include_router(institutions.router)
-app.include_router(platform.router)
-app.include_router(public.router)
-app.include_router(report_export_safe.router)
-app.include_router(enterprise.router)
+for module in (
+    auth_refresh_atomic,
+    auth,
+    students,
+    recruiters,
+    jobs,
+    interview_compat,
+    ai,
+    mock_interview,
+    institutions,
+    platform,
+    public,
+    report_export_safe,
+    enterprise,
+):
+    _include_router(module)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -175,7 +215,7 @@ def mock_interview_page():
 
 @app.get("/health", tags=["System"])
 def health_check():
-    if runtime_configuration_errors:
+    if runtime_readiness_errors:
         return JSONResponse(
             status_code=503,
             content={
@@ -184,7 +224,7 @@ def health_check():
                 "version": "3.1.3",
                 "database": "not_checked",
                 "configuration": "invalid",
-                "configuration_errors": runtime_configuration_errors,
+                "configuration_errors": runtime_readiness_errors,
             },
         )
     try:
