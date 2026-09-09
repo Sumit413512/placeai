@@ -14,25 +14,24 @@ Baseline: PlaceAI Commercial V3.1.3 Production Security & Persistence Hardening.
 - Access tokens are memory-only in the browser; browser persistence relies on the HttpOnly refresh cookie.
 - PDF extraction is bounded to 30 pages/50,000 extracted characters and uses maintained `pypdf`.
 - Alembic migrations reach head successfully from both a blank database and the prior 3.1.2 schema path.
-- Automated regression suite: 12/12 passed.
-- Python compile check passed.
-- Frontend JavaScript syntax check passed.
+- Automated regression suite, Python compile check and frontend JavaScript syntax checks have passed.
 
-## Live infrastructure status on 2026-09-08
+## Live infrastructure status on 2026-09-09
 
+- Supabase project `cnpsvfpcxbrygynihlxs` is active and healthy in `ap-southeast-1`.
 - Supabase production schema is present and aligned with the 3.1.3 session/storage baseline.
-- Supabase `anon` and `authenticated` Data API roles have no table grants on the PlaceAI `public` tables; PlaceAI uses the direct PostgreSQL application connection.
-- Eight previously missing foreign-key indexes were added.
-- GitHub repository `Sumit413512/placeai` is intentionally **public** and is the canonical source repository.
-- Vercel recognizes `Sumit413512/placeai` as a FastAPI import candidate, but the connected Vercel account currently exposes no imported PlaceAI project/team to the connector.
+- The canonical production application URL is `https://placeai-rxpp.vercel.app`.
+- The production root is publicly reachable and returns HTTP 200.
+- PlaceAI is configured for the Supabase transaction pooler on port 6543 with the expected PostgreSQL username shape.
+- The production `DATABASE_URL` credential was replaced/reset by the operator on 2026-09-09 after the previous live health probe classified the failure as `DATABASE_AUTHENTICATION_FAILED`.
+- This commit intentionally triggers a fresh Vercel production deployment so the new production environment variable is loaded before re-running health and authentication tests.
 
 ## Remaining deployment gates
 
-1. Replace the current corrupt `bundle*` representation on GitHub `main` with the verified 3.1.3 source tree.
-2. Verify GitHub Pages serves the root static `index.html`.
-3. Import/link the public repository into the intended Vercel account/project.
-4. Configure production environment variables and the Supabase PostgreSQL connection/pooler endpoint.
-5. Apply `alembic upgrade head` before serving production traffic.
-6. Run live health/login/student/TPO/recruiter/upload/QR/regression checks against the deployed URL.
+1. Verify the newly deployed `/health` endpoint reports `status=healthy` and `database=ok`.
+2. Verify signup and sign-in against the production database.
+3. Verify refresh/session persistence and logout.
+4. Run core student, institution/TPO and recruiter smoke checks.
+5. Verify QR/upload/public production paths required for the pilot.
 
-Dedicated object storage is recommended for high-volume enterprise operation, but it is no longer a functional durability blocker for the current Vercel pilot because production file bytes are persisted in PostgreSQL.
+Dedicated object storage is recommended for high-volume enterprise operation, but it is not a current durability blocker because production file bytes are persisted in PostgreSQL.
