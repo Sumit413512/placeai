@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="PlaceAI is an AI-assisted campus placement operating system for institutions, recruiters, and students.">
-  <title>PlaceAI — Placement operations, finally in one system</title>
+  <title>PlaceAI — Campus placement operations</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -27,7 +27,7 @@
       </nav>
       <div class="header-actions">
         <button class="button button-ghost" data-open-auth="login">Sign in</button>
-        <button class="button button-primary" data-open-auth="demo">Request demo</button>
+        <button class="button button-primary" data-open-access="request">Request access</button>
       </div>
       <button class="mobile-menu" data-action="toggle-mobile-menu" aria-label="Open navigation">Menu</button>
     </header>
@@ -35,103 +35,105 @@
     <main id="top">
       <section class="hero section-shell">
         <div class="hero-copy">
-          <div class="eyebrow"><span class="eyebrow-dot"></span> Campus hiring infrastructure for modern institutions</div>
-          <h1>Placement operations,<br><span>finally in one system.</span></h1>
-          <p class="hero-lead">Run student readiness, campus drives, recruiter pipelines and placement analytics from one controlled workspace—with AI where it materially saves time.</p>
+          <div class="eyebrow"><span class="eyebrow-dot"></span> Campus placement operations for institutions, recruiters and students</div>
+          <h1>Placement operations,<br><span>connected end to end.</span></h1>
+          <p class="hero-lead">Manage student readiness, approved opportunities, placement drives, recruiter pipelines, interviews, offers and reporting from one controlled workspace.</p>
           <div class="hero-actions">
-            <button class="button button-primary button-large" data-open-auth="demo">Book a product walkthrough</button>
-            <button class="button button-secondary button-large" data-open-auth="login">Open workspace</button>
+            <button class="button button-primary button-large" data-open-auth="login">Sign in to PlaceAI</button>
+            <button class="button button-secondary button-large" data-open-access="request">Request workspace access</button>
           </div>
           <div class="hero-trust">
-            <div><strong>Role-based access</strong><span>Institution, recruiter & student controls</span></div>
-            <div><strong>Privacy by default</strong><span>Candidate data stays in approved pipelines</span></div>
-            <div><strong>AI with guardrails</strong><span>Decision support, not autonomous hiring</span></div>
+            <div><strong>Role-based access</strong><span>Student, recruiter, institution and platform controls</span></div>
+            <div><strong>Production data only</strong><span>Operational records come from authenticated workspace activity</span></div>
+            <div><strong>Human-reviewed AI</strong><span>Decision support remains subject to authorized human review</span></div>
           </div>
         </div>
 
-        <div class="hero-product" aria-label="PlaceAI dashboard preview">
-          <div class="product-window">
-            <div class="window-top"><div class="window-dots"><i></i><i></i><i></i></div><span>Northstar Institute · Placement Office</span><span class="status-chip">Live</span></div>
-            <div class="preview-layout">
-              <aside class="preview-sidebar">
-                <div class="preview-brand"><span class="mini-brand"></span></div>
-                <span class="active"></span><span></span><span></span><span></span><span></span>
-              </aside>
-              <div class="preview-main">
-                <div class="preview-head"><div><small>Placement command centre</small><strong>Good morning, Placement Team</strong></div><button>Export report</button></div>
-                <div class="metric-grid preview-metrics">
-                  <article><small>Eligible students</small><strong>842</strong><span class="positive">+7.2% this term</span></article>
-                  <article><small>Active drives</small><strong>18</strong><span>6 this week</span></article>
-                  <article><small>Offers secured</small><strong>214</strong><span class="positive">+31 this month</span></article>
-                  <article><small>Placement rate</small><strong>74.8%</strong><span class="positive">+4.6 pts</span></article>
-                </div>
-                <div class="preview-two-col">
-                  <article class="preview-card chart-card">
-                    <div class="card-title-row"><div><small>Placement velocity</small><strong>Offers by month</strong></div><span>2026 batch</span></div>
-                    <div class="chart-bars"><i style="--h:28%"></i><i style="--h:40%"></i><i style="--h:36%"></i><i style="--h:54%"></i><i style="--h:63%"></i><i style="--h:77%"></i><i style="--h:88%"></i></div>
-                    <div class="chart-labels"><span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span><span>Jul</span></div>
-                  </article>
-                  <article class="preview-card drive-card">
-                    <div class="card-title-row"><div><small>Upcoming</small><strong>Placement drives</strong></div><span>View all</span></div>
-                    <div class="mini-drive"><b>AV</b><div><strong>Avanta Labs</strong><small>Software Engineer · Tomorrow</small></div><em>128 eligible</em></div>
-                    <div class="mini-drive"><b>NX</b><div><strong>Nexora Systems</strong><small>Data Analyst · Sep 9</small></div><em>94 eligible</em></div>
-                    <div class="mini-drive"><b>QF</b><div><strong>Quantforge</strong><small>Graduate Analyst · Sep 12</small></div><em>72 eligible</em></div>
-                  </article>
-                </div>
-              </div>
+        <div class="hero-product" aria-label="PlaceAI production workspace information">
+          <div class="production-surface-card">
+            <div>
+              <span class="surface-kicker">Production workspace</span>
+              <h3>Real records appear only after authenticated users create them.</h3>
+              <p>PlaceAI does not display fabricated students, companies, applications, placement rates or operational activity on its public surface.</p>
+            </div>
+            <div class="production-surface-grid">
+              <div><strong>Student</strong><span>Profile, eligibility, applications, documents and interview preparation.</span></div>
+              <div><strong>Recruiter</strong><span>Approved jobs, applicant pipelines, interviews, offers and company verification.</span></div>
+              <div><strong>Institution Admin</strong><span>Students, recruiters, drives, approvals, attendance, governance and reports.</span></div>
+              <div><strong>Platform Admin</strong><span>Institution provisioning, access review and platform operations.</span></div>
             </div>
           </div>
-          <div class="floating-insight"><span class="insight-icon">AI</span><div><small>Readiness insight</small><strong>63 students can become drive-eligible with one skill intervention.</strong></div></div>
         </div>
       </section>
 
       <section class="proof-strip">
         <div class="section-shell proof-content">
           <span>Designed to replace fragmented placement operations across</span>
-          <strong>Spreadsheets</strong><i></i><strong>WhatsApp groups</strong><i></i><strong>Scattered résumés</strong><i></i><strong>Manual reports</strong>
+          <strong>Spreadsheets</strong><i></i><strong>Messaging threads</strong><i></i><strong>Scattered résumés</strong><i></i><strong>Manual reports</strong>
         </div>
       </section>
 
       <section id="platform" class="section-shell value-section">
         <div class="section-heading">
-          <div><span class="section-kicker">One operating layer</span><h2>Every placement workflow,<br>connected end to end.</h2></div>
-          <p>PlaceAI keeps the institution in control while giving students and recruiters purpose-built workspaces. Every stage feeds one auditable placement record.</p>
+          <div><span class="section-kicker">One operating layer</span><h2>Every placement workflow,<br>connected to the same record.</h2></div>
+          <p>PlaceAI gives each stakeholder a purpose-built workspace while preserving institution boundaries, auditability and controlled access.</p>
         </div>
         <div class="feature-bento">
-          <article class="bento-card bento-large">
-            <span class="card-number">01</span>
-            <div><h3>Placement command centre</h3><p>Track batches, eligibility, active drives, applications, offers and final outcomes without rebuilding reports every week.</p></div>
-            <div class="bento-visual analytics-visual">
-              <div class="visual-tabs"><span class="active">Overview</span><span>Branches</span><span>Companies</span></div>
-              <div class="visual-chart"><strong>74.8%</strong><span>overall placement</span><div class="line-graph"><svg viewBox="0 0 500 120" preserveAspectRatio="none" aria-hidden="true"><path d="M0,95 C45,92 60,70 102,74 S170,98 205,60 S280,42 315,48 S390,58 430,26 S470,18 500,10"/><path class="area" d="M0,95 C45,92 60,70 102,74 S170,98 205,60 S280,42 315,48 S390,58 430,26 S470,18 500,10 L500,120 L0,120 Z"/></svg></div></div>
-            </div>
-          </article>
-          <article class="bento-card"><span class="card-number">02</span><h3>Eligibility that enforces itself</h3><p>Set CGPA, branch and graduating-batch criteria once. Students immediately know whether they qualify before applying.</p><div class="criteria-pills"><span>CGPA ≥ 7.0</span><span>2026 batch</span><span>CSE · IT · ECE</span></div></article>
-          <article class="bento-card"><span class="card-number">03</span><h3>Recruiter pipeline with evidence</h3><p>Move candidates from applied to shortlisted, interview, offered and hired. AI ranking is attached as explainable support—not hidden automation.</p><div class="pipeline-mini"><span><i></i>Applied <b>128</b></span><span><i></i>Shortlisted <b>42</b></span><span><i></i>Interview <b>18</b></span><span><i></i>Offered <b>9</b></span></div></article>
-          <article class="bento-card bento-wide"><span class="card-number">04</span><div><h3>Student readiness, before application day</h3><p>Résumé parsing, skill-gap analysis, matched roles and mock interviews give students a concrete preparation loop instead of generic placement advice.</p></div><div class="readiness-ring"><div><strong>82</strong><small>readiness</small></div><span>Resume <b>92%</b></span><span>Skills <b>78%</b></span><span>Interview <b>76%</b></span></div></article>
+          <article class="bento-card bento-large"><span class="card-number">01</span><div><h3>Placement command centre</h3><p>Track students, eligibility, active drives, applications, interviews, offers and outcomes from production records instead of manually assembled summaries.</p></div></article>
+          <article class="bento-card"><span class="card-number">02</span><h3>Eligibility enforcement</h3><p>Institutions configure academic and batch requirements. Students receive eligibility results from their stored profile and the actual drive criteria.</p></article>
+          <article class="bento-card"><span class="card-number">03</span><h3>Recruiter pipeline</h3><p>Recruiters work only with authorized jobs and candidate pipelines, with status movement recorded against real applications.</p></article>
+          <article class="bento-card bento-wide"><span class="card-number">04</span><div><h3>Student readiness</h3><p>Profile completion, résumé records, documents, interview preparation and application history are tied to the signed-in student account.</p></div></article>
         </div>
       </section>
 
       <section id="institutions" class="dark-section">
         <div class="section-shell dark-grid">
-          <div class="dark-copy"><span class="section-kicker light">For placement teams</span><h2>Run the placement office like an operating system, not a spreadsheet.</h2><p>Own recruiter access, verify student records, approve campus jobs, open drives, enforce eligibility and export clean placement data from one institutional workspace.</p><ul class="check-list"><li>Institution-scoped student records and verification</li><li>Controlled recruiter provisioning and campus-job approval</li><li>Drive eligibility by CGPA, branch and graduation year</li><li>Offer, hire and placement-rate analytics</li><li>CSV exports for internal reporting</li></ul><button class="button button-light button-large" data-open-auth="demo">See institution workflow</button></div>
-          <div class="workflow-stack"><div class="workflow-card active"><span>01</span><div><small>Recruiter request</small><strong>Acme Technologies · Graduate Engineer</strong></div><em>Review</em></div><div class="connector"></div><div class="workflow-card"><span>02</span><div><small>Eligibility configured</small><strong>CGPA 7.0 · CSE/IT · 2026</strong></div><em>842 → 514</em></div><div class="connector"></div><div class="workflow-card"><span>03</span><div><small>Drive opens</small><strong>514 students notified in workspace</strong></div><em>Open</em></div><div class="connector"></div><div class="workflow-card success"><span>04</span><div><small>Outcomes tracked</small><strong>Interviews → Offers → Hires</strong></div><em>Auditable</em></div></div>
+          <div class="dark-copy">
+            <span class="section-kicker light">For placement teams</span>
+            <h2>Operate placement workflows with institutional control.</h2>
+            <p>Provision authorized users, verify student records, review campus jobs, configure drives, manage attendance and export placement data without exposing candidate information as a public directory.</p>
+            <ul class="check-list">
+              <li>Institution-scoped student records and verification</li>
+              <li>Controlled recruiter provisioning and campus-job approval</li>
+              <li>Drive eligibility by configured academic criteria</li>
+              <li>Application, interview, offer and placement outcome tracking</li>
+              <li>Audit, policy, incident and reporting workflows</li>
+            </ul>
+            <button class="button button-light button-large" data-open-access="request">Request institution access</button>
+          </div>
+          <div class="production-surface-card">
+            <div><span class="surface-kicker">Institution controls</span><h3>Tenant-scoped workflows by design.</h3><p>Institution administrators work inside their authorized organization. Recruiter access, jobs, students and placement records remain subject to backend authorization checks.</p></div>
+          </div>
         </div>
       </section>
 
       <section id="recruiters" class="section-shell role-section">
-        <div class="section-heading compact"><div><span class="section-kicker">For hiring teams</span><h2>Move from application volume<br>to a usable shortlist.</h2></div><p>Post verified opportunities, inspect only candidates in your approved pipeline, rank applicants with transparent AI reasoning and move decisions through a consistent hiring funnel.</p></div>
+        <div class="section-heading compact">
+          <div><span class="section-kicker">For hiring teams</span><h2>Manage approved campus hiring<br>without exposing a public candidate directory.</h2></div>
+          <p>Recruiter workspaces use real company profiles, approved opportunities and actual applicants. Candidate access follows the placement pipeline and institution controls.</p>
+        </div>
         <div class="role-demo">
-          <div class="candidate-list"><div class="list-head"><strong>Applicants · Graduate Engineer</strong><span>128 candidates</span></div><div class="candidate-row selected"><b>AS</b><div><strong>Aarav Shah</strong><small>Python · SQL · FastAPI</small></div><span class="score strong">92</span></div><div class="candidate-row"><b>RM</b><div><strong>Riya Mehta</strong><small>Python · PostgreSQL · Docker</small></div><span class="score">87</span></div><div class="candidate-row"><b>VK</b><div><strong>Vihaan Kumar</strong><small>Java · Spring · SQL</small></div><span class="score">81</span></div><div class="candidate-row"><b>NS</b><div><strong>Nisha Singh</strong><small>Python · Django · AWS</small></div><span class="score">78</span></div></div>
-          <div class="candidate-detail"><div class="detail-head"><div><span class="avatar-large">AS</span><div><h3>Aarav Shah</h3><p>B.Tech Computer Science · CGPA 8.7</p></div></div><span class="verified-badge">Institution verified</span></div><div class="match-box"><div><span>AI match support</span><strong>92 / 100</strong></div><p>Strong overlap with Python, SQL and API engineering requirements. Project work shows relevant backend implementation experience.</p><small>AI output is decision support and should be reviewed by a human recruiter.</small></div><div class="detail-actions"><button>Shortlist candidate</button><button class="muted">View résumé</button></div></div>
+          <div class="production-surface-card">
+            <div><span class="surface-kicker">Controlled recruiter access</span><h3>Applicant data appears only when real candidates enter an authorized pipeline.</h3><p>Recruiter views do not use sample identities or fabricated match scores. AI-assisted analysis is generated only from authorized production inputs and remains human-reviewed.</p></div>
+            <div class="production-surface-grid"><div><strong>Company verification</strong><span>Evidence and institution-linked trust review.</span></div><div><strong>Application pipeline</strong><span>Actual status movement from application through final outcome.</span></div></div>
+          </div>
         </div>
       </section>
 
       <section id="security" class="section-shell security-section">
-        <div class="security-card"><span class="security-orbit"></span><div><span class="section-kicker">Built for institutional trust</span><h2>Candidate data should not become an open directory.</h2><p>PlaceAI defaults to controlled recruiter access. Recruiters see candidates who entered their pipeline unless your deployment explicitly enables an institution-approved talent pool.</p></div><div class="security-grid"><div><strong>Verified recruiter access</strong><span>Recruiter creation is controlled in production.</span></div><div><strong>Institution tenancy</strong><span>Student and campus-drive data is scoped by organization.</span></div><div><strong>Secure reset flow</strong><span>One-time tokens are hashed and account existence is not disclosed.</span></div><div><strong>AI fallback safety</strong><span>No fabricated candidate analysis when AI is unavailable.</span></div></div></div>
+        <div class="security-card">
+          <span class="security-orbit"></span>
+          <div><span class="section-kicker">Built for institutional trust</span><h2>Candidate data stays behind authenticated, role-aware controls.</h2><p>PlaceAI defaults to controlled access. Public visitors cannot browse student records, recruiter pipelines or institution operations.</p></div>
+          <div class="security-grid">
+            <div><strong>Verified role selection</strong><span>The selected sign-in role must match the account's backend role.</span></div>
+            <div><strong>Institution tenancy</strong><span>Student and campus data is scoped to authorized organizations.</span></div>
+            <div><strong>Secure recovery</strong><span>Password reset uses one-time server-side state and does not enumerate accounts.</span></div>
+            <div><strong>AI fallback safety</strong><span>AI unavailability does not create fabricated candidate analysis.</span></div>
+          </div>
+        </div>
       </section>
 
-      <section class="cta-section"><div class="section-shell cta-inner"><div><span>Ready to modernize placement operations?</span><h2>Start with one batch.<br>Prove the workflow. Scale from there.</h2></div><button class="button button-light button-large" data-open-auth="demo">Request a walkthrough</button></div></section>
+      <section class="cta-section"><div class="section-shell cta-inner"><div><span>Need a PlaceAI workspace?</span><h2>Choose the correct role<br>and request controlled access.</h2></div><button class="button button-light button-large" data-open-access="request">Request access</button></div></section>
     </main>
 
     <footer class="site-footer section-shell"><a class="brand" href="#top"><span class="brand-mark"><span></span><span></span><span></span></span><span>PlaceAI</span></a><p>AI-assisted campus placement operating system.</p><span>© 2026 PlaceAI · Privacy-first campus hiring.</span></footer>
@@ -144,8 +146,8 @@
       <nav id="app-nav" class="app-nav" aria-label="Workspace"></nav>
       <div class="sidebar-bottom"><div class="ai-policy"><span>AI</span><p><strong>Human-reviewed intelligence</strong><small>AI features support—not replace—placement decisions.</small></p></div><button class="sidebar-user" data-action="logout"><span class="user-avatar" id="sidebar-avatar">U</span><span><strong id="sidebar-user-name">Account</strong><small id="sidebar-user-role">Role</small></span><em>Sign out</em></button></div>
     </aside>
-      <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" data-action="toggle-sidebar" aria-label="Close navigation"></button>
-      <div class="app-content-wrap">
+    <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" data-action="toggle-sidebar" aria-label="Close navigation"></button>
+    <div class="app-content-wrap">
       <header class="app-topbar"><button class="sidebar-trigger" data-action="toggle-sidebar">Menu</button><div class="topbar-context"><small id="page-eyebrow">Workspace</small><strong id="page-title">Dashboard</strong></div><div class="topbar-actions"><button class="icon-button command-launch" data-action="open-command-palette" title="Search PlaceAI" aria-label="Search PlaceAI"><span class="command-launch-icon">⌕</span>Search <kbd>Ctrl K</kbd></button><button class="icon-button" id="notifications-button" data-action="open-notifications" title="Notifications" aria-label="Notifications"><span class="notification-dot"></span>Updates <b id="notification-count" class="notification-count">0</b></button><button class="button button-primary button-small" id="context-action">New</button></div></header>
       <main id="app-content" class="app-content"><div class="loading-state"><span class="loader"></span><p>Loading your workspace…</p></div></main>
     </div>
@@ -154,16 +156,12 @@
   <div id="auth-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="auth-title">
     <div class="auth-modal">
       <button class="modal-close" data-action="close-auth" aria-label="Close">×</button>
-      <div class="auth-brand-panel"><a class="brand brand-light" href="#"><span class="brand-mark"><span></span><span></span><span></span></span><span>PlaceAI</span></a><div><span class="auth-panel-kicker">Controlled access</span><h2>One workspace for every placement stakeholder.</h2><p>Students can self-register. Recruiter and institution accounts are provisioned by authorized administrators.</p></div><div class="auth-proof"><span>Role-based controls</span><span>Institution tenancy</span><span>Privacy-first candidate access</span></div></div>
+      <div class="auth-brand-panel"><a class="brand brand-light" href="#"><span class="brand-mark"><span></span><span></span><span></span></span><span>PlaceAI</span></a><div><span class="auth-panel-kicker">Controlled access</span><h2>One secure entry point for every PlaceAI workspace.</h2><p>Select the role assigned to your account. Privileged roles require authorized provisioning.</p></div><div class="auth-proof"><span>Role verification</span><span>Institution tenancy</span><span>Privacy-first candidate access</span></div></div>
       <div class="auth-form-panel">
-        <div id="login-view">
-          <span class="section-kicker">Welcome back</span><h2 id="auth-title">Sign in to your workspace</h2><p class="form-intro">Use your institution, recruiter or student account.</p>
-          <form id="login-form" class="form-stack"><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@institution.edu"></label><label>Password<div class="password-wrap"><input type="password" name="password" autocomplete="current-password" required placeholder="Enter your password"><button type="button" data-action="toggle-password">Show</button></div></label><div class="form-row-between"><span></span><button type="button" class="text-button" data-action="forgot-password">Forgot password?</button></div><button class="button button-primary button-full" type="submit">Sign in securely</button></form>
-          <div class="auth-switch">New student? <button class="text-button" data-action="show-student-signup">Create student account</button></div>
-        </div>
-        <div id="signup-view" class="hidden"><span class="section-kicker">Student access</span><h2>Create your PlaceAI profile</h2><p class="form-intro">Join your institution using its placement code, or continue without one.</p><form id="signup-form" class="form-stack"><div class="form-two"><label>Full name<input name="full_name" required placeholder="Your full name"></label><label>Username<input name="username" required minlength="3" placeholder="e.g. aarav.shah"></label></div><label>Email address<input type="email" name="email" required placeholder="you@example.com"></label><label>Institution code <span class="optional">optional</span><input name="organization_slug" placeholder="e.g. northstar"></label><label>Password<input type="password" name="password" minlength="12" required placeholder="12+ chars with upper/lowercase, number & symbol"></label><button class="button button-primary button-full" type="submit">Create student account</button></form><div class="auth-switch">Already registered? <button class="text-button" data-action="show-login">Sign in</button></div></div>
-        <div id="demo-view" class="hidden"><span class="section-kicker">Request a walkthrough</span><h2>See PlaceAI with your placement workflow</h2><p class="form-intro">Tell us about your institution. The request is saved securely for the PlaceAI sales team to follow up.</p><form id="demo-request-form" class="form-stack"><div class="form-two"><label>Your name<input name="contact_name" required minlength="2" placeholder="Full name"></label><label>Work email<input name="work_email" type="email" required placeholder="you@institution.edu"></label></div><label>Institution / organization<input name="organization_name" required minlength="2" placeholder="College, university or training institute"></label><div class="form-two"><label>Role / title<input name="role_title" placeholder="Placement officer, director, TPO"></label><label>Phone <span class="optional">optional</span><input name="phone" placeholder="+91 …"></label></div><label>Approx. students placed per year <span class="optional">optional</span><input name="student_count" type="number" min="1" max="1000000" placeholder="e.g. 1200"></label><label>What do you want to improve? <span class="optional">optional</span><textarea name="message" rows="4" maxlength="3000" placeholder="Placement operations, recruiter access, reporting, student readiness…"></textarea></label><label class="hidden" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label><button class="button button-primary button-full" type="submit">Request product walkthrough</button></form><div class="auth-switch">Already have access? <button class="text-button" data-action="show-login">Sign in</button></div></div>
-        <div id="reset-view" class="hidden"><span class="section-kicker">Account recovery</span><h2>Reset your password</h2><p class="form-intro">Enter your email. If the account exists, PlaceAI will send a one-time reset link when SMTP is configured.</p><form id="forgot-form" class="form-stack"><label>Email address<input type="email" name="email" required></label><button class="button button-primary button-full">Send reset link</button></form><button class="text-button back-link" data-action="show-login">← Back to sign in</button></div>
+        <div id="login-view"><span class="section-kicker">Secure access</span><h2 id="auth-title">Sign in to PlaceAI</h2></div>
+        <div id="signup-view" class="hidden"><span class="section-kicker">Account access</span><h2>Create or request access</h2></div>
+        <div id="demo-view" class="hidden" aria-hidden="true"></div>
+        <div id="reset-view" class="hidden"><span class="section-kicker">Account recovery</span><h2>Reset your password</h2><p class="form-intro">Enter your email. If the account exists, PlaceAI will send a one-time reset link when transactional email is configured.</p><form id="forgot-form" class="form-stack"><label>Email address<input type="email" name="email" required autocomplete="email"></label><button class="button button-primary button-full">Send reset link</button></form><button class="text-button back-link" data-action="show-login">← Back to sign in</button></div>
       </div>
     </div>
   </div>
@@ -180,7 +178,7 @@
     <button class="command-backdrop" data-action="close-command-palette" aria-label="Close search"></button>
     <section class="command-card">
       <div class="command-input-row"><span>⌕</span><input id="command-search" type="search" autocomplete="off" placeholder="Search students, companies, jobs, drives…" aria-label="Search PlaceAI"><kbd>Esc</kbd></div>
-      <div class="command-meta"><strong id="command-title">Quick search</strong><span>Jump directly to records and workspaces</span></div>
+      <div class="command-meta"><strong id="command-title">Quick search</strong><span>Jump directly to authorized records and workspaces</span></div>
       <div id="command-results" class="command-results"><div class="command-hint">Type at least two characters to search your authorized PlaceAI data.</div></div>
     </section>
   </div>
