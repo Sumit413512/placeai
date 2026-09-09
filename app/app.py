@@ -11,7 +11,7 @@ from sqlalchemy import text
 
 from app.config import get_settings
 from app.database import Base, engine
-from app.routers import ai, auth, auth_refresh_atomic, enterprise, institutions, interview_compat, jobs, mock_interview, platform, public, recruiters, students
+from app.routers import ai, auth, auth_refresh_atomic, enterprise, institutions, interview_compat, jobs, mock_interview, platform, public, recruiters, report_export_safe, students
 
 settings = get_settings()
 
@@ -101,6 +101,13 @@ auth.router.routes = [
     if getattr(route, "path", "") != "/auth/refresh"
 ]
 
+# Spreadsheet reports contain institution-controlled and user-controlled text. Replace the
+# legacy CSV/XLSX route with the formula-neutralizing exporter before registering enterprise.
+enterprise.router.routes = [
+    route for route in enterprise.router.routes
+    if getattr(route, "path", "") != "/enterprise/reports/{kind}.{fmt}"
+]
+
 app.include_router(auth_refresh_atomic.router)
 app.include_router(auth.router)
 app.include_router(students.router)
@@ -112,6 +119,7 @@ app.include_router(mock_interview.router)
 app.include_router(institutions.router)
 app.include_router(platform.router)
 app.include_router(public.router)
+app.include_router(report_export_safe.router)
 app.include_router(enterprise.router)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
