@@ -34,7 +34,9 @@ jobs:
         run: python -m compileall -q app scripts tests alembic
 
       - name: Check frontend JavaScript
-        run: node --check app/static/app.js
+        run: |
+          node --check app/static/app.js
+          node --check app/static/access-portal.js
 
       - name: Critical Python static analysis
         run: ruff check app scripts tests alembic --select E9,F63,F7,F82
