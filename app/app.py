@@ -13,7 +13,13 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
-from app.database import Base, engine, engine_initialization_error_code
+from app.database import (
+    Base,
+    classify_database_exception,
+    engine,
+    engine_initialization_error_code,
+    safe_database_target,
+)
 
 logger = logging.getLogger("placeai")
 settings = get_settings()
@@ -24,10 +30,6 @@ if engine_initialization_error_code and engine_initialization_error_code not in 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Do not raise configuration errors from the ASGI lifespan. On serverless hosts,
-    # a lifespan exception terminates the Python worker and Vercel can only surface
-    # FUNCTION_INVOCATION_FAILED. Keep the worker alive for /health diagnostics while
-    # the request guard below refuses protected traffic until configuration is valid.
     if runtime_readiness_errors:
         for code in runtime_readiness_errors:
             logger.error("PlaceAI runtime readiness blocked: %s", code)
@@ -127,8 +129,6 @@ def _include_router(module) -> None:
         app.include_router(module.router)
 
 
-# Import routers individually so one environment-specific import failure cannot terminate
-# the entire serverless worker before /health exists.
 auth_refresh_atomic = _import_router("auth_refresh_atomic")
 auth = _import_router("auth")
 students = _import_router("students")
@@ -143,10 +143,6 @@ public = _import_router("public")
 report_export_safe = _import_router("report_export_safe")
 enterprise = _import_router("enterprise")
 
-# The original V2 AI interview endpoints accepted client-supplied question text during
-# scoring. Keep their implementation in source for migration history, but do not register
-# those unsafe routes. A small compatibility router owns the retired POST surface and the
-# read-only history routes, while the canonical coach lives under /mock-interview.
 if ai is not None:
     _RETIRED_AI_INTERVIEW_PATHS = {
         "/ai/interview/questions",
@@ -164,17 +160,12 @@ if mock_interview is not None:
         if getattr(route, "path", "") != "/mock-interview/history"
     ]
 
-# The original refresh route validates rotation state without locking the session row.
-# Register one PostgreSQL row-locking implementation so a refresh token cannot produce
-# multiple valid successors under concurrent requests.
 if auth is not None:
     auth.router.routes = [
         route for route in auth.router.routes
         if getattr(route, "path", "") != "/auth/refresh"
     ]
 
-# Spreadsheet reports contain institution-controlled and user-controlled text. Replace the
-# legacy CSV/XLSX route with the formula-neutralizing exporter before registering enterprise.
 if enterprise is not None:
     enterprise.router.routes = [
         route for route in enterprise.router.routes
@@ -215,32 +206,41 @@ def mock_interview_page():
 
 @app.get("/health", tags=["System"])
 def health_check():
+    service_name = settings.app_name or "PlaceAI"
     if runtime_readiness_errors:
         return JSONResponse(
             status_code=503,
             content={
                 "status": "degraded",
-                "service": settings.app_name,
+                "service": service_name,
                 "version": "3.1.3",
                 "database": "not_checked",
                 "configuration": "invalid",
                 "configuration_errors": runtime_readiness_errors,
             },
         )
+
+    target = safe_database_target(settings.database_url)
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
         database = "ok"
-    except Exception:
+        database_error = None
+    except Exception as exc:
         logger.exception("PlaceAI health database probe failed")
         database = "degraded"
+        database_error = classify_database_exception(exc)
+
     payload = {
         "status": "healthy" if database == "ok" else "degraded",
-        "service": settings.app_name,
+        "service": service_name,
         "version": "3.1.3",
         "database": database,
         "configuration": "ok",
+        "database_target": target,
     }
+    if database_error:
+        payload["database_error"] = database_error
     if database != "ok":
         return JSONResponse(status_code=503, content=payload)
     return payload
