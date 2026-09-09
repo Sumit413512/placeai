@@ -58,23 +58,51 @@ def classify_database_exception(exc: BaseException) -> str:
     current: BaseException | None = exc
     visited: set[int] = set()
     texts: list[str] = []
+    sqlstates: list[str] = []
     while current is not None and id(current) not in visited:
         visited.add(id(current))
         sqlstate = getattr(current, "sqlstate", None) or getattr(current, "pgcode", None)
-        if sqlstate == "28P01":
-            return "DATABASE_AUTHENTICATION_FAILED"
-        if sqlstate == "3D000":
-            return "DATABASE_NAME_INVALID"
-        if sqlstate == "42501":
-            return "DATABASE_PERMISSION_DENIED"
+        if sqlstate:
+            sqlstates.append(str(sqlstate).upper())
         texts.append(str(current).lower())
         original = getattr(current, "orig", None)
         cause = getattr(current, "__cause__", None)
         current = original if isinstance(original, BaseException) else cause
 
+    for sqlstate in sqlstates:
+        if sqlstate in {"28P01", "28000"}:
+            return "DATABASE_AUTHENTICATION_FAILED"
+        if sqlstate == "3D000":
+            return "DATABASE_NAME_INVALID"
+        if sqlstate == "42501":
+            return "DATABASE_PERMISSION_DENIED"
+        if sqlstate == "53300":
+            return "DATABASE_CONNECTION_LIMIT"
+        if sqlstate == "57P03":
+            return "DATABASE_SERVER_UNAVAILABLE"
+        if sqlstate == "08004":
+            return "DATABASE_CONNECTION_REJECTED"
+        if sqlstate in {"08003", "08006", "08007"}:
+            return "DATABASE_CONNECTION_CLOSED"
+        if sqlstate.startswith("08"):
+            return "DATABASE_CONNECTION_FAILED"
+
     text = " ".join(texts)
-    if "password authentication failed" in text or "authentication failed" in text:
+    if "tenant or user not found" in text:
+        return "DATABASE_POOLER_TENANT_OR_USER_NOT_FOUND"
+    if (
+        "password authentication failed" in text
+        or "authentication failed" in text
+        or "sasl authentication failed" in text
+        or "invalid password" in text
+    ):
         return "DATABASE_AUTHENTICATION_FAILED"
+    if (
+        "max client connections reached" in text
+        or "too many connections" in text
+        or "remaining connection slots are reserved" in text
+    ):
+        return "DATABASE_CONNECTION_LIMIT"
     if "could not translate host name" in text or "name or service not known" in text or "nodename nor servname" in text:
         return "DATABASE_DNS_RESOLUTION_FAILED"
     if "timeout expired" in text or "connection timeout" in text or "timed out" in text:
@@ -83,6 +111,13 @@ def classify_database_exception(exc: BaseException) -> str:
         return "DATABASE_CONNECTION_REFUSED"
     if "no route to host" in text or "network is unreachable" in text:
         return "DATABASE_NETWORK_UNREACHABLE"
+    if (
+        "server closed the connection unexpectedly" in text
+        or "connection is bad" in text
+        or "eof detected" in text
+        or "unexpected eof" in text
+    ):
+        return "DATABASE_CONNECTION_CLOSED"
     if "ssl" in text or "certificate" in text:
         return "DATABASE_SSL_FAILED"
     return "DATABASE_CONNECTION_FAILED"
