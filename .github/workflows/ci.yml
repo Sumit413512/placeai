@@ -27,9 +27,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      - name: Print cleanup hashes
-        run: sha256sum app/templates/index.html index.html
-
       - name: Verify release manifest
         run: sha256sum -c MANIFEST.sha256
 
