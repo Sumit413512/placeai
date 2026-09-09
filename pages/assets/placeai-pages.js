@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const productionBase = 'https://placeai-rxpp-git-main-skj1200519-gmailcoms-projects.vercel.app';
+  const productionBase = 'https://placeai-rxpp.vercel.app';
   const portalLabels = {
     student: 'Student workspace',
     recruiter: 'Employer / recruiter workspace',
