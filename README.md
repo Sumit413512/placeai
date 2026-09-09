@@ -30,13 +30,13 @@ PlaceAI is an AI-assisted, multi-tenant campus placement operating system for in
 
 ## Existing commercial foundation retained
 
-- Public B2B website and product-demo lead capture.
+- Public B2B website with controlled role-based access requests.
 - Student, Recruiter, Institution/TPO and Platform Admin workspaces.
 - Institution multi-tenancy and cross-campus data isolation.
 - Controlled recruiter provisioning and institution linkage.
 - Public/campus job posting and campus-job approval.
 - Student applications, resume handling, AI resume parsing/matching/skill-gap/mock-interview capabilities.
-- Bulk CSV student onboarding/export, tenant audit trail and sales-lead pipeline.
+- Bulk CSV student onboarding/export, tenant audit trail and privileged-access review pipeline.
 - Argon2 password hashing, JWT access/refresh workflow, HttpOnly refresh cookie, hashed password-reset tokens, security headers and strict script CSP.
 - PostgreSQL/Docker production path plus SQLite local development, Alembic migrations, automated tests and release-safety checks.
 
@@ -64,26 +64,9 @@ pip install -r requirements-dev.txt
 
 ### 2. Configure
 
-Copy `.env.example` to `.env`. For local SQLite, the defaults are enough. Generate strong JWT secrets even in a shared demo environment.
+Copy `.env.example` to `.env`. For local SQLite, the defaults are enough. Generate strong JWT secrets for every shared development or test environment.
 
-### 3. Create demo data
-
-```bash
-python scripts/seed_demo.py
-```
-
-Development demo password for all seeded users:
-
-`PlaceAI-Demo-2026!`
-
-Accounts:
-
-- TPO: `tpo@northstar.example.com`
-- Recruiter: `recruiter@acme.example.com`
-- Student: `student@northstar.example.com`
-- Platform admin: `platform@placeai.example.com`
-
-### 4. Run
+### 3. Run
 
 ```bash
 uvicorn app.app:app --reload
@@ -91,7 +74,7 @@ uvicorn app.app:app --reload
 
 Open `http://localhost:8000`.
 
-## Clean first-time setup instead of demo seed
+## First-time setup
 
 Use the bootstrap script to create the first platform administrator and institution administrator:
 
@@ -138,7 +121,6 @@ The web container runs `alembic upgrade head` before starting Uvicorn. Productio
 
 Set `GEMINI_API_KEY` to enable Gemini functionality. If AI is not configured or unavailable, production returns an explicit service-unavailable response. Synthetic candidate analysis is **not** silently substituted.
 
-`ENABLE_AI_DEMO_FALLBACK=true` is intended only for controlled local demos.
 
 ## Password reset email
 
@@ -152,7 +134,7 @@ Recommended sales message:
 
 > Replace fragmented placement operations with one institution-controlled workflow for student readiness, recruiter access, campus drives, applications and outcomes.
 
-See `docs/SALES_DEMO.md` for the walkthrough sequence.
+See `docs/PRODUCT_WALKTHROUGH.md` for the production-safe walkthrough sequence.
 
 ## Public repository and deployment topology
 

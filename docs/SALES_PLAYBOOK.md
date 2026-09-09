@@ -85,9 +85,9 @@ Would a 15-minute product walkthrough be useful this week?
 Regards,
 <Your Name>
 
-## Demo close
+## Walkthrough close
 
-Do not end a demo with “what do you think?”. Ask for a concrete next step:
+Do not end a walkthrough with “what do you think?”. Ask for a concrete next step:
 
 > If we configure one graduating batch and two recruiters, who needs to approve a 30-day pilot and what data/security questions must we answer first?
 
