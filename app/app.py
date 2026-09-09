@@ -140,7 +140,6 @@ ai = _import_router("ai")
 mock_interview = _import_router("mock_interview")
 institutions = _import_router("institutions")
 platform = _import_router("platform")
-public = _import_router("public")
 report_export_safe = _import_router("report_export_safe")
 enterprise = _import_router("enterprise")
 
@@ -185,7 +184,6 @@ for module in (
     mock_interview,
     institutions,
     platform,
-    public,
     report_export_safe,
     enterprise,
 ):

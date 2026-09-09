@@ -101,8 +101,8 @@
   function showAuth(view = 'login') {
     $('#auth-overlay').classList.remove('hidden');
     document.body.classList.add('modal-open');
-    ['login-view','signup-view','demo-view','reset-view'].forEach(id => $(`#${id}`).classList.add('hidden'));
-    $(`#${view === 'signup' ? 'signup-view' : view === 'demo' ? 'demo-view' : view === 'reset' ? 'reset-view' : 'login-view'}`).classList.remove('hidden');
+    ['login-view','signup-view','reset-view'].forEach(id => $(`#${id}`).classList.add('hidden'));
+    $(`#${view === 'signup' ? 'signup-view' : view === 'reset' ? 'reset-view' : 'login-view'}`).classList.remove('hidden');
   }
   function closeAuth() { $('#auth-overlay').classList.add('hidden'); document.body.classList.remove('modal-open'); }
   function openModal(html) {
@@ -126,7 +126,7 @@
       ['Command centre','dashboard','Overview'],['Command centre','attention','Attention centre'],['Command centre','analytics2','Placement analytics'],['People','students','Students'],['People','approvals','Profile approvals'],['People','recruiters','Recruiters'],['Trust','verification','Company verification'],['Placements','jobs','Campus jobs'],['Placements','drives','Placement drives'],['Placements','pipeline','Drive pipelines'],['Placements','applications','Applications'],['Placements','interviews','Interviews'],['Placements','offers','Offer management'],['Operations','attendance','QR attendance'],['Operations','calendar','Placement calendar'],['Operations','announcements','Announcements'],['Operations','communications','Recruiter communication'],['Governance','policies','Placement policies'],['Governance','custom-fields','Custom fields'],['Governance','incidents','Incident reports'],['Governance','reports','Reports'],['Updates','notifications','Notifications'],['Governance','audit','Audit log']
     ],
     platform_admin: [
-      ['Platform','dashboard','Overview'],['Platform','organizations','Institutions'],['Sales','leads','Demo requests'],['Updates','notifications','Notifications']
+      ['Platform','dashboard','Overview'],['Platform','organizations','Institutions'],['Access','leads','Access requests'],['Updates','notifications','Notifications']
     ]
   };
 
@@ -172,28 +172,6 @@
     return `<div class="empty-state"><span>${esc(code)}</span><h3>${esc(title)}</h3><p>${esc(text)}</p>${button}</div>`;
   }
 
-  const demoNotificationsByRole = {
-    student: [
-      {type:'Application', title:'Application moved to interview', text:'Your Graduate Software Engineer application has moved to the interview stage.', time:'18 min ago'},
-      {type:'Drive', title:'Campus drive opens tomorrow', text:'A new campus drive is opening soon. Review the eligibility criteria and keep your profile current.', time:'2 hr ago'},
-      {type:'Profile', title:'Complete your placement profile', text:'Add current skills and a resume so eligibility checks and AI-assisted matching have better inputs.', time:'Yesterday'}
-    ],
-    recruiter: [
-      {type:'Applicants', title:'New applicant activity', text:'Graduate Software Engineer has candidate activity ready for recruiter review.', time:'12 min ago'},
-      {type:'Campus', title:'Campus job approved', text:'A campus job was approved by the institution and is now visible to eligible students.', time:'1 hr ago'},
-      {type:'AI', title:'AI ranking available after Gemini setup', text:'Connect GEMINI_API_KEY to generate match scores and reasoning. Final decisions remain human-reviewed.', time:'Yesterday'}
-    ],
-    institution_admin: [
-      {type:'Approval', title:'Campus job awaiting review', text:'A recruiter submitted a campus opportunity that requires placement-office approval.', time:'9 min ago'},
-      {type:'Students', title:'Students added to a drive', text:'Eligible students have been associated with an upcoming placement drive.', time:'46 min ago'},
-      {type:'Recruiter', title:'Recruiter workspace provisioned', text:'A verified recruiter workspace is ready for your institution workflow.', time:'Yesterday'}
-    ],
-    platform_admin: [
-      {type:'Lead', title:'New product walkthrough request', text:'A college placement team submitted a new PlaceAI demo request.', time:'14 min ago'},
-      {type:'Institution', title:'Institution onboarding pending', text:'A newly created institution still needs its placement administrator provisioned.', time:'1 hr ago'},
-      {type:'Audit', title:'Platform activity summary ready', text:'Recent tenant and sales activity is available for review.', time:'Yesterday'}
-    ]
-  };
 
   async function updateNotificationBadge() {
     const node = $('#notification-count');
@@ -419,15 +397,15 @@
     if (view === 'dashboard') {
       setPage('Overview','Platform control'); setContextAction('Add institution','open-org-form');
       const o=await api('/platform/overview');
-      $('#app-content').innerHTML = `${pageHead('Platform overview','Tenant, adoption and sales-pipeline operating metrics.','Add institution','open-org-form')}<div class="metric-grid"><article class="metric-card"><small>Institutions</small><strong>${o.organizations}</strong><span>Active platform tenants</span></article><article class="metric-card"><small>Students</small><strong>${o.students}</strong><span>Registered student users</span></article><article class="metric-card"><small>Recruiters</small><strong>${o.recruiters}</strong><span>Controlled recruiter accounts</span></article><article class="metric-card"><small>Active jobs</small><strong>${o.active_jobs}</strong><span>${o.applications} applications recorded</span></article><article class="metric-card"><small>Sales leads</small><strong>${o.demo_requests}</strong><span>Open walkthrough requests</span></article></div>`;
+      $('#app-content').innerHTML = `${pageHead('Platform overview','Tenant and access-control operating metrics.','Add institution','open-org-form')}<div class="metric-grid"><article class="metric-card"><small>Institutions</small><strong>${o.organizations}</strong><span>Active platform tenants</span></article><article class="metric-card"><small>Students</small><strong>${o.students}</strong><span>Registered student users</span></article><article class="metric-card"><small>Recruiters</small><strong>${o.recruiters}</strong><span>Controlled recruiter accounts</span></article><article class="metric-card"><small>Active jobs</small><strong>${o.active_jobs}</strong><span>${o.applications} applications recorded</span></article><article class="metric-card"><small>Access requests</small><strong>${o.access_requests}</strong><span>Privileged workspace requests awaiting review</span></article></div>`;
     } else if (view === 'organizations') {
       setPage('Institutions','Platform control'); setContextAction('Add institution','open-org-form');
       const orgs=await api('/platform/organizations'); state.orgs=orgs;
       $('#app-content').innerHTML=`${pageHead('Institutions','Create and manage institution tenants.','Add institution','open-org-form')}${orgs.length?`<div class="data-panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Institution</th><th>Code</th><th>Location</th><th>Status</th><th></th></tr></thead><tbody>${orgs.map(o=>`<tr><td><span class="table-primary">${esc(o.name)}</span><span class="table-secondary">${esc(o.website||o.domain||'')}</span></td><td><span class="skill-tag">${esc(o.slug)}</span></td><td>${esc([o.city,o.state].filter(Boolean).join(', ')||'—')}</td><td>${o.is_active?statusBadge('approved'):statusBadge('rejected')}</td><td><button class="row-button primary" data-action="open-admin-form" data-id="${o.slug}">Create TPO admin</button></td></tr>`).join('')}</tbody></table></div></div>`:emptyState('IN','No institutions yet','Create the first institution tenant and provision its placement administrator.')}`;
     } else if (view === 'leads') {
-      setPage('Demo requests','Sales pipeline'); setContextAction();
-      const leads = await api('/platform/demo-requests');
-      $('#app-content').innerHTML = `${pageHead('Demo requests','Inbound institution leads captured from the public website.')}${leads.length ? `<div class="data-panel"><div class="data-toolbar"><span class="table-secondary">${leads.length} requests</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Contact</th><th>Institution</th><th>Role</th><th>Students/year</th><th>Received</th><th>Status</th></tr></thead><tbody>${leads.map(l => `<tr><td><span class="table-primary">${esc(l.contact_name)}</span><span class="table-secondary">${esc(l.work_email)}${l.phone ? ` · ${esc(l.phone)}` : ''}</span></td><td>${esc(l.organization_name)}${l.message ? `<span class="table-secondary">${esc(l.message.slice(0,120))}</span>` : ''}</td><td>${esc(l.role_title || '—')}</td><td>${l.student_count ?? '—'}</td><td>${fmtDate(l.created_at)}</td><td><select class="filter-select lead-status-select" data-id="${l.id}"><option value="new" ${l.status==='new'?'selected':''}>New</option><option value="contacted" ${l.status==='contacted'?'selected':''}>Contacted</option><option value="qualified" ${l.status==='qualified'?'selected':''}>Qualified</option><option value="won" ${l.status==='won'?'selected':''}>Won</option><option value="lost" ${l.status==='lost'?'selected':''}>Lost</option></select></td></tr>`).join('')}</tbody></table></div></div>` : emptyState('LD','No demo requests yet','Requests submitted through the public site will appear here.')}`;
+      setPage('Access requests','Platform control'); setContextAction();
+      const requests = await api('/platform/access-requests');
+      $('#app-content').innerHTML = `${pageHead('Access requests','Privileged workspace requests submitted through the production access flow.')}${requests.length ? `<div class="data-panel"><div class="data-toolbar"><span class="table-secondary">${requests.length} requests</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Requester</th><th>Role</th><th>Organization</th><th>Context</th><th>Received</th><th>Status</th></tr></thead><tbody>${requests.map(r => `<tr><td><span class="table-primary">${esc(r.full_name)}</span><span class="table-secondary">${esc(r.work_email)}${r.phone ? ` · ${esc(r.phone)}` : ''}</span></td><td>${esc((r.requested_role || '').replaceAll('_',' '))}</td><td>${esc(r.organization_name || '—')}</td><td>${esc((r.message || '—').slice(0,120))}</td><td>${fmtDate(r.created_at)}</td><td><select class="filter-select access-status-select" data-id="${r.id}"><option value="new" ${r.status==='new'?'selected':''}>New</option><option value="under_review" ${r.status==='under_review'?'selected':''}>Under review</option><option value="approved" ${r.status==='approved'?'selected':''}>Approved</option><option value="rejected" ${r.status==='rejected'?'selected':''}>Rejected</option><option value="provisioned" ${r.status==='provisioned'?'selected':''}>Provisioned</option></select></td></tr>`).join('')}</tbody></table></div></div>` : emptyState('AR','No access requests','New privileged workspace requests will appear here after submission.')}`;
     }
   }
 
@@ -501,7 +479,7 @@
       if(e.target.id==='resume-file'&&e.target.files[0]){const form=new FormData();form.append('file',e.target.files[0]);await api('/students/resume',{method:'POST',body:form});toast('Resume uploaded');navigate('resume');}
       if(e.target.id==='student-csv-file'&&e.target.files[0]){const form=new FormData();form.append('file',e.target.files[0]);const result=await api('/institutions/import/students.csv',{method:'POST',body:form});toast('CSV import complete',`${result.created} created · ${result.failed} failed`);if(result.errors?.length){openModal(`<span class="section-kicker">CSV import report</span><h2>${result.created} students created</h2><p class="form-intro">${result.failed} rows could not be imported.</p><div class="ai-box"><div class="ai-box-head"><span>ROW ERRORS</span></div><p>${result.errors.map(x=>`Row ${x.row}: ${esc(x.error)}`).join('<br>')}</p></div><button class="button button-primary button-full" data-action="close-generic-modal">Done</button>`);}await navigate('students');}
       if(e.target.classList.contains('application-status-select')&&e.target.value){await api(`/jobs/${e.target.dataset.job}/applicants/${e.target.dataset.id}/status`,{method:'PATCH',body:JSON.stringify({status:e.target.value})});toast('Application stage updated');await viewApplicants(e.target.dataset.job);}
-      if(e.target.classList.contains('lead-status-select')&&e.target.value){await api(`/platform/demo-requests/${e.target.dataset.id}`,{method:'PATCH',body:JSON.stringify({status:e.target.value})});toast('Lead status updated');}
+      if(e.target.classList.contains('access-status-select')&&e.target.value){await api(`/platform/access-requests/${e.target.dataset.id}`,{method:'PATCH',body:JSON.stringify({status:e.target.value})});toast('Access request updated');}
     }catch(err){toast('Update failed',err.message,'error');}
   });
 
@@ -514,8 +492,7 @@
   document.addEventListener('submit',async e=>{
     const f=e.target; e.preventDefault(); const fd=new FormData(f); const obj=Object.fromEntries(fd.entries());
     try{
-      if(f.id==='demo-request-form'){const data={...obj,student_count:obj.student_count?Number(obj.student_count):null};await api('/public/demo-requests',{method:'POST',body:JSON.stringify(data)},false);f.reset();toast('Walkthrough requested','Your request has been saved for follow-up.');showAuth('login');}
-      else if(f.id==='login-form'){const data=await api('/auth/login-json',{method:'POST',body:JSON.stringify({email:obj.email,password:obj.password})},false);state.token=data.access_token;closeAuth();await bootWorkspace();toast('Signed in');}
+      if(f.id==='login-form'){const data=await api('/auth/login-json',{method:'POST',body:JSON.stringify({email:obj.email,password:obj.password})},false);state.token=data.access_token;closeAuth();await bootWorkspace();toast('Signed in');}
       else if(f.id==='signup-form'){const data={username:obj.username,email:obj.email,password:obj.password,role:'student',organization_slug:obj.organization_slug||null};await api('/auth/signup',{method:'POST',body:JSON.stringify(data)},false);const login=await api('/auth/login-json',{method:'POST',body:JSON.stringify({email:obj.email,password:obj.password})},false);state.token=login.access_token;closeAuth();await bootWorkspace();if(obj.full_name)await api('/students/profile',{method:'PUT',body:JSON.stringify({full_name:obj.full_name})});toast('Student account created');}
       else if(f.id==='forgot-form'){await api('/auth/forgot-password',{method:'POST',body:JSON.stringify({email:obj.email})},false);toast('Request accepted','If the account exists, reset instructions will be sent.');showAuth('login');}
       else if(f.id==='student-profile-form'){const num=(v)=>v!==''&&v!=null?Number(v):null;const customValues={};for(const [k,v] of Object.entries(obj)){if(k.startsWith('custom__')){customValues[k.slice(8)]=String(v??'');delete obj[k];}}const data={...obj,skills:String(obj.skills||'').split(',').map(x=>x.trim()).filter(Boolean),certifications:String(obj.certifications||'').split(',').map(x=>x.trim()).filter(Boolean),desired_roles:String(obj.desired_roles||'').split(',').map(x=>x.trim()).filter(Boolean),graduation_year:num(obj.graduation_year),cgpa:num(obj.cgpa),tenth_percentage:num(obj.tenth_percentage),twelfth_percentage:num(obj.twelfth_percentage),diploma_percentage:num(obj.diploma_percentage),active_backlogs:num(obj.active_backlogs),historical_backlogs:num(obj.historical_backlogs),academic_gap_months:num(obj.academic_gap_months)};await api('/students/profile',{method:'PUT',body:JSON.stringify(data)});if(state.profile?.id&&Object.keys(customValues).length)await api(`/enterprise/custom-fields/values/${state.profile.id}`,{method:'PUT',body:JSON.stringify({values:customValues})});toast('Profile saved','Verified academic changes may appear under Profile approvals until your placement office reviews them.');navigate('profile');}

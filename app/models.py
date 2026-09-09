@@ -446,21 +446,6 @@ class MockInterview(Base):
     job = relationship("Job")
 
 
-class DemoRequest(Base):
-    __tablename__ = "demo_requests"
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    contact_name = Column(String(200), nullable=False)
-    work_email = Column(String(320), nullable=False, index=True)
-    organization_name = Column(String(250), nullable=False)
-    role_title = Column(String(180), nullable=True)
-    phone = Column(String(40), nullable=True)
-    student_count = Column(Integer, nullable=True)
-    message = Column(Text, nullable=True)
-    status = Column(String(30), nullable=False, default="new", index=True)
-    created_at = Column(DateTime, default=utcnow, index=True)
-
-
 class AuditEvent(Base):
     __tablename__ = "audit_events"
 
