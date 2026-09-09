@@ -26,6 +26,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      # Production verification after PR #20 merged to main.
       - name: Check production deployment
         env:
           PLACEAI_PRODUCTION_URL: https://placeai-rxpp.vercel.app
