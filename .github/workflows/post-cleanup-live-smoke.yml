@@ -30,7 +30,7 @@ jobs:
           curl -fsS "$BASE/static/access-portal.js" -o /tmp/access.js
           for role in 'Student' 'Recruiter' 'Institution Admin' 'Platform Admin'; do grep -q "$role" /tmp/access.js; done
           grep -q 'Production workspace' /tmp/root.html
-          grep -q 'No fabricated placement activity' /tmp/root.html
+          grep -q 'does not display fabricated students' /tmp/root.html
           ! grep -q 'Northstar Institute' /tmp/root.html
           ! grep -q 'Aarav Shah' /tmp/root.html
           ! grep -q 'Avanta Labs' /tmp/root.html
