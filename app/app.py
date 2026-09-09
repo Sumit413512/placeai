@@ -11,7 +11,7 @@ from sqlalchemy import text
 
 from app.config import get_settings
 from app.database import Base, engine
-from app.routers import ai, auth, enterprise, institutions, jobs, mock_interview, platform, public, recruiters, students
+from app.routers import ai, auth, enterprise, institutions, interview_compat, jobs, mock_interview, platform, public, recruiters, students
 
 settings = get_settings()
 
@@ -74,10 +74,30 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     raise exc
 
 
+# The original V2 AI interview endpoints accepted client-supplied question text during
+# scoring. Keep their implementation in source for migration history, but do not register
+# those unsafe routes. A small compatibility router owns the retired POST surface and the
+# read-only history routes, while the canonical coach lives under /mock-interview.
+_RETIRED_AI_INTERVIEW_PATHS = {
+    "/ai/interview/questions",
+    "/ai/interview/evaluate",
+    "/ai/interviews",
+    "/ai/interviews/{interview_id}",
+}
+ai.router.routes = [
+    route for route in ai.router.routes
+    if getattr(route, "path", "") not in _RETIRED_AI_INTERVIEW_PATHS
+]
+mock_interview.router.routes = [
+    route for route in mock_interview.router.routes
+    if getattr(route, "path", "") != "/mock-interview/history"
+]
+
 app.include_router(auth.router)
 app.include_router(students.router)
 app.include_router(recruiters.router)
 app.include_router(jobs.router)
+app.include_router(interview_compat.router)
 app.include_router(ai.router)
 app.include_router(mock_interview.router)
 app.include_router(institutions.router)
