@@ -18,21 +18,20 @@ Baseline: PlaceAI Commercial V3.1.3 Production Security & Persistence Hardening.
 - Python compile check passed.
 - Frontend JavaScript syntax check passed.
 
-## Live infrastructure status on 2026-09-08
+## Live infrastructure status
 
 - Supabase production schema is present and aligned with the 3.1.3 session/storage baseline.
 - Supabase `anon` and `authenticated` Data API roles have no table grants on the PlaceAI `public` tables; PlaceAI uses the direct PostgreSQL application connection.
 - Eight previously missing foreign-key indexes were added.
 - GitHub repository `Sumit413512/placeai` is intentionally **public** and is the canonical source repository.
-- Vercel recognizes `Sumit413512/placeai` as a FastAPI import candidate, but the connected Vercel account currently exposes no imported PlaceAI project/team to the connector.
+- Vercel production serves PlaceAI at `https://placeai-rxpp.vercel.app`.
+- Production `DATABASE_URL` was refreshed on 2026-09-09 and this documentation-only commit intentionally triggers a fresh production deployment so the new runtime secret is loaded.
 
 ## Remaining deployment gates
 
-1. Replace the current corrupt `bundle*` representation on GitHub `main` with the verified 3.1.3 source tree.
-2. Verify GitHub Pages serves the root static `index.html`.
-3. Import/link the public repository into the intended Vercel account/project.
-4. Configure production environment variables and the Supabase PostgreSQL connection/pooler endpoint.
-5. Apply `alembic upgrade head` before serving production traffic.
-6. Run live health/login/student/TPO/recruiter/upload/QR/regression checks against the deployed URL.
+1. Verify the fresh Vercel production deployment loads the updated `DATABASE_URL`.
+2. Require `/health` to return HTTP 200 with `database=ok`.
+3. Run live login/signup/student/TPO/recruiter smoke checks.
+4. Run upload/QR/regression checks against the deployed URL.
 
 Dedicated object storage is recommended for high-volume enterprise operation, but it is no longer a functional durability blocker for the current Vercel pilot because production file bytes are persisted in PostgreSQL.
