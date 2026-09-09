@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -13,7 +16,15 @@ def build_engine_kwargs(settings):
         # Supabase recommends its transaction-mode Supavisor pooler for
         # serverless/auto-scaling workloads. Psycopg prepared statements are not
         # compatible with transaction pooling, so disable them per connection.
-        connect_args["prepare_threshold"] = None
+        # Bound connection establishment as well: a bad pooler host/credential must
+        # produce a readiness result quickly rather than consuming a full invocation.
+        connect_args.update(
+            {
+                "prepare_threshold": None,
+                "connect_timeout": 5,
+                "sslmode": "require",
+            }
+        )
 
     engine_kwargs = {
         "connect_args": connect_args,
@@ -24,6 +35,57 @@ def build_engine_kwargs(settings):
         # SQLAlchemy connection pool between short-lived invocations.
         engine_kwargs["poolclass"] = NullPool
     return engine_kwargs
+
+
+def safe_database_target(database_url: str) -> dict[str, object]:
+    """Return non-secret connection metadata suitable for /health diagnostics."""
+    try:
+        url = make_url(database_url)
+    except Exception:
+        return {"driver": "invalid", "supabase_pooler": False, "port": None}
+    host = (url.host or "").lower()
+    return {
+        "driver": url.drivername,
+        "supabase_pooler": host.endswith("pooler.supabase.com"),
+        "transaction_pooler": host.endswith("pooler.supabase.com") and url.port == 6543,
+        "port": url.port,
+        "username_shape_ok": bool((url.username or "").startswith("postgres.")),
+    }
+
+
+def classify_database_exception(exc: BaseException) -> str:
+    """Map connection failures to safe codes without returning hosts, users or secrets."""
+    current: BaseException | None = exc
+    visited: set[int] = set()
+    texts: list[str] = []
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        sqlstate = getattr(current, "sqlstate", None) or getattr(current, "pgcode", None)
+        if sqlstate == "28P01":
+            return "DATABASE_AUTHENTICATION_FAILED"
+        if sqlstate == "3D000":
+            return "DATABASE_NAME_INVALID"
+        if sqlstate == "42501":
+            return "DATABASE_PERMISSION_DENIED"
+        texts.append(str(current).lower())
+        original = getattr(current, "orig", None)
+        cause = getattr(current, "__cause__", None)
+        current = original if isinstance(original, BaseException) else cause
+
+    text = " ".join(texts)
+    if "password authentication failed" in text or "authentication failed" in text:
+        return "DATABASE_AUTHENTICATION_FAILED"
+    if "could not translate host name" in text or "name or service not known" in text or "nodename nor servname" in text:
+        return "DATABASE_DNS_RESOLUTION_FAILED"
+    if "timeout expired" in text or "connection timeout" in text or "timed out" in text:
+        return "DATABASE_CONNECTION_TIMEOUT"
+    if "connection refused" in text:
+        return "DATABASE_CONNECTION_REFUSED"
+    if "no route to host" in text or "network is unreachable" in text:
+        return "DATABASE_NETWORK_UNREACHABLE"
+    if "ssl" in text or "certificate" in text:
+        return "DATABASE_SSL_FAILED"
+    return "DATABASE_CONNECTION_FAILED"
 
 
 settings = get_settings()
