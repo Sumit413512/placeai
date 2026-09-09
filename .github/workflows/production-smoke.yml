@@ -28,7 +28,7 @@ jobs:
 
       - name: Check production deployment
         env:
-          PLACEAI_PRODUCTION_URL: https://placeai-rxpp-git-main-skj1200519-gmailcoms-projects.vercel.app
+          PLACEAI_PRODUCTION_URL: https://placeai-rxpp.vercel.app
         shell: bash
         run: |
           set -euo pipefail
