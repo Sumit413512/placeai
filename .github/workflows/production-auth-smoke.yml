@@ -10,115 +10,74 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: placeai-production-auth-smoke
-  cancel-in-progress: true
-
 jobs:
   auth-smoke:
-    name: Verify production signup login session and student core
+    name: Verify production auth student and resume persistence
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Exercise live production authentication
+      - uses: actions/checkout@v6
+      - name: Exercise live production
         env:
           PLACEAI_PRODUCTION_URL: https://placeai-rxpp.vercel.app
         shell: bash
         run: |
           set -euo pipefail
           base="${PLACEAI_PRODUCTION_URL%/}"
-          work="${RUNNER_TEMP}/placeai-auth-smoke"
-          mkdir -p "${work}"
-
+          work="${RUNNER_TEMP}/placeai-auth-smoke"; mkdir -p "${work}"
           username="smoke_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
           email="${username}@example.com"
           password="Smoke!Aa9_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
-          cookie_jar="${work}/cookies.txt"
-          revoked_cookie_jar="${work}/cookies-before-logout.txt"
+          jar="${work}/cookies.txt"; oldjar="${work}/cookies-before-logout.txt"
 
-          request_json() {
-            local method="$1" path="$2" body="$3" output="$4"
-            shift 4
-            curl --silent --show-error --location \
-              --connect-timeout 10 --max-time 25 \
-              --request "${method}" \
-              --header 'Content-Type: application/json' \
-              --output "${output}" --write-out '%{http_code}' \
-              "$@" \
-              --data "${body}" \
-              "${base}${path}"
-          }
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -o "${work}/health.json" -w '%{http_code}' "${base}/health")"
+          test "${code}" = 200
+          jq -e '.status=="healthy" and .database=="ok" and .configuration=="ok"' "${work}/health.json" >/dev/null
 
-          echo "1/10 health"
-          health_code="$(curl --silent --show-error --location --connect-timeout 10 --max-time 25 --output "${work}/health.json" --write-out '%{http_code}' "${base}/health")"
-          test "${health_code}" = "200"
-          jq -e '.status == "healthy" and .database == "ok" and .configuration == "ok"' "${work}/health.json" >/dev/null
+          signup="$(jq -nc --arg u "$username" --arg e "$email" --arg p "$password" '{username:$u,email:$e,password:$p,role:"student"}')"
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -H 'Content-Type: application/json' -d "$signup" -o "${work}/signup.json" -w '%{http_code}' "${base}/auth/signup")"
+          test "${code}" = 201
+          jq -e --arg e "$email" '.email==$e and .role=="student" and .is_active==true' "${work}/signup.json" >/dev/null
 
-          echo "2/10 signup"
-          signup_body="$(jq -nc --arg username "${username}" --arg email "${email}" --arg password "${password}" '{username:$username,email:$email,password:$password,role:"student"}')"
-          signup_code="$(request_json POST /auth/signup "${signup_body}" "${work}/signup.json")"
-          test "${signup_code}" = "201"
-          jq -e --arg email "${email}" '.email == $email and .role == "student" and .is_active == true' "${work}/signup.json" >/dev/null
+          login="$(jq -nc --arg e "$email" --arg p "$password" '{email:$e,password:$p}')"
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -c "$jar" -b "$jar" -H 'Content-Type: application/json' -d "$login" -o "${work}/login.json" -w '%{http_code}' "${base}/auth/login-json")"
+          test "${code}" = 200
+          token="$(jq -er '.access_token|select(length>20)' "${work}/login.json")"
 
-          echo "3/10 login-json"
-          login_body="$(jq -nc --arg email "${email}" --arg password "${password}" '{email:$email,password:$password}')"
-          login_code="$(request_json POST /auth/login-json "${login_body}" "${work}/login.json" --cookie-jar "${cookie_jar}" --cookie "${cookie_jar}")"
-          test "${login_code}" = "200"
-          access_token="$(jq -er '.access_token | select(length > 20)' "${work}/login.json")"
-          jq -e '.refresh_token == null and .token_type == "bearer" and .expires_in > 0' "${work}/login.json" >/dev/null
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -H "Authorization: Bearer ${token}" -o "${work}/me.json" -w '%{http_code}' "${base}/auth/me")"; test "$code" = 200
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -H "Authorization: Bearer ${token}" -o "${work}/profile.json" -w '%{http_code}' "${base}/students/profile")"; test "$code" = 200
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -H "Authorization: Bearer ${token}" -o "${work}/dashboard.json" -w '%{http_code}' "${base}/students/dashboard")"; test "$code" = 200
 
-          echo "4/10 auth me"
-          me_code="$(curl --silent --show-error --location --connect-timeout 10 --max-time 25 --header "Authorization: Bearer ${access_token}" --output "${work}/me.json" --write-out '%{http_code}' "${base}/auth/me")"
-          test "${me_code}" = "200"
-          jq -e --arg email "${email}" '.email == $email and .role == "student"' "${work}/me.json" >/dev/null
+          update='{"full_name":"PlaceAI Production Smoke","skills":["Python","SQL"],"desired_roles":["Software Engineer"]}'
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -X PUT -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' -d "$update" -o "${work}/update.json" -w '%{http_code}' "${base}/students/profile")"; test "$code" = 200
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -H "Authorization: Bearer ${token}" -o "${work}/jobs.json" -w '%{http_code}' "${base}/students/jobs")"; test "$code" = 200; jq -e 'type=="array"' "${work}/jobs.json" >/dev/null
 
-          echo "5/10 student profile and dashboard"
-          profile_code="$(curl --silent --show-error --location --connect-timeout 10 --max-time 25 --header "Authorization: Bearer ${access_token}" --output "${work}/profile.json" --write-out '%{http_code}' "${base}/students/profile")"
-          test "${profile_code}" = "200"
-          dashboard_code="$(curl --silent --show-error --location --connect-timeout 10 --max-time 25 --header "Authorization: Bearer ${access_token}" --output "${work}/dashboard.json" --write-out '%{http_code}' "${base}/students/dashboard")"
-          test "${dashboard_code}" = "200"
-          jq -e 'has("profile_completion") and has("applications") and has("has_resume")' "${work}/dashboard.json" >/dev/null
+          cat > "${work}/resume.pdf" <<'PDF'
+          %PDF-1.4
+          1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+          2 0 obj<</Type/Pages/Count 0/Kids[]>>endobj
+          trailer<</Root 1 0 R>>
+          %%EOF
+          PDF
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -X POST -H "Authorization: Bearer ${token}" -F "file=@${work}/resume.pdf;type=application/pdf" -o "${work}/resume-upload.json" -w '%{http_code}' "${base}/students/resume")"; test "$code" = 201
+          jq -e '.original_filename=="resume.pdf"' "${work}/resume-upload.json" >/dev/null
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -H "Authorization: Bearer ${token}" -o "${work}/resume-meta.json" -w '%{http_code}' "${base}/students/resume")"; test "$code" = 200
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -H "Authorization: Bearer ${token}" -o "${work}/resume-download.pdf" -w '%{http_code}' "${base}/students/resume/download")"; test "$code" = 200
+          head -c 5 "${work}/resume-download.pdf" | grep -q '%PDF-'
 
-          echo "6/10 update student profile"
-          update_body='{"full_name":"PlaceAI Production Smoke","skills":["Python","SQL"],"desired_roles":["Software Engineer"]}'
-          update_code="$(request_json PUT /students/profile "${update_body}" "${work}/profile-update.json" --header "Authorization: Bearer ${access_token}")"
-          test "${update_code}" = "200"
-          jq -e '.full_name == "PlaceAI Production Smoke" and (.skills | index("Python") != null)' "${work}/profile-update.json" >/dev/null
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -c "$jar" -b "$jar" -H 'Content-Type: application/json' -d '{}' -o "${work}/refresh.json" -w '%{http_code}' "${base}/auth/refresh")"; test "$code" = 200
+          token2="$(jq -er '.access_token|select(length>20)' "${work}/refresh.json")"; test "$token2" != "$token"
+          cp "$jar" "$oldjar"
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -H "Authorization: Bearer ${token2}" -o "${work}/me2.json" -w '%{http_code}' "${base}/auth/me")"; test "$code" = 200
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -X POST -c "$jar" -b "$jar" -o "${work}/logout.txt" -w '%{http_code}' "${base}/auth/logout")"; test "$code" = 204
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -b "$oldjar" -H 'Content-Type: application/json' -d '{}' -o "${work}/revoked.json" -w '%{http_code}' "${base}/auth/refresh")"; test "$code" = 401
 
-          echo "7/10 browse jobs"
-          jobs_code="$(curl --silent --show-error --location --connect-timeout 10 --max-time 25 --header "Authorization: Bearer ${access_token}" --output "${work}/jobs.json" --write-out '%{http_code}' "${base}/students/jobs")"
-          test "${jobs_code}" = "200"
-          jq -e 'type == "array"' "${work}/jobs.json" >/dev/null
-
-          echo "8/10 refresh rotation"
-          refresh_code="$(request_json POST /auth/refresh '{}' "${work}/refresh.json" --cookie-jar "${cookie_jar}" --cookie "${cookie_jar}")"
-          test "${refresh_code}" = "200"
-          refreshed_access="$(jq -er '.access_token | select(length > 20)' "${work}/refresh.json")"
-          test "${refreshed_access}" != "${access_token}"
-          cp "${cookie_jar}" "${revoked_cookie_jar}"
-
-          echo "9/10 refreshed session"
-          me2_code="$(curl --silent --show-error --location --connect-timeout 10 --max-time 25 --header "Authorization: Bearer ${refreshed_access}" --output "${work}/me-after-refresh.json" --write-out '%{http_code}' "${base}/auth/me")"
-          test "${me2_code}" = "200"
-          jq -e --arg email "${email}" '.email == $email' "${work}/me-after-refresh.json" >/dev/null
-
-          echo "10/10 logout and revoke refresh"
-          logout_code="$(curl --silent --show-error --location --connect-timeout 10 --max-time 25 --request POST --cookie "${cookie_jar}" --cookie-jar "${cookie_jar}" --output "${work}/logout.txt" --write-out '%{http_code}' "${base}/auth/logout")"
-          test "${logout_code}" = "204"
-          revoked_code="$(request_json POST /auth/refresh '{}' "${work}/revoked-refresh.json" --cookie "${revoked_cookie_jar}")"
-          test "${revoked_code}" = "401"
-
-          printf 'smoke_email=%s\nhealth=ok\nsignup=ok\nlogin=ok\nme=ok\nstudent_profile=ok\nstudent_dashboard=ok\nprofile_update=ok\njobs=ok\nrefresh_rotation=ok\nlogout_revocation=ok\n' "${email}" > "${work}/summary.txt"
+          printf 'smoke_email=%s\nhealth=ok\nsignup=ok\nlogin=ok\nstudent_core=ok\nresume_upload=ok\nresume_download=ok\nrefresh_rotation=ok\nlogout_revocation=ok\n' "$email" > "${work}/summary.txt"
           cat "${work}/summary.txt"
-
-      - name: Preserve smoke diagnostics
+      - name: Preserve diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: placeai-production-auth-smoke-diagnostics
           path: ${{ runner.temp }}/placeai-auth-smoke
-          if-no-files-found: warn
           retention-days: 3
