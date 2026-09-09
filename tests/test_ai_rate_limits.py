@@ -12,9 +12,10 @@ from app.ai_rate_limit import (
 )
 from app.database import Base, SessionLocal, engine
 from app.models import RateLimitBucket
+from app.rate_limit import enforce_rate_limit
 
 
-def request_for(path: str = "/ai/test") -> Request:
+def request_for(path: str = "/ai/test", client_host: str = "127.0.0.1") -> Request:
     return Request({
         "type": "http",
         "http_version": "1.1",
@@ -24,9 +25,14 @@ def request_for(path: str = "/ai/test") -> Request:
         "raw_path": path.encode("ascii"),
         "query_string": b"",
         "headers": [],
-        "client": ("127.0.0.1", 45678),
+        "client": (client_host, 45678),
         "server": ("testserver", 80),
     })
+
+
+def _clear_scope(db, prefix: str) -> None:
+    db.query(RateLimitBucket).filter(RateLimitBucket.scope.like(f"{prefix}%")).delete(synchronize_session=False)
+    db.commit()
 
 
 def test_ai_budget_allows_bounded_requests_then_returns_429():
@@ -34,9 +40,7 @@ def test_ai_budget_allows_bounded_requests_then_returns_429():
     db = SessionLocal()
     user = SimpleNamespace(id="ai-budget-test-user")
     try:
-        db.query(RateLimitBucket).filter(RateLimitBucket.scope.like("ai:%")).delete(synchronize_session=False)
-        db.commit()
-
+        _clear_scope(db, "ai:")
         for _ in range(AI_STUDENT_ENDPOINT_LIMIT_PER_10_MIN):
             _enforce_ai_budget(
                 request_for("/ai/test"),
@@ -55,8 +59,7 @@ def test_ai_budget_allows_bounded_requests_then_returns_429():
         assert exc.value.status_code == 429
         assert exc.value.headers and int(exc.value.headers["Retry-After"]) > 0
     finally:
-        db.query(RateLimitBucket).filter(RateLimitBucket.scope.like("ai:%")).delete(synchronize_session=False)
-        db.commit()
+        _clear_scope(db, "ai:")
         db.close()
 
 
@@ -65,8 +68,7 @@ def test_ai_endpoint_buckets_are_path_scoped_but_share_aggregate_budget():
     db = SessionLocal()
     user = SimpleNamespace(id="ai-path-test-user")
     try:
-        db.query(RateLimitBucket).filter(RateLimitBucket.scope.like("ai:%")).delete(synchronize_session=False)
-        db.commit()
+        _clear_scope(db, "ai:")
         _enforce_ai_budget(request_for("/ai/generate-summary"), db, user, endpoint_limit=12)
         _enforce_ai_budget(request_for("/mock-interview/start"), db, user, endpoint_limit=12)
 
@@ -78,8 +80,79 @@ def test_ai_endpoint_buckets_are_path_scoped_but_share_aggregate_budget():
         aggregate = next(row for row in rows if row.scope == "ai:aggregate")
         assert aggregate.request_count == 2
     finally:
-        db.query(RateLimitBucket).filter(RateLimitBucket.scope.like("ai:%")).delete(synchronize_session=False)
-        db.commit()
+        _clear_scope(db, "ai:")
+        db.close()
+
+
+def test_ai_budget_cannot_be_reset_by_changing_client_ip():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    user = SimpleNamespace(id="ai-ip-rotation-user")
+    try:
+        _clear_scope(db, "ai:")
+        for index in range(AI_STUDENT_ENDPOINT_LIMIT_PER_10_MIN):
+            host = f"10.20.0.{index + 1}"
+            _enforce_ai_budget(
+                request_for("/ai/generate-summary", client_host=host),
+                db,
+                user,
+                endpoint_limit=AI_STUDENT_ENDPOINT_LIMIT_PER_10_MIN,
+            )
+
+        rows = db.query(RateLimitBucket).filter(RateLimitBucket.scope.like("ai:%")).all()
+        assert len(rows) == 2
+        endpoint = next(row for row in rows if row.scope == "ai:/ai/generate-summary")
+        assert endpoint.request_count == AI_STUDENT_ENDPOINT_LIMIT_PER_10_MIN
+
+        with pytest.raises(HTTPException) as exc:
+            _enforce_ai_budget(
+                request_for("/ai/generate-summary", client_host="203.0.113.250"),
+                db,
+                user,
+                endpoint_limit=AI_STUDENT_ENDPOINT_LIMIT_PER_10_MIN,
+            )
+        assert exc.value.status_code == 429
+    finally:
+        _clear_scope(db, "ai:")
+        db.close()
+
+
+def test_default_limiter_remains_client_address_aware():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        _clear_scope(db, "auth-ip-test")
+        enforce_rate_limit(
+            db,
+            request_for("/auth/test", client_host="10.0.0.1"),
+            scope="auth-ip-test",
+            identifier="same-account",
+            limit=1,
+            window_seconds=600,
+        )
+        enforce_rate_limit(
+            db,
+            request_for("/auth/test", client_host="10.0.0.2"),
+            scope="auth-ip-test",
+            identifier="same-account",
+            limit=1,
+            window_seconds=600,
+        )
+        rows = db.query(RateLimitBucket).filter(RateLimitBucket.scope == "auth-ip-test").all()
+        assert len(rows) == 2
+
+        with pytest.raises(HTTPException) as exc:
+            enforce_rate_limit(
+                db,
+                request_for("/auth/test", client_host="10.0.0.1"),
+                scope="auth-ip-test",
+                identifier="same-account",
+                limit=1,
+                window_seconds=600,
+            )
+        assert exc.value.status_code == 429
+    finally:
+        _clear_scope(db, "auth-ip-test")
         db.close()
 
 
