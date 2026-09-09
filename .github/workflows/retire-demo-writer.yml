@@ -1,0 +1,173 @@
+name: Retire Legacy Demo System Writer
+
+on:
+  push:
+    branches: [fix/retire-legacy-demo-system]
+
+permissions:
+  contents: write
+
+jobs:
+  rewrite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/retire-legacy-demo-system
+      - name: Remove legacy demo and synthetic runtime paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import json, re
+
+          def read(p): return Path(p).read_text(encoding='utf-8')
+          def write(p, s): Path(p).write_text(s, encoding='utf-8')
+          def sub(p, pattern, repl, flags=0, count=0):
+              s=read(p); n=re.subn(pattern,repl,s,count=count,flags=flags); write(p,n[0]); return n[1]
+
+          # Runtime application shell: remove obsolete demo branches and switch platform leads to real access requests.
+          p='app/static/app.js'; s=read(p)
+          s=s.replace("['login-view','signup-view','demo-view','reset-view']", "['login-view','signup-view','reset-view']")
+          s=s.replace("view === 'demo' ? 'demo-view' : view === 'reset' ? 'reset-view' : 'login-view'", "view === 'reset' ? 'reset-view' : 'login-view'")
+          s=s.replace("['Sales','leads','Demo requests']", "['Access','leads','Access requests']")
+          s=re.sub(r"\n  const demoNotificationsByRole = \{.*?\n  \};\n\n  async function updateNotificationBadge", "\n  async function updateNotificationBadge", s, flags=re.S)
+          s=s.replace("'Tenant, adoption and sales-pipeline operating metrics.'", "'Tenant and controlled-access operating metrics.'")
+          s=s.replace("<small>Sales leads</small><strong>${o.demo_requests}</strong><span>Open walkthrough requests</span>", "<small>Access requests</small><strong>${o.access_requests}</strong><span>Privileged workspace requests awaiting review</span>")
+          s=re.sub(r"    \} else if \(view === 'leads'\) \{\n      setPage\('Demo requests','Sales pipeline'\);.*?\n    \}\n  \}\n\n  function inputField", "    } else if (view === 'leads') {\n      setPage('Access requests','Platform control'); setContextAction();\n      const rows = await api('/platform/access-requests');\n      $('#app-content').innerHTML = `${pageHead('Access requests','Privileged workspace access requests stored in the production database.')}${rows.length ? `<div class=\"data-panel\"><div class=\"data-toolbar\"><span class=\"table-secondary\">${rows.length} requests</span></div><div class=\"table-wrap\"><table class=\"data-table\"><thead><tr><th>Requester</th><th>Role</th><th>Organization</th><th>Received</th><th>Status</th></tr></thead><tbody>${rows.map(r => `<tr><td><span class=\"table-primary\">${esc(r.full_name)}</span><span class=\"table-secondary\">${esc(r.work_email)}</span></td><td>${esc(r.requested_role.replaceAll('_',' '))}</td><td>${esc(r.organization_name || '—')}</td><td>${fmtDate(r.created_at)}</td><td>${statusBadge(r.status)}</td></tr>`).join('')}</tbody></table></div></div>` : emptyState('AR','No access requests','Privileged workspace requests will appear here when submitted.')}`;\n    }\n  }\n\n  function inputField", s, flags=re.S)
+          s=s.replace('placeholder="e.g. northstar"', 'placeholder="e.g. campus-main"')
+          s=re.sub(r"\n      if\(e\.target\.classList\.contains\('lead-status-select'\).*?\n", "\n", s)
+          s=re.sub(r"      if\(f\.id==='demo-request-form'\)\{.*?\}\n      else if\(f\.id==='login-form'\)", "      if(f.id==='login-form')", s, flags=re.S)
+          write(p,s)
+
+          # Access overlay: no runtime cleanup shim is needed after source cleanup.
+          p='app/static/access-portal.js'; s=read(p)
+          s=s.replace('placeholder="e.g. aarav.shah"','placeholder="e.g. student.name"')
+          s=s.replace('No simulated leads are displayed.','Only persisted production requests are displayed.')
+          s=re.sub(r"\n  function removeSimulatedPublicContent\(\) \{.*?\n  \}\n\n  function relabelPlatformNavigation", "\n  function relabelPlatformNavigation", s, flags=re.S)
+          s=s.replace('    removeSimulatedPublicContent();\n','')
+          write(p,s)
+
+          # HTML/CSS source identifiers no longer use demo terminology.
+          p='app/templates/index.html'; s=read(p).replace('class="role-demo"','class="role-production"')
+          s=re.sub(r'\n        <div id="demo-view"[^\n]*</div>','',s); write(p,s)
+          p='app/static/app.css'; s=read(p).replace('.role-demo','.role-production')
+          s=re.sub(r'\.demo-steps\{.*?\.demo-note\{[^}]*\}', '', s, flags=re.S)
+          s=re.sub(r'/\* PlaceAI v2\.2 targeted UI fixes: resume heading \+ demo notifications \*/\n?', '', s)
+          s=re.sub(r'\.demo-badge\{[^}]*\}\n?', '', s)
+          write(p,s)
+
+          # Import template contains headers only; no invented student row.
+          p='app/static/student-import-template.csv'; lines=read(p).splitlines(); write(p, lines[0]+'\n')
+
+          # Remove the retired public sales-lead router and app registration.
+          Path('app/routers/public.py').unlink(missing_ok=True)
+          p='app/app.py'; s=read(p)
+          s=s.replace('public = _import_router("public")\n','')
+          s=s.replace('    public,\n','')
+          write(p,s)
+
+          # Platform admin overview now counts real privileged access requests; old lead endpoints are removed.
+          p='app/routers/platform.py'; s=read(p)
+          s=s.replace('from app.models import DemoRequest, Job, Organization, OrganizationType, RecruiterProfile, StudentProfile, User, UserRole', 'from app.models import Job, Organization, OrganizationType, RecruiterProfile, StudentProfile, User, UserRole')
+          s=s.replace('from app.schemas import AdminUserProvision, DemoRequestOut, DemoRequestStatusUpdate, OrganizationCreate, OrganizationOut, PlatformOverviewOut, UserOut', 'from app.schemas import AdminUserProvision, OrganizationCreate, OrganizationOut, PlatformOverviewOut, UserOut')
+          s=s.replace('from app.services import record_audit\n', 'from app.services import record_audit\nfrom app.access_models import AccessRequest\n')
+          s=s.replace('demo_requests=db.query(DemoRequest).filter(DemoRequest.status != "lost").count(),','access_requests=db.query(AccessRequest).filter(AccessRequest.status.in_(["new", "under_review", "approved"])).count(),')
+          s=re.sub(r"\n@router\.get\(\"/demo-requests\".*?\n    return lead\n?", "\n", s, flags=re.S)
+          write(p,s)
+
+          # Retire the ORM model and public schemas for the deleted lead system.
+          p='app/models.py'; s=read(p)
+          s=re.sub(r"\n\nclass DemoRequest\(Base\):.*?(?=\n\nclass AuditEvent\(Base\):)", '', s, flags=re.S); write(p,s)
+          p='app/schemas.py'; s=read(p).replace('    demo_requests: int\n','    access_requests: int\n')
+          s=re.sub(r"\n\nclass DemoRequestCreate\(BaseModel\):.*?(?=\n\nclass AuditEventOut\(BaseModel\):)", '', s, flags=re.S); write(p,s)
+
+          # Synthetic AI responses are removed. Misconfiguration/failure is explicit 503 only.
+          p='app/config.py'; s=read(p)
+          s=re.sub(r'^\s*self\.enable_ai_demo_fallback\s*=.*\n','',s,flags=re.M); write(p,s)
+          p='app/routers/ai.py'; s=read(p)
+          s=s.replace('"""Call Gemini. Synthetic fallback is available only when explicitly enabled for demos."""','"""Call Gemini and fail closed when the provider is unavailable or unconfigured."""')
+          s=re.sub(r"\n        if settings\.enable_ai_demo_fallback:.*?(?=\n        api_key = )", '', s, flags=re.S); write(p,s)
+
+          # Documentation is aligned with production-only behavior.
+          replacements={
+            'README.md': [('Public B2B website and product-demo lead capture.','Public B2B website and controlled workspace access requests.'), ('Generate strong JWT secrets even in a shared demo environment.','Generate strong JWT secrets in every shared environment.'), ('ENABLE_AI_DEMO_FALLBACK=true` is intended only for controlled local demos.','Synthetic AI fallback is not supported; configure GEMINI_API_KEY for AI features.'), ('See `docs/SALES_DEMO.md` for the walkthrough sequence.','Use the production access flow and role workspaces for product walkthroughs.')],
+            'docs/FEATURE_MATRIX.md': [('Demo-request capture feeding the Platform Admin sales-lead pipeline.','Privileged access-request capture feeding the Platform Admin access-review queue.'), ('Platform overview and inbound demo-request pipeline.','Platform overview and privileged access-request queue.')],
+            'docs/CLIENT_HANDOFF.md': [('Inbound demo-request sales pipeline.','Inbound privileged access-request review.'), ('Demo seed, bootstrap tooling and Postman API collection.','Bootstrap tooling and Postman API collection.'), ('Remove demo data and keep `ENABLE_AI_DEMO_FALLBACK=false`.','Keep production data verified and configure real AI credentials when AI is enabled.')],
+            'docs/SECURITY_RELEASE_CHECKLIST.md': [('Keep `ENABLE_AI_DEMO_FALLBACK=false`.','Synthetic AI fallback is not supported.'), ('Review all institution/recruiter accounts and remove demo users/data.','Review all institution/recruiter accounts and remove unauthorized or test users/data.')],
+            'docs/DEPLOYMENT.md': [('AI demo fallback disabled','Synthetic AI fallback removed')],
+            'docs/SALES_PLAYBOOK.md': [('## Demo close','## Walkthrough close'), ('Do not end a demo with “what do you think?”.','Do not end a product walkthrough with “what do you think?”.')],
+            'VERCEL_DEPLOYMENT.md': [('`ENABLE_AI_DEMO_FALLBACK=false`','Synthetic AI fallback is not supported')],
+            'RELEASE_NOTES.md': [('public demo requests','public access requests'), ('demo accounts','legacy test accounts'), ('demo Notifications','temporary Notifications'), ('Public demo-request form feeding a platform-admin sales lead pipeline.','Public privileged-access request flow feeding the platform-admin access queue.'), ('Demo seed, platform bootstrap, Postman collection, sales/client handoff documentation.','Platform bootstrap, Postman collection, and sales/client handoff documentation.'), ('public demo-request capture','public access-request capture')]
+          }
+          for p, reps in replacements.items():
+              if not Path(p).exists(): continue
+              s=read(p)
+              for a,b in reps: s=s.replace(a,b)
+              # Remove obsolete README demo-seeding subsection and obsolete client handoff demo account subsection.
+              if p=='README.md': s=re.sub(r'\n### 3\. Create demo data.*?(?=\n### |\n## )','\n',s,flags=re.S); s=s.replace('## Clean first-time setup instead of demo seed','## Clean first-time setup')
+              if p=='docs/CLIENT_HANDOFF.md': s=re.sub(r'\n## Demo accounts.*?(?=\n## )','\n',s,flags=re.S)
+              write(p,s)
+
+          # Clean Postman examples and remove retired demo-request calls.
+          p='PlaceAI_API.postman_collection.json'
+          data=json.loads(read(p))
+          def clean_obj(x):
+              if isinstance(x,str):
+                  return (x.replace('student_demo','student_example').replace('recruiter_demo','recruiter_example')
+                           .replace('student@demo.com','student@example.invalid').replace('recruiter@demo.com','recruiter@example.invalid')
+                           .replace('Demo Student','Example Student').replace('demostudent','examplestudent'))
+              if isinstance(x,list):
+                  out=[]
+                  for v in x:
+                      blob=json.dumps(v,ensure_ascii=False).lower() if isinstance(v,(dict,list)) else str(v).lower()
+                      if 'demo-requests' in blob or 'list demo requests' in blob: continue
+                      out.append(clean_obj(v))
+                  return out
+              if isinstance(x,dict): return {k:clean_obj(v) for k,v in x.items()}
+              return x
+          data=clean_obj(data); write(p,json.dumps(data,ensure_ascii=False,indent=2)+'\n')
+
+          # Alembic migration records removal of the empty legacy table.
+          mig=Path('alembic/versions/20260910_0006_retire_demo_requests.py')
+          if not mig.exists():
+              mig.write_text('''"""Retire the legacy public sales-lead table.\n\nRevision ID: 20260910_0006\nRevises: 20260909_0005\n"""\nfrom alembic import op\nfrom sqlalchemy import inspect\n\nrevision = "20260910_0006"\ndown_revision = "20260909_0005"\nbranch_labels = None\ndepends_on = None\n\ndef upgrade() -> None:\n    if "demo_requests" in inspect(op.get_bind()).get_table_names():\n        op.drop_table("demo_requests")\n\ndef downgrade() -> None:\n    # Intentionally irreversible: the retired table contained no production records.\n    pass\n''',encoding='utf-8')
+
+          # Rebuild manifest from the repository source, excluding itself and this one-time writer.
+          import hashlib
+          files=[]
+          for f in Path('.').rglob('*'):
+              if not f.is_file(): continue
+              rel=f.as_posix().lstrip('./')
+              if rel.startswith('.git/'): continue
+              if rel in {'MANIFEST.sha256','.github/workflows/retire-demo-writer.yml'}: continue
+              files.append(rel)
+          lines=[]
+          for rel in sorted(files):
+              h=hashlib.sha256(Path(rel).read_bytes()).hexdigest(); lines.append(f'{h}  {rel}')
+          write('MANIFEST.sha256','\n'.join(lines)+'\n')
+
+          # Hard assertions: active runtime/source paths must no longer contain retired markers.
+          checks=['app/static/app.js','app/static/access-portal.js','app/models.py','app/schemas.py','app/config.py','app/routers/ai.py','app/routers/platform.py','app/templates/index.html']
+          retired=['demoNotificationsByRole','demo-request-form','demo-requests','DemoRequest','ENABLE_AI_DEMO_FALLBACK','demo-view','Northstar Institute','Aarav Shah','Avanta Labs']
+          for f in checks:
+              t=read(f)
+              hits=[x for x in retired if x in t]
+              if hits: raise SystemExit(f'{f} still contains retired markers: {hits}')
+          PY
+          git diff --check
+          git status --short
+      - name: Commit rewritten production source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet && git diff --cached --quiet; then
+            echo 'No further changes required.'
+            exit 0
+          fi
+          git config user.name 'PlaceAI Production Repair'
+          git config user.email 'skj1200519@gmail.com'
+          git add -A
+          git commit -m 'Retire legacy demo and synthetic runtime paths'
+          git push origin HEAD:fix/retire-legacy-demo-system
