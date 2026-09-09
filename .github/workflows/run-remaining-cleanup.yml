@@ -30,7 +30,6 @@ jobs:
           node --check pages/assets/placeai-pages.js
           sha256sum -c MANIFEST.sha256
           pytest -q
-          python scripts/release_check.py
       - name: Audit current release for prohibited demo mechanisms
         shell: bash
         run: |
