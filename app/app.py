@@ -11,7 +11,7 @@ from sqlalchemy import text
 
 from app.config import get_settings
 from app.database import Base, engine
-from app.routers import ai, auth, enterprise, institutions, interview_compat, jobs, mock_interview, platform, public, recruiters, students
+from app.routers import ai, auth, auth_refresh_atomic, enterprise, institutions, interview_compat, jobs, mock_interview, platform, public, recruiters, students
 
 settings = get_settings()
 
@@ -93,6 +93,15 @@ mock_interview.router.routes = [
     if getattr(route, "path", "") != "/mock-interview/history"
 ]
 
+# The original refresh route validates rotation state without locking the session row.
+# Register one PostgreSQL row-locking implementation so a refresh token cannot produce
+# multiple valid successors under concurrent requests.
+auth.router.routes = [
+    route for route in auth.router.routes
+    if getattr(route, "path", "") != "/auth/refresh"
+]
+
+app.include_router(auth_refresh_atomic.router)
 app.include_router(auth.router)
 app.include_router(students.router)
 app.include_router(recruiters.router)
