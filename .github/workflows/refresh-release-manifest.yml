@@ -1,0 +1,44 @@
+name: Refresh release manifest
+
+on:
+  push:
+    branches: ["fix/retire-demo-source"]
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: fix/retire-demo-source
+          fetch-depth: 0
+      - name: Rebuild manifest and remove this workflow
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import subprocess
+
+          Path('.github/workflows/refresh-release-manifest.yml').unlink(missing_ok=True)
+          tracked = subprocess.check_output(['git','ls-files'], text=True).splitlines()
+          paths = sorted(p for p in tracked if p != 'MANIFEST.sha256' and Path(p).is_file())
+          lines = [f"{hashlib.sha256(Path(p).read_bytes()).hexdigest()}  {p}" for p in paths]
+          Path('MANIFEST.sha256').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
+          sha256sum -c MANIFEST.sha256
+      - name: Commit manifest refresh
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Refresh release manifest after walkthrough fix"
+          git push origin HEAD:fix/retire-demo-source
