@@ -19,7 +19,7 @@ class AccessRequest(Base):
     phone = Column(String(40), nullable=True)
     message = Column(Text, nullable=True)
     status = Column(String(40), nullable=False, default="new", index=True)
-    reviewed_by_user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    reviewed_by_user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     review_note = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow, index=True)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
