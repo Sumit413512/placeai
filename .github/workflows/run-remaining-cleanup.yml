@@ -41,6 +41,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          p = Path('docs/PRODUCT_WALKTHROUGH.md')
+          clean = '\n'.join(line.rstrip() for line in p.read_text(encoding='utf-8').splitlines()).rstrip() + '\n'
+          p.write_text(clean, encoding='utf-8')
+
+          manifest = Path('MANIFEST.sha256')
+          updated = []
+          for line in manifest.read_text(encoding='utf-8').splitlines():
+              if not line.strip():
+                  continue
+              digest, path = line.split('  ', 1)
+              if path == 'docs/PRODUCT_WALKTHROUGH.md':
+                  digest = hashlib.sha256(p.read_bytes()).hexdigest()
+              updated.append(f'{digest}  {path}')
+          manifest.write_text('\n'.join(updated) + '\n', encoding='utf-8')
+          PY
+          sha256sum -c MANIFEST.sha256
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
