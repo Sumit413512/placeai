@@ -18,6 +18,8 @@ jobs:
           fetch-depth: 0
       - name: Install validation dependencies
         run: python -m pip install -r requirements-dev.txt
+      - name: Clean remaining documentation references
+        run: python scripts/retire_demo_docs.py
       - name: Transform remaining source
         run: python scripts/retire_remaining_demo.py
       - name: Validate transformed release
