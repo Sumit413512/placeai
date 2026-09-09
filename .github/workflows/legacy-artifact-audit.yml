@@ -1,0 +1,23 @@
+name: PlaceAI Legacy Artifact Audit
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Inventory legacy demo and fabricated artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== Product/runtime source findings ==='
+          grep -RniE 'demo|simulat|Northstar|Aarav|Avanta|Nexora|Quantforge|74\.8%|>842<|>214<' \
+            app index.html pages scripts docs README.md RELEASE_NOTES.md VERCEL_DEPLOYMENT.md PlaceAI_API.postman_collection.json \
+            --exclude-dir='__pycache__' || true
+          echo '=== End findings ==='
