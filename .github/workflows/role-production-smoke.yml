@@ -1,0 +1,85 @@
+name: PlaceAI Role Production Smoke
+
+on:
+  push:
+    branches: [ops/role-production-smoke]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Verify production role access and public UI
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Exercise production role access
+        shell: bash
+        env:
+          BASE_URL: https://placeai-rxpp.vercel.app
+        run: |
+          set -euo pipefail
+          base="${BASE_URL%/}"
+          work="${RUNNER_TEMP}/role-production-smoke"
+          mkdir -p "${work}"
+          username="role_smoke_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          email="${username}@example.com"
+          access_email="access_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}@example.com"
+          password="RoleSmoke!Aa9_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          cookies="${work}/cookies.txt"
+
+          echo "1/8 health"
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -o "${work}/health.json" -w '%{http_code}' "${base}/health")"
+          test "${code}" = "200"
+          jq -e '.status=="healthy" and .database=="ok" and .configuration=="ok"' "${work}/health.json" >/dev/null
+
+          echo "2/8 production access UI asset"
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -o "${work}/root.html" -w '%{http_code}' "${base}/")"
+          test "${code}" = "200"
+          grep -q '/static/access-portal.js' "${work}/root.html"
+          grep -q '/static/access-portal.css' "${work}/root.html"
+          curl -sS -L --connect-timeout 10 --max-time 25 -o "${work}/access-portal.js" "${base}/static/access-portal.js"
+          node --check "${work}/access-portal.js"
+
+          echo "3/8 student signup"
+          signup="$(jq -nc --arg username "${username}" --arg email "${email}" --arg password "${password}" '{username:$username,email:$email,password:$password,role:"student"}')"
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -H 'Content-Type: application/json' -d "${signup}" -o "${work}/signup.json" -w '%{http_code}' "${base}/auth/signup")"
+          test "${code}" = "201"
+          jq -e --arg email "${email}" '.email==$email and .role=="student"' "${work}/signup.json" >/dev/null
+
+          echo "4/8 selected student role login"
+          login="$(jq -nc --arg email "${email}" --arg password "${password}" '{email:$email,password:$password,role:"student"}')"
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -c "${cookies}" -H 'Content-Type: application/json' -d "${login}" -o "${work}/login.json" -w '%{http_code}' "${base}/auth/login-role")"
+          test "${code}" = "200"
+          token="$(jq -er '.access_token | select(length > 20)' "${work}/login.json")"
+
+          echo "5/8 role mismatch rejection"
+          wrong="$(jq -nc --arg email "${email}" --arg password "${password}" '{email:$email,password:$password,role:"platform_admin"}')"
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -H 'Content-Type: application/json' -d "${wrong}" -o "${work}/wrong-role.json" -w '%{http_code}' "${base}/auth/login-role")"
+          test "${code}" = "403"
+
+          echo "6/8 authenticated workspace identity"
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -H "Authorization: Bearer ${token}" -o "${work}/me.json" -w '%{http_code}' "${base}/auth/me")"
+          test "${code}" = "200"
+          jq -e --arg email "${email}" '.email==$email and .role=="student"' "${work}/me.json" >/dev/null
+
+          echo "7/8 privileged access request"
+          request_body="$(jq -nc --arg email "${access_email}" '{requested_role:"recruiter",full_name:"Production Access Smoke",work_email:$email,organization_name:"PlaceAI Production Verification",message:"Automated production verification request"}')"
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -H 'Content-Type: application/json' -d "${request_body}" -o "${work}/request.json" -w '%{http_code}' "${base}/public/access-requests")"
+          test "${code}" = "202"
+          jq -e '.request_id and .status=="new"' "${work}/request.json" >/dev/null
+
+          echo "8/8 logout"
+          code="$(curl -sS -L --connect-timeout 10 --max-time 25 -b "${cookies}" -X POST -o "${work}/logout.txt" -w '%{http_code}' "${base}/auth/logout")"
+          test "${code}" = "204"
+
+          printf 'student_email=%s\naccess_email=%s\nhealth=ok\nui_assets=ok\nui_js_syntax=ok\nsignup=ok\nrole_login=ok\nwrong_role_rejected=ok\nme=ok\naccess_request=ok\nlogout=ok\n' "${email}" "${access_email}" | tee "${work}/summary.txt"
+
+      - name: Preserve diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: role-production-smoke-diagnostics
+          path: ${{ runner.temp }}/role-production-smoke
+          retention-days: 3
