@@ -106,7 +106,6 @@ class Settings:
         self.max_resume_mb = _bounded_env_int("MAX_RESUME_MB", 5, 1, 50)
         self.public_recruiter_signup = os.getenv("PUBLIC_RECRUITER_SIGNUP", "false").lower() == "true"
         self.allow_talent_pool_search = os.getenv("ALLOW_TALENT_POOL_SEARCH", "false").lower() == "true"
-        self.enable_ai_demo_fallback = os.getenv("ENABLE_AI_DEMO_FALLBACK", "false").lower() == "true"
         self.google_client_id = os.getenv("GOOGLE_CLIENT_ID", "")
         self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
         self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"

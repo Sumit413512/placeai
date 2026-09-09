@@ -95,7 +95,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"student_demo\",\n  \"email\": \"student@demo.com\",\n  \"password\": \"Password123!\",\n  \"role\": \"student\"\n}"
+              "raw": "{\n  \"username\": \"student_example\",\n  \"email\": \"student@example.invalid\",\n  \"password\": \"Password123!\",\n  \"role\": \"student\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/auth/signup",
@@ -137,7 +137,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"recruiter_demo\",\n  \"email\": \"recruiter@demo.com\",\n  \"password\": \"Password123!\",\n  \"role\": \"recruiter\"\n}"
+              "raw": "{\n  \"username\": \"recruiter_example\",\n  \"email\": \"recruiter@example.invalid\",\n  \"password\": \"Password123!\",\n  \"role\": \"recruiter\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/auth/signup",
@@ -179,7 +179,7 @@
               "urlencoded": [
                 {
                   "key": "username",
-                  "value": "student@demo.com"
+                  "value": "student@example.invalid"
                 },
                 {
                   "key": "password",
@@ -228,7 +228,7 @@
               "urlencoded": [
                 {
                   "key": "username",
-                  "value": "recruiter@demo.com"
+                  "value": "recruiter@example.invalid"
                 },
                 {
                   "key": "password",
@@ -409,7 +409,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"full_name\": \"Demo Student\",\n  \"phone\": \"+91 98765 43210\",\n  \"college\": \"IIT Bombay\",\n  \"degree\": \"B.Tech\",\n  \"branch\": \"Computer Science\",\n  \"graduation_year\": 2025,\n  \"cgpa\": 8.7,\n  \"bio\": \"Passionate about backend development and machine learning.\",\n  \"skills\": [\"Python\", \"FastAPI\", \"React\", \"SQL\", \"Docker\"],\n  \"desired_roles\": [\"Backend Developer\", \"Full Stack Developer\"],\n  \"linkedin_url\": \"https://linkedin.com/in/demostudent\",\n  \"github_url\": \"https://github.com/demostudent\",\n  \"portfolio_url\": \"https://demostudent.dev\"\n}"
+              "raw": "{\n  \"full_name\": \"Example Student\",\n  \"phone\": \"+91 98765 43210\",\n  \"college\": \"IIT Bombay\",\n  \"degree\": \"B.Tech\",\n  \"branch\": \"Computer Science\",\n  \"graduation_year\": 2025,\n  \"cgpa\": 8.7,\n  \"bio\": \"Passionate about backend development and machine learning.\",\n  \"skills\": [\"Python\", \"FastAPI\", \"React\", \"SQL\", \"Docker\"],\n  \"desired_roles\": [\"Backend Developer\", \"Full Stack Developer\"],\n  \"linkedin_url\": \"https://linkedin.com/in/examplestudent\",\n  \"github_url\": \"https://github.com/examplestudent\",\n  \"portfolio_url\": \"https://examplestudent.dev\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/students/profile",
@@ -1706,7 +1706,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"student_demo\",\n  \"email\": \"student@demo.com\",\n  \"password\": \"anything\",\n  \"role\": \"student\"\n}"
+              "raw": "{\n  \"username\": \"student_example\",\n  \"email\": \"student@example.invalid\",\n  \"password\": \"anything\",\n  \"role\": \"student\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/auth/signup",
@@ -1731,7 +1731,7 @@
               "urlencoded": [
                 {
                   "key": "username",
-                  "value": "student@demo.com"
+                  "value": "student@example.invalid"
                 },
                 {
                   "key": "password",
@@ -2011,117 +2011,6 @@
                 "institutions",
                 "applications"
               ]
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "🛡️ Platform Admin",
-      "item": [
-        {
-          "name": "Platform Overview",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{platform_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/platform/overview",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "platform",
-                "overview"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "List Institutions",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{platform_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/platform/organizations",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "platform",
-                "organizations"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "List Demo Requests",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{platform_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/platform/demo-requests",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "platform",
-                "demo-requests"
-              ]
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "📣 Public Sales",
-      "item": [
-        {
-          "name": "Request Product Walkthrough",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/public/demo-requests",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "public",
-                "demo-requests"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"contact_name\": \"Placement Officer\",\n  \"work_email\": \"placement@example.edu\",\n  \"organization_name\": \"Example Institute\",\n  \"role_title\": \"TPO\",\n  \"student_count\": 800,\n  \"message\": \"We want to modernize campus placements.\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
             }
           },
           "response": []

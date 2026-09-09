@@ -95,7 +95,7 @@ def get_gemini_client():
 
 
 def call_gemini(client, prompt: str) -> str:
-    """Call Gemini. Synthetic fallback is available only when explicitly enabled for demos."""
+    """Call Gemini and fail closed when the provider is unavailable or unconfigured."""
     try:
         if client is None:
             raise RuntimeError("AI service is not configured")
@@ -104,24 +104,6 @@ def call_gemini(client, prompt: str) -> str:
             raise RuntimeError("AI service returned an empty response")
         return response.text
     except Exception as exc:
-        if settings.enable_ai_demo_fallback:
-            prompt_lower = prompt.lower()
-            if "interview" in prompt_lower and "questions" in prompt_lower:
-                return json.dumps({"questions": [
-                    {"question_id": 1, "question": "Explain one technical decision you would make for this role and why."},
-                    {"question_id": 2, "question": "How would you debug a production issue related to the required skills?"},
-                    {"question_id": 3, "question": "Describe a time you handled ambiguity or disagreement in a team."}
-                ]})
-            if "overall_score" in prompt_lower or "evaluate" in prompt_lower:
-                return json.dumps({"overall_score": 75, "overall_feedback": "Demo evaluation only — configure Gemini for production scoring.", "evaluations": []})
-            if "resume" in prompt_lower:
-                return json.dumps({"skills": [], "experience": [], "education": [], "certifications": [], "languages": [], "summary": "Demo mode: configure Gemini to parse this resume."})
-            if "match" in prompt_lower or "recommend" in prompt_lower:
-                return json.dumps([])
-            if "gap" in prompt_lower or "coach" in prompt_lower:
-                return json.dumps([])
-            if "summary" in prompt_lower:
-                return "Demo mode: configure Gemini to generate a professional summary."
         api_key = os.getenv("GEMINI_API_KEY", settings.gemini_api_key).strip()
         if not api_key or api_key.startswith("your-") or api_key == "your-gemini-api-key-here":
             detail = "Gemini is not configured. Add GEMINI_API_KEY to your .env file, restart the server, and try again."

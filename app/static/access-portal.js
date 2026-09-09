@@ -54,7 +54,7 @@
   }
 
   function studentSignupForm() {
-    return `<div class="access-selection-summary"><span class="access-role-dot"></span><div><b>Student</b><span>Self-service registration</span></div></div><form id="role-student-signup-form" class="form-stack"><div class="form-two"><label>Full name<input name="full_name" required minlength="2" maxlength="200" placeholder="Your full name"></label><label>Username<input name="username" required minlength="3" maxlength="80" placeholder="e.g. aarav.shah"></label></div><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@example.com"></label><label>Institution code <span class="optional">optional</span><input name="organization_slug" maxlength="120" placeholder="Provided by your placement office"></label><label>Password<input type="password" name="password" autocomplete="new-password" minlength="12" maxlength="128" required placeholder="12+ chars, upper/lowercase, number and symbol"></label><div id="role-create-error" class="access-form-error" role="alert"></div><button class="button button-primary button-full" type="submit">Create student account</button></form>`;
+    return `<div class="access-selection-summary"><span class="access-role-dot"></span><div><b>Student</b><span>Self-service registration</span></div></div><form id="role-student-signup-form" class="form-stack"><div class="form-two"><label>Full name<input name="full_name" required minlength="2" maxlength="200" placeholder="Your full name"></label><label>Username<input name="username" required minlength="3" maxlength="80" placeholder="e.g. student.name"></label></div><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@example.com"></label><label>Institution code <span class="optional">optional</span><input name="organization_slug" maxlength="120" placeholder="Provided by your placement office"></label><label>Password<input type="password" name="password" autocomplete="new-password" minlength="12" maxlength="128" required placeholder="12+ chars, upper/lowercase, number and symbol"></label><div id="role-create-error" class="access-form-error" role="alert"></div><button class="button button-primary button-full" type="submit">Create student account</button></form>`;
   }
 
   function controlledAccessForm(roleKey) {
@@ -184,7 +184,7 @@
       const response = await fetch('/platform/access-requests', {headers: {Authorization: `Bearer ${token}`}, credentials: 'include'});
       if (!response.ok) throw new Error('Could not load access requests.');
       const rows = await response.json();
-      content.innerHTML = `<section><div class="access-requests-panel"><div class="access-requests-head"><div><h2>Privileged account access</h2><p>Real requests submitted from the public access flow. No simulated leads are displayed.</p></div><span>${rows.length} request${rows.length === 1 ? '' : 's'}</span></div>${rows.length ? `<div class="access-table-wrap"><table class="access-table"><thead><tr><th>Requester</th><th>Role</th><th>Organization</th><th>Context</th><th>Received</th><th>Status</th></tr></thead><tbody>${rows.map(row => `<tr><td><strong>${esc(row.full_name)}</strong><span>${esc(row.work_email)}${row.phone ? ` · ${esc(row.phone)}` : ''}</span></td><td>${esc(roles[row.requested_role]?.label || row.requested_role)}</td><td>${esc(row.organization_name || '—')}</td><td>${esc((row.message || '—').slice(0, 180))}</td><td>${fmtDate(row.created_at)}</td><td><select data-access-request-status data-id="${esc(row.id)}"><option value="new" ${row.status === 'new' ? 'selected' : ''}>New</option><option value="under_review" ${row.status === 'under_review' ? 'selected' : ''}>Under review</option><option value="approved" ${row.status === 'approved' ? 'selected' : ''}>Approved</option><option value="rejected" ${row.status === 'rejected' ? 'selected' : ''}>Rejected</option><option value="provisioned" ${row.status === 'provisioned' ? 'selected' : ''}>Provisioned</option></select></td></tr>`).join('')}</tbody></table></div>` : '<div class="access-empty">No access requests have been submitted.</div>'}</div></section>`;
+      content.innerHTML = `<section><div class="access-requests-panel"><div class="access-requests-head"><div><h2>Privileged account access</h2><p>Real requests submitted from the public access flow. Only persisted production requests are displayed.</p></div><span>${rows.length} request${rows.length === 1 ? '' : 's'}</span></div>${rows.length ? `<div class="access-table-wrap"><table class="access-table"><thead><tr><th>Requester</th><th>Role</th><th>Organization</th><th>Context</th><th>Received</th><th>Status</th></tr></thead><tbody>${rows.map(row => `<tr><td><strong>${esc(row.full_name)}</strong><span>${esc(row.work_email)}${row.phone ? ` · ${esc(row.phone)}` : ''}</span></td><td>${esc(roles[row.requested_role]?.label || row.requested_role)}</td><td>${esc(row.organization_name || '—')}</td><td>${esc((row.message || '—').slice(0, 180))}</td><td>${fmtDate(row.created_at)}</td><td><select data-access-request-status data-id="${esc(row.id)}"><option value="new" ${row.status === 'new' ? 'selected' : ''}>New</option><option value="under_review" ${row.status === 'under_review' ? 'selected' : ''}>Under review</option><option value="approved" ${row.status === 'approved' ? 'selected' : ''}>Approved</option><option value="rejected" ${row.status === 'rejected' ? 'selected' : ''}>Rejected</option><option value="provisioned" ${row.status === 'provisioned' ? 'selected' : ''}>Provisioned</option></select></td></tr>`).join('')}</tbody></table></div>` : '<div class="access-empty">No access requests have been submitted.</div>'}</div></section>`;
     } catch (error) {
       content.innerHTML = `<div class="access-empty">${esc(error.message)}</div>`;
     }
@@ -201,35 +201,6 @@
     } finally {
       select.disabled = false;
     }
-  }
-
-  function removeSimulatedPublicContent() {
-    $$('#demo-view').forEach(node => node.remove());
-    $$('[data-open-auth="demo"]').forEach(button => {
-      button.removeAttribute('data-open-auth');
-      button.setAttribute('data-open-access', 'request');
-      const label = (button.textContent || '').trim().toLowerCase();
-      if (label.includes('walkthrough') || label.includes('demo')) button.textContent = 'Request access';
-      else if (label.includes('institution')) button.textContent = 'Request institution access';
-      else button.textContent = 'Request access';
-    });
-
-    const heroProduct = $('.hero-product');
-    if (heroProduct) {
-      heroProduct.innerHTML = `<div class="production-surface-card"><div><span class="surface-kicker">Production workspace</span><h3>Authenticated data only. No fabricated placement activity.</h3><p>The public surface does not present fake students, companies, applications, placement rates or generated operational metrics. Real records appear only inside the role-authorized workspace.</p></div><div class="production-surface-grid"><div><strong>Student</strong><span>Own profile, applications, drives and preparation records.</span></div><div><strong>Recruiter</strong><span>Only authorized jobs and candidate pipelines.</span></div><div><strong>Institution Admin</strong><span>Institution-scoped placement operations.</span></div><div><strong>Platform Admin</strong><span>Restricted provisioning and platform controls.</span></div></div></div>`;
-    }
-
-    const recruiterExample = $('.role-demo');
-    if (recruiterExample) {
-      recruiterExample.innerHTML = `<div class="production-surface-card"><div><span class="surface-kicker">Controlled recruiter access</span><h3>Candidate records are never populated with sample identities.</h3><p>Recruiter views are backed by production applications and institution-approved access boundaries. Empty datasets remain empty until real users create records.</p></div><div class="production-surface-grid"><div><strong>Verified company profile</strong><span>Evidence-based trust review and institution linkage.</span></div><div><strong>Real applicant pipeline</strong><span>Applied → shortlisted → interview → offer → hire.</span></div></div></div>`;
-    }
-
-    const fakeMetric = $('.visual-chart');
-    if (fakeMetric) fakeMetric.innerHTML = '<strong>Live data</strong><span>Institution analytics populate from production placement records.</span>';
-    const pipelineMini = $('.pipeline-mini');
-    if (pipelineMini) pipelineMini.innerHTML = '<span><i></i>Applied</span><span><i></i>Shortlisted</span><span><i></i>Interview</span><span><i></i>Offered</span>';
-    const readinessRing = $('.readiness-ring');
-    if (readinessRing) readinessRing.innerHTML = '<div><strong>Live</strong><small>student data</small></div><span>Resume</span><span>Skills</span><span>Interview</span>';
   }
 
   function relabelPlatformNavigation() {
@@ -313,7 +284,6 @@
   const observer = new MutationObserver(() => relabelPlatformNavigation());
 
   function init() {
-    removeSimulatedPublicContent();
     renderLogin();
     renderCreate();
     relabelPlatformNavigation();

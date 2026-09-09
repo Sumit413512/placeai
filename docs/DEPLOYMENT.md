@@ -11,7 +11,7 @@ Production environment must include:
 - HTTPS `BASE_URL`
 - `AUTO_CREATE_SCHEMA=false`
 - recruiter self-signup disabled unless explicitly approved
-- AI demo fallback disabled
+- Synthetic AI fallback removed
 - reset-token debugging disabled
 
 Apply reviewed migrations before serving traffic:

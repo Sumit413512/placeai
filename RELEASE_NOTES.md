@@ -9,7 +9,7 @@
 - Enforced attendance opening/closing windows and invalid time-range rejection.
 - Added production startup guards for HTTPS base URL/CORS, distinct strong JWT secrets, PostgreSQL, and migration-only schema changes.
 - Require verified Google account email claims.
-- Added database-backed throttling for signup, login, refresh, Google auth, password-reset requests and public demo requests with hashed bucket identifiers and `Retry-After` responses.
+- Added database-backed throttling for signup, login, refresh, Google auth, password-reset requests and public access requests with hashed bucket identifiers and `Retry-After` responses.
 - Raised new/reset/provisioned password policy to 12+ characters with uppercase, lowercase, numeric and symbol requirements.
 - Added upload magic-byte validation, OOXML package validation for DOCX/XLSX, UTF-8 text enforcement, filename path stripping and rejection of legacy `.doc`/`.xls` payloads.
 - Added bounded auth/provider payload sizes to reduce resource-abuse surface.
@@ -82,7 +82,7 @@ This maintenance release keeps the V3.0 Enterprise Suite feature set intact and 
 ### Compatibility
 - No database schema change.
 - No API contract change.
-- Existing V3.0 data and demo accounts remain compatible.
+- Existing V3.0 data and legacy test accounts remain compatible.
 
 # Release Notes
 
@@ -124,7 +124,7 @@ Targeted patch over V2.1. No redesign or application-architecture replacement.
 - Added public non-secret `/ai/status` diagnostics so local setup can be verified without a bearer token.
 - Improved Gemini failure messages for missing key, missing SDK, or provider/quota/network errors.
 - Candidate AI ranking and resume AI now share the same configurable Gemini model.
-- Added visible demo Notifications for Student, Recruiter, Institution Admin, and Platform Admin.
+- Added visible temporary Notifications for Student, Recruiter, Institution Admin, and Platform Admin.
 - Made the existing Updates button open Notifications and added an unread badge / Mark all read interaction.
 - Added `docs/GEMINI_SETUP.md`.
 
@@ -142,12 +142,12 @@ This is the clean client-safe commercial rebuild of the uploaded student recruit
 - Student application pipeline and institution outcome visibility.
 - Bulk CSV student import + template + validation report + CSV export.
 - Tenant-scoped audit trail for critical placement/account actions.
-- Public demo-request form feeding a platform-admin sales lead pipeline.
+- Public privileged-access request flow feeding the platform-admin access queue.
 - AI resume parsing, matching, skill-gap and mock-interview capabilities with production-safe fallback behavior.
 - Hardened auth: Argon2 passwords, access/refresh tokens, HttpOnly refresh cookie, hashed reset tokens and non-enumerating reset requests.
 - Strict script CSP, security headers, validated PDF uploads and recruiter privacy boundaries.
 - PostgreSQL + Docker + Alembic deployment path.
-- Demo seed, platform bootstrap, Postman collection, sales/client handoff documentation.
+- Platform bootstrap, Postman collection, and sales/client handoff documentation.
 - Automated test suite and release-safety checker.
 
 ## Verification
@@ -157,7 +157,7 @@ Final source verification completed with:
 - `pytest -q` — all tests passed.
 - Python `compileall` — passed.
 - `node --check app/static/app.js` — passed.
-- Live Uvicorn smoke checks for health, homepage, TPO login and public demo-request capture — passed.
+- Live Uvicorn smoke checks for health, homepage, TPO login and public access-request capture — passed.
 - Clean release artifact scan — must pass `python scripts/release_check.py` before distribution.
 
 ## Production note

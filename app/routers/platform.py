@@ -7,9 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_platform_admin
-from app.models import DemoRequest, Job, Organization, OrganizationType, RecruiterProfile, StudentProfile, User, UserRole
-from app.schemas import AdminUserProvision, DemoRequestOut, DemoRequestStatusUpdate, OrganizationCreate, OrganizationOut, PlatformOverviewOut, UserOut
+from app.models import Job, Organization, OrganizationType, RecruiterProfile, StudentProfile, User, UserRole
+from app.schemas import AdminUserProvision, OrganizationCreate, OrganizationOut, PlatformOverviewOut, UserOut
 from app.services import record_audit
+from app.access_models import AccessRequest
 from app.utils import get_hashed_password
 
 router = APIRouter(prefix="/platform", tags=["Platform Admin"])
@@ -24,7 +25,7 @@ def overview(current_user: User = Depends(require_platform_admin), db: Session =
         institution_admins=db.query(User).filter(User.role == UserRole.institution_admin).count(),
         active_jobs=db.query(Job).filter(Job.is_active.is_(True)).count(),
         applications=sum(len(j.applications) for j in db.query(Job).all()),
-        demo_requests=db.query(DemoRequest).filter(DemoRequest.status != "lost").count(),
+        access_requests=db.query(AccessRequest).filter(AccessRequest.status.in_(["new", "under_review", "approved"])).count(),
     )
 
 
@@ -90,20 +91,3 @@ def provision_recruiter(data: AdminUserProvision, current_user: User = Depends(r
     db.commit()
     db.refresh(user)
     return user
-
-
-@router.get("/demo-requests", response_model=List[DemoRequestOut])
-def demo_requests(current_user: User = Depends(require_platform_admin), db: Session = Depends(get_db)):
-    return db.query(DemoRequest).order_by(DemoRequest.created_at.desc()).limit(1000).all()
-
-
-@router.patch("/demo-requests/{request_id}", response_model=DemoRequestOut)
-def update_demo_request(request_id: str, data: DemoRequestStatusUpdate, current_user: User = Depends(require_platform_admin), db: Session = Depends(get_db)):
-    lead = db.query(DemoRequest).filter(DemoRequest.id == request_id).first()
-    if not lead:
-        raise HTTPException(status_code=404, detail="Demo request not found")
-    lead.status = data.status
-    record_audit(db, current_user, "platform.demo_request.status_changed", entity_type="demo_request", entity_id=lead.id, metadata={"status": lead.status})
-    db.commit()
-    db.refresh(lead)
-    return lead
