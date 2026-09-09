@@ -21,12 +21,11 @@ def _enforce_ai_budget(
     *,
     endpoint_limit: int,
 ) -> None:
-    """Apply durable per-user AI budgets before a cost-generating model call.
+    """Apply durable account-scoped AI budgets before a cost-generating model call.
 
-    The underlying limiter also includes the client address in its SHA-256 bucket key,
-    while `current_user.id` prevents unrelated users behind a campus NAT from sharing
-    the same quota. The aggregate bucket caps total model usage across AI features and
-    the endpoint bucket suppresses rapid repetition of one expensive operation.
+    Both the aggregate and endpoint buckets are keyed to the authenticated account,
+    independent of client IP. This prevents quota resets through VPN/proxy/IP rotation
+    while keeping unrelated accounts behind the same campus NAT isolated.
     """
     identifier = current_user.id
     enforce_rate_limit(
@@ -37,6 +36,7 @@ def _enforce_ai_budget(
         limit=AI_AGGREGATE_LIMIT_PER_HOUR,
         window_seconds=3600,
         block_seconds=900,
+        include_client_address=False,
     )
     path_scope = f"ai:{request.url.path}"[:80]
     enforce_rate_limit(
@@ -47,6 +47,7 @@ def _enforce_ai_budget(
         limit=endpoint_limit,
         window_seconds=600,
         block_seconds=600,
+        include_client_address=False,
     )
 
 
