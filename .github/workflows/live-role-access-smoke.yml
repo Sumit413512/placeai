@@ -1,0 +1,58 @@
+name: PlaceAI Live Role Access Smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/live-role-access-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify production role access surface
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v6
+      - name: Exercise canonical production deployment
+        env:
+          BASE_URL: https://placeai-rxpp.vercel.app
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${BASE_URL%/}"
+          work="${RUNNER_TEMP}/placeai-role-access-smoke"
+          mkdir -p "$work"
+
+          curl -fsSL "$base/health" -o "$work/health.json"
+          jq -e '.status == "healthy" and .database == "ok" and .configuration == "ok"' "$work/health.json" >/dev/null
+
+          curl -fsSL "$base/" -o "$work/root.html"
+          grep -Fq '/static/access-portal.js' "$work/root.html"
+          grep -Fq '/static/access-portal.css' "$work/root.html"
+
+          curl -fsSL "$base/static/access-portal.js" -o "$work/access-portal.js"
+          grep -Fq "label: 'Student'" "$work/access-portal.js"
+          grep -Fq "label: 'Recruiter'" "$work/access-portal.js"
+          grep -Fq "label: 'Institution Admin'" "$work/access-portal.js"
+          grep -Fq "label: 'Platform Admin'" "$work/access-portal.js"
+          grep -Fq '/auth/login-role' "$work/access-portal.js"
+          grep -Fq '/public/access-requests' "$work/access-portal.js"
+
+          role_code=$(curl -sS -o "$work/role-probe.json" -w '%{http_code}' -H 'Content-Type: application/json' -d '{}' "$base/auth/login-role")
+          test "$role_code" = "422"
+
+          access_code=$(curl -sS -o "$work/access-probe.json" -w '%{http_code}' -H 'Content-Type: application/json' -d '{}' "$base/public/access-requests")
+          test "$access_code" = "422"
+
+          printf 'health=ok\nrole_portal_assets=ok\nfour_roles=ok\nrole_endpoint=ok\naccess_request_endpoint=ok\n' | tee "$work/summary.txt"
+      - name: Preserve diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: placeai-live-role-access-smoke
+          path: ${{ runner.temp }}/placeai-role-access-smoke
+          retention-days: 3
