@@ -648,37 +648,7 @@ class PlatformOverviewOut(BaseModel):
     institution_admins: int
     active_jobs: int
     applications: int
-    demo_requests: int
-
-
-class DemoRequestCreate(BaseModel):
-    contact_name: str = Field(min_length=2, max_length=200)
-    work_email: EmailStr
-    organization_name: str = Field(min_length=2, max_length=250)
-    role_title: Optional[str] = Field(None, max_length=180)
-    phone: Optional[str] = Field(None, max_length=40)
-    student_count: Optional[int] = Field(None, ge=1, le=1_000_000)
-    message: Optional[str] = Field(None, max_length=3000)
-    website: Optional[str] = Field(None, max_length=300)  # honeypot; legitimate users leave blank
-
-
-class DemoRequestOut(BaseModel):
-    id: str
-    contact_name: str
-    work_email: str
-    organization_name: str
-    role_title: Optional[str] = None
-    phone: Optional[str] = None
-    student_count: Optional[int] = None
-    message: Optional[str] = None
-    status: str
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class DemoRequestStatusUpdate(BaseModel):
-    status: str = Field(pattern="^(new|contacted|qualified|won|lost)$")
+    access_requests: int
 
 
 class AuditEventOut(BaseModel):

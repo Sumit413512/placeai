@@ -30,7 +30,7 @@ PlaceAI is an AI-assisted, multi-tenant campus placement operating system for in
 
 ## Existing commercial foundation retained
 
-- Public B2B website and product-demo lead capture.
+- Public B2B website and controlled workspace access requests.
 - Student, Recruiter, Institution/TPO and Platform Admin workspaces.
 - Institution multi-tenancy and cross-campus data isolation.
 - Controlled recruiter provisioning and institution linkage.
@@ -64,24 +64,8 @@ pip install -r requirements-dev.txt
 
 ### 2. Configure
 
-Copy `.env.example` to `.env`. For local SQLite, the defaults are enough. Generate strong JWT secrets even in a shared demo environment.
+Copy `.env.example` to `.env`. For local SQLite, the defaults are enough. Generate strong JWT secrets in every shared environment.
 
-### 3. Create demo data
-
-```bash
-python scripts/seed_demo.py
-```
-
-Development demo password for all seeded users:
-
-`PlaceAI-Demo-2026!`
-
-Accounts:
-
-- TPO: `tpo@northstar.example.com`
-- Recruiter: `recruiter@acme.example.com`
-- Student: `student@northstar.example.com`
-- Platform admin: `platform@placeai.example.com`
 
 ### 4. Run
 
@@ -91,7 +75,7 @@ uvicorn app.app:app --reload
 
 Open `http://localhost:8000`.
 
-## Clean first-time setup instead of demo seed
+## Clean first-time setup
 
 Use the bootstrap script to create the first platform administrator and institution administrator:
 
@@ -138,7 +122,7 @@ The web container runs `alembic upgrade head` before starting Uvicorn. Productio
 
 Set `GEMINI_API_KEY` to enable Gemini functionality. If AI is not configured or unavailable, production returns an explicit service-unavailable response. Synthetic candidate analysis is **not** silently substituted.
 
-`ENABLE_AI_DEMO_FALLBACK=true` is intended only for controlled local demos.
+`Synthetic AI fallback is not supported; configure GEMINI_API_KEY for AI features.
 
 ## Password reset email
 
@@ -152,7 +136,7 @@ Recommended sales message:
 
 > Replace fragmented placement operations with one institution-controlled workflow for student readiness, recruiter access, campus drives, applications and outcomes.
 
-See `docs/SALES_DEMO.md` for the walkthrough sequence.
+Use the production access flow and role workspaces for product walkthroughs.
 
 ## Public repository and deployment topology
 

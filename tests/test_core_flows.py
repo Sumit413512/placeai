@@ -195,26 +195,29 @@ def test_password_reset_is_non_enumerating_and_refresh_cookie_works():
     assert r.status_code == 200 and r.json()["access_token"]
 
 
-def test_public_demo_request_and_platform_sales_pipeline():
-    r = client.post("/public/demo-requests", json={
-        "contact_name": "Priya Placement",
+def test_public_access_request_and_platform_review_pipeline():
+    r = client.post("/public/access-requests", json={
+        "requested_role": "institution_admin",
+        "full_name": "Priya Placement",
         "work_email": "priya@college.example.com",
         "organization_name": "Example College",
-        "role_title": "Training and Placement Officer",
-        "student_count": 900,
-        "message": "We want to replace spreadsheet-based campus placement tracking.",
+        "message": "We want controlled access for our placement office.",
     })
-    assert r.status_code == 201, r.text
-    lead = r.json()
-    assert lead["status"] == "new"
+    assert r.status_code == 202, r.text
+    request = r.json()
+    assert request["status"] == "new"
+    request_id = request["request_id"]
 
     platform = login("platform@placeai.example.com", "PlatformPass123!")
-    r = client.get("/platform/demo-requests", headers=auth(platform))
-    assert r.status_code == 200 and any(x["id"] == lead["id"] for x in r.json())
+    r = client.get("/platform/access-requests", headers=auth(platform))
+    assert r.status_code == 200 and any(x["id"] == request_id for x in r.json())
 
-    r = client.patch(f"/platform/demo-requests/{lead['id']}", headers=auth(platform), json={"status": "qualified"})
-    assert r.status_code == 200 and r.json()["status"] == "qualified"
-
+    r = client.patch(
+        f"/platform/access-requests/{request_id}",
+        headers=auth(platform),
+        json={"status": "under_review", "review_note": "Validated institutional request."},
+    )
+    assert r.status_code == 200 and r.json()["status"] == "under_review"
 
 def test_cross_institution_campus_job_isolation():
     platform = login("platform@placeai.example.com", "PlatformPass123!")

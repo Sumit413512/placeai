@@ -13,7 +13,7 @@ PlaceAI runs as a FastAPI application on Vercel using `app.app:app`. Production 
 - `AUTO_CREATE_SCHEMA=false`
 - `PUBLIC_RECRUITER_SIGNUP=false`
 - `ALLOW_TALENT_POOL_SEARCH=false` unless contractually approved
-- `ENABLE_AI_DEMO_FALLBACK=false`
+- Synthetic AI fallback is not supported
 - `DEV_SHOW_RESET_TOKEN=false`
 - `GEMINI_API_KEY=<optional>`
 - `GEMINI_MODEL=gemini-3.8-flash`

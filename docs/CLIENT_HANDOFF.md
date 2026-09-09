@@ -8,11 +8,11 @@
 - Recruiter workspace.
 - Institution/TPO workspace.
 - Platform administration workspace.
-- Inbound demo-request sales pipeline.
+- Inbound privileged access-request review.
 - PostgreSQL Docker deployment configuration.
 - Alembic schema baseline.
 - Automated functional tests and release-safety checker.
-- Demo seed, bootstrap tooling and Postman API collection.
+- Bootstrap tooling and Postman API collection.
 
 ## Recommended pilot deployment
 
@@ -30,12 +30,9 @@ Vercel/production already persists uploaded files in PostgreSQL-backed private s
 6. Set SMTP and production base URL.
 7. Set strong secrets and exact CORS origin.
 8. Confirm privacy notice, retention period and AI-processing disclosure with the client.
-9. Remove demo data and keep `ENABLE_AI_DEMO_FALLBACK=false`.
+9. Keep production data verified and configure real AI credentials when AI is enabled.
 10. Run `pytest` and `python scripts/release_check.py` on the final artifact.
 
-## Demo accounts
-
-Run `python scripts/seed_demo.py` only in a development environment. The seeded password is documented in `README.md`. Never use demo accounts in a client production database.
 
 ## Commercial boundaries
 

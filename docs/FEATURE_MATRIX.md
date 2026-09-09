@@ -2,7 +2,7 @@
 
 ## Public / sales
 - Responsive B2B marketing website and product positioning.
-- Demo-request capture feeding the Platform Admin sales-lead pipeline.
+- Privileged access-request capture feeding the Platform Admin access-review queue.
 - Security/privacy messaging and separate role workspaces.
 
 ## Student
@@ -59,7 +59,7 @@
 ## Platform admin
 - Institution tenant creation and TPO provisioning.
 - Recruiter provisioning.
-- Platform overview and inbound demo-request pipeline.
+- Platform overview and privileged access-request queue.
 - Lead status management.
 - Cross-platform audit/admin foundation retained for future billing, feature flags and support operations.
 
