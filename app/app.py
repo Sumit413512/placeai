@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -131,6 +131,7 @@ def _include_router(module) -> None:
 
 auth_refresh_atomic = _import_router("auth_refresh_atomic")
 auth = _import_router("auth")
+access = _import_router("access")
 students = _import_router("students")
 recruiters = _import_router("recruiters")
 jobs = _import_router("jobs")
@@ -175,6 +176,7 @@ if enterprise is not None:
 for module in (
     auth_refresh_atomic,
     auth,
+    access,
     students,
     recruiters,
     jobs,
@@ -196,7 +198,15 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 @app.get("/", include_in_schema=False)
 def root():
-    return FileResponse(TEMPLATE_DIR / "index.html")
+    """Serve the production workspace shell with the role-aware access layer."""
+    html = (TEMPLATE_DIR / "index.html").read_text(encoding="utf-8")
+    assets = (
+        '<link rel="stylesheet" href="/static/access-portal.css">\n'
+        '<script src="/static/access-portal.js" defer></script>\n'
+    )
+    if "/static/access-portal.js" not in html:
+        html = html.replace("</head>", f"{assets}</head>", 1)
+    return HTMLResponse(html)
 
 
 @app.get("/mock-interview", include_in_schema=False)
