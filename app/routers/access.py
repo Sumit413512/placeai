@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import smtplib
 from email.message import EmailMessage
 from typing import Literal
@@ -14,7 +15,7 @@ from app.database import get_db
 from app.dependencies import require_platform_admin
 from app.models import User
 from app.rate_limit import enforce_rate_limit
-from app.routers.auth import _set_refresh_cookie, _token_response, _utcnow
+from app.routers.auth import _token_response, _utcnow
 from app.schemas import TokenSchema
 from app.utils import verify_password
 
@@ -27,7 +28,6 @@ ROLE_LABELS = {
     "institution_admin": "Institution Admin",
     "platform_admin": "Platform Admin",
 }
-ACCESS_REQUEST_ROLES = {"recruiter", "institution_admin", "platform_admin"}
 ACCESS_STATUSES = {"new", "under_review", "approved", "rejected", "provisioned"}
 
 
@@ -59,7 +59,7 @@ class AccessRequestReview(BaseModel):
 
 def _notify_access_request(item: AccessRequest) -> None:
     """Send a real transactional notification through configured SMTP/Brevo SMTP."""
-    recipient = settings.access_request_notify_to
+    recipient = os.getenv("ACCESS_REQUEST_NOTIFY_TO", "").strip()
     if not (settings.smtp_host and settings.smtp_from and recipient):
         return
     message = EmailMessage()
@@ -84,7 +84,7 @@ def _notify_access_request(item: AccessRequest) -> None:
                 smtp.login(settings.smtp_user, settings.smtp_password)
             smtp.send_message(message)
     except Exception:
-        # Persistence is the source of truth. Email delivery failure must not lose the request.
+        # Database persistence is the source of truth; mail delivery is retriable infrastructure.
         return
 
 
@@ -141,7 +141,6 @@ def create_access_request(
         block_seconds=3600,
     )
 
-    # Honeypot: legitimate clients leave this invisible field empty.
     if body.website:
         return {"message": "Access request received."}
 
@@ -245,7 +244,7 @@ def integration_status(current_user: User = Depends(require_platform_admin)):
     return {
         "database": not settings.database_url.startswith("sqlite"),
         "brevo_smtp": bool(settings.smtp_host and settings.smtp_user and settings.smtp_password and settings.smtp_from),
-        "access_request_notifications": bool(settings.access_request_notify_to),
+        "access_request_notifications": bool(os.getenv("ACCESS_REQUEST_NOTIFY_TO", "").strip()),
         "gemini": bool(settings.gemini_api_key),
         "google_sign_in": bool(settings.google_client_id),
         "production": settings.is_production,
