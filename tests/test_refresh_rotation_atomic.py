@@ -39,7 +39,8 @@ def test_atomic_refresh_endpoint_uses_database_row_lock():
     assert "session.revoked_at is not None" in source
     assert "revoke_jti=session.jti" in source
     assert 'getattr(route, "path", "") != "/auth/refresh"' in app_source
-    assert "app.include_router(auth_refresh_atomic.router)" in app_source
+    assert 'auth_refresh_atomic = _import_router("auth_refresh_atomic")' in app_source
+    assert "_include_router(module)" in app_source
 
 
 def test_refresh_token_remains_single_use_in_normal_rotation():
