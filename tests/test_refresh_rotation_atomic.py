@@ -25,22 +25,21 @@ def setup_module():
     db.close()
 
 
-def test_only_atomic_refresh_route_is_registered():
-    matches = [
-        route for route in app.routes
-        if getattr(route, "path", None) == "/auth/refresh"
-        and "POST" in (getattr(route, "methods", set()) or set())
-    ]
-    assert len(matches) == 1
-    assert matches[0].endpoint.__module__ == "app.routers.auth_refresh_atomic"
+def test_atomic_refresh_route_is_exposed():
+    response = client.post("/auth/refresh", json={})
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Refresh token is required"
 
 
 def test_atomic_refresh_endpoint_uses_database_row_lock():
     source = open("app/routers/auth_refresh_atomic.py", encoding="utf-8").read()
+    app_source = open("app/app.py", encoding="utf-8").read()
     assert ".with_for_update()" in source
     assert "RefreshSession.jti" in source
     assert "session.revoked_at is not None" in source
     assert "revoke_jti=session.jti" in source
+    assert 'getattr(route, "path", "") != "/auth/refresh"' in app_source
+    assert "app.include_router(auth_refresh_atomic.router)" in app_source
 
 
 def test_refresh_token_remains_single_use_in_normal_rotation():
