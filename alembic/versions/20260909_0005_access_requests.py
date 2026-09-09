@@ -56,6 +56,8 @@ def upgrade() -> None:
         op.create_index("ix_access_requests_status", "access_requests", ["status"])
     if "ix_access_requests_created_at" not in idx:
         op.create_index("ix_access_requests_created_at", "access_requests", ["created_at"])
+    if "ix_access_requests_reviewed_by_user_id" not in idx:
+        op.create_index("ix_access_requests_reviewed_by_user_id", "access_requests", ["reviewed_by_user_id"])
 
 
 def downgrade() -> None:
