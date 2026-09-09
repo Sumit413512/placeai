@@ -1,0 +1,34 @@
+name: Production runtime probe
+
+on:
+  push:
+    branches:
+      - diagnostics/production-runtime-probe
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe PlaceAI production runtime
+        shell: bash
+        run: |
+          set +e
+          BASE="https://placeai-rxpp.vercel.app"
+          for path in / /health; do
+            echo "===== REQUEST ${path} ====="
+            rm -f headers.txt body.txt
+            code=$(curl -sS --max-time 30 -D headers.txt -o body.txt -w '%{http_code}' "${BASE}${path}")
+            curl_exit=$?
+            echo "curl_exit=${curl_exit}"
+            echo "http_status=${code}"
+            echo "--- headers ---"
+            sed -n '1,40p' headers.txt
+            echo "--- body ---"
+            head -c 8000 body.txt
+            echo
+            echo "===== END ${path} ====="
+          done
+          exit 0
