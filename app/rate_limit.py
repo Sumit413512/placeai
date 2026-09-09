@@ -29,8 +29,15 @@ def _client_address(request: Request) -> str:
     return "unknown"
 
 
-def _bucket_key(request: Request, scope: str, identifier: str | None) -> str:
-    raw = f"{scope}|{_client_address(request)}|{(identifier or '').strip().lower()}"
+def _bucket_key(
+    request: Request,
+    scope: str,
+    identifier: str | None,
+    *,
+    include_client_address: bool = True,
+) -> str:
+    client_component = _client_address(request) if include_client_address else "account"
+    raw = f"{scope}|{client_component}|{(identifier or '').strip().lower()}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -43,14 +50,22 @@ def enforce_rate_limit(
     limit: int,
     window_seconds: int,
     block_seconds: int | None = None,
+    include_client_address: bool = True,
 ) -> None:
     """Durable fixed-window limiter suitable for multi-instance deployments.
 
-    The deterministic key stores only a SHA-256 digest of scope/IP/identifier, so raw
-    email/IP values are not persisted in the rate-limit table.
+    By default the deterministic SHA-256 key includes scope, client address and
+    identifier, preserving the existing auth/abuse throttling semantics without storing
+    raw email/IP values. Authenticated account budgets can explicitly disable the client
+    component so changing IP does not create a fresh quota.
     """
     now = _utcnow()
-    key_hash = _bucket_key(request, scope, identifier)
+    key_hash = _bucket_key(
+        request,
+        scope,
+        identifier,
+        include_client_address=include_client_address,
+    )
     bucket = (
         db.query(RateLimitBucket)
         .filter(RateLimitBucket.key_hash == key_hash)
