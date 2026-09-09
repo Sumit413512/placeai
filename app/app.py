@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -8,23 +9,33 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
-from app.database import Base, engine
+from app.database import Base, engine, engine_initialization_error_code
 from app.routers import ai, auth, auth_refresh_atomic, enterprise, institutions, interview_compat, jobs, mock_interview, platform, public, recruiters, report_export_safe, students
 
+logger = logging.getLogger("placeai")
 settings = get_settings()
+runtime_configuration_errors = settings.configuration_error_codes()
+if engine_initialization_error_code and engine_initialization_error_code not in runtime_configuration_errors:
+    runtime_configuration_errors.append(engine_initialization_error_code)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Vercel imports the module during build/framework discovery. Keep import side effects
-    # build-safe while still failing closed when a real application instance starts.
-    settings.validate_for_startup()
-    if settings.auto_create_schema:
-        Base.metadata.create_all(bind=engine)
-    if not settings.uses_database_file_storage:
-        settings.upload_dir.mkdir(parents=True, exist_ok=True)
+    # Do not raise configuration errors from the ASGI lifespan. On serverless hosts,
+    # a lifespan exception terminates the Python worker and Vercel can only surface
+    # FUNCTION_INVOCATION_FAILED. Keep the worker alive for /health diagnostics while
+    # the request guard below refuses protected traffic until configuration is valid.
+    if runtime_configuration_errors:
+        for code in runtime_configuration_errors:
+            logger.error("PlaceAI runtime configuration blocked: %s", code)
+    else:
+        if settings.auto_create_schema:
+            Base.metadata.create_all(bind=engine)
+        if not settings.uses_database_file_storage:
+            settings.upload_dir.mkdir(parents=True, exist_ok=True)
     yield
 
 
@@ -46,9 +57,22 @@ app.add_middleware(
 )
 
 
+_DIAGNOSTIC_PATHS = {"/", "/health"}
+
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
-    response = await call_next(request)
+    path = request.url.path
+    if runtime_configuration_errors and path not in _DIAGNOSTIC_PATHS and not path.startswith("/static/"):
+        response = JSONResponse(
+            status_code=503,
+            content={
+                "detail": "PlaceAI backend is not ready for authenticated traffic.",
+                "code": "SERVICE_CONFIGURATION_ERROR",
+            },
+        )
+    else:
+        response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -67,8 +91,20 @@ async def security_headers(request: Request, call_next):
     return response
 
 
+@app.exception_handler(SQLAlchemyError)
+async def database_exception_handler(request: Request, exc: SQLAlchemyError):
+    logger.exception("Database operation failed on %s", request.url.path)
+    if settings.is_production:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Database temporarily unavailable", "code": "DATABASE_UNAVAILABLE"},
+        )
+    raise exc
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled PlaceAI request failure on %s", request.url.path)
     if settings.is_production:
         return JSONResponse(status_code=500, content={"detail": "Unexpected server error"})
     raise exc
@@ -139,10 +175,32 @@ def mock_interview_page():
 
 @app.get("/health", tags=["System"])
 def health_check():
+    if runtime_configuration_errors:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "degraded",
+                "service": settings.app_name,
+                "version": "3.1.3",
+                "database": "not_checked",
+                "configuration": "invalid",
+                "configuration_errors": runtime_configuration_errors,
+            },
+        )
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
         database = "ok"
     except Exception:
+        logger.exception("PlaceAI health database probe failed")
         database = "degraded"
-    return {"status": "healthy" if database == "ok" else "degraded", "service": settings.app_name, "version": "3.1.3", "database": database}
+    payload = {
+        "status": "healthy" if database == "ok" else "degraded",
+        "service": settings.app_name,
+        "version": "3.1.3",
+        "database": database,
+        "configuration": "ok",
+    }
+    if database != "ok":
+        return JSONResponse(status_code=503, content=payload)
+    return payload
