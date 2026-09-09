@@ -20,6 +20,25 @@ def _https_url_from_vercel_host(value: str | None) -> str:
     return f"https://{host}"
 
 
+def _bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    """Parse an integer environment variable without allowing bootstrap crashes.
+
+    Vercel environment variables are user-controlled strings. A stale placeholder such as
+    ``ACCESS_TOKEN_MINUTES=replace-me`` must not terminate the Python worker before FastAPI
+    can expose readiness. Invalid/out-of-range values fall back to conservative defaults.
+    """
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw.strip())
+    except (TypeError, ValueError):
+        return default
+    if value < minimum or value > maximum:
+        return default
+    return value
+
+
 class Settings:
     def __init__(self) -> None:
         self.app_name = os.getenv("APP_NAME", "PlaceAI")
@@ -52,8 +71,8 @@ class Settings:
 
         self.jwt_secret_key = os.getenv("JWT_SECRET_KEY", "dev-access-secret-change-me")
         self.jwt_refresh_secret_key = os.getenv("JWT_REFRESH_SECRET_KEY", "dev-refresh-secret-change-me")
-        self.access_token_minutes = int(os.getenv("ACCESS_TOKEN_MINUTES", "30"))
-        self.refresh_token_days = int(os.getenv("REFRESH_TOKEN_DAYS", "14"))
+        self.access_token_minutes = _bounded_env_int("ACCESS_TOKEN_MINUTES", 30, 1, 1440)
+        self.refresh_token_days = _bounded_env_int("REFRESH_TOKEN_DAYS", 14, 1, 365)
 
         # Vercel exposes generated/production hostnames as system environment
         # variables. Use them only as non-secret URL defaults; explicit application
@@ -84,7 +103,7 @@ class Settings:
         ]
 
         self.upload_dir = Path(os.getenv("UPLOAD_DIR", "uploads/resumes"))
-        self.max_resume_mb = int(os.getenv("MAX_RESUME_MB", "5"))
+        self.max_resume_mb = _bounded_env_int("MAX_RESUME_MB", 5, 1, 50)
         self.public_recruiter_signup = os.getenv("PUBLIC_RECRUITER_SIGNUP", "false").lower() == "true"
         self.allow_talent_pool_search = os.getenv("ALLOW_TALENT_POOL_SEARCH", "false").lower() == "true"
         self.enable_ai_demo_fallback = os.getenv("ENABLE_AI_DEMO_FALLBACK", "false").lower() == "true"
@@ -93,7 +112,7 @@ class Settings:
         self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
         self.dev_show_reset_token = os.getenv("DEV_SHOW_RESET_TOKEN", "false").lower() == "true"
         self.smtp_host = os.getenv("SMTP_HOST", "")
-        self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        self.smtp_port = _bounded_env_int("SMTP_PORT", 587, 1, 65535)
         self.smtp_user = os.getenv("SMTP_USER", "")
         self.smtp_password = os.getenv("SMTP_PASSWORD", "")
         self.smtp_from = os.getenv("SMTP_FROM", "")
