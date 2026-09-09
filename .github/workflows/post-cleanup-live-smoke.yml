@@ -1,0 +1,40 @@
+name: PlaceAI Post-Cleanup Live Smoke
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify canonical production
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://placeai-rxpp.vercel.app'
+          curl -fsS "$BASE/health" -o /tmp/health.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/health.json'))
+          assert d.get('status') == 'healthy', d
+          assert d.get('database') == 'ok', d
+          assert d.get('configuration') == 'ok', d
+          PY
+          curl -fsS "$BASE/" -o /tmp/root.html
+          grep -q '/static/access-portal.js' /tmp/root.html
+          curl -fsS "$BASE/static/access-portal.js" -o /tmp/access.js
+          for role in 'Student' 'Recruiter' 'Institution Admin' 'Platform Admin'; do grep -q "$role" /tmp/access.js; done
+          grep -q 'Production workspace' /tmp/root.html
+          grep -q 'No fabricated placement activity' /tmp/root.html
+          ! grep -q 'Northstar Institute' /tmp/root.html
+          ! grep -q 'Aarav Shah' /tmp/root.html
+          ! grep -q 'Avanta Labs' /tmp/root.html
+          ! grep -q '74.8%' /tmp/root.html
+          ! grep -q '>842<' /tmp/root.html
+          ! grep -q '>214<' /tmp/root.html
+          echo 'Post-cleanup canonical production smoke passed.'
