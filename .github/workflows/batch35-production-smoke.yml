@@ -1,0 +1,39 @@
+name: PlaceAI Batch 35 Production Smoke
+
+on:
+  push:
+    branches:
+      - ops/batch35-production-smoke
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify canonical production offer authority UI and health
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://placeai-rxpp.vercel.app"
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "$BASE/health" -o /tmp/health.json
+          python - <<'PY'
+          import json
+          data=json.load(open('/tmp/health.json'))
+          assert data.get('status') == 'healthy', data
+          assert data.get('database') == 'ok', data
+          assert data.get('configuration') == 'ok', data
+          PY
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "$BASE/static/app.js" -o /tmp/app.js
+          grep -Fq 'data-action="student-offer-decision"' /tmp/app.js
+          grep -Fq '<option value="joined">Joined</option>' /tmp/app.js
+          python - <<'PY'
+          text=open('/tmp/app.js', encoding='utf-8').read()
+          anchor="pageHead('Offer management','Record CTC structure, offer lifecycle, PPO status and joining outcomes.'"
+          start=text.index(anchor)
+          section=text[start:start+5000]
+          assert '<option value="accepted">Accepted</option>' not in section
+          assert '<option value="declined">Declined</option>' not in section
+          assert '<option value="joined">Joined</option>' in section
+          PY
