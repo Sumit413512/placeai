@@ -264,7 +264,7 @@ def hardened_install_default_pipeline(
     return _pipeline_payload(drive.id, db)
 
 
-@router.post("/enterprise/drives/{drive_id}/pipeline", status_code=status.HTTP_201_CREATED)
+@router.post("/enterprise/drives/{drive_id}/pipeline")
 def hardened_add_pipeline_stage(
     drive_id: str,
     data: DriveStageCreate,

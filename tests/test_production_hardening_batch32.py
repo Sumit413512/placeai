@@ -203,8 +203,8 @@ def test_scheduled_announcements_are_hidden_until_active_and_notify_once() -> No
     db = SessionLocal()
     try:
         row = db.query(Announcement).filter(Announcement.id == announcement_id).first()
-        row.starts_at = datetime.utcnow() - timedelta(minutes=1)
-        row.expires_at = datetime.utcnow() + timedelta(hours=1)
+        row.starts_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=1)
+        row.expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
         db.commit()
     finally:
         db.close()
