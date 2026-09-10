@@ -185,6 +185,11 @@
     }
   }
 
+  function notificationTarget(link) {
+    const candidate = String(link || '').trim().split(':', 1)[0];
+    return (state.nav || []).some(item => item[1] === candidate) ? candidate : 'notifications';
+  }
+
   async function renderNotifications() {
     setPage('Notifications','Updates'); setContextAction();
     const data = await api('/enterprise/notifications');
@@ -230,7 +235,7 @@
     mountNav();
     $('#app-content').innerHTML = `<div class="loading-state"><span class="loader"></span><p>Loading workspace…</p></div>`;
     try {
-      if (view === 'notifications') { renderNotifications(); return; }
+      if (view === 'notifications') { await renderNotifications(); return; }
       if (state.me.role === 'student') await renderStudent(view);
       else if (state.me.role === 'recruiter') await renderRecruiter(view);
       else if (state.me.role === 'institution_admin') await renderInstitution(view);
@@ -678,7 +683,7 @@
     const el=e.target.closest('[data-action]');if(!el)return;const a=el.dataset.action,id=el.dataset.id,val=el.dataset.value;
     try{
       if(a==='mark-notifications-read'){await api('/enterprise/notifications/read-all',{method:'POST'});toast('Notifications marked as read');await renderNotifications();}
-      else if(a==='open-notification'){await api(`/enterprise/notifications/${id}/read`,{method:'PATCH'});await updateNotificationBadge();navigate(val||'dashboard');}
+      else if(a==='open-notification'){await api(`/enterprise/notifications/${id}/read`,{method:'PATCH'});await updateNotificationBadge();await navigate(notificationTarget(val));}
       else if(a==='notification-preferences')await openNotificationPreferences();
       else if(a==='assistant-suggestion'){const input=$('#assistant-form textarea');if(input){input.value=val;input.focus();}}
       else if(a==='view-pipeline')await openPipeline(id);
