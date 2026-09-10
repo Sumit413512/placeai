@@ -142,17 +142,19 @@ institutions = _import_router("institutions")
 platform = _import_router("platform")
 report_export_safe = _import_router("report_export_safe")
 enterprise = _import_router("enterprise")
+hardening = _import_router("hardening")
 
 if ai is not None:
-    _RETIRED_AI_INTERVIEW_PATHS = {
+    _RETIRED_AI_PATHS = {
         "/ai/interview/questions",
         "/ai/interview/evaluate",
         "/ai/interviews",
         "/ai/interviews/{interview_id}",
+        "/ai/rank-candidates/{job_id}",
     }
     ai.router.routes = [
         route for route in ai.router.routes
-        if getattr(route, "path", "") not in _RETIRED_AI_INTERVIEW_PATHS
+        if getattr(route, "path", "") not in _RETIRED_AI_PATHS
     ]
 if mock_interview is not None:
     mock_interview.router.routes = [
@@ -164,6 +166,16 @@ if auth is not None:
     auth.router.routes = [
         route for route in auth.router.routes
         if getattr(route, "path", "") != "/auth/refresh"
+    ]
+
+if institutions is not None:
+    _HARDENED_INSTITUTION_PATHS = {
+        "/institutions/dashboard",
+        "/institutions/jobs/{job_id}/approval",
+    }
+    institutions.router.routes = [
+        route for route in institutions.router.routes
+        if getattr(route, "path", "") not in _HARDENED_INSTITUTION_PATHS
     ]
 
 if enterprise is not None:
@@ -186,6 +198,7 @@ for module in (
     platform,
     report_export_safe,
     enterprise,
+    hardening,
 ):
     _include_router(module)
 
