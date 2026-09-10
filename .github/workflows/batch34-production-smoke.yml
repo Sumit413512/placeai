@@ -1,0 +1,35 @@
+name: PlaceAI Batch 34 Production Smoke
+
+on:
+  push:
+    branches:
+      - ops/batch34-production-smoke
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify canonical production notification navigation
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://placeai-rxpp.vercel.app"
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "$BASE/health" -o /tmp/health.json
+          python - <<'PY'
+          import json
+          data=json.load(open('/tmp/health.json'))
+          assert data.get('status') == 'healthy', data
+          assert data.get('database') == 'ok', data
+          assert data.get('configuration') == 'ok', data
+          PY
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "$BASE/" -o /tmp/root.html
+          grep -Fq '/static/access-portal.js' /tmp/root.html
+          grep -Fq '/static/app.js' /tmp/root.html
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "$BASE/static/app.js" -o /tmp/app.js
+          grep -Fq 'function notificationTarget(link)' /tmp/app.js
+          grep -Fq "split(':', 1)[0]" /tmp/app.js
+          grep -Fq 'await navigate(notificationTarget(val))' /tmp/app.js
+          grep -Fq "if (view === 'notifications') { await renderNotifications(); return; }" /tmp/app.js
