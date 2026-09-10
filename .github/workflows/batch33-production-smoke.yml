@@ -1,0 +1,40 @@
+name: PlaceAI Batch 33 Production Smoke
+
+on:
+  push:
+    branches:
+      - ops/batch33-production-smoke
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify canonical production and frontend permission fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://placeai-rxpp.vercel.app"
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "$BASE/health" -o /tmp/health.json
+          python - <<'PY'
+          import json
+          data=json.load(open('/tmp/health.json'))
+          assert data.get('status') == 'healthy', data
+          assert data.get('database') == 'ok', data
+          assert data.get('configuration') == 'ok', data
+          PY
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "$BASE/static/app.js" -o /tmp/app.js
+          grep -Fq 'state.appliedJobIds=new Set(apps.map(a=>a.job_id))' /tmp/app.js
+          grep -Fq 'Institution-controlled pipeline' /tmp/app.js
+          grep -Fq 'External notification channels are not exposed until a production delivery provider is configured' /tmp/app.js
+          grep -Fq "await api('/enterprise/notifications/read-all',{method:'POST'})" /tmp/app.js
+          if grep -Fq "state.notificationsRead=true" /tmp/app.js; then
+            echo 'Stale local notification read-state handler still present' >&2
+            exit 1
+          fi
+          if grep -Fq 'name="whatsapp"' /tmp/app.js || grep -Fq 'name="sms"' /tmp/app.js; then
+            echo 'Unsupported external channel controls still present' >&2
+            exit 1
+          fi
