@@ -200,7 +200,9 @@ def root():
     html = (TEMPLATE_DIR / "index.html").read_text(encoding="utf-8")
     assets = (
         '<link rel="stylesheet" href="/static/access-portal.css">\n'
+        '<link rel="stylesheet" href="/static/ui-fixes.css">\n'
         '<script src="/static/access-portal.js" defer></script>\n'
+        '<script src="/static/ui-state-fixes.js" defer></script>\n'
     )
     if "/static/access-portal.js" not in html:
         html = html.replace("</head>", f"{assets}</head>", 1)
