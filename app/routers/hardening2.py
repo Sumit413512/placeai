@@ -44,6 +44,9 @@ from app.storage import (
 settings = get_settings()
 router = APIRouter(tags=["Production hardening v2"])
 PLACED_OFFER_STATUSES = {"accepted", "joining_confirmed", "joined"}
+VALID_OFFER_STATUSES = {"issued", "accepted", "declined", "withdrawn", "joining_confirmed", "joined"}
+STUDENT_OFFER_DECISIONS = {"accepted", "declined"}
+OPERATOR_OFFER_STATUSES = VALID_OFFER_STATUSES - STUDENT_OFFER_DECISIONS
 
 
 def _utc_naive_now() -> datetime:
@@ -348,12 +351,24 @@ def hardened_update_offer(
     if not application or not _application_access(current_user, application, db):
         raise HTTPException(status_code=403, detail="Not permitted")
 
+    normalized_status = None
+    if data.status is not None:
+        normalized_status = data.status.strip().lower()
+        if not normalized_status or normalized_status not in VALID_OFFER_STATUSES:
+            raise HTTPException(status_code=422, detail="Unsupported offer status")
+
     if current_user.role == UserRole.student:
-        if data.status not in {"accepted", "declined"}:
+        if normalized_status not in STUDENT_OFFER_DECISIONS:
             raise HTTPException(status_code=403, detail="Students may only accept or decline offers")
-        payload = {"status": data.status}
+        payload = {"status": normalized_status}
     else:
+        if normalized_status in STUDENT_OFFER_DECISIONS:
+            raise HTTPException(status_code=403, detail="Only the student may accept or decline an offer")
         payload = data.model_dump(exclude_unset=True)
+        if "status" in payload:
+            if normalized_status not in OPERATOR_OFFER_STATUSES:
+                raise HTTPException(status_code=422, detail="Unsupported offer status")
+            payload["status"] = normalized_status
 
     for key, value in payload.items():
         setattr(offer, key, value)
