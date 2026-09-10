@@ -1,0 +1,73 @@
+name: PlaceAI Google auth role-integrity normalization
+
+on:
+  push:
+    branches:
+      - fix/google-auth-role-integrity-batch36
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/google-auth-role-integrity-batch36
+
+      - name: Enforce Google auth role integrity
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          path = Path('app/routers/auth.py')
+          text = path.read_text(encoding='utf-8')
+
+          old = '''    requested_role = payload.role\n    if requested_role == "recruiter" and not settings.public_recruiter_signup:\n        requested_role = "student"\n'''
+          new = '''    requested_role = payload.role\n    if requested_role == "recruiter" and not settings.public_recruiter_signup:\n        raise HTTPException(\n            status_code=403,\n            detail="Recruiter self-registration is disabled. Request an invite from an institution or platform administrator.",\n        )\n'''
+          if old not in text:
+              raise SystemExit('Google recruiter downgrade anchor missing')
+          text = text.replace(old, new, 1)
+
+          existing_anchor = '''    user = db.query(User).filter(User.email == email).first()\n    if not user:\n'''
+          existing_replacement = '''    user = db.query(User).filter(User.email == email).first()\n    if user:\n        if user.role in {UserRole.institution_admin, UserRole.platform_admin}:\n            raise HTTPException(\n                status_code=403,\n                detail="Google sign-in is not enabled for privileged administrator accounts",\n            )\n        if user.role.value != requested_role:\n            raise HTTPException(status_code=403, detail="Google sign-in role does not match this account")\n    if not user:\n'''
+          if existing_anchor not in text:
+              raise SystemExit('Google existing-account anchor missing')
+          text = text.replace(existing_anchor, existing_replacement, 1)
+          path.write_text(text, encoding='utf-8')
+
+          manifest = Path('MANIFEST.sha256')
+          rows = []
+          seen = set()
+          for raw in manifest.read_text(encoding='utf-8').splitlines():
+              if not raw.strip():
+                  continue
+              _digest, file_name = raw.split(maxsplit=1)
+              file_name = file_name.strip()
+              file_path = Path(file_name)
+              if not file_path.is_file():
+                  raise SystemExit(f'Manifest path missing: {file_name}')
+              rows.append((file_name, hashlib.sha256(file_path.read_bytes()).hexdigest()))
+              seen.add(file_name)
+          extra = 'tests/test_google_auth_role_integrity.py'
+          if extra not in seen:
+              rows.append((extra, hashlib.sha256(Path(extra).read_bytes()).hexdigest()))
+          manifest.write_text(''.join(f'{digest}  {file_name}\n' for file_name, digest in rows), encoding='utf-8')
+          PY
+
+          rm -f .github/workflows/batch36-google-auth-role-integrity.yml
+
+      - name: Commit Google auth role hardening
+        shell: bash
+        run: |
+          git config user.name "PlaceAI Hardening Bot"
+          git config user.email "placeai-hardening@users.noreply.github.com"
+          git add app/routers/auth.py tests/test_google_auth_role_integrity.py MANIFEST.sha256 .github/workflows/batch36-google-auth-role-integrity.yml
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Harden Google auth role integrity"
+          git push origin HEAD:fix/google-auth-role-integrity-batch36
