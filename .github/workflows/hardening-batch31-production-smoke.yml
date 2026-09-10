@@ -1,0 +1,69 @@
+name: PlaceAI Hardening Batch 31 Production Smoke
+
+on:
+  push:
+    branches:
+      - "ops/hardening-batch31-production-smoke"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-production:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify canonical production
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://placeai-rxpp.vercel.app"
+
+          curl --fail --silent --show-error "$BASE/health" -o /tmp/health.json
+          python - <<'PY'
+          import json
+          data = json.load(open('/tmp/health.json'))
+          assert data.get('status') == 'healthy', data
+          assert data.get('database') == 'ok', data
+          assert data.get('configuration') == 'ok', data
+          PY
+
+          curl --fail --silent --show-error "$BASE/" -o /tmp/root.html
+          grep -q '/static/access-portal.js' /tmp/root.html
+          grep -q '/static/ui-fixes.css' /tmp/root.html
+          grep -q '/static/ui-state-fixes.js' /tmp/root.html
+
+          curl --fail --silent --show-error "$BASE/static/access-portal.js" -o /tmp/access.js
+          grep -q '/auth/login-role' /tmp/access.js
+          grep -q '/public/access-requests' /tmp/access.js
+
+          access_code=$(curl --silent --output /tmp/access-empty.json --write-out '%{http_code}' \
+            -H 'Content-Type: application/json' -d '{}' "$BASE/public/access-requests")
+          test "$access_code" = "422"
+
+          login_code=$(curl --silent --output /tmp/login-empty.json --write-out '%{http_code}' \
+            -H 'Content-Type: application/json' -d '{}' "$BASE/auth/login-role")
+          test "$login_code" = "422"
+
+          dashboard_code=$(curl --silent --output /tmp/dashboard-noauth.json --write-out '%{http_code}' \
+            "$BASE/institutions/dashboard")
+          test "$dashboard_code" = "401"
+
+          platform_code=$(curl --silent --output /tmp/platform-noauth.json --write-out '%{http_code}' \
+            "$BASE/platform/access-requests")
+          test "$platform_code" = "401"
+
+          curl --fail --silent --show-error "$BASE/openapi.json" -o /tmp/openapi.json
+          python - <<'PY'
+          import json
+          data = json.load(open('/tmp/openapi.json'))
+          paths = data.get('paths', {})
+          required = {
+              '/public/access-requests',
+              '/auth/login-role',
+              '/institutions/dashboard',
+              '/institutions/jobs/{job_id}/approval',
+              '/ai/rank-candidates/{job_id}',
+          }
+          missing = sorted(required - set(paths))
+          assert not missing, missing
+          PY
