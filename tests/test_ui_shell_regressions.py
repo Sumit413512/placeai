@@ -26,24 +26,36 @@ def test_auth_dialog_is_bounded_to_dynamic_viewport() -> None:
     assert ".auth-modal" in css
     assert ".auth-form-panel" in css
     assert "overflow-y: auto" in css
+    assert ".modal-close" in css
+    assert ".auth-inline-cancel" in css
     assert ".generic-modal-content" in css
     assert ".app-sidebar" in css
+    assert ".app-nav" in css
     assert "body.modal-open" in css
 
 
-def test_workspace_view_survives_reload_without_storing_auth_tokens() -> None:
+def test_workspace_reload_restores_session_and_view_without_web_storage_tokens() -> None:
     js = (ROOT / "app/static/ui-state-fixes.js").read_text(encoding="utf-8")
     assert "sessionStorage" in js
     assert "localStorage" not in js
     assert "placeai.workspace.view.v1" in js
+    assert "placeai.session.active.v1" in js
     assert "VIEW_PARAM = 'view'" in js
     assert "restoreInitialView" in js
+    assert "refreshRuntimeToken" in js
+    assert "'/auth/refresh'" in js
+    assert "credentials: 'include'" in js
+    assert "runtimeToken" in js
+    assert "auth-inline-cancel" in js
     assert "data-view" in js
-    assert "access_token" not in js
-    assert "refresh_token" not in js
+    # JWTs may be held in JS memory for the current page, but must never be written
+    # to localStorage/sessionStorage.
+    assert "sessionStorage.setItem('access_token'" not in js
+    assert 'sessionStorage.setItem("access_token"' not in js
+    assert "localStorage.setItem" not in js
 
 
-def test_primary_workspace_boot_still_restores_server_session() -> None:
+def test_primary_workspace_boot_keeps_server_session_refresh_path() -> None:
     js = (ROOT / "app/static/app.js").read_text(encoding="utf-8")
     assert "async function refreshSession()" in js
     assert "await api('/auth/me')" in js
