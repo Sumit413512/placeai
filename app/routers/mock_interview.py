@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,6 +15,17 @@ from app.models import ApprovalStatus, Job, MockInterview, StudentProfile, User
 from app.routers.ai import PROMPT_GUARDRAIL, call_gemini, extract_json_from_response, get_gemini_client
 
 router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])
+
+
+def _clamp_score(value: Any) -> int:
+    """Normalize an AI-provided score without allowing NaN/Infinity to crash evaluation."""
+    try:
+        score = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+    if not math.isfinite(score):
+        return 0
+    return max(0, min(100, int(round(score))))
 
 
 class MockInterviewStart(BaseModel):
@@ -271,10 +283,7 @@ SERVER-ISSUED QUESTIONS AND ANSWERS
         raise HTTPException(status_code=502, detail="AI service returned an invalid interview evaluation")
 
     def clamp(value: Any) -> int:
-        try:
-            return max(0, min(100, int(round(float(value)))))
-        except (TypeError, ValueError):
-            return 0
+        return _clamp_score(value)
 
     dimensions = data.get("dimensions") if isinstance(data.get("dimensions"), dict) else {}
     dimension_keys = ["relevance", "clarity", "structure", "language_precision", "role_knowledge", "problem_solving", "professionalism"]

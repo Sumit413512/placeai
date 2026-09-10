@@ -143,6 +143,7 @@ platform = _import_router("platform")
 report_export_safe = _import_router("report_export_safe")
 enterprise = _import_router("enterprise")
 hardening = _import_router("hardening")
+hardening2 = _import_router("hardening2")
 
 if ai is not None:
     _RETIRED_AI_PATHS = {
@@ -179,9 +180,25 @@ if institutions is not None:
     ]
 
 if enterprise is not None:
+    def _retired_enterprise_route(route) -> bool:
+        path = getattr(route, "path", "")
+        methods = set(getattr(route, "methods", set()) or set())
+        if path in {
+            "/enterprise/reports/{kind}.{fmt}",
+            "/enterprise/announcements",
+            "/enterprise/offers/{offer_id}/letter",
+        }:
+            return True
+        return (
+            (path == "/enterprise/drives/{drive_id}/pipeline/default" and "POST" in methods)
+            or (path == "/enterprise/drives/{drive_id}/pipeline" and "POST" in methods)
+            or (path == "/enterprise/offers/{offer_id}" and "PATCH" in methods)
+            or (path == "/enterprise/company-verification/authorization-letter" and "POST" in methods)
+        )
+
     enterprise.router.routes = [
         route for route in enterprise.router.routes
-        if getattr(route, "path", "") != "/enterprise/reports/{kind}.{fmt}"
+        if not _retired_enterprise_route(route)
     ]
 
 for module in (
@@ -199,6 +216,7 @@ for module in (
     report_export_safe,
     enterprise,
     hardening,
+    hardening2,
 ):
     _include_router(module)
 
