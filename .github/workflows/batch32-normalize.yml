@@ -1,0 +1,104 @@
+name: PlaceAI hardening batch 32 normalization
+
+on:
+  push:
+    branches:
+      - fix/production-hardening-batch-32
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/production-hardening-batch-32
+
+      - name: Patch router registration and mock interview score normalization
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          app_path = Path('app/app.py')
+          app_text = app_path.read_text(encoding='utf-8')
+          old_import = 'hardening = _import_router("hardening")\n'
+          new_import = 'hardening = _import_router("hardening")\nhardening2 = _import_router("hardening2")\n'
+          if 'hardening2 = _import_router("hardening2")' not in app_text:
+              if old_import not in app_text:
+                  raise SystemExit('hardening import anchor missing')
+              app_text = app_text.replace(old_import, new_import, 1)
+
+          old_enterprise = '''if enterprise is not None:\n    enterprise.router.routes = [\n        route for route in enterprise.router.routes\n        if getattr(route, "path", "") != "/enterprise/reports/{kind}.{fmt}"\n    ]\n'''
+          new_enterprise = '''if enterprise is not None:\n    def _retired_enterprise_route(route) -> bool:\n        path = getattr(route, "path", "")\n        methods = set(getattr(route, "methods", set()) or set())\n        if path in {\n            "/enterprise/reports/{kind}.{fmt}",\n            "/enterprise/announcements",\n            "/enterprise/offers/{offer_id}/letter",\n        }:\n            return True\n        return (\n            (path == "/enterprise/drives/{drive_id}/pipeline/default" and "POST" in methods)\n            or (path == "/enterprise/drives/{drive_id}/pipeline" and "POST" in methods)\n            or (path == "/enterprise/offers/{offer_id}" and "PATCH" in methods)\n            or (path == "/enterprise/company-verification/authorization-letter" and "POST" in methods)\n        )\n\n    enterprise.router.routes = [\n        route for route in enterprise.router.routes\n        if not _retired_enterprise_route(route)\n    ]\n'''
+          if '_retired_enterprise_route' not in app_text:
+              if old_enterprise not in app_text:
+                  raise SystemExit('enterprise route retirement anchor missing')
+              app_text = app_text.replace(old_enterprise, new_enterprise, 1)
+
+          old_tuple = '''    enterprise,\n    hardening,\n):\n'''
+          new_tuple = '''    enterprise,\n    hardening,\n    hardening2,\n):\n'''
+          if '    hardening2,\n):' not in app_text:
+              if old_tuple not in app_text:
+                  raise SystemExit('router include tuple anchor missing')
+              app_text = app_text.replace(old_tuple, new_tuple, 1)
+          app_path.write_text(app_text, encoding='utf-8')
+
+          mock_path = Path('app/routers/mock_interview.py')
+          mock_text = mock_path.read_text(encoding='utf-8')
+          if 'import math\n' not in mock_text:
+              mock_text = mock_text.replace('import json\n', 'import json\nimport math\n', 1)
+          helper_anchor = 'router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])\n\n'
+          helper = '''router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])\n\n\ndef _clamp_score(value: Any) -> int:\n    """Normalize an AI-provided score without allowing NaN/Infinity to crash evaluation."""\n    try:\n        score = float(value)\n    except (TypeError, ValueError, OverflowError):\n        return 0\n    if not math.isfinite(score):\n        return 0\n    return max(0, min(100, int(round(score))))\n\n'''
+          if 'def _clamp_score(' not in mock_text:
+              if helper_anchor not in mock_text:
+                  raise SystemExit('mock router helper anchor missing')
+              mock_text = mock_text.replace(helper_anchor, helper, 1)
+          old_clamp = '''    def clamp(value: Any) -> int:\n        try:\n            return max(0, min(100, int(round(float(value)))))\n        except (TypeError, ValueError):\n            return 0\n'''
+          new_clamp = '''    def clamp(value: Any) -> int:\n        return _clamp_score(value)\n'''
+          if old_clamp in mock_text:
+              mock_text = mock_text.replace(old_clamp, new_clamp, 1)
+          elif new_clamp not in mock_text:
+              raise SystemExit('mock score clamp anchor missing')
+          mock_path.write_text(mock_text, encoding='utf-8')
+
+          manifest = Path('MANIFEST.sha256')
+          parsed = []
+          seen = set()
+          for raw in manifest.read_text(encoding='utf-8').splitlines():
+              if not raw.strip():
+                  continue
+              _digest, path = raw.split(maxsplit=1)
+              path = path.strip()
+              file_path = Path(path)
+              if not file_path.is_file():
+                  raise SystemExit(f'Manifest path missing: {path}')
+              parsed.append((path, hashlib.sha256(file_path.read_bytes()).hexdigest()))
+              seen.add(path)
+          for path in [
+              'app/routers/hardening2.py',
+              'tests/test_production_hardening_batch32.py',
+          ]:
+              if path not in seen:
+                  file_path = Path(path)
+                  parsed.append((path, hashlib.sha256(file_path.read_bytes()).hexdigest()))
+                  seen.add(path)
+          manifest.write_text(''.join(f'{digest}  {path}\n' for path, digest in parsed), encoding='utf-8')
+          PY
+
+          rm -f .github/workflows/batch32-normalize.yml
+
+      - name: Commit normalized branch
+        shell: bash
+        run: |
+          git config user.name "PlaceAI Hardening Bot"
+          git config user.email "placeai-hardening@users.noreply.github.com"
+          git add app/app.py app/routers/mock_interview.py app/routers/hardening2.py tests/test_production_hardening_batch32.py MANIFEST.sha256 .github/workflows/batch32-normalize.yml
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Normalize hardening batch 32 routes and manifest"
+          git push origin HEAD:fix/production-hardening-batch-32
