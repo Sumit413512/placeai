@@ -91,24 +91,29 @@ def test_public_privileged_signup_remains_blocked() -> None:
     assert response.status_code == 403, response.text
 
 
-def test_real_access_request_is_persisted_and_platform_admin_can_review() -> None:
-    request_response = client.post(
-        "/public/access-requests",
-        json={
-            "requested_role": "recruiter",
-            "full_name": "Recruiter Access Test",
-            "work_email": REQUEST_EMAIL,
-            "organization_name": "Access Test Company",
-            "message": "Production access verification",
-        },
-    )
-    assert request_response.status_code == 202, request_response.text
-    request_id = request_response.json()["request_id"]
+def test_access_request_is_non_enumerating_and_platform_admin_can_review() -> None:
+    payload = {
+        "requested_role": "recruiter",
+        "full_name": "Recruiter Access Test",
+        "work_email": REQUEST_EMAIL,
+        "organization_name": "Access Test Company",
+        "message": "Production access verification",
+    }
+    first = client.post("/public/access-requests", json=payload)
+    duplicate = client.post("/public/access-requests", json=payload)
+    assert first.status_code == 202, first.text
+    assert duplicate.status_code == 202, duplicate.text
+    assert first.json() == duplicate.json()
+    assert set(first.json()) == {"message"}
+    assert "request_id" not in first.json()
+    assert "status" not in first.json()
 
     db = SessionLocal()
     try:
-        row = db.query(AccessRequest).filter(AccessRequest.id == request_id).first()
-        assert row is not None
+        rows = db.query(AccessRequest).filter(AccessRequest.work_email == REQUEST_EMAIL).all()
+        assert len(rows) == 1
+        row = rows[0]
+        request_id = row.id
         assert row.status == "new"
         assert row.requested_role == "recruiter"
     finally:

@@ -1,3 +1,11 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json"
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "ops/*": false,
+      "audit/*": false,
+      "smoke/*": false,
+      "tmp/*": false
+    }
+  }
 }

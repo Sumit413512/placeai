@@ -29,6 +29,7 @@ ROLE_LABELS = {
     "platform_admin": "Platform Admin",
 }
 ACCESS_STATUSES = {"new", "under_review", "approved", "rejected", "provisioned"}
+PUBLIC_ACCESS_MESSAGE = "Access request received. If eligible, an authorized administrator will review it."
 
 
 class RoleLoginRequest(BaseModel):
@@ -55,6 +56,11 @@ class AccessRequestCreate(BaseModel):
 class AccessRequestReview(BaseModel):
     status: Literal["new", "under_review", "approved", "rejected", "provisioned"]
     review_note: str | None = Field(default=None, max_length=3000)
+
+
+def _public_access_response() -> dict[str, str]:
+    """Return one invariant response so public callers cannot enumerate request state."""
+    return {"message": PUBLIC_ACCESS_MESSAGE}
 
 
 def _notify_access_request(item: AccessRequest) -> None:
@@ -129,7 +135,7 @@ def create_access_request(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Capture a real provisioning request for non-self-service account roles."""
+    """Capture privileged provisioning requests without exposing whether one already exists."""
     email = str(body.work_email).lower()
     enforce_rate_limit(
         db,
@@ -141,8 +147,10 @@ def create_access_request(
         block_seconds=3600,
     )
 
+    # Honeypot submissions deliberately receive the exact same response as genuine
+    # new and duplicate requests. Nothing about request existence/review state is public.
     if body.website:
-        return {"message": "Access request received."}
+        return _public_access_response()
 
     organization_name = (body.organization_name or "").strip() or None
     if body.requested_role in {"recruiter", "institution_admin"} and not organization_name:
@@ -159,11 +167,7 @@ def create_access_request(
         .first()
     )
     if existing:
-        return {
-            "message": "An active access request already exists for this email and role.",
-            "request_id": existing.id,
-            "status": existing.status,
-        }
+        return _public_access_response()
 
     item = AccessRequest(
         requested_role=body.requested_role,
@@ -178,7 +182,7 @@ def create_access_request(
     db.commit()
     db.refresh(item)
     _notify_access_request(item)
-    return {"message": "Access request received.", "request_id": item.id, "status": item.status}
+    return _public_access_response()
 
 
 @router.get("/platform/access-requests")
