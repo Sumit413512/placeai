@@ -204,9 +204,21 @@ def test_public_access_request_and_platform_review_pipeline():
         "message": "We want controlled access for our placement office.",
     })
     assert r.status_code == 202, r.text
-    request = r.json()
-    assert request["status"] == "new"
-    request_id = request["request_id"]
+    assert set(r.json()) == {"message"}
+    assert "request_id" not in r.json()
+    assert "status" not in r.json()
+
+    db = SessionLocal()
+    try:
+        from app.access_models import AccessRequest
+        access_request = db.query(AccessRequest).filter(
+            AccessRequest.work_email == "priya@college.example.com",
+            AccessRequest.requested_role == "institution_admin",
+        ).order_by(AccessRequest.created_at.desc()).first()
+        assert access_request is not None
+        request_id = access_request.id
+    finally:
+        db.close()
 
     platform = login("platform@placeai.example.com", "PlatformPass123!")
     r = client.get("/platform/access-requests", headers=auth(platform))
