@@ -106,8 +106,8 @@ def login_for_selected_role(
     enforce_rate_limit(
         db,
         request,
-        scope="login-role",
-        identifier=f"{body.role}:{email}",
+        scope="login",
+        identifier=email,
         limit=12,
         window_seconds=600,
         block_seconds=900,
