@@ -205,7 +205,10 @@ def google_auth(payload: GoogleAuthRequest, request: Request, response: Response
     credential = payload.credential
     requested_role = payload.role
     if requested_role == "recruiter" and not settings.public_recruiter_signup:
-        requested_role = "student"
+        raise HTTPException(
+            status_code=403,
+            detail="Recruiter self-registration is disabled. Request an invite from an institution or platform administrator.",
+        )
     try:
         from google.auth.transport import requests as google_requests
         from google.oauth2 import id_token
@@ -219,6 +222,14 @@ def google_auth(payload: GoogleAuthRequest, request: Request, response: Response
     if info.get("email_verified") is not True:
         raise HTTPException(status_code=403, detail="Google account email must be verified")
     user = db.query(User).filter(User.email == email).first()
+    if user:
+        if user.role in {UserRole.institution_admin, UserRole.platform_admin}:
+            raise HTTPException(
+                status_code=403,
+                detail="Google sign-in is not enabled for privileged administrator accounts",
+            )
+        if user.role.value != requested_role:
+            raise HTTPException(status_code=403, detail="Google sign-in role does not match this account")
     if not user:
         username_base = email.split("@")[0].replace(".", "_").replace("-", "_")[:65]
         username = username_base
