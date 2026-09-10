@@ -48,6 +48,14 @@ body.sidebar-open {
   box-shadow: 0 4px 18px rgba(16, 24, 39, .10);
 }
 
+.auth-inline-cancel {
+  margin-top: 12px;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  box-shadow: 0 -10px 22px rgba(255,255,255,.94);
+}
+
 .generic-modal-card {
   max-height: calc(100dvh - 32px);
   overflow: hidden;
@@ -74,13 +82,49 @@ body.sidebar-open {
 .app-sidebar {
   height: 100dvh;
   min-height: 0;
+  overflow: hidden;
+}
+
+.app-nav {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  padding-right: 2px;
+}
+
+.sidebar-bottom {
+  flex: 0 0 auto;
+}
+
+/* If a known signed-in session is being restored, do not flash the public/sign-in
+   surface before the HttpOnly refresh-cookie bootstrap finishes. */
+html.placeai-session-restoring #marketing-site {
+  visibility: hidden;
+}
+
+html.placeai-session-restoring body::before {
+  content: "Restoring your PlaceAI workspace…";
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: #f6f7fa;
+  color: #647084;
+  font: 600 13px/1.4 "DM Sans", sans-serif;
+}
+
+html.placeai-session-restoring #app-shell:not(.hidden) ~ * {
+  pointer-events: auto;
 }
 
 @media (max-height: 700px) and (min-width: 761px) {
   .modal-overlay {
+    place-items: start center;
     padding-top: 12px;
     padding-bottom: 12px;
   }
@@ -111,6 +155,10 @@ body.sidebar-open {
 
   .generic-modal-card {
     max-height: calc(100dvh - 24px);
+  }
+
+  .auth-inline-cancel {
+    bottom: -1px;
   }
 }
 
