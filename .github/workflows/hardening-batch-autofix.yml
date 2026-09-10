@@ -3,7 +3,7 @@ name: PlaceAI hardening batch one-time normalization
 on:
   push:
     branches:
-      - fix/production-hardening-batch-31
+      - "fix/production-hardening-batch-31"
 
 permissions:
   contents: write
@@ -12,109 +12,21 @@ jobs:
   normalize:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout hardening branch
+        uses: actions/checkout@v4
         with:
           ref: fix/production-hardening-batch-31
 
-      - name: Update legacy regression and release manifest
-        shell: bash
+      - name: Normalize tests and release manifest
+        run: python scripts/one_time_hardening_normalize.py
+
+      - name: Commit normalized release branch
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          import hashlib
-
-          core = Path('tests/test_core_flows.py')
-          text = core.read_text(encoding='utf-8')
-          old = '''    assert r.status_code == 202, r.text
-    request = r.json()
-    assert request["status"] == "new"
-    request_id = request["request_id"]
-
-    platform = login("platform@placeai.example.com", "PlatformPass123!")
-    r = client.get("/platform/access-requests", headers=auth(platform))
-    assert r.status_code == 200 and any(x["id"] == request_id for x in r.json())
-
-    r = client.patch(
-        f"/platform/access-requests/{request_id}",
-        headers=auth(platform),
-        json={"status": "under_review", "review_note": "Validated institutional request."},
-    )
-    assert r.status_code == 200 and r.json()["status"] == "under_review"
-'''
-          new = '''    assert r.status_code == 202, r.text
-    assert set(r.json()) == {"message"}
-    assert "request_id" not in r.json()
-    assert "status" not in r.json()
-
-    db = SessionLocal()
-    try:
-        from app.access_models import AccessRequest
-        access_request = db.query(AccessRequest).filter(
-            AccessRequest.work_email == "priya@college.example.com",
-            AccessRequest.requested_role == "institution_admin",
-        ).order_by(AccessRequest.created_at.desc()).first()
-        assert access_request is not None
-        request_id = access_request.id
-    finally:
-        db.close()
-
-    platform = login("platform@placeai.example.com", "PlatformPass123!")
-    r = client.get("/platform/access-requests", headers=auth(platform))
-    assert r.status_code == 200 and any(x["id"] == request_id for x in r.json())
-
-    r = client.patch(
-        f"/platform/access-requests/{request_id}",
-        headers=auth(platform),
-        json={"status": "under_review", "review_note": "Validated institutional request."},
-    )
-    assert r.status_code == 200 and r.json()["status"] == "under_review"
-'''
-          if old not in text:
-              raise SystemExit('Expected legacy access-request regression block not found')
-          core.write_text(text.replace(old, new, 1), encoding='utf-8')
-
-          manifest = Path('MANIFEST.sha256')
-          parsed = []
-          seen = set()
-          for raw in manifest.read_text(encoding='utf-8').splitlines():
-              if not raw.strip():
-                  continue
-              _digest, path = raw.split(maxsplit=1)
-              path = path.strip()
-              file_path = Path(path)
-              if not file_path.is_file():
-                  raise SystemExit(f'Manifest path missing: {path}')
-              digest = hashlib.sha256(file_path.read_bytes()).hexdigest()
-              parsed.append((path, digest))
-              seen.add(path)
-
-          extras = [
-              'app/routers/hardening.py',
-              'tests/test_production_hardening_batch31.py',
-          ]
-          for path in extras:
-              if path not in seen:
-                  file_path = Path(path)
-                  digest = hashlib.sha256(file_path.read_bytes()).hexdigest()
-                  parsed.append((path, digest))
-                  seen.add(path)
-
-          manifest.write_text(
-              ''.join(f'{digest}  {path}\n' for path, digest in parsed),
-              encoding='utf-8',
-          )
-          PY
-
-          rm -f .github/workflows/hardening-batch-autofix.yml
-
-      - name: Commit normalized branch
-        shell: bash
-        run: |
-          if git diff --quiet; then
-            exit 0
-          fi
           git config user.name "PlaceAI Hardening Bot"
           git config user.email "placeai-hardening@users.noreply.github.com"
-          git add tests/test_core_flows.py MANIFEST.sha256 .github/workflows/hardening-batch-autofix.yml
+          git add -A
+          if git diff --cached --quiet; then
+            exit 0
+          fi
           git commit -m "Normalize hardening regressions and release manifest"
           git push origin HEAD:fix/production-hardening-batch-31
