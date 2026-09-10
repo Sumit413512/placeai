@@ -1,0 +1,122 @@
+/* PlaceAI viewport and dialog resilience.
+   Loaded after the primary UI styles so every modal remains operable at 100% zoom,
+   on short laptop screens, mobile dynamic viewports, and browser zoom. */
+
+body.modal-open,
+body.sidebar-open {
+  overflow: hidden;
+}
+
+.modal-overlay {
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding:
+    max(12px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+}
+
+.auth-modal {
+  height: min(760px, calc(100dvh - 48px));
+  min-height: min(610px, calc(100dvh - 48px));
+  max-height: calc(100dvh - 48px);
+  overflow: hidden;
+  align-items: stretch;
+}
+
+.auth-brand-panel,
+.auth-form-panel {
+  min-height: 0;
+}
+
+.auth-form-panel {
+  align-self: stretch;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-top: 58px;
+  padding-bottom: 40px;
+}
+
+.modal-close {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 30;
+  flex: 0 0 auto;
+  box-shadow: 0 4px 18px rgba(16, 24, 39, .10);
+}
+
+.generic-modal-card {
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.generic-modal-content {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 2px;
+}
+
+.generic-modal-actions {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
+  background: #fff;
+  padding-top: 16px;
+}
+
+.app-sidebar {
+  height: 100dvh;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+@media (max-height: 700px) and (min-width: 761px) {
+  .modal-overlay {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .auth-modal {
+    height: calc(100dvh - 24px);
+    min-height: 0;
+    max-height: calc(100dvh - 24px);
+  }
+
+  .auth-form-panel {
+    padding: 48px 42px 28px;
+  }
+}
+
+@media (max-width: 760px) {
+  .auth-modal {
+    height: calc(100dvh - 24px);
+    min-height: 0;
+    max-height: calc(100dvh - 24px);
+    overflow: hidden;
+  }
+
+  .auth-form-panel {
+    padding: 54px 25px 28px;
+    overflow-y: auto;
+  }
+
+  .generic-modal-card {
+    max-height: calc(100dvh - 24px);
+  }
+}
+
+@media (max-width: 430px) {
+  .auth-form-panel {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
