@@ -1,0 +1,51 @@
+name: PlaceAI Hardening Batch 32 Production Smoke
+
+on:
+  push:
+    branches:
+      - ops/hardening-batch32-production-smoke
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify canonical production health and protected routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://placeai-rxpp.vercel.app"
+
+          curl -fsS "$BASE/health" -o /tmp/health.json
+          python - <<'PY'
+          import json
+          payload = json.load(open('/tmp/health.json', encoding='utf-8'))
+          assert payload.get('status') == 'healthy', payload
+          assert payload.get('database') == 'ok', payload
+          assert payload.get('configuration') == 'ok', payload
+          PY
+
+          curl -fsS "$BASE/" -o /tmp/root.html
+          grep -q '/static/access-portal.js' /tmp/root.html
+          grep -q '/static/ui-state-fixes.js' /tmp/root.html
+
+          check_unauthorized() {
+            method="$1"
+            path="$2"
+            body="${3:-}"
+            if [ -n "$body" ]; then
+              code=$(curl -sS -o /tmp/probe.json -w '%{http_code}' -X "$method" -H 'Content-Type: application/json' --data "$body" "$BASE$path")
+            else
+              code=$(curl -sS -o /tmp/probe.json -w '%{http_code}' -X "$method" "$BASE$path")
+            fi
+            test "$code" = "401"
+          }
+
+          check_unauthorized GET '/enterprise/announcements'
+          check_unauthorized PATCH '/enterprise/offers/not-a-real-offer' '{"status":"declined"}'
+          check_unauthorized POST '/enterprise/drives/not-a-real-drive/pipeline' '{"name":"Unauthorized stage"}'
+          check_unauthorized GET '/mock-interview/jobs'
+
+          echo 'Canonical production smoke passed.'
