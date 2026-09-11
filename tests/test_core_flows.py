@@ -8,6 +8,8 @@ from app.models import User, UserRole
 from app.utils import get_hashed_password
 
 client = TestClient(app)
+ROTATED_PASSWORDS: dict[str, str] = {}
+ROTATED_TEST_PASSWORD = "PlaceAIRotated456!"
 
 
 def auth(token: str):
@@ -15,9 +17,22 @@ def auth(token: str):
 
 
 def login(email: str, password: str):
-    r = client.post("/auth/login-json", json={"email": email, "password": password})
+    current_password = ROTATED_PASSWORDS.get(email, password)
+    r = client.post("/auth/login-json", json={"email": email, "password": current_password})
     assert r.status_code == 200, r.text
-    return r.json()["access_token"]
+    token = r.json()["access_token"]
+    me = client.get("/auth/me", headers=auth(token))
+    assert me.status_code == 200, me.text
+    if me.json().get("must_change_password"):
+        changed = client.post(
+            "/auth/change-password",
+            headers=auth(token),
+            json={"current_password": current_password, "new_password": ROTATED_TEST_PASSWORD},
+        )
+        assert changed.status_code == 200, changed.text
+        token = changed.json()["access_token"]
+        ROTATED_PASSWORDS[email] = ROTATED_TEST_PASSWORD
+    return token
 
 
 def setup_module():
@@ -188,7 +203,10 @@ def test_password_reset_is_non_enumerating_and_refresh_cookie_works():
     assert existing.json()["message"] == missing.json()["message"]
     assert "reset_token" not in existing.json()
 
-    r = client.post("/auth/login-json", json={"email": "student@northstar.example.com", "password": "StudentPass123!"})
+    r = client.post("/auth/login-json", json={
+        "email": "student@northstar.example.com",
+        "password": ROTATED_PASSWORDS.get("student@northstar.example.com", "StudentPass123!"),
+    })
     assert r.status_code == 200
     assert "placeai_refresh" in r.cookies
     r = client.post("/auth/refresh", json={})
