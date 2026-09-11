@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from fastapi.testclient import TestClient
 
 import app.routers.access as access_router
@@ -60,6 +62,31 @@ def test_forgot_password_stays_non_enumerating_and_records_pii_free_failure(monk
         assert "recipient" not in column_names
         assert "user_id" not in column_names
         assert "token" not in column_names
+    finally:
+        db.close()
+
+
+def test_failed_delivery_does_not_invalidate_existing_reset_link(monkeypatch) -> None:
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == USER_EMAIL).one()
+        prior_hash = "prior-reset-token-digest"
+        prior_expires = auth_router._utcnow() + timedelta(minutes=10)
+        user.reset_token_hash = prior_hash
+        user.reset_token_expires = prior_expires
+        db.commit()
+    finally:
+        db.close()
+
+    monkeypatch.setattr(auth_router, "_send_reset_email", lambda recipient, link: ("failed", "smtp_delivery_failed"))
+    response = client.post("/auth/forgot-password", json={"email": USER_EMAIL})
+    assert response.status_code == 200
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == USER_EMAIL).one()
+        assert user.reset_token_hash == prior_hash
+        assert user.reset_token_expires == prior_expires
     finally:
         db.close()
 
