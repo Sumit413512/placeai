@@ -10,11 +10,24 @@ __pycache__/
 *.sqlite3
 *.log
 uploads/
+
+# Test / engineering-only source
 tests/
 docs/
 scripts/
 alembic/
+.github/
+
+# Non-runtime packaging and documentation
 Dockerfile
 docker-compose.yml
 PlaceAI_API.postman_collection.json
 MANIFEST.sha256
+README.md
+RELEASE_NOTES.md
+VERCEL_DEPLOYMENT.md
+DEPLOYMENT_PREP_STATUS.md
+
+# GitHub Pages-only public site artifacts
+pages/
+index.html

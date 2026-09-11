@@ -9,7 +9,7 @@ from openpyxl import load_workbook
 from app.app import app
 from app.database import Base, SessionLocal, engine
 from app.models import Application, ApprovalStatus, Job, Organization, RecruiterProfile, StudentProfile, User, UserRole
-from app.routers.report_export_safe import spreadsheet_safe_cell
+from app.routers.enterprise import spreadsheet_safe_cell
 from app.utils import get_hashed_password
 
 client = TestClient(app)
