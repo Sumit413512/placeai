@@ -39,6 +39,15 @@ def _bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int
     return value
 
 
+def _first_env(*names: str) -> str:
+    """Return the first non-empty environment value from a list of compatible aliases."""
+    for name in names:
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    return ""
+
+
 class Settings:
     def __init__(self) -> None:
         self.app_name = os.getenv("APP_NAME", "PlaceAI")
@@ -110,12 +119,22 @@ class Settings:
         self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
         self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
         self.dev_show_reset_token = os.getenv("DEV_SHOW_RESET_TOKEN", "false").lower() == "true"
-        self.smtp_host = os.getenv("SMTP_HOST", "")
+
+        # Transactional email supports the existing generic SMTP names plus common
+        # Brevo aliases. This lets production recover from earlier deployments that
+        # stored provider-specific variable names instead of SMTP_* names.
+        brevo_smtp_user = _first_env("BREVO_SMTP_USER", "BREVO_SMTP_LOGIN")
+        brevo_smtp_password = _first_env("BREVO_SMTP_PASSWORD", "BREVO_SMTP_KEY")
+        self.smtp_user = _first_env("SMTP_USER") or brevo_smtp_user
+        self.smtp_password = _first_env("SMTP_PASSWORD") or brevo_smtp_password
+        self.smtp_from = _first_env("SMTP_FROM", "BREVO_FROM_EMAIL", "BREVO_SENDER_EMAIL")
+        self.smtp_host = _first_env("SMTP_HOST", "BREVO_SMTP_HOST")
+        if not self.smtp_host and (brevo_smtp_user or brevo_smtp_password):
+            self.smtp_host = "smtp-relay.brevo.com"
         self.smtp_port = _bounded_env_int("SMTP_PORT", 587, 1, 65535)
-        self.smtp_user = os.getenv("SMTP_USER", "")
-        self.smtp_password = os.getenv("SMTP_PASSWORD", "")
-        self.smtp_from = os.getenv("SMTP_FROM", "")
         self.smtp_tls = os.getenv("SMTP_TLS", "true").lower() == "true"
+        self.brevo_api_key = _first_env("BREVO_API_KEY")
+
         default_auto_schema = "false" if self.is_production else "true"
         self.auto_create_schema = os.getenv("AUTO_CREATE_SCHEMA", default_auto_schema).lower() == "true"
 
