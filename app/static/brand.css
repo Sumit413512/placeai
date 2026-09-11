@@ -1,0 +1,77 @@
+/* Official PlaceAI identity — source artwork supplied by the product owner. */
+.brand{
+  min-height:72px;
+  display:inline-flex;
+  align-items:center;
+  gap:0!important;
+  line-height:1;
+}
+.brand .brand-mark{
+  display:block!important;
+  flex:0 0 auto;
+  width:94px!important;
+  height:86px!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:10px!important;
+  background:#fff url("./placeai-logo.svg") center/contain no-repeat!important;
+  box-shadow:none!important;
+  overflow:hidden;
+}
+.brand .brand-mark span,
+.brand .brand-mark i{
+  display:none!important;
+}
+.brand > span:last-child{
+  display:none!important;
+}
+.brand-light,
+.brand-light:hover,
+.brand-light:focus{
+  color:inherit;
+}
+.brand-light .brand-mark{
+  background:#fff url("./placeai-logo.svg") center/contain no-repeat!important;
+  box-shadow:0 0 0 1px rgba(255,255,255,.08)!important;
+}
+.site-header{
+  min-height:88px;
+  height:auto!important;
+}
+.site-footer{
+  min-height:116px;
+  height:auto!important;
+}
+.sidebar-brand{
+  min-height:92px;
+  padding-top:2px!important;
+}
+.sidebar-brand .brand{
+  min-height:82px;
+}
+.sidebar-brand .brand-mark{
+  width:92px!important;
+  height:84px!important;
+}
+.auth-brand-panel > .brand,
+.auth-brand-panel .brand:first-child{
+  align-self:flex-start;
+  min-height:110px;
+  position:relative;
+  z-index:2;
+}
+.auth-brand-panel .brand-mark{
+  width:118px!important;
+  height:110px!important;
+}
+.topbar .brand-mark{
+  width:88px!important;
+  height:80px!important;
+}
+@media (max-width:760px){
+  .brand{min-height:64px}
+  .site-header{min-height:76px}
+  .site-header .brand-mark{width:78px!important;height:72px!important}
+  .site-footer .brand-mark{width:88px!important;height:80px!important}
+  .topbar .brand-mark{width:78px!important;height:72px!important}
+}
