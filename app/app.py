@@ -20,6 +20,7 @@ from app.database import (
     engine_initialization_error_code,
     safe_database_target,
 )
+from app.email_delivery import transactional_email_configured
 
 logger = logging.getLogger("placeai")
 settings = get_settings()
@@ -38,6 +39,10 @@ async def lifespan(_: FastAPI):
             Base.metadata.create_all(bind=engine)
         if not settings.uses_database_file_storage:
             settings.upload_dir.mkdir(parents=True, exist_ok=True)
+    if settings.is_production and not transactional_email_configured(settings):
+        logger.error(
+            "PlaceAI transactional email is not configured: password recovery and operational alerts are unavailable"
+        )
     yield
 
 
@@ -65,7 +70,21 @@ _DIAGNOSTIC_PATHS = {"/", "/health"}
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     path = request.url.path
-    if runtime_readiness_errors and path not in _DIAGNOSTIC_PATHS and not path.startswith("/static/"):
+    reset_email_unavailable = (
+        settings.is_production
+        and request.method == "POST"
+        and path == "/auth/forgot-password"
+        and not transactional_email_configured(settings)
+    )
+    if reset_email_unavailable:
+        response = JSONResponse(
+            status_code=503,
+            content={
+                "detail": "Password reset email is temporarily unavailable. Please try again later or contact support.",
+                "code": "PASSWORD_RESET_EMAIL_UNAVAILABLE",
+            },
+        )
+    elif runtime_readiness_errors and path not in _DIAGNOSTIC_PATHS and not path.startswith("/static/"):
         response = JSONResponse(
             status_code=503,
             content={
@@ -277,6 +296,7 @@ def health_check():
         "database": database,
         "configuration": "ok",
         "database_target": target,
+        "transactional_email": "ok" if transactional_email_configured(settings) else "not_configured",
     }
     if database_error:
         payload["database_error"] = database_error
