@@ -1,0 +1,69 @@
+name: PlaceAI batch 39 production smoke
+
+on:
+  push:
+    branches:
+      - ops/batch39-production-smoke
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify canonical production
+        env:
+          BASE_URL: https://placeai-rxpp.vercel.app
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, urllib.request, urllib.error
+
+          base = 'https://placeai-rxpp.vercel.app'
+
+          def request(path, method='GET', data=None, headers=None):
+              payload = None if data is None else json.dumps(data).encode()
+              req = urllib.request.Request(base + path, data=payload, method=method, headers=headers or {})
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as response:
+                      return response.status, response.headers, response.read().decode('utf-8', 'replace')
+              except urllib.error.HTTPError as exc:
+                  return exc.code, exc.headers, exc.read().decode('utf-8', 'replace')
+
+          status, _, body = request('/health')
+          assert status == 200, (status, body)
+          health = json.loads(body)
+          assert health.get('status') == 'healthy', health
+          assert health.get('database') == 'ok', health
+          assert health.get('configuration') == 'ok', health
+
+          status, _, root = request('/')
+          assert status == 200, status
+          assert '/static/account-security.css' in root
+          assert '/static/account-security.js' in root
+          assert '/static/access-portal.js' in root
+
+          status, _, security_js = request('/static/account-security.js')
+          assert status == 200
+          assert '/auth/change-password' in security_js
+          assert 'must_change_password' in security_js
+          assert 'Current temporary password' in security_js
+
+          status, _, access_js = request('/static/access-portal.js')
+          assert status == 200
+          for role in ('Student', 'Recruiter', 'Institution Admin', 'Platform Admin'):
+              assert role in access_js, role
+
+          status, headers, body = request('/auth/change-password', method='POST', data={'current_password':'x','new_password':'Abcdefghijk1!'}, headers={'Content-Type':'application/json'})
+          assert status == 401, (status, body)
+
+          status, _, body = request('/auth/login-role', method='POST', data={}, headers={'Content-Type':'application/json'})
+          assert status == 422, (status, body)
+
+          status, _, body = request('/public/access-requests', method='POST', data={}, headers={'Content-Type':'application/json'})
+          assert status == 422, (status, body)
+
+          print('BATCH39_PRODUCTION_SMOKE_OK')
+          print(json.dumps({'health': health, 'change_password_unauth_status': 401, 'role_access': 'present'}, sort_keys=True))
+          PY
