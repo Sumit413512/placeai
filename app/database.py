@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, unquote
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL, make_url
@@ -85,6 +85,11 @@ def build_runtime_database_url(database_url: str):
     project_ref = os.getenv("SUPABASE_PROJECT_REF", "").strip()
     if project_ref and host.lower().endswith("pooler.supabase.com") and "." not in username:
         username = f"{username}.{project_ref}"
+
+    # DATABASE_URL credentials may already contain percent escapes. Decode them once
+    # before handing the value to SQLAlchemy's structured URL object; rendering then
+    # performs exactly one canonical URI encoding pass rather than double-encoding '%'.
+    password = unquote(password)
 
     return URL.create(
         "postgresql+psycopg",
