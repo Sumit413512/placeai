@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import smtplib
 from email.message import EmailMessage
 
@@ -34,8 +35,36 @@ def _brevo_api_failure_reason(status_code: int) -> str:
     return "brevo_api_delivery_failed"
 
 
+def _brevo_headers(settings) -> dict[str, str]:
+    return {
+        "accept": "application/json",
+        "api-key": settings.brevo_api_key,
+        "content-type": "application/json",
+    }
+
+
+def _plain_body_as_html(body: str) -> str:
+    """Convert trusted application plain text into minimal safe HTML for provider fallback."""
+    return "<div>" + html.escape(body).replace("\n", "<br>") + "</div>"
+
+
+def _post_brevo(settings, payload: dict) -> httpx.Response:
+    return httpx.post(
+        BREVO_TRANSACTIONAL_EMAIL_URL,
+        json=payload,
+        headers=_brevo_headers(settings),
+        timeout=8.0,
+    )
+
+
 def send_transactional_email(settings, *, recipient: str, subject: str, body: str) -> tuple[str, str | None]:
     """Send mail through configured SMTP, with Brevo HTTPS API as a safe fallback.
+
+    Brevo normally accepts a textContent payload with a verified sender. Some account
+    configurations reject that otherwise-valid shape with HTTP 400. When that happens,
+    PlaceAI retries once with the same verified sender email, no sender-name override,
+    and an escaped HTML body. The retry is deliberately limited to request-rejection
+    responses so auth, rate-limit and provider failures are never hidden.
 
     The return value intentionally exposes only sanitized operational outcome codes.
     Secrets, provider response bodies, recipients and exception text must never be persisted.
@@ -83,18 +112,22 @@ def send_transactional_email(settings, *, recipient: str, subject: str, body: st
             "textContent": body,
         }
         try:
-            response = httpx.post(
-                BREVO_TRANSACTIONAL_EMAIL_URL,
-                json=payload,
-                headers={
-                    "accept": "application/json",
-                    "api-key": settings.brevo_api_key,
-                    "content-type": "application/json",
-                },
-                timeout=8.0,
-            )
+            response = _post_brevo(settings, payload)
             if 200 <= response.status_code < 300:
                 return "sent", None
+
+            if response.status_code == 400:
+                compatibility_payload = {
+                    "sender": {"email": settings.smtp_from},
+                    "to": [{"email": recipient}],
+                    "subject": subject,
+                    "htmlContent": _plain_body_as_html(body),
+                }
+                retry = _post_brevo(settings, compatibility_payload)
+                if 200 <= retry.status_code < 300:
+                    return "sent", None
+                return "failed", _brevo_api_failure_reason(retry.status_code)
+
             return "failed", _brevo_api_failure_reason(response.status_code)
         except httpx.TimeoutException:
             return "failed", "brevo_api_timeout"
