@@ -31,17 +31,16 @@ def test_atomic_refresh_route_is_exposed():
     assert response.json()["detail"] == "Refresh token is required"
 
 
-def test_atomic_refresh_endpoint_uses_database_row_lock():
-    source = open("app/routers/auth_refresh_atomic.py", encoding="utf-8").read()
+def test_atomic_refresh_endpoint_uses_database_row_lock_in_canonical_router():
+    source = open("app/routers/auth.py", encoding="utf-8").read()
     app_source = open("app/app.py", encoding="utf-8").read()
+    assert source.count('@router.post("/refresh", response_model=TokenSchema)') == 1
     assert ".with_for_update()" in source
     assert "RefreshSession.jti" in source
     assert "session.revoked_at is not None" in source
     assert "revoke_jti=session.jti" in source
-    assert 'getattr(route, "path", "") != "/auth/refresh"' in app_source
-    assert 'auth_refresh_atomic = _import_router("auth_refresh_atomic")' in app_source
-    assert "_include_router(module)" in app_source
-
+    assert 'auth_refresh_atomic = _import_router("auth_refresh_atomic")' not in app_source
+    assert 'getattr(route, "path", "") != "/auth/refresh"' not in app_source
 
 def test_refresh_token_remains_single_use_in_normal_rotation():
     login = client.post("/auth/login-json", json={

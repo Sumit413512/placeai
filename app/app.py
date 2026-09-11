@@ -129,7 +129,6 @@ def _include_router(module) -> None:
         app.include_router(module.router)
 
 
-auth_refresh_atomic = _import_router("auth_refresh_atomic")
 auth = _import_router("auth")
 account_security = _import_router("account_security")
 access = _import_router("access")
@@ -162,12 +161,6 @@ if mock_interview is not None:
     mock_interview.router.routes = [
         route for route in mock_interview.router.routes
         if getattr(route, "path", "") != "/mock-interview/history"
-    ]
-
-if auth is not None:
-    auth.router.routes = [
-        route for route in auth.router.routes
-        if getattr(route, "path", "") != "/auth/refresh"
     ]
 
 if institutions is not None:
@@ -203,7 +196,6 @@ if enterprise is not None:
     ]
 
 for module in (
-    auth_refresh_atomic,
     auth,
     account_security,
     access,
