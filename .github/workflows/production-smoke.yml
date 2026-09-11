@@ -1,0 +1,112 @@
+name: PlaceAI Production Smoke
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: placeai-production-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BASE_URL: https://placeai-rxpp.vercel.app
+    steps:
+      - name: Wait for canonical production deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 36); do
+            code=$(curl -L -sS -o /tmp/health.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/health" || true)
+            if [ "$code" = "200" ]; then
+              python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path('/tmp/health.json').read_text(encoding='utf-8'))
+          required = {
+              'status': 'healthy',
+              'database': 'ok',
+              'configuration': 'ok',
+              'transactional_email': 'ok',
+          }
+          bad = {key: (payload.get(key), expected) for key, expected in required.items() if payload.get(key) != expected}
+          target = payload.get('database_target') or {}
+          if not target.get('supabase_pooler'):
+              bad['database_target.supabase_pooler'] = (target.get('supabase_pooler'), True)
+          if not target.get('username_shape_ok'):
+              bad['database_target.username_shape_ok'] = (target.get('username_shape_ok'), True)
+          if bad:
+              raise SystemExit(f'Production health contract failed: {bad}; payload={payload}')
+          print('Production health contract passed.')
+          PY
+              exit 0
+            fi
+            echo "Production not ready yet (attempt $attempt/36, HTTP $code)."
+            sleep 10
+          done
+          echo 'Production health endpoint did not become healthy in time.' >&2
+          cat /tmp/health.json 2>/dev/null || true
+          exit 1
+
+      - name: Verify public shell and security headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -L -sS --fail --connect-timeout 10 --max-time 20 -D /tmp/root.headers -o /tmp/root.html "$BASE_URL/"
+          grep -qi 'PlaceAI' /tmp/root.html
+          grep -qi '^strict-transport-security:' /tmp/root.headers
+          grep -qi '^content-security-policy:' /tmp/root.headers
+          grep -qi '^x-content-type-options: *nosniff' /tmp/root.headers
+          grep -qi '^x-frame-options: *DENY' /tmp/root.headers
+          grep -qi '^referrer-policy: *strict-origin-when-cross-origin' /tmp/root.headers
+
+      - name: Verify unauthenticated auth boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          refresh_code=$(curl -sS -o /tmp/refresh.json -w '%{http_code}' \
+            -H 'Content-Type: application/json' \
+            -d '{}' \
+            "$BASE_URL/auth/refresh")
+          test "$refresh_code" = '401'
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('/tmp/refresh.json').read_text(encoding='utf-8'))
+          if payload.get('detail') != 'Refresh token is required':
+              raise SystemExit(f'Unexpected refresh response: {payload}')
+          PY
+
+          me_code=$(curl -sS -o /tmp/me.json -w '%{http_code}' "$BASE_URL/auth/me")
+          test "$me_code" = '401'
+
+      - name: Record smoke evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Production smoke passed for $BASE_URL"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('/tmp/health.json').read_text(encoding='utf-8'))
+          safe = {
+              'status': payload.get('status'),
+              'service': payload.get('service'),
+              'version': payload.get('version'),
+              'database': payload.get('database'),
+              'configuration': payload.get('configuration'),
+              'transactional_email': payload.get('transactional_email'),
+              'database_target': payload.get('database_target'),
+          }
+          print(json.dumps(safe, sort_keys=True))
+          PY
