@@ -21,6 +21,19 @@ def transactional_email_configured(settings) -> bool:
     return smtp_transport_configured(settings) or brevo_api_configured(settings)
 
 
+def _brevo_api_failure_reason(status_code: int) -> str:
+    """Map provider HTTP failures to sanitized operational reason codes."""
+    if status_code in {401, 403}:
+        return "brevo_api_auth_failed"
+    if status_code == 400:
+        return "brevo_api_request_rejected"
+    if status_code == 429:
+        return "brevo_api_rate_limited"
+    if 500 <= status_code < 600:
+        return "brevo_api_provider_unavailable"
+    return "brevo_api_delivery_failed"
+
+
 def send_transactional_email(settings, *, recipient: str, subject: str, body: str) -> tuple[str, str | None]:
     """Send mail through configured SMTP, with Brevo HTTPS API as a safe fallback.
 
@@ -82,9 +95,11 @@ def send_transactional_email(settings, *, recipient: str, subject: str, body: st
             )
             if 200 <= response.status_code < 300:
                 return "sent", None
-            return "failed", "brevo_api_delivery_failed"
+            return "failed", _brevo_api_failure_reason(response.status_code)
+        except httpx.TimeoutException:
+            return "failed", "brevo_api_timeout"
         except httpx.HTTPError:
-            return "failed", "brevo_api_delivery_failed"
+            return "failed", "brevo_api_network_failed"
         except Exception:
             return "failed", "brevo_api_delivery_failed"
 
