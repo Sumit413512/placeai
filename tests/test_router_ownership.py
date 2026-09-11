@@ -28,18 +28,18 @@ def test_canonical_routes_keep_hardened_and_compatibility_owners():
 
 
 def test_enterprise_paths_have_single_canonical_owner():
-    expected_local = [
-        ("/announcements", "GET"),
-        ("/announcements", "POST"),
-        ("/drives/{drive_id}/pipeline/default", "POST"),
-        ("/drives/{drive_id}/pipeline", "POST"),
-        ("/offers/{offer_id}", "PATCH"),
-        ("/company-verification/authorization-letter", "POST"),
-        ("/offers/{offer_id}/letter", "POST"),
-        ("/offers/{offer_id}/letter", "GET"),
-        ("/reports/{kind}.{fmt}", "GET"),
+    expected = [
+        ("/enterprise/announcements", "GET"),
+        ("/enterprise/announcements", "POST"),
+        ("/enterprise/drives/{drive_id}/pipeline/default", "POST"),
+        ("/enterprise/drives/{drive_id}/pipeline", "POST"),
+        ("/enterprise/offers/{offer_id}", "PATCH"),
+        ("/enterprise/company-verification/authorization-letter", "POST"),
+        ("/enterprise/offers/{offer_id}/letter", "POST"),
+        ("/enterprise/offers/{offer_id}/letter", "GET"),
+        ("/enterprise/reports/{kind}.{fmt}", "GET"),
     ]
-    for path, method in expected_local:
+    for path, method in expected:
         matches = [
             route
             for route in enterprise_router.routes
