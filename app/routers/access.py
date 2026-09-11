@@ -1,28 +1,30 @@
 from __future__ import annotations
 
+import logging
 import os
 import smtplib
 from datetime import timedelta
 from email.message import EmailMessage
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.access_models import AccessRequest
 from app.config import get_settings
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.dependencies import require_platform_admin
-from app.models import User
-from app.telemetry_models import EmailDeliveryEvent
+from app.models import User, UserRole
 from app.rate_limit import enforce_rate_limit
 from app.routers.auth import _token_response, _utcnow
 from app.schemas import TokenSchema
+from app.telemetry_models import EmailDeliveryEvent
 from app.utils import verify_password
 
 settings = get_settings()
 router = APIRouter(tags=["Access"])
+logger = logging.getLogger("placeai.access")
 
 ROLE_LABELS = {
     "student": "Student",
@@ -65,35 +67,160 @@ def _public_access_response() -> dict[str, str]:
     return {"message": PUBLIC_ACCESS_MESSAGE}
 
 
-def _notify_access_request(item: AccessRequest) -> None:
-    """Send a real transactional notification through configured SMTP/Brevo SMTP."""
-    recipient = os.getenv("ACCESS_REQUEST_NOTIFY_TO", "").strip()
-    if not (settings.smtp_host and settings.smtp_from and recipient):
-        return
-    message = EmailMessage()
-    message["Subject"] = f"PlaceAI access request — {ROLE_LABELS.get(item.requested_role, item.requested_role)}"
-    message["From"] = settings.smtp_from
-    message["To"] = recipient
-    message.set_content(
-        "A new PlaceAI access request was submitted.\n\n"
-        f"Role: {ROLE_LABELS.get(item.requested_role, item.requested_role)}\n"
-        f"Name: {item.full_name}\n"
-        f"Email: {item.work_email}\n"
-        f"Organization: {item.organization_name or 'Not provided'}\n"
-        f"Phone: {item.phone or 'Not provided'}\n"
-        f"Message: {item.message or 'Not provided'}\n"
-        f"Request ID: {item.id}\n"
-    )
+def _smtp_transport_configured() -> bool:
+    credentials_consistent = bool(settings.smtp_user) == bool(settings.smtp_password)
+    return bool(settings.smtp_host and settings.smtp_from and credentials_consistent)
+
+
+def _record_delivery_event(purpose: str, outcome: str, reason_code: str | None = None) -> None:
+    """Persist PII-free delivery telemetry in an isolated transaction."""
+    db = SessionLocal()
     try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
+        db.add(EmailDeliveryEvent(purpose=purpose, outcome=outcome, reason_code=reason_code))
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Could not record access-email delivery telemetry")
+    finally:
+        db.close()
+
+
+def _send_transactional_email(*, recipient: str, subject: str, body: str, purpose: str) -> bool:
+    """Send one PlaceAI transactional email without leaking SMTP/provider details."""
+    recipient = recipient.strip().lower()
+    if not recipient:
+        return False
+    if not _smtp_transport_configured():
+        _record_delivery_event(purpose, "not_configured", "smtp_not_configured")
+        return False
+
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = f"{settings.app_name} <{settings.smtp_from}>"
+    message["To"] = recipient
+    message.set_content(body)
+    try:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=5) as smtp:
             if settings.smtp_tls:
                 smtp.starttls()
             if settings.smtp_user:
                 smtp.login(settings.smtp_user, settings.smtp_password)
             smtp.send_message(message)
+        _record_delivery_event(purpose, "sent")
+        return True
+    except smtplib.SMTPAuthenticationError:
+        _record_delivery_event(purpose, "failed", "smtp_authentication_failed")
+    except (smtplib.SMTPException, OSError):
+        _record_delivery_event(purpose, "failed", "smtp_delivery_failed")
     except Exception:
-        # Database persistence is the source of truth; mail delivery is retriable infrastructure.
-        return
+        _record_delivery_event(purpose, "failed", "smtp_delivery_failed")
+    return False
+
+
+def _platform_admin_recipients(db: Session) -> list[str]:
+    """Return active Platform Admin mailboxes plus the optional operational fallback."""
+    recipients = {
+        str(email).strip().lower()
+        for (email,) in (
+            db.query(User.email)
+            .filter(User.role == UserRole.platform_admin, User.is_active.is_(True))
+            .all()
+        )
+        if email and str(email).strip()
+    }
+    fallback = os.getenv("ACCESS_REQUEST_NOTIFY_TO", "").strip().lower()
+    if fallback:
+        recipients.add(fallback)
+    return sorted(recipients)
+
+
+def _access_request_payload(item: AccessRequest) -> dict[str, str | None]:
+    return {
+        "id": item.id,
+        "requested_role": item.requested_role,
+        "full_name": item.full_name,
+        "work_email": item.work_email,
+        "organization_name": item.organization_name,
+        "phone": item.phone,
+        "message": item.message,
+        "status": item.status,
+    }
+
+
+def _deliver_new_access_request(payload: dict[str, str | None], admin_recipients: list[str]) -> None:
+    role = ROLE_LABELS.get(str(payload["requested_role"]), str(payload["requested_role"]))
+    admin_body = (
+        "A new PlaceAI privileged-access request was submitted.\n\n"
+        f"Role: {role}\n"
+        f"Name: {payload['full_name']}\n"
+        f"Email: {payload['work_email']}\n"
+        f"Organization: {payload['organization_name'] or 'Not provided'}\n"
+        f"Phone: {payload['phone'] or 'Not provided'}\n"
+        f"Message: {payload['message'] or 'Not provided'}\n"
+        f"Request ID: {payload['id']}\n\n"
+        f"Review this request from the Platform Admin workspace: {settings.base_url}/\n"
+    )
+    for recipient in admin_recipients:
+        _send_transactional_email(
+            recipient=recipient,
+            subject=f"PlaceAI access request — {role}",
+            body=admin_body,
+            purpose="access_request_admin",
+        )
+
+    requester = str(payload["work_email"] or "")
+    _send_transactional_email(
+        recipient=requester,
+        subject="PlaceAI access request received",
+        body=(
+            f"Hello {payload['full_name']},\n\n"
+            f"Your request for {role} access has been received. An authorized PlaceAI administrator "
+            "will review it before any privileged account is provisioned.\n\n"
+            f"Request ID: {payload['id']}\n\n"
+            "You will receive another email when the review status changes. PlaceAI will never send "
+            "a permanent password by email.\n"
+        ),
+        purpose="access_request_requester",
+    )
+
+
+def _deliver_access_status(payload: dict[str, str | None]) -> None:
+    role = ROLE_LABELS.get(str(payload["requested_role"]), str(payload["requested_role"]))
+    status_value = str(payload["status"] or "under_review")
+    status_copy = {
+        "new": "received",
+        "under_review": "under review",
+        "approved": "approved for provisioning",
+        "rejected": "not approved",
+        "provisioned": "provisioned",
+    }.get(status_value, status_value.replace("_", " "))
+
+    if status_value == "approved":
+        next_step = (
+            "Approval authorizes the next provisioning step. Your account is not usable until an "
+            "authorized administrator creates the role-specific account and credentials."
+        )
+    elif status_value == "provisioned":
+        next_step = (
+            "Your privileged PlaceAI account has been marked provisioned. Use the secure credential "
+            "handoff provided by the administrator; temporary credentials must be changed at first sign-in."
+        )
+    elif status_value == "rejected":
+        next_step = "No privileged account will be created from this request unless it is reviewed again."
+    else:
+        next_step = "No action is required from you while the administrator completes the review."
+
+    _send_transactional_email(
+        recipient=str(payload["work_email"] or ""),
+        subject=f"PlaceAI access request update — {status_copy}",
+        body=(
+            f"Hello {payload['full_name']},\n\n"
+            f"Your {role} access request is now {status_copy}.\n\n"
+            f"{next_step}\n\n"
+            f"Request ID: {payload['id']}\n"
+        ),
+        purpose="access_request_status",
+    )
 
 
 @router.post("/auth/login-role", response_model=TokenSchema)
@@ -135,6 +262,7 @@ def login_for_selected_role(
 def create_access_request(
     body: AccessRequestCreate,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     """Capture privileged provisioning requests without exposing whether one already exists."""
@@ -183,7 +311,10 @@ def create_access_request(
     db.add(item)
     db.commit()
     db.refresh(item)
-    _notify_access_request(item)
+
+    payload = _access_request_payload(item)
+    recipients = _platform_admin_recipients(db)
+    background_tasks.add_task(_deliver_new_access_request, payload, recipients)
     return _public_access_response()
 
 
@@ -223,18 +354,25 @@ def list_access_requests(
 def review_access_request(
     request_id: str,
     body: AccessRequestReview,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ):
     item = db.query(AccessRequest).filter(AccessRequest.id == request_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Access request not found")
+
+    previous_status = item.status
     item.status = body.status
     item.review_note = (body.review_note or "").strip() or None
     item.reviewed_by_user_id = current_user.id
     item.updated_at = _utcnow()
     db.commit()
     db.refresh(item)
+
+    if item.status != previous_status:
+        background_tasks.add_task(_deliver_access_status, _access_request_payload(item))
+
     return {
         "id": item.id,
         "status": item.status,
@@ -245,16 +383,28 @@ def review_access_request(
 
 
 @router.get("/platform/integrations/status")
-def integration_status(current_user: User = Depends(require_platform_admin)):
-    """Return booleans only; never expose secret values."""
+def integration_status(
+    current_user: User = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+):
+    """Return booleans and aggregate counts only; never expose secret values."""
+    active_platform_admins = (
+        db.query(User)
+        .filter(User.role == UserRole.platform_admin, User.is_active.is_(True))
+        .count()
+    )
+    fallback_configured = bool(os.getenv("ACCESS_REQUEST_NOTIFY_TO", "").strip())
+    smtp_ready = _smtp_transport_configured()
     return {
         "database": not settings.database_url.startswith("sqlite"),
-        "brevo_smtp": bool(settings.smtp_host and settings.smtp_user and settings.smtp_password and settings.smtp_from),
-        "access_request_notifications": bool(os.getenv("ACCESS_REQUEST_NOTIFY_TO", "").strip()),
+        "brevo_smtp": smtp_ready,
+        "access_request_notifications": smtp_ready and (active_platform_admins > 0 or fallback_configured),
+        "active_platform_admins": active_platform_admins,
         "gemini": bool(settings.gemini_api_key),
         "google_sign_in": bool(settings.google_client_id),
         "production": settings.is_production,
     }
+
 
 @router.get("/platform/integrations/password-reset-email")
 def password_reset_email_observability(
