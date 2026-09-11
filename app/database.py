@@ -12,17 +12,43 @@ from app.config import get_settings
 
 
 def build_runtime_database_url(database_url: str):
-    """Return a structured SQLAlchemy URL for Render Postgres connections.
+    """Return the effective database URL for the current runtime.
 
-    Render receives DATABASE_URL as a secret string. Building a SQLAlchemy URL object
-    lets psycopg receive the exact password value even when it contains URI-reserved
-    characters. It also completes Supabase shared-pooler usernames as ROLE.PROJECT_REF.
-    Non-Render environments keep the existing string behavior unchanged.
+    On Render, an optional dedicated ``RENDER_DB_PASSWORD`` secret takes precedence.
+    When present, all non-secret Supabase connection fields come from explicit Render
+    environment variables and the password is passed to SQLAlchemy as a structured
+    value, so it is never reinterpreted as URI syntax. Existing Vercel behavior is
+    unchanged.
     """
     raw = (database_url or "").strip()
     if not os.getenv("RENDER_EXTERNAL_HOSTNAME"):
         return raw
 
+    render_password = os.getenv("RENDER_DB_PASSWORD", "")
+    if render_password:
+        project_ref = os.getenv("SUPABASE_PROJECT_REF", "").strip()
+        role = os.getenv("RENDER_DB_ROLE", "placeai_render_runtime").strip() or "placeai_render_runtime"
+        host = os.getenv("RENDER_DB_HOST", "aws-0-ap-southeast-1.pooler.supabase.com").strip()
+        port_raw = os.getenv("RENDER_DB_PORT", "5432").strip()
+        database = os.getenv("RENDER_DB_NAME", "postgres").strip() or "postgres"
+        username = role
+        if project_ref and host.lower().endswith("pooler.supabase.com") and "." not in username:
+            username = f"{username}.{project_ref}"
+        try:
+            port = int(port_raw)
+        except ValueError:
+            port = 5432
+        return URL.create(
+            "postgresql+psycopg",
+            username=username,
+            password=render_password,
+            host=host,
+            port=port,
+            database=database,
+            query={"sslmode": "require"},
+        )
+
+    # Backward-compatible fallback for an existing full DATABASE_URL on Render.
     prefix = "postgresql+psycopg://"
     if not raw.startswith(prefix):
         return raw
@@ -72,7 +98,6 @@ def build_runtime_database_url(database_url: str):
 
 
 def normalize_database_url_for_runtime(database_url: str) -> str:
-    """Render the structured runtime URL only when a string representation is needed."""
     runtime_url = build_runtime_database_url(database_url)
     if isinstance(runtime_url, URL):
         return runtime_url.render_as_string(hide_password=False)
