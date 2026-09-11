@@ -6,11 +6,11 @@ services:
     plan: free
     branch: main
     buildCommand: pip install -r requirements.txt
-    preDeployCommand: alembic upgrade head
     startCommand: >-
       sh -c 'export BASE_URL="${BASE_URL:-https://${RENDER_EXTERNAL_HOSTNAME}}";
       export ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-$BASE_URL}";
-      exec uvicorn app.app:app --host 0.0.0.0 --port "$PORT" --workers 2'
+      alembic upgrade head &&
+      exec uvicorn app.app:app --host 0.0.0.0 --port "$PORT" --workers 1'
     healthCheckPath: /health
     autoDeploy: true
     envVars:
