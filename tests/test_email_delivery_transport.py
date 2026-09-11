@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import httpx
+
 import app.email_delivery as email_delivery
 
 
@@ -83,3 +85,51 @@ def test_smtp_failure_falls_back_to_brevo_api(monkeypatch) -> None:
     )
     assert outcome == "sent"
     assert reason is None
+
+
+def test_brevo_api_failure_statuses_are_sanitized(monkeypatch) -> None:
+    settings = _settings(smtp_from="noreply@example.com", brevo_api_key="api-key")
+    cases = {
+        400: "brevo_api_request_rejected",
+        401: "brevo_api_auth_failed",
+        403: "brevo_api_auth_failed",
+        429: "brevo_api_rate_limited",
+        503: "brevo_api_provider_unavailable",
+        418: "brevo_api_delivery_failed",
+    }
+
+    for status_code, expected_reason in cases.items():
+        monkeypatch.setattr(
+            email_delivery.httpx,
+            "post",
+            lambda *args, _status=status_code, **kwargs: SimpleNamespace(status_code=_status),
+        )
+        outcome, reason = email_delivery.send_transactional_email(
+            settings, recipient="user@example.com", subject="Reset", body="Use link"
+        )
+        assert outcome == "failed"
+        assert reason == expected_reason
+
+
+def test_brevo_api_transport_distinguishes_timeout_and_network_failures(monkeypatch) -> None:
+    settings = _settings(smtp_from="noreply@example.com", brevo_api_key="api-key")
+
+    def raise_timeout(*args, **kwargs):
+        raise httpx.TimeoutException("timeout")
+
+    monkeypatch.setattr(email_delivery.httpx, "post", raise_timeout)
+    outcome, reason = email_delivery.send_transactional_email(
+        settings, recipient="user@example.com", subject="Reset", body="Use link"
+    )
+    assert outcome == "failed"
+    assert reason == "brevo_api_timeout"
+
+    def raise_network(*args, **kwargs):
+        raise httpx.ConnectError("network unavailable")
+
+    monkeypatch.setattr(email_delivery.httpx, "post", raise_network)
+    outcome, reason = email_delivery.send_transactional_email(
+        settings, recipient="user@example.com", subject="Reset", body="Use link"
+    )
+    assert outcome == "failed"
+    assert reason == "brevo_api_network_failed"
