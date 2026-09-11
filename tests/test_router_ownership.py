@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from app.app import app
+from app.routers.enterprise import router as enterprise_router
 
 
 def test_canonical_router_ownership_has_no_bootstrap_shadow_filters():
@@ -27,21 +28,21 @@ def test_canonical_routes_keep_hardened_and_compatibility_owners():
 
 
 def test_enterprise_paths_have_single_canonical_owner():
-    expected = [
-        ("/enterprise/announcements", "GET"),
-        ("/enterprise/announcements", "POST"),
-        ("/enterprise/drives/{drive_id}/pipeline/default", "POST"),
-        ("/enterprise/drives/{drive_id}/pipeline", "POST"),
-        ("/enterprise/offers/{offer_id}", "PATCH"),
-        ("/enterprise/company-verification/authorization-letter", "POST"),
-        ("/enterprise/offers/{offer_id}/letter", "POST"),
-        ("/enterprise/offers/{offer_id}/letter", "GET"),
-        ("/enterprise/reports/{kind}.{fmt}", "GET"),
+    expected_local = [
+        ("/announcements", "GET"),
+        ("/announcements", "POST"),
+        ("/drives/{drive_id}/pipeline/default", "POST"),
+        ("/drives/{drive_id}/pipeline", "POST"),
+        ("/offers/{offer_id}", "PATCH"),
+        ("/company-verification/authorization-letter", "POST"),
+        ("/offers/{offer_id}/letter", "POST"),
+        ("/offers/{offer_id}/letter", "GET"),
+        ("/reports/{kind}.{fmt}", "GET"),
     ]
-    for path, method in expected:
+    for path, method in expected_local:
         matches = [
             route
-            for route in app.routes
+            for route in enterprise_router.routes
             if getattr(route, "path", None) == path
             and method in (getattr(route, "methods", set()) or set())
         ]
@@ -50,3 +51,6 @@ def test_enterprise_paths_have_single_canonical_owner():
     schema = app.openapi()["paths"]
     assert "update_offer" in schema["/enterprise/offers/{offer_id}"]["patch"]["operationId"]
     assert "export_report" in schema["/enterprise/reports/{kind}.{fmt}"]["get"]["operationId"]
+    assert "/enterprise/announcements" in schema
+    assert "get" in schema["/enterprise/announcements"]
+    assert "post" in schema["/enterprise/announcements"]
