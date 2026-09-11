@@ -64,25 +64,53 @@ def institution_profile(current_user: User = Depends(require_institution_admin),
 
 
 @router.get("/dashboard", response_model=InstitutionDashboardOut)
-def dashboard(current_user: User = Depends(require_institution_admin), db: Session = Depends(get_db)):
+def dashboard(
+    current_user: User = Depends(require_institution_admin),
+    db: Session = Depends(get_db),
+):
+    """Scope activity to the institution's students, including their public-job applications."""
     org = _org(current_user, db)
     students = db.query(StudentProfile).filter(StudentProfile.organization_id == org.id).all()
+    student_ids = [student.id for student in students]
+
     target_jobs = db.query(Job).filter(Job.target_organization_id == org.id).all()
-    job_ids = [j.id for j in target_jobs]
-    applications = db.query(Application).filter(Application.job_id.in_(job_ids)).all() if job_ids else []
-    offers = sum(1 for a in applications if a.status in {ApplicationStatus.offered, ApplicationStatus.hired})
-    hires = sum(1 for a in applications if a.status == ApplicationStatus.hired)
+    applications = (
+        db.query(Application).filter(Application.student_id.in_(student_ids)).all()
+        if student_ids
+        else []
+    )
+
+    offered_applications = [
+        application
+        for application in applications
+        if application.status in {ApplicationStatus.offered, ApplicationStatus.hired}
+    ]
+    hired_student_ids = {
+        application.student_id
+        for application in applications
+        if application.status == ApplicationStatus.hired
+    }
     eligible_base = max(len(students), 1)
+
     return InstitutionDashboardOut(
         organization=org,
         total_students=len(students),
-        verified_students=sum(1 for s in students if s.is_verified),
-        active_jobs=sum(1 for j in target_jobs if j.is_active and j.approval_status == ApprovalStatus.approved),
-        open_drives=db.query(PlacementDrive).filter(PlacementDrive.organization_id == org.id, PlacementDrive.status == DriveStatus.open).count(),
+        verified_students=sum(1 for student in students if student.is_verified),
+        active_jobs=sum(
+            1
+            for job in target_jobs
+            if job.visibility == "campus"
+            and job.is_active
+            and job.approval_status == ApprovalStatus.approved
+        ),
+        open_drives=db.query(PlacementDrive).filter(
+            PlacementDrive.organization_id == org.id,
+            PlacementDrive.status == DriveStatus.open,
+        ).count(),
         total_applications=len(applications),
-        offers=offers,
-        hires=hires,
-        placement_rate=round(hires / eligible_base * 100, 1),
+        offers=len(offered_applications),
+        hires=len(hired_student_ids),
+        placement_rate=round(len(hired_student_ids) / eligible_base * 100, 1),
     )
 
 
@@ -241,16 +269,40 @@ def institution_jobs(current_user: User = Depends(require_institution_admin), db
 
 
 @router.patch("/jobs/{job_id}/approval", response_model=JobOut)
-def approve_job(job_id: str, data: JobApprovalUpdate, current_user: User = Depends(require_institution_admin), db: Session = Depends(get_db)):
+def approve_job(
+    job_id: str,
+    data: JobApprovalUpdate,
+    current_user: User = Depends(require_institution_admin),
+    db: Session = Depends(get_db),
+):
+    """Approve only a genuine campus-targeted listing for the caller's institution."""
     org = _org(current_user, db)
     job = db.query(Job).filter(Job.id == job_id, Job.target_organization_id == org.id).first()
-    if not job:
+    if not job or job.visibility != "campus":
         raise HTTPException(status_code=404, detail="Campus job not found")
+
     job.approval_status = ApprovalStatus(data.approval_status.value)
-    job.is_active = data.approval_status.value == "approved"
-    record_audit(db, current_user, "institution.job.approval_changed", organization_id=org.id, entity_type="job", entity_id=job.id, metadata={"approval_status": data.approval_status.value, "title": job.title})
+    job.is_active = data.approval_status.value == ApprovalStatus.approved.value
+    record_audit(
+        db,
+        current_user,
+        "institution.job.approval_changed",
+        organization_id=org.id,
+        entity_type="job",
+        entity_id=job.id,
+        metadata={"approval_status": data.approval_status.value, "title": job.title},
+    )
     if job.recruiter and job.recruiter.user_id:
-        create_notification(db, job.recruiter.user_id, f"Campus job {data.approval_status.value}", f"{org.name} {data.approval_status.value} your campus job: {job.title}.", organization_id=org.id, category="campus", priority="high" if data.approval_status.value == "approved" else "normal", link="jobs")
+        create_notification(
+            db,
+            job.recruiter.user_id,
+            f"Campus job {data.approval_status.value}",
+            f"{org.name} {data.approval_status.value} your campus job: {job.title}.",
+            organization_id=org.id,
+            category="campus",
+            priority="high" if data.approval_status.value == "approved" else "normal",
+            link="jobs",
+        )
     db.commit()
     db.refresh(job)
     return job_out(job)

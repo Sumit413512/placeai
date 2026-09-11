@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-import app.routers.hardening as hardening_router
+import app.routers.ai as ai_router
 from app.app import app
 from app.database import Base, SessionLocal, engine
 from app.models import (
@@ -251,23 +251,23 @@ def test_public_job_target_consistency_and_campus_approval_guard() -> None:
 
 
 def test_ai_score_normalization_is_finite_clamped_and_reasoning_is_bounded() -> None:
-    assert hardening_router._normalize_ai_score(-20) == 0.0
-    assert hardening_router._normalize_ai_score(120) == 100.0
-    assert hardening_router._normalize_ai_score("81.5") == 81.5
+    assert ai_router._normalize_ai_score(-20) == 0.0
+    assert ai_router._normalize_ai_score(120) == 100.0
+    assert ai_router._normalize_ai_score("81.5") == 81.5
     for invalid in ("NaN", "Infinity", float("nan"), float("inf"), object()):
         with pytest.raises(HTTPException) as exc:
-            hardening_router._normalize_ai_score(invalid)
+            ai_router._normalize_ai_score(invalid)
         assert exc.value.status_code == 502
-    assert len(hardening_router._bounded_reasoning("x" * 5000)) == hardening_router.MAX_AI_REASONING_CHARS
+    assert len(ai_router._bounded_reasoning("x" * 5000)) == ai_router.MAX_AI_REASONING_CHARS
 
 
 def test_ai_candidate_ranking_sanitizes_before_database_persistence(monkeypatch) -> None:
     fixture = _ensure_fixture_data()
     recruiter_token = login(fixture["recruiter_email"])
 
-    monkeypatch.setattr(hardening_router, "get_gemini_client", lambda: object())
+    monkeypatch.setattr(ai_router, "get_gemini_client", lambda: object())
     monkeypatch.setattr(
-        hardening_router,
+        ai_router,
         "call_gemini",
         lambda _client, _prompt: json.dumps([
             {
@@ -281,18 +281,18 @@ def test_ai_candidate_ranking_sanitizes_before_database_persistence(monkeypatch)
     assert response.status_code == 200, response.text
     ranked = response.json()["ranked_candidates"][0]
     assert ranked["ai_match_score"] == 100.0
-    assert len(ranked["ai_match_reasoning"]) == hardening_router.MAX_AI_REASONING_CHARS
+    assert len(ranked["ai_match_reasoning"]) == ai_router.MAX_AI_REASONING_CHARS
 
     db = SessionLocal()
     try:
         application = db.query(Application).filter(Application.id == fixture["public_application"]).first()
         assert application.ai_match_score == 100.0
-        assert len(application.ai_match_reasoning) == hardening_router.MAX_AI_REASONING_CHARS
+        assert len(application.ai_match_reasoning) == ai_router.MAX_AI_REASONING_CHARS
     finally:
         db.close()
 
     monkeypatch.setattr(
-        hardening_router,
+        ai_router,
         "call_gemini",
         lambda _client, _prompt: json.dumps([
             {

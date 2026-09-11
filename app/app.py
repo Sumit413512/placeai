@@ -161,30 +161,8 @@ institutions = _import_router("institutions")
 platform = _import_router("platform")
 report_export_safe = _import_router("report_export_safe")
 enterprise = _import_router("enterprise")
-hardening = _import_router("hardening")
 hardening2 = _import_router("hardening2")
 
-if ai is not None:
-    _RETIRED_AI_PATHS = {
-        "/ai/interview/questions",
-        "/ai/interview/evaluate",
-        "/ai/interviews",
-        "/ai/interviews/{interview_id}",
-        "/ai/rank-candidates/{job_id}",
-    }
-    ai.router.routes = [
-        route for route in ai.router.routes
-        if getattr(route, "path", "") not in _RETIRED_AI_PATHS
-    ]
-if institutions is not None:
-    _HARDENED_INSTITUTION_PATHS = {
-        "/institutions/dashboard",
-        "/institutions/jobs/{job_id}/approval",
-    }
-    institutions.router.routes = [
-        route for route in institutions.router.routes
-        if getattr(route, "path", "") not in _HARDENED_INSTITUTION_PATHS
-    ]
 
 if enterprise is not None:
     def _retired_enterprise_route(route) -> bool:
@@ -222,7 +200,6 @@ for module in (
     platform,
     report_export_safe,
     enterprise,
-    hardening,
     hardening2,
 ):
     _include_router(module)
