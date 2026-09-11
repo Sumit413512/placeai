@@ -2,6 +2,7 @@
   'use strict';
   const $ = (s, root = document) => root.querySelector(s);
   const esc = (value = '') => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const apiErrors = window.PlaceAIApiErrors;
   const state = { token:'', jobs:[], session:null };
 
   function toast(message, type='') {
@@ -36,7 +37,7 @@
     }
     const contentType = response.headers.get('content-type') || '';
     const data = contentType.includes('application/json') ? await response.json().catch(()=>({})) : null;
-    if (!response.ok) throw new Error(typeof data?.detail === 'string' ? data.detail : `Request failed (${response.status})`);
+    if (!response.ok) throw apiErrors.createError(data || {}, response.status);
     return data;
   }
 
@@ -99,6 +100,7 @@
       const result = await api('/mock-interview/start',{method:'POST',body:JSON.stringify(data)});
       renderQuestions(result);
     } catch (error) {
+      apiErrors.applyToForm(form, error);
       toast(error.message,'error');
     } finally {
       setBusy(form,false);
@@ -119,6 +121,7 @@
       const result = await api('/mock-interview/evaluate',{method:'POST',body:JSON.stringify({interview_id:state.session.interview_id,answers})});
       renderResult(result);
     } catch (error) {
+      apiErrors.applyToForm(form, error);
       toast(error.message,'error');
     } finally {
       setBusy(form,false);

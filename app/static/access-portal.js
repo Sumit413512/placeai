@@ -86,23 +86,7 @@
     }
   }
 
-  function apiErrorMessage(data, status) {
-    const detail = data?.detail;
-    if (typeof detail === 'string' && detail.trim()) return detail.trim();
-    if (Array.isArray(detail)) {
-      const messages = detail.map(item => {
-        if (typeof item === 'string') return item.trim();
-        if (!item || typeof item !== 'object') return '';
-        const rawMessage = typeof item.msg === 'string' ? item.msg.replace(/^Value error,\s*/i, '').trim() : '';
-        const loc = Array.isArray(item.loc) ? item.loc.filter(part => part !== 'body') : [];
-        const field = loc.length ? String(loc[loc.length - 1]).replace(/_/g, ' ') : '';
-        if (!rawMessage) return '';
-        return field ? `${field.charAt(0).toUpperCase()}${field.slice(1)}: ${rawMessage}` : rawMessage;
-      }).filter(Boolean);
-      if (messages.length) return [...new Set(messages)].join(' ');
-    }
-    return `Request failed (${status})`;
-  }
+  const apiErrors = window.PlaceAIApiErrors;
 
   async function requestJson(path, options = {}) {
     const response = await fetch(path, {
@@ -112,7 +96,7 @@
     });
     const contentType = response.headers.get('content-type') || '';
     const data = contentType.includes('application/json') ? await response.json().catch(() => ({})) : {};
-    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+    if (!response.ok) throw apiErrors.createError(data, response.status);
     return data;
   }
 
@@ -138,7 +122,7 @@
       await requestJson('/auth/login-role', {method: 'POST', body: JSON.stringify(body)});
       location.reload();
     } catch (error) {
-      showError('role-login-error', error.message);
+      apiErrors.applyToForm(form, error, $('#role-login-error'));
       setBusy(form, false);
     }
   }
@@ -171,7 +155,7 @@
       }
       location.reload();
     } catch (error) {
-      showError('role-create-error', error.message);
+      apiErrors.applyToForm(form, error, $('#role-create-error'));
       setBusy(form, false);
     }
   }
@@ -184,7 +168,7 @@
       const view = $('#signup-view');
       if (view) view.innerHTML = `${modeTabs('create')}<div class="access-request-success"><div class="success-mark">✓</div><span class="section-kicker">Request received</span><h2>Your ${roles[body.requested_role]?.label || 'account'} access request is recorded.</h2><p>${esc(result.message || 'An authorized administrator will review the request before any account is provisioned.')}</p><button type="button" class="button button-primary button-full" data-access-switch="login">Return to sign in</button></div>`;
     } catch (error) {
-      showError('role-create-error', error.message);
+      apiErrors.applyToForm(form, error, $('#role-create-error'));
       setBusy(form, false);
     }
   }

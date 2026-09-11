@@ -232,9 +232,11 @@ def root():
     """Serve the production workspace shell with the role-aware access layer."""
     html = (TEMPLATE_DIR / "index.html").read_text(encoding="utf-8")
     assets = (
+        '<link rel="stylesheet" href="/static/api-errors.css">\n'
         '<link rel="stylesheet" href="/static/access-portal.css">\n'
         '<link rel="stylesheet" href="/static/ui-fixes.css">\n'
         '<link rel="stylesheet" href="/static/account-security.css">\n'
+        '<script src="/static/api-errors.js" defer></script>\n'
         '<script src="/static/access-portal.js" defer></script>\n'
         '<script src="/static/ui-state-fixes.js" defer></script>\n'
         '<script src="/static/account-security.js" defer></script>\n'
