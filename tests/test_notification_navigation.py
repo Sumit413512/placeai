@@ -12,7 +12,7 @@ def test_notification_links_resolve_to_role_scoped_workspace_views() -> None:
 
 
 def test_unique_announcement_notification_links_remain_supported() -> None:
-    backend = (ROOT / "app/routers/hardening2.py").read_text(encoding="utf-8")
+    backend = (ROOT / "app/routers/enterprise.py").read_text(encoding="utf-8")
     frontend = (ROOT / "app/static/app.js").read_text(encoding="utf-8")
     assert 'link = f"announcements:{row.id}"' in backend
     assert "function notificationTarget(link)" in frontend
