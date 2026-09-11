@@ -176,12 +176,6 @@ if ai is not None:
         route for route in ai.router.routes
         if getattr(route, "path", "") not in _RETIRED_AI_PATHS
     ]
-if mock_interview is not None:
-    mock_interview.router.routes = [
-        route for route in mock_interview.router.routes
-        if getattr(route, "path", "") != "/mock-interview/history"
-    ]
-
 if institutions is not None:
     _HARDENED_INSTITUTION_PATHS = {
         "/institutions/dashboard",

@@ -124,35 +124,3 @@ def completed_interview_detail(
         overall_feedback=row.overall_feedback,
         created_at=row.created_at,
     )
-
-
-@router.get("/mock-interview/history")
-def canonical_interview_history(
-    current_user: User = Depends(require_student),
-    db: Session = Depends(get_db),
-):
-    profile = _student_profile(current_user, db)
-    rows = (
-        db.query(MockInterview)
-        .filter(
-            MockInterview.student_id == profile.id,
-            MockInterview.overall_score.isnot(None),
-        )
-        .order_by(MockInterview.created_at.desc())
-        .limit(50)
-        .all()
-    )
-    result = []
-    for row in rows:
-        evaluation = _evaluation_dict(row.evaluation_json)
-        result.append({
-            "id": row.id,
-            "job_id": row.job_id,
-            "job_title": row.job.title if row.job else "Role",
-            "company_name": row.job.recruiter.company_name if row.job and row.job.recruiter else None,
-            "overall_score": row.overall_score,
-            "dimensions": evaluation.get("dimensions", {}),
-            "overall_feedback": row.overall_feedback,
-            "created_at": row.created_at.isoformat() if row.created_at else None,
-        })
-    return result

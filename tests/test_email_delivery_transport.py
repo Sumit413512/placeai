@@ -57,6 +57,35 @@ def test_brevo_api_transport_sends_when_smtp_is_absent(monkeypatch) -> None:
     assert captured["json"]["to"] == [{"email": "user@example.com"}]
 
 
+def test_brevo_400_retries_with_escaped_html_and_verified_email_only(monkeypatch) -> None:
+    calls = []
+
+    def fake_post(url, *, json, headers, timeout):
+        calls.append(json)
+        status_code = 400 if len(calls) == 1 else 201
+        return SimpleNamespace(status_code=status_code)
+
+    monkeypatch.setattr(email_delivery.httpx, "post", fake_post)
+    settings = _settings(smtp_from="verified@example.com", brevo_api_key="api-key")
+    outcome, reason = email_delivery.send_transactional_email(
+        settings,
+        recipient="user@example.com",
+        subject="Reset",
+        body="Use https://example.com/?a=1&b=2\nDo not share <this>.",
+    )
+
+    assert outcome == "sent"
+    assert reason is None
+    assert len(calls) == 2
+    assert calls[0]["sender"] == {"name": "PlaceAI", "email": "verified@example.com"}
+    assert "textContent" in calls[0]
+    assert calls[1]["sender"] == {"email": "verified@example.com"}
+    assert "htmlContent" in calls[1]
+    assert "&amp;" in calls[1]["htmlContent"]
+    assert "&lt;this&gt;" in calls[1]["htmlContent"]
+    assert "<br>" in calls[1]["htmlContent"]
+
+
 def test_smtp_failure_falls_back_to_brevo_api(monkeypatch) -> None:
     class BrokenSMTP:
         def __init__(self, *args, **kwargs):

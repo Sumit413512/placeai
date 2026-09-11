@@ -126,10 +126,10 @@ def extract_json_from_response(text: str) -> dict:
         text = "\n".join(lines[1:-1]) if lines[-1].strip() == "```" else "\n".join(lines[1:])
     try:
         return json.loads(text)
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to parse AI response as JSON: {str(e)}. Raw: {text[:300]}"
+            detail="AI service returned an invalid structured response."
         )
 
 
