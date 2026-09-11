@@ -22,10 +22,10 @@ jobs:
 
           path = Path('app/routers/mock_interview.py')
           text = path.read_text()
-          old = '''            try:\n                evaluation = json.loads(row.evaluation_json or "{}")\n            except json.JSONDecodeError:\n                evaluation = {}\n            result.append({\n                "id": row.id,\n                "job_id": row.job_id,\n                "job_title": row.job.title if row.job else "Role",\n                "company_name": row.job.recruiter.company_name if row.job and row.job.recruiter else None,\n                "overall_score": row.overall_score,\n                "dimensions": evaluation.get("dimensions", {}),'''
-          new = '''            try:\n                evaluation = json.loads(row.evaluation_json or "{}")\n            except json.JSONDecodeError:\n                evaluation = {}\n            dimensions = evaluation.get("dimensions", {}) if isinstance(evaluation, dict) else {}\n            result.append({\n                "id": row.id,\n                "job_id": row.job_id,\n                "job_title": row.job.title if row.job else "Role",\n                "company_name": row.job.recruiter.company_name if row.job and row.job.recruiter else None,\n                "overall_score": row.overall_score,\n                "dimensions": dimensions,'''
+          old = '"dimensions": evaluation.get("dimensions", {}),'
+          new = '"dimensions": evaluation.get("dimensions", {}) if isinstance(evaluation, dict) else {},'
           if old not in text:
-              raise SystemExit('canonical history source shape changed')
+              raise SystemExit('canonical history dimensions expression not found')
           path.write_text(text.replace(old, new, 1))
           PY
       - name: Refresh manifest
