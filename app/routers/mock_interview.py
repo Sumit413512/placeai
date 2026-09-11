@@ -345,7 +345,7 @@ def mock_interview_history(
             "job_title": row.job.title if row.job else "Role",
             "company_name": row.job.recruiter.company_name if row.job and row.job.recruiter else None,
             "overall_score": row.overall_score,
-            "dimensions": evaluation.get("dimensions", {}),
+            "dimensions": evaluation.get("dimensions", {}) if isinstance(evaluation, dict) else {},
             "overall_feedback": row.overall_feedback,
             "created_at": row.created_at.isoformat() if row.created_at else None,
         })
