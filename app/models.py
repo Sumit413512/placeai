@@ -89,6 +89,7 @@ class User(Base):
     organization_id = Column(String, ForeignKey("organizations.id"), nullable=True, index=True)
     is_active = Column(Boolean, default=True)
     email_verified = Column(Boolean, default=False)
+    must_change_password = Column(Boolean, nullable=False, default=False)
     last_login_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     reset_token_hash = Column(String(64), nullable=True, index=True)

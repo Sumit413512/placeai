@@ -131,6 +131,7 @@ def _include_router(module) -> None:
 
 auth_refresh_atomic = _import_router("auth_refresh_atomic")
 auth = _import_router("auth")
+account_security = _import_router("account_security")
 access = _import_router("access")
 students = _import_router("students")
 recruiters = _import_router("recruiters")
@@ -204,6 +205,7 @@ if enterprise is not None:
 for module in (
     auth_refresh_atomic,
     auth,
+    account_security,
     access,
     students,
     recruiters,
@@ -232,8 +234,10 @@ def root():
     assets = (
         '<link rel="stylesheet" href="/static/access-portal.css">\n'
         '<link rel="stylesheet" href="/static/ui-fixes.css">\n'
+        '<link rel="stylesheet" href="/static/account-security.css">\n'
         '<script src="/static/access-portal.js" defer></script>\n'
         '<script src="/static/ui-state-fixes.js" defer></script>\n'
+        '<script src="/static/account-security.js" defer></script>\n'
     )
     if "/static/access-portal.js" not in html:
         html = html.replace("</head>", f"{assets}</head>", 1)

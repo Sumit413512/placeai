@@ -60,7 +60,7 @@ def provision_institution_admin(data: AdminUserProvision, current_user: User = D
         raise HTTPException(status_code=404, detail="Organization not found")
     if db.query(User).filter((User.email == data.email.lower()) | (User.username == data.username)).first():
         raise HTTPException(status_code=400, detail="Email or username already exists")
-    user = User(email=data.email.lower(), username=data.username, hashed_password=get_hashed_password(data.temporary_password), role=UserRole.institution_admin, organization_id=org.id)
+    user = User(email=data.email.lower(), username=data.username, hashed_password=get_hashed_password(data.temporary_password), role=UserRole.institution_admin, organization_id=org.id, must_change_password=True)
     db.add(user)
     db.flush()
     record_audit(db, current_user, "platform.institution_admin.provisioned", organization_id=org.id, entity_type="user", entity_id=user.id, metadata={"email": user.email})
@@ -78,7 +78,7 @@ def provision_recruiter(data: AdminUserProvision, current_user: User = Depends(r
         provisioned_org = db.query(Organization).filter(Organization.slug == data.organization_slug.lower(), Organization.is_active.is_(True)).first()
         if not provisioned_org:
             raise HTTPException(status_code=404, detail="Organization not found")
-    user = User(email=data.email.lower(), username=data.username, hashed_password=get_hashed_password(data.temporary_password), role=UserRole.recruiter)
+    user = User(email=data.email.lower(), username=data.username, hashed_password=get_hashed_password(data.temporary_password), role=UserRole.recruiter, must_change_password=True)
     db.add(user)
     db.flush()
     profile = RecruiterProfile(

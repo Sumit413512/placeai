@@ -80,6 +80,7 @@ class UserOut(BaseModel):
     organization_id: Optional[str] = None
     is_active: bool = True
     email_verified: bool = False
+    must_change_password: bool = False
 
     model_config = {"from_attributes": True}
 
