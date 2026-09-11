@@ -1,11 +1,47 @@
 from __future__ import annotations
 
+import os
+from urllib.parse import quote
+
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import NullPool
 
 from app.config import get_settings
+
+
+def normalize_database_url_for_runtime(database_url: str) -> str:
+    """Encode raw Render DATABASE_URL credentials before SQLAlchemy parses them.
+
+    Supabase connection strings are often pasted with the database password inserted
+    directly into the URI. Reserved URL characters inside that password can otherwise
+    be misread as part of the host/path and surface as DNS failures. Keep Vercel
+    behavior unchanged; this normalization is only for Render runtime deployments.
+    """
+    raw = (database_url or "").strip()
+    if not os.getenv("RENDER_EXTERNAL_HOSTNAME"):
+        return raw
+
+    prefix = "postgresql+psycopg://"
+    if not raw.startswith(prefix):
+        return raw
+
+    remainder = raw[len(prefix):]
+    if "@" not in remainder:
+        return raw
+    credentials, endpoint = remainder.rsplit("@", 1)
+    if ":" not in credentials or not endpoint:
+        return raw
+
+    username, password = credentials.split(":", 1)
+    if not username:
+        return raw
+
+    # Preserve existing percent escapes while encoding raw reserved characters.
+    safe_username = quote(username, safe=".%")
+    safe_password = quote(password, safe="%")
+    return f"{prefix}{safe_username}:{safe_password}@{endpoint}"
 
 
 def build_engine_kwargs(settings):
@@ -40,7 +76,7 @@ def build_engine_kwargs(settings):
 def safe_database_target(database_url: str) -> dict[str, object]:
     """Return non-secret connection metadata suitable for /health diagnostics."""
     try:
-        url = make_url(database_url)
+        url = make_url(normalize_database_url_for_runtime(database_url))
     except Exception:
         return {"driver": "invalid", "supabase_pooler": False, "port": None}
     host = (url.host or "").lower()
@@ -126,7 +162,8 @@ def classify_database_exception(exc: BaseException) -> str:
 settings = get_settings()
 engine_initialization_error_code: str | None = None
 try:
-    engine = create_engine(settings.database_url, **build_engine_kwargs(settings))
+    runtime_database_url = normalize_database_url_for_runtime(settings.database_url)
+    engine = create_engine(runtime_database_url, **build_engine_kwargs(settings))
 except Exception:
     # A malformed/unsupported production URL must never make the entire Vercel
     # Python process unbootable. Bind an in-memory diagnostic engine only so the
