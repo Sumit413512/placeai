@@ -159,14 +159,13 @@ def test_default_limiter_remains_client_address_aware():
 def test_cost_generating_routes_are_guarded_but_status_and_history_are_not():
     ai_source = open("app/routers/ai.py", encoding="utf-8").read()
     mock_source = open("app/routers/mock_interview.py", encoding="utf-8").read()
+    compat_source = open("app/routers/interview_compat.py", encoding="utf-8").read()
 
     expected_student = [
         "/parse-resume",
         "/match-jobs",
         "/generate-summary",
         "/skill-gap/{job_id}",
-        "/interview/questions",
-        "/interview/evaluate",
     ]
     for route in expected_student:
         anchor = f'"{route}"'
@@ -184,3 +183,12 @@ def test_cost_generating_routes_are_guarded_but_status_and_history_are_not():
     assert '@router.post("/start", dependencies=[Depends(student_ai_guard)])' in mock_source
     assert '@router.post("/evaluate", dependencies=[Depends(student_ai_guard)])' in mock_source
     assert '@router.get("/history")' in mock_source
+
+    # The legacy interview write endpoints are authenticated 410 compatibility
+    # shims now; they perform no model call and therefore must not consume an AI budget.
+    for route in ("/ai/interview/questions", "/ai/interview/evaluate"):
+        anchor = f'@router.post("{route}", deprecated=True)'
+        pos = compat_source.index(anchor)
+        window = compat_source[pos:pos + 420]
+        assert "Depends(require_student)" in window
+        assert "student_ai_guard" not in window
