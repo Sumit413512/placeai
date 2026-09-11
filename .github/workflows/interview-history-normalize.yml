@@ -1,0 +1,45 @@
+name: Interview History Normalize
+
+on:
+  push:
+    branches: [fix/production-readiness-20260912]
+    paths: [.github/workflows/interview-history-normalize.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/production-readiness-20260912
+      - name: Repair canonical history compatibility
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/routers/mock_interview.py')
+          text = path.read_text()
+          old = '''            try:\n                evaluation = json.loads(row.evaluation_json or "{}")\n            except json.JSONDecodeError:\n                evaluation = {}\n            result.append({\n                "id": row.id,\n                "job_id": row.job_id,\n                "job_title": row.job.title if row.job else "Role",\n                "company_name": row.job.recruiter.company_name if row.job and row.job.recruiter else None,\n                "overall_score": row.overall_score,\n                "dimensions": evaluation.get("dimensions", {}),'''
+          new = '''            try:\n                evaluation = json.loads(row.evaluation_json or "{}")\n            except json.JSONDecodeError:\n                evaluation = {}\n            dimensions = evaluation.get("dimensions", {}) if isinstance(evaluation, dict) else {}\n            result.append({\n                "id": row.id,\n                "job_id": row.job_id,\n                "job_title": row.job.title if row.job else "Role",\n                "company_name": row.job.recruiter.company_name if row.job and row.job.recruiter else None,\n                "overall_score": row.overall_score,\n                "dimensions": dimensions,'''
+          if old not in text:
+              raise SystemExit('canonical history source shape changed')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Refresh manifest
+        run: |
+          git ls-files -z | while IFS= read -r -d '' file; do
+            case "$file" in
+              MANIFEST.sha256|.github/workflows/interview-history-normalize.yml) continue ;;
+            esac
+            sha256sum "$file"
+          done > MANIFEST.sha256
+      - name: Commit repair
+        run: |
+          git config user.name "placeai-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/routers/mock_interview.py MANIFEST.sha256
+          git commit -m "fix: accept historical mock interview JSON shapes"
+          git push
