@@ -1,0 +1,46 @@
+name: PlaceAI batch 40 transformer brace fix
+
+on:
+  push:
+    branches:
+      - fix/password-reset-observability-batch40
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/password-reset-observability-batch40
+      - name: Fix generated renderPlatform brace closure
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/batch40_email_observability.py')
+          text = path.read_text(encoding='utf-8')
+          old = 'block = block[:close] + integration_branch + "\\n  }" + block[close + len("\\n    }\\n  }"): ]'
+          # tolerate the exact source spelling without an extra space before ]
+          old_exact = 'block = block[:close] + integration_branch + "\\n  }" + block[close + len("\\n    }\\n  }"):]'
+          new = 'block = block[:close] + integration_branch + "\\n    }\\n  }" + block[close + len("\\n    }\\n  }"):]'
+          if old_exact in text:
+              path.write_text(text.replace(old_exact, new, 1), encoding='utf-8')
+              print('transformer fixed')
+          elif new in text:
+              print('transformer already fixed')
+          else:
+              raise SystemExit('expected transformer line not found')
+          PY
+      - name: Commit fix when needed
+        run: |
+          if git diff --quiet; then
+            echo "No transformer update required"
+            exit 0
+          fi
+          git config user.name "PlaceAI Hardening Bot"
+          git config user.email "placeai-hardening@users.noreply.github.com"
+          git add scripts/batch40_email_observability.py
+          git commit -m "Fix batch 40 platform integrations insertion"
+          git push origin HEAD:fix/password-reset-observability-batch40
