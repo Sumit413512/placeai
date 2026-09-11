@@ -4,6 +4,7 @@
   const $ = (s, root = document) => root.querySelector(s);
   const $$ = (s, root = document) => [...root.querySelectorAll(s)];
   const esc = (v = '') => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const apiErrors = window.PlaceAIApiErrors;
   const fmtDate = v => v ? new Intl.DateTimeFormat('en-IN', { day:'2-digit', month:'short', year:'numeric' }).format(new Date(v)) : '—';
   const initials = v => (String(v || 'User').trim().split(/\s+/).slice(0,2).map(x => x[0] || '').join('').replace(/[^A-Za-z0-9]/g,'').toUpperCase().slice(0,2) || 'U');
   const statusBadge = v => `<span class="status-badge status-${esc(v)}">${esc(v)}</span>`;
@@ -77,12 +78,8 @@
     if (response.status === 204) return null;
     const contentType = response.headers.get('content-type') || '';
     if (!response.ok) {
-      let detail = `Request failed (${response.status})`;
-      if (contentType.includes('application/json')) {
-        const data = await response.json().catch(() => ({}));
-        detail = typeof data.detail === 'string' ? data.detail : (Array.isArray(data.detail) ? data.detail.map(x => x.msg).join(', ') : detail);
-      }
-      const err = new Error(detail); err.status = response.status; throw err;
+      const data = contentType.includes('application/json') ? await response.json().catch(() => ({})) : {};
+      throw apiErrors.createError(data, response.status);
     }
     if (contentType.includes('application/json')) return response.json();
     return response;
@@ -513,7 +510,7 @@
       else if(f.id==='org-form'){await api('/platform/organizations',{method:'POST',body:JSON.stringify({...obj,country:'India',primary_color:'#5B5BD6'})});closeModal();toast('Institution created');navigate('organizations');}
       else if(f.id==='admin-form'){await api('/platform/institution-admins',{method:'POST',body:JSON.stringify(obj)});closeModal();toast('TPO administrator created');navigate('organizations');}
       else if(f.id==='apply-form'){await api(`/students/jobs/${obj.job_id}/apply`,{method:'POST',body:JSON.stringify({cover_note:obj.cover_note||null})});closeModal();toast('Application submitted');navigate('applications');}
-    }catch(err){toast('Could not complete request',err.message,'error');}
+    }catch(err){apiErrors.applyToForm(f,err);toast('Could not complete request',err.message,'error');}
   });
 
 
@@ -755,7 +752,7 @@
       else if(f.id==='interview-evaluation-form'){const data={technical_knowledge:o.technical_knowledge?Number(o.technical_knowledge):null,communication:o.communication?Number(o.communication):null,problem_solving:o.problem_solving?Number(o.problem_solving):null,role_fit:o.role_fit?Number(o.role_fit):null,recommendation:o.recommendation,notes:o.notes};await api(`/enterprise/interviews/${o.interview_id}/evaluation`,{method:'PUT',body:JSON.stringify(data)});closeModal();toast('Human evaluation saved');navigate('interviews');}
       else if(f.id==='incident-form'){await api('/enterprise/incidents',{method:'POST',body:JSON.stringify({category:o.category,description:o.description,confidential:fd.has('confidential')})});toast('Incident report submitted');navigate('incidents');}
       else if(f.id==='notification-preferences-form'){await api('/enterprise/notification-preferences',{method:'PUT',body:JSON.stringify({in_app:fd.has('in_app'),email:fd.has('email'),whatsapp:fd.has('whatsapp'),sms:fd.has('sms'),high_priority_only_external:fd.has('high_priority_only_external')})});closeModal();toast('Notification preferences saved');}
-    }catch(err){toast('Could not complete request',err.message,'error');}
+    }catch(err){apiErrors.applyToForm(f,err);toast('Could not complete request',err.message,'error');}
   });
 
   // Ctrl/Cmd + K command palette for fast role-scoped navigation.
@@ -773,7 +770,7 @@
   let commandTimer=null;document.addEventListener('input',e=>{if(e.target.id!=='command-search')return;clearTimeout(commandTimer);commandTimer=setTimeout(async()=>{const q=e.target.value.trim();if(!q){$('#command-results').innerHTML='<div class="command-hint">Search students, jobs, candidates or opportunities.</div>';return;}try{const rows=await api(`/enterprise/search?q=${encodeURIComponent(q)}`);$('#command-results').innerHTML=rows.length?rows.map(x=>`<button class="command-result" data-command-view="${esc(x.view)}"><span class="command-result-icon">${esc((x.type||'?').slice(0,2).toUpperCase())}</span><span><strong>${esc(x.title)}</strong><small>${esc(x.subtitle||'')}</small></span><em>${esc(x.type||'record')}</em></button>`).join(''):'<div class="command-hint">No matching workspace records.</div>';}catch(err){$('#command-results').innerHTML=`<div class="command-hint">${esc(err.message)}</div>`;}},180);});
 
 
-  async function handleResetToken(){const params=new URLSearchParams(location.search);const token=params.get('reset_token');if(!token)return false;const cleanUrl=new URL(location.href);cleanUrl.searchParams.delete('reset_token');history.replaceState({},'',cleanUrl.pathname+cleanUrl.search);showAuth('login');openModal(`<span class="section-kicker">Account recovery</span><h2>Set a new password</h2><form id="reset-password-form" class="form-stack"><input type="hidden" name="token" value="${esc(token)}"><label>New password<input type="password" name="new_password" minlength="12" required></label><button class="button button-primary button-full">Reset password</button></form>`);const form=$('#reset-password-form');form.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(form);try{await api('/auth/reset-password',{method:'POST',body:JSON.stringify(Object.fromEntries(fd.entries()))},false);closeModal();history.replaceState({},'',location.pathname);toast('Password reset','You can now sign in with the new password.');showAuth('login');}catch(err){toast('Reset failed',err.message,'error')}});return true;}
+  async function handleResetToken(){const params=new URLSearchParams(location.search);const token=params.get('reset_token');if(!token)return false;const cleanUrl=new URL(location.href);cleanUrl.searchParams.delete('reset_token');history.replaceState({},'',cleanUrl.pathname+cleanUrl.search);showAuth('login');openModal(`<span class="section-kicker">Account recovery</span><h2>Set a new password</h2><form id="reset-password-form" class="form-stack"><input type="hidden" name="token" value="${esc(token)}"><label>New password<input type="password" name="new_password" minlength="12" required></label><button class="button button-primary button-full">Reset password</button></form>`);const form=$('#reset-password-form');form.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(form);try{await api('/auth/reset-password',{method:'POST',body:JSON.stringify(Object.fromEntries(fd.entries()))},false);closeModal();history.replaceState({},'',location.pathname);toast('Password reset','You can now sign in with the new password.');showAuth('login');}catch(err){apiErrors.applyToForm(form,err);toast('Reset failed',err.message,'error')}});return true;}
 
   (async()=>{await handleResetToken();await bootWorkspace();})();
 })();

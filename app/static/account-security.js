@@ -4,15 +4,7 @@
   const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const provisioningFormIds = new Set(['institution-student-form', 'institution-recruiter-form', 'admin-form']);
 
-  function validationMessage(data, status) {
-    const detail = data?.detail;
-    if (typeof detail === 'string' && detail.trim()) return detail.trim();
-    if (Array.isArray(detail)) {
-      const messages = detail.map(item => typeof item?.msg === 'string' ? item.msg.replace(/^Value error,\s*/i, '').trim() : '').filter(Boolean);
-      if (messages.length) return [...new Set(messages)].join(' ');
-    }
-    return `Request failed (${status})`;
-  }
+  const apiErrors = window.PlaceAIApiErrors;
 
   function validatePassword(password) {
     if (password.length < 12) return 'Password must be at least 12 characters long.';
@@ -120,15 +112,14 @@
         body.new_password = '';
         body.confirm_password = '';
         form.reset();
-        if (!response.ok) throw new Error(validationMessage(data, response.status));
+        if (!response.ok) throw apiErrors.createError(data, response.status);
         location.reload();
       } catch (err) {
         body.current_password = '';
         body.new_password = '';
         body.confirm_password = '';
         form.reset();
-        error.textContent = err?.message || 'Password update failed.';
-        error.classList.add('is-visible');
+        apiErrors.applyToForm(form, err, error);
         button.disabled = false;
         button.textContent = 'Change password and continue';
       }
