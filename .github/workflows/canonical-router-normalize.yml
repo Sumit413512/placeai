@@ -23,6 +23,7 @@ jobs:
             case "$file" in
               MANIFEST.sha256|.github/workflows/canonical-router-normalize.yml|.github/placeai-normalize.py) continue ;;
             esac
+            [ -f "$file" ] || continue
             sha256sum "$file"
           done > MANIFEST.sha256
       - name: Commit normalization
