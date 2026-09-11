@@ -1,0 +1,41 @@
+name: Temporary Vercel Manifest Refresh
+
+on:
+  push:
+    branches: [tmp-v-main-only-manifest-helper2]
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refresh only vercel.json hash in release manifest
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          path = Path('MANIFEST.sha256')
+          lines = path.read_text().splitlines()
+          digest = hashlib.sha256(Path('vercel.json').read_bytes()).hexdigest()
+          out = []
+          found = False
+          for line in lines:
+              if line.endswith('  vercel.json'):
+                  out.append(f'{digest}  vercel.json')
+                  found = True
+              else:
+                  out.append(line)
+          if not found:
+              out.append(f'{digest}  vercel.json')
+          path.write_text('\n'.join(out) + '\n')
+          PY
+          git config user.name "placeai-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add MANIFEST.sha256
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: refresh Vercel policy manifest"
+            git push
+          fi
