@@ -27,10 +27,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      - name: Emit reset lifecycle integrity hashes
-        run: |
-          sha256sum app/routers/auth.py tests/test_password_reset_observability.py
-          exit 1
+      - name: Verify release manifest
+        run: sha256sum -c MANIFEST.sha256
 
       - name: Compile Python
         run: python -m compileall -q app scripts tests alembic
