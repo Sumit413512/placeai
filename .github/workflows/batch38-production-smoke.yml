@@ -1,0 +1,32 @@
+name: PlaceAI Batch 38 Production Smoke
+
+on:
+  push:
+    branches:
+      - ops/batch38-production-smoke
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify canonical production signup feedback and health
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://placeai-rxpp.vercel.app"
+          curl -fsS "$base/health" -o /tmp/health.json
+          python - <<'PY'
+          import json
+          data = json.load(open('/tmp/health.json', encoding='utf-8'))
+          assert data.get('status') == 'healthy', data
+          assert data.get('database') == 'ok', data
+          assert data.get('configuration') == 'ok', data
+          PY
+          curl -fsS "$base/static/access-portal.js" -o /tmp/access-portal.js
+          grep -Fq 'function apiErrorMessage(data, status)' /tmp/access-portal.js
+          grep -Fq 'Array.isArray(detail)' /tmp/access-portal.js
+          grep -Fq 'function validateStudentSignup(body)' /tmp/access-portal.js
+          grep -Fq 'Password must contain an uppercase letter.' /tmp/access-portal.js
+          grep -Fq 'Password must contain a symbol.' /tmp/access-portal.js
+          grep -Fq 'student-password-help' /tmp/access-portal.js
+          printf '%s\n' 'Production signup validation UI and health verified.'
