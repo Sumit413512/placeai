@@ -12,12 +12,12 @@ from app.config import get_settings
 
 
 def normalize_database_url_for_runtime(database_url: str) -> str:
-    """Encode raw Render DATABASE_URL credentials before SQLAlchemy parses them.
+    """Normalize Render Postgres credentials without exposing or rewriting secrets.
 
-    Supabase connection strings are often pasted with the database password inserted
-    directly into the URI. Reserved URL characters inside that password can otherwise
-    be misread as part of the host/path and surface as DNS failures. Keep Vercel
-    behavior unchanged; this normalization is only for Render runtime deployments.
+    Supabase pooler connection strings can be pasted with raw reserved characters in
+    the password. They also require pooler usernames in the form ROLE.PROJECT_REF.
+    Apply those two Render-only normalizations before SQLAlchemy/Psycopg parse the URL.
+    Vercel behavior remains unchanged.
     """
     raw = (database_url or "").strip()
     if not os.getenv("RENDER_EXTERNAL_HOSTNAME"):
@@ -37,6 +37,16 @@ def normalize_database_url_for_runtime(database_url: str) -> str:
     username, password = credentials.split(":", 1)
     if not username:
         return raw
+
+    endpoint_authority = endpoint.split("/", 1)[0]
+    endpoint_host = endpoint_authority.rsplit(":", 1)[0].lower()
+    project_ref = os.getenv("SUPABASE_PROJECT_REF", "").strip()
+    if (
+        project_ref
+        and endpoint_host.endswith("pooler.supabase.com")
+        and "." not in username
+    ):
+        username = f"{username}.{project_ref}"
 
     # Preserve existing percent escapes while encoding raw reserved characters.
     safe_username = quote(username, safe=".%")
@@ -85,7 +95,7 @@ def safe_database_target(database_url: str) -> dict[str, object]:
         "supabase_pooler": host.endswith("pooler.supabase.com"),
         "transaction_pooler": host.endswith("pooler.supabase.com") and url.port == 6543,
         "port": url.port,
-        "username_shape_ok": bool((url.username or "").startswith("postgres.")),
+        "username_shape_ok": bool("." in (url.username or "")),
     }
 
 
