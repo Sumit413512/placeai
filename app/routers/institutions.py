@@ -102,7 +102,7 @@ def create_student(data: InstitutionStudentCreate, current_user: User = Depends(
         raise HTTPException(status_code=400, detail="This username is already taken")
     user = User(
         email=data.email.lower(), username=data.username, hashed_password=get_hashed_password(data.temporary_password),
-        role=UserRole.student, organization_id=org.id,
+        role=UserRole.student, organization_id=org.id, must_change_password=True,
     )
     db.add(user)
     db.flush()
@@ -176,7 +176,7 @@ async def import_students_csv(file: UploadFile = File(...), current_user: User =
             continue
         user = User(
             email=str(data.email).lower(), username=data.username, hashed_password=get_hashed_password(data.temporary_password),
-            role=UserRole.student, organization_id=org.id,
+            role=UserRole.student, organization_id=org.id, must_change_password=True,
         )
         db.add(user)
         db.flush()
@@ -221,7 +221,7 @@ def provision_recruiter(data: AdminUserProvision, current_user: User = Depends(r
     org = _org(current_user, db)
     if db.query(User).filter(User.email == data.email.lower()).first() or db.query(User).filter(User.username == data.username).first():
         raise HTTPException(status_code=400, detail="Email or username already exists")
-    user = User(email=data.email.lower(), username=data.username, hashed_password=get_hashed_password(data.temporary_password), role=UserRole.recruiter)
+    user = User(email=data.email.lower(), username=data.username, hashed_password=get_hashed_password(data.temporary_password), role=UserRole.recruiter, must_change_password=True)
     db.add(user)
     db.flush()
     profile = RecruiterProfile(user_id=user.id, full_name=data.full_name, company_name=data.company_name, is_verified=True, provisioned_by_organization_id=org.id)

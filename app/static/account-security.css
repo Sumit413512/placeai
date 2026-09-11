@@ -1,0 +1,24 @@
+html.placeai-password-rotation-open,
+html.placeai-password-rotation-open body { overflow: hidden !important; }
+
+.password-rotation-overlay {
+  position: fixed; inset: 0; z-index: 30000; display: grid; place-items: center;
+  padding: 20px; background: rgba(10, 18, 32, .72); backdrop-filter: blur(8px);
+}
+.password-rotation-card {
+  width: min(520px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto;
+  border-radius: 20px; background: #fff; padding: 34px; box-shadow: 0 24px 80px rgba(0,0,0,.28);
+}
+.password-rotation-card h2 { margin: 8px 0 10px; font: 750 28px/1.15 Manrope, sans-serif; color: #172033; }
+.password-rotation-card p { margin: 0 0 20px; color: #657084; line-height: 1.55; }
+.password-rotation-kicker { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #5b5bd6; }
+.password-rotation-form { display: grid; gap: 14px; }
+.password-rotation-form label { display: grid; gap: 7px; font-size: 13px; font-weight: 700; color: #39445a; }
+.password-rotation-form input { width: 100%; box-sizing: border-box; border: 1px solid #d8deea; border-radius: 11px; padding: 12px 13px; font: inherit; }
+.password-rotation-form input:focus { outline: 2px solid rgba(91,91,214,.20); border-color: #5b5bd6; }
+.password-rotation-help { margin: -3px 0 2px; font-size: 12px; color: #69758a; }
+.password-rotation-error { display: none; border: 1px solid #f2c8c8; border-radius: 10px; padding: 10px 12px; background: #fff5f5; color: #9c2c2c; font-size: 13px; }
+.password-rotation-error.is-visible { display: block; }
+.password-rotation-submit { border: 0; border-radius: 11px; padding: 13px 16px; background: #273a51; color: white; font: 700 14px/1 DM Sans, sans-serif; cursor: pointer; }
+.password-rotation-submit:disabled { opacity: .65; cursor: wait; }
+@media (max-width: 560px) { .password-rotation-overlay { padding: 10px; } .password-rotation-card { padding: 24px 20px; max-height: calc(100dvh - 20px); } }
