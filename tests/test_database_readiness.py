@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 from app.config import Settings
-from app.database import build_engine_kwargs, classify_database_exception, safe_database_target
+from app.database import (
+    build_engine_kwargs,
+    classify_database_exception,
+    normalize_database_url_for_runtime,
+    safe_database_target,
+)
 
 
 class _SqlStateError(RuntimeError):
@@ -26,6 +31,34 @@ def test_supabase_transaction_pooler_metadata_is_safe_and_recognized(monkeypatch
     assert target["port"] == 6543
     assert target["username_shape_ok"] is True
     assert "password" not in repr(target)
+
+
+def test_render_database_url_encodes_raw_reserved_password_characters(monkeypatch):
+    monkeypatch.delenv("VERCEL", raising=False)
+    monkeypatch.setenv("RENDER_EXTERNAL_HOSTNAME", "placeai-production.onrender.com")
+    raw = (
+        "postgresql+psycopg://placeai_render_runtime.projectref:"
+        "Ab#12/x?y:z@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
+    )
+
+    normalized = normalize_database_url_for_runtime(raw)
+
+    assert "Ab%2312%2Fx%3Fy%3Az" in normalized
+    assert normalized.endswith("@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres")
+    assert safe_database_target(normalized)["supabase_pooler"] is True
+
+
+def test_render_database_url_preserves_existing_percent_escapes(monkeypatch):
+    monkeypatch.setenv("RENDER_EXTERNAL_HOSTNAME", "placeai-production.onrender.com")
+    raw = (
+        "postgresql+psycopg://placeai_render_runtime.projectref:"
+        "already%23encoded@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
+    )
+
+    normalized = normalize_database_url_for_runtime(raw)
+
+    assert "already%23encoded" in normalized
+    assert "%2523" not in normalized
 
 
 def test_vercel_postgres_connection_is_bounded_and_requires_tls(monkeypatch):
