@@ -15,10 +15,11 @@ from app.access_models import AccessRequest
 from app.config import get_settings
 from app.database import SessionLocal, get_db
 from app.dependencies import require_platform_admin
-from app.models import User, UserRole
+from app.models import AuditEvent, User, UserRole
 from app.rate_limit import enforce_rate_limit
 from app.routers.auth import _token_response, _utcnow
 from app.schemas import TokenSchema
+from app.services import create_notification, record_audit
 from app.telemetry_models import EmailDeliveryEvent
 from app.utils import verify_password
 
@@ -32,6 +33,7 @@ ROLE_LABELS = {
     "institution_admin": "Institution Admin",
     "platform_admin": "Platform Admin",
 }
+CONTROLLED_LOGIN_ROLES = {UserRole.recruiter, UserRole.institution_admin, UserRole.platform_admin}
 ACCESS_STATUSES = {"new", "under_review", "approved", "rejected", "provisioned"}
 PUBLIC_ACCESS_MESSAGE = "Access request received. If eligible, an authorized administrator will review it."
 
@@ -223,11 +225,57 @@ def _deliver_access_status(payload: dict[str, str | None]) -> None:
     )
 
 
+def _record_login_activity(db: Session, user: User) -> None:
+    """Audit every successful role login and surface controlled-role logins to Platform Admins."""
+    role_value = user.role.value
+    record_audit(
+        db,
+        user,
+        "auth.login.success",
+        organization_id=user.organization_id,
+        entity_type="user",
+        entity_id=user.id,
+        metadata={"role": role_value, "provider": "password"},
+    )
+    if user.role not in CONTROLLED_LOGIN_ROLES:
+        return
+    role_label = ROLE_LABELS.get(role_value, role_value)
+    admins = db.query(User).filter(User.role == UserRole.platform_admin, User.is_active.is_(True)).all()
+    for admin in admins:
+        create_notification(
+            db,
+            admin.id,
+            f"{role_label} sign-in",
+            f"{role_label} account {user.email} signed in to PlaceAI.",
+            category="security",
+            priority="high",
+            link="notifications",
+        )
+
+
+def _deliver_controlled_login(payload: dict[str, str], admin_recipients: list[str]) -> None:
+    role = payload["role"]
+    for recipient in admin_recipients:
+        _send_transactional_email(
+            recipient=recipient,
+            subject=f"PlaceAI security alert — {role} sign-in",
+            body=(
+                "A controlled PlaceAI account signed in successfully.\n\n"
+                f"Role: {role}\n"
+                f"Account: {payload['email']}\n"
+                f"Time (UTC): {payload['signed_in_at']}\n\n"
+                "If this sign-in is expected, no action is required. If it is unexpected, review the account and revoke access immediately.\n"
+            ),
+            purpose="controlled_login_alert",
+        )
+
+
 @router.post("/auth/login-role", response_model=TokenSchema)
 def login_for_selected_role(
     body: RoleLoginRequest,
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     """Authenticate only when the selected workspace matches the account's actual role."""
@@ -253,8 +301,22 @@ def login_for_selected_role(
         )
 
     user.last_login_at = _utcnow()
+    _record_login_activity(db, user)
     db.commit()
     db.refresh(user)
+
+    if user.role in CONTROLLED_LOGIN_ROLES:
+        role_label = ROLE_LABELS.get(user.role.value, user.role.value)
+        recipients = _platform_admin_recipients(db)
+        background_tasks.add_task(
+            _deliver_controlled_login,
+            {
+                "role": role_label,
+                "email": user.email,
+                "signed_in_at": user.last_login_at.isoformat(timespec="seconds") + "Z",
+            },
+            recipients,
+        )
     return _token_response(user, response, db)
 
 
@@ -350,6 +412,35 @@ def list_access_requests(
     ]
 
 
+@router.get("/platform/auth-activity")
+def platform_auth_activity(
+    limit: int = Query(default=100, ge=1, le=500),
+    current_user: User = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+):
+    """Return successful role-login activity without exposing credentials or tokens."""
+    del current_user
+    events = (
+        db.query(AuditEvent)
+        .filter(AuditEvent.action == "auth.login.success")
+        .order_by(AuditEvent.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": event.id,
+            "email": event.actor.email if event.actor else None,
+            "username": event.actor.username if event.actor else None,
+            "role": event.details.get("role") or (event.actor.role.value if event.actor else None),
+            "organization_id": event.organization_id,
+            "provider": event.details.get("provider", "password"),
+            "signed_in_at": event.created_at,
+        }
+        for event in events
+    ]
+
+
 @router.patch("/platform/access-requests/{request_id}")
 def review_access_request(
     request_id: str,
@@ -399,6 +490,7 @@ def integration_status(
         "database": not settings.database_url.startswith("sqlite"),
         "brevo_smtp": smtp_ready,
         "access_request_notifications": smtp_ready and (active_platform_admins > 0 or fallback_configured),
+        "controlled_login_notifications": smtp_ready and active_platform_admins > 0,
         "active_platform_admins": active_platform_admins,
         "gemini": bool(settings.gemini_api_key),
         "google_sign_in": bool(settings.google_client_id),
