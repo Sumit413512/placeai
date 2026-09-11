@@ -54,7 +54,7 @@
   }
 
   function studentSignupForm() {
-    return `<div class="access-selection-summary"><span class="access-role-dot"></span><div><b>Student</b><span>Self-service registration</span></div></div><form id="role-student-signup-form" class="form-stack"><div class="form-two"><label>Full name<input name="full_name" required minlength="2" maxlength="200" placeholder="Your full name"></label><label>Username<input name="username" required minlength="3" maxlength="80" placeholder="e.g. student.name"></label></div><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@example.com"></label><label>Institution code <span class="optional">optional</span><input name="organization_slug" maxlength="120" placeholder="Provided by your placement office"></label><label>Password<input type="password" name="password" autocomplete="new-password" minlength="12" maxlength="128" required placeholder="12+ chars, upper/lowercase, number and symbol"></label><div id="role-create-error" class="access-form-error" role="alert"></div><button class="button button-primary button-full" type="submit">Create student account</button></form>`;
+    return `<div class="access-selection-summary"><span class="access-role-dot"></span><div><b>Student</b><span>Self-service registration</span></div></div><form id="role-student-signup-form" class="form-stack"><div class="form-two"><label>Full name<input name="full_name" required minlength="2" maxlength="200" placeholder="Your full name"></label><label>Username<input name="username" required minlength="3" maxlength="80" placeholder="e.g. student.name"></label></div><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@example.com"></label><label>Institution code <span class="optional">optional</span><input name="organization_slug" maxlength="120" placeholder="Provided by your placement office"></label><label>Password<input type="password" name="password" autocomplete="new-password" minlength="12" maxlength="128" required aria-describedby="student-password-help" placeholder="12+ chars, upper/lowercase, number and symbol"><small id="student-password-help">Use 12+ characters with uppercase, lowercase, a number and a symbol.</small></label><div id="role-create-error" class="access-form-error" role="alert"></div><button class="button button-primary button-full" type="submit">Create student account</button></form>`;
   }
 
   function controlledAccessForm(roleKey) {
@@ -86,6 +86,24 @@
     }
   }
 
+  function apiErrorMessage(data, status) {
+    const detail = data?.detail;
+    if (typeof detail === 'string' && detail.trim()) return detail.trim();
+    if (Array.isArray(detail)) {
+      const messages = detail.map(item => {
+        if (typeof item === 'string') return item.trim();
+        if (!item || typeof item !== 'object') return '';
+        const rawMessage = typeof item.msg === 'string' ? item.msg.replace(/^Value error,\s*/i, '').trim() : '';
+        const loc = Array.isArray(item.loc) ? item.loc.filter(part => part !== 'body') : [];
+        const field = loc.length ? String(loc[loc.length - 1]).replace(/_/g, ' ') : '';
+        if (!rawMessage) return '';
+        return field ? `${field.charAt(0).toUpperCase()}${field.slice(1)}: ${rawMessage}` : rawMessage;
+      }).filter(Boolean);
+      if (messages.length) return [...new Set(messages)].join(' ');
+    }
+    return `Request failed (${status})`;
+  }
+
   async function requestJson(path, options = {}) {
     const response = await fetch(path, {
       credentials: 'include',
@@ -94,10 +112,7 @@
     });
     const contentType = response.headers.get('content-type') || '';
     const data = contentType.includes('application/json') ? await response.json().catch(() => ({})) : {};
-    if (!response.ok) {
-      const detail = typeof data.detail === 'string' ? data.detail : `Request failed (${response.status})`;
-      throw new Error(detail);
-    }
+    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
     return data;
   }
 
@@ -128,10 +143,27 @@
     }
   }
 
+  function validateStudentSignup(body) {
+    const username = String(body.username || '').trim();
+    const password = String(body.password || '');
+    if (!/^[A-Za-z0-9._-]{3,80}$/.test(username)) {
+      throw new Error('Username may only contain letters, numbers, dot, underscore, and hyphen.');
+    }
+    if (password.length < 12) throw new Error('Password must be at least 12 characters long.');
+    if (!/[a-z]/.test(password)) throw new Error('Password must contain a lowercase letter.');
+    if (!/[A-Z]/.test(password)) throw new Error('Password must contain an uppercase letter.');
+    if (!/[0-9]/.test(password)) throw new Error('Password must contain a number.');
+    if (!/[^A-Za-z0-9]/.test(password)) throw new Error('Password must contain a symbol.');
+  }
+
   async function studentSignupSubmit(form) {
     setBusy(form, true);
     try {
       const body = Object.fromEntries(new FormData(form).entries());
+      body.username = String(body.username || '').trim();
+      body.email = String(body.email || '').trim();
+      body.organization_slug = String(body.organization_slug || '').trim();
+      validateStudentSignup(body);
       await requestJson('/auth/signup', {method: 'POST', body: JSON.stringify({username: body.username, email: body.email, password: body.password, role: 'student', organization_slug: body.organization_slug || null})});
       const login = await requestJson('/auth/login-role', {method: 'POST', body: JSON.stringify({email: body.email, password: body.password, role: 'student'})});
       if (body.full_name && login.access_token) {
