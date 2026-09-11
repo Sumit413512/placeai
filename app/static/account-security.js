@@ -84,7 +84,7 @@
       <h2 id="password-rotation-title">${forced ? 'Create your permanent password' : 'Change your password'}</h2>
       <p>${forced ? `${accountName} was provisioned with a temporary password. Change it before entering the PlaceAI workspace.` : 'Enter your current password, then choose a strong new password. All older sessions will be invalidated.'}</p>
       <form id="password-rotation-form" class="password-rotation-form">
-        <label>Current password<input type="password" name="current_password" autocomplete="current-password" maxlength="128" required autofocus></label>
+        <label>${forced ? 'Current temporary password' : 'Current password'}<input type="password" name="current_password" autocomplete="current-password" maxlength="128" required autofocus></label>
         <label>New password<input type="password" name="new_password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
         <div class="password-rotation-help">Use 12+ characters with uppercase, lowercase, a number and a symbol.</div>
         <label>Confirm new password<input type="password" name="confirm_password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
