@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-import socket
 import subprocess
 import sys
 import time
@@ -83,7 +82,11 @@ def test_public_shell_auth_modal_and_mobile_layout(browser) -> None:
     assert page.locator(".site-header .brand").is_visible()
     assert page.locator('link[rel="icon"][href="/static/placeai-icon.svg"]').count() == 1
 
-    page.locator('button[data-open-auth="login"]').first.click()
+    # The compact header intentionally hides desktop actions. Exercise the visible
+    # hero CTA that mobile users actually receive instead of forcing a hidden node.
+    mobile_sign_in = page.locator('.hero button[data-open-auth="login"]')
+    assert mobile_sign_in.is_visible()
+    mobile_sign_in.click()
     page.locator("#auth-overlay").wait_for(state="visible")
     box = page.locator("#auth-overlay .auth-modal").bounding_box()
     assert box is not None
