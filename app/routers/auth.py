@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import smtplib
 from datetime import datetime, timedelta, timezone
-from email.message import EmailMessage
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -11,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.email_delivery import send_transactional_email
 from app.models import Organization, RecruiterProfile, RefreshSession, StudentProfile, User, UserRole
 from app.telemetry_models import EmailDeliveryEvent
 from app.rate_limit import enforce_rate_limit
@@ -199,6 +198,7 @@ def refresh_token(
 
     return _token_response(user, response, db, revoke_jti=session.jti)
 
+
 @router.post("/logout", status_code=204)
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
     token = request.cookies.get(COOKIE_NAME)
@@ -286,26 +286,17 @@ def google_auth(payload: GoogleAuthRequest, request: Request, response: Response
 
 
 def _send_reset_email(recipient: str, link: str) -> tuple[str, str | None]:
-    """Send reset mail and return only sanitized operational outcome codes."""
-    credentials_consistent = bool(settings.smtp_user) == bool(settings.smtp_password)
-    if not (settings.smtp_host and settings.smtp_from and credentials_consistent):
-        return "not_configured", "smtp_not_configured"
-    message = EmailMessage()
-    message["Subject"] = f"Reset your {settings.app_name} password"
-    message["From"] = settings.smtp_from
-    message["To"] = recipient
-    message.set_content(f"Use this one-time link to reset your password. It expires in 15 minutes:\n\n{link}\n\nIf you did not request this, ignore this email.")
-    try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
-            if settings.smtp_tls:
-                smtp.starttls()
-            if settings.smtp_user:
-                smtp.login(settings.smtp_user, settings.smtp_password)
-            smtp.send_message(message)
-        return "sent", None
-    except Exception:
-        # Never persist exception text: SMTP/provider errors can contain addresses or infrastructure detail.
-        return "failed", "smtp_delivery_failed"
+    """Send reset mail through the configured SMTP or Brevo transactional API transport."""
+    return send_transactional_email(
+        settings,
+        recipient=recipient,
+        subject=f"Reset your {settings.app_name} password",
+        body=(
+            "Use this one-time link to reset your password. It expires in 15 minutes:\n\n"
+            f"{link}\n\n"
+            "If you did not request this, ignore this email."
+        ),
+    )
 
 
 def _record_reset_delivery_event(db: Session, outcome: str, reason_code: str | None) -> None:
