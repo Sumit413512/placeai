@@ -1,0 +1,17 @@
+name: Database Hash Check
+
+on:
+  push:
+    branches: [fix/reset-probe-20260911]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sha256sum app/database.py
+          pytest -q tests/test_database_readiness.py
