@@ -1,0 +1,193 @@
+name: PlaceAI batch 43 auth route consolidation
+
+on:
+  push:
+    branches:
+      - fix/route-ownership-auth-refresh-batch43
+
+permissions:
+  contents: write
+
+jobs:
+  consolidate-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/route-ownership-auth-refresh-batch43
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Consolidate atomic refresh into canonical auth router
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          auth_path = Path('app/routers/auth.py')
+          auth = auth_path.read_text(encoding='utf-8')
+          old = '''@router.post("/refresh", response_model=TokenSchema)
+          def refresh_token(body: RefreshTokenRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+              enforce_rate_limit(db, request, scope="refresh", limit=60, window_seconds=600, block_seconds=600)
+              token = body.refresh_token or request.cookies.get(COOKIE_NAME)
+              if not token:
+                  raise HTTPException(status_code=401, detail="Refresh token is required")
+              payload = decode_refresh_payload(token)
+              email = str(payload["sub"])
+              user = db.query(User).filter(User.email == email).first()
+              if not user or not user.is_active or int(payload.get("ver", 0)) != int(user.auth_version or 1):
+                  raise HTTPException(status_code=401, detail="Account session is unavailable")
+              session = db.query(RefreshSession).filter(RefreshSession.jti == str(payload["jti"]), RefreshSession.user_id == user.id).first()
+              if not session or session.revoked_at is not None or session.expires_at <= _utcnow() or session.auth_version != int(user.auth_version or 1):
+                  raise HTTPException(status_code=401, detail="Refresh session is invalid or revoked")
+              return _token_response(user, response, db, revoke_jti=session.jti)
+          '''.replace('          ', '')
+          new = '''@router.post("/refresh", response_model=TokenSchema)
+          def refresh_token(body: RefreshTokenRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+              """Rotate a refresh token exactly once, including under concurrent requests.
+
+              The refresh-session row is locked until `_token_response` revokes the
+              current JTI, creates its successor and commits. Concurrent reuse of the
+              same token therefore observes the committed revocation and is denied.
+              """
+              enforce_rate_limit(db, request, scope="refresh", limit=60, window_seconds=600, block_seconds=600)
+              token = body.refresh_token or request.cookies.get(COOKIE_NAME)
+              if not token:
+                  raise HTTPException(status_code=401, detail="Refresh token is required")
+              payload = decode_refresh_payload(token)
+              email = str(payload["sub"])
+              user = db.query(User).filter(User.email == email).first()
+              if not user or not user.is_active or int(payload.get("ver", 0)) != int(user.auth_version or 1):
+                  raise HTTPException(status_code=401, detail="Account session is unavailable")
+              session = (
+                  db.query(RefreshSession)
+                  .filter(
+                      RefreshSession.jti == str(payload["jti"]),
+                      RefreshSession.user_id == user.id,
+                  )
+                  .with_for_update()
+                  .first()
+              )
+              if (
+                  not session
+                  or session.revoked_at is not None
+                  or session.expires_at <= _utcnow()
+                  or session.auth_version != int(user.auth_version or 1)
+              ):
+                  raise HTTPException(status_code=401, detail="Refresh session is invalid or revoked")
+              return _token_response(user, response, db, revoke_jti=session.jti)
+          '''.replace('          ', '')
+          if new not in auth:
+              if old not in auth:
+                  raise SystemExit('canonical auth refresh source anchor not found')
+              auth = auth.replace(old, new, 1)
+              auth_path.write_text(auth, encoding='utf-8')
+
+          app_path = Path('app/app.py')
+          app = app_path.read_text(encoding='utf-8')
+          app = app.replace('auth_refresh_atomic = _import_router("auth_refresh_atomic")\n', '', 1)
+          retired = '''if auth is not None:
+              auth.router.routes = [
+                  route for route in auth.router.routes
+                  if getattr(route, "path", "") != "/auth/refresh"
+              ]
+
+          '''.replace('          ', '')
+          app = app.replace(retired, '', 1)
+          app = app.replace('for module in (\n    auth_refresh_atomic,\n    auth,', 'for module in (\n    auth,', 1)
+          if 'auth_refresh_atomic' in app:
+              raise SystemExit('auth_refresh_atomic bootstrap reference remains')
+          if 'getattr(route, "path", "") != "/auth/refresh"' in app:
+              raise SystemExit('auth refresh shadow filter remains')
+          app_path.write_text(app, encoding='utf-8')
+
+          test_path = Path('tests/test_refresh_rotation_atomic.py')
+          test = test_path.read_text(encoding='utf-8')
+          old_test = '''def test_atomic_refresh_endpoint_uses_database_row_lock():
+              source = open("app/routers/auth_refresh_atomic.py", encoding="utf-8").read()
+              app_source = open("app/app.py", encoding="utf-8").read()
+              assert ".with_for_update()" in source
+              assert "RefreshSession.jti" in source
+              assert "session.revoked_at is not None" in source
+              assert "revoke_jti=session.jti" in source
+              assert 'getattr(route, "path", "") != "/auth/refresh"' in app_source
+              assert 'auth_refresh_atomic = _import_router("auth_refresh_atomic")' in app_source
+              assert "_include_router(module)" in app_source
+          '''.replace('          ', '')
+          new_test = '''def test_atomic_refresh_endpoint_uses_database_row_lock_in_canonical_router():
+              source = open("app/routers/auth.py", encoding="utf-8").read()
+              app_source = open("app/app.py", encoding="utf-8").read()
+              assert ".with_for_update()" in source
+              assert "RefreshSession.jti" in source
+              assert "session.revoked_at is not None" in source
+              assert "revoke_jti=session.jti" in source
+              assert 'auth_refresh_atomic = _import_router("auth_refresh_atomic")' not in app_source
+              assert 'getattr(route, "path", "") != "/auth/refresh"' not in app_source
+              refresh_routes = [
+                  route for route in app.routes
+                  if getattr(route, "path", None) == "/auth/refresh"
+                  and "POST" in (getattr(route, "methods", set()) or set())
+              ]
+              assert len(refresh_routes) == 1
+          '''.replace('          ', '')
+          if new_test not in test:
+              if old_test not in test:
+                  raise SystemExit('refresh regression source anchor not found')
+              test = test.replace(old_test, new_test, 1)
+              test_path.write_text(test, encoding='utf-8')
+
+          shadow_path = Path('app/routers/auth_refresh_atomic.py')
+          if shadow_path.exists():
+              shadow_path.unlink()
+          PY
+      - name: Refresh release manifest
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          manifest = Path('MANIFEST.sha256')
+          entries = {}
+          for line in manifest.read_text(encoding='utf-8').splitlines():
+              if '  ' not in line:
+                  continue
+              _, path = line.split('  ', 1)
+              entries[path] = line
+          entries.pop('app/routers/auth_refresh_atomic.py', None)
+          for path in ('app/app.py', 'app/routers/auth.py', 'tests/test_refresh_rotation_atomic.py'):
+              digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+              entries[path] = f'{digest}  {path}'
+          manifest.write_text('\n'.join(entries[path] for path in sorted(entries)) + '\n', encoding='utf-8')
+          PY
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: Verify consolidation
+        run: |
+          set -euo pipefail
+          sha256sum -c MANIFEST.sha256
+          python -m compileall -q app tests alembic
+          node --check app/static/api-errors.js
+          node --check app/static/app.js
+          node --check app/static/access-portal.js
+          node --check app/static/account-security.js
+          node --check app/static/mock-interview.js
+          ruff check app tests alembic --select E9,F63,F7,F82
+          pytest -q
+          test ! -e app/routers/auth_refresh_atomic.py
+          ! grep -q 'auth_refresh_atomic' app/app.py
+          ! grep -q 'getattr(route, "path", "") != "/auth/refresh"' app/app.py
+          git diff --check
+      - name: Commit canonical auth route ownership
+        run: |
+          if git diff --quiet; then
+            echo "No generated changes"
+            exit 0
+          fi
+          git config user.name "PlaceAI Hardening Bot"
+          git config user.email "placeai-hardening@users.noreply.github.com"
+          git add MANIFEST.sha256 app/app.py app/routers/auth.py tests/test_refresh_rotation_atomic.py
+          git rm -f app/routers/auth_refresh_atomic.py || true
+          git commit -m "Consolidate atomic refresh into canonical auth router"
+          git push origin HEAD:fix/route-ownership-auth-refresh-batch43
