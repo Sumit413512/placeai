@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-import smtplib
 from datetime import timedelta
-from email.message import EmailMessage
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
@@ -15,6 +13,12 @@ from app.access_models import AccessRequest
 from app.config import get_settings
 from app.database import SessionLocal, get_db
 from app.dependencies import require_platform_admin
+from app.email_delivery import (
+    brevo_api_configured,
+    send_transactional_email,
+    smtp_transport_configured,
+    transactional_email_configured,
+)
 from app.models import AuditEvent, User, UserRole
 from app.rate_limit import enforce_rate_limit
 from app.routers.auth import _token_response, _utcnow
@@ -69,11 +73,6 @@ def _public_access_response() -> dict[str, str]:
     return {"message": PUBLIC_ACCESS_MESSAGE}
 
 
-def _smtp_transport_configured() -> bool:
-    credentials_consistent = bool(settings.smtp_user) == bool(settings.smtp_password)
-    return bool(settings.smtp_host and settings.smtp_from and credentials_consistent)
-
-
 def _record_delivery_event(purpose: str, outcome: str, reason_code: str | None = None) -> None:
     """Persist PII-free delivery telemetry in an isolated transaction."""
     db = SessionLocal()
@@ -88,35 +87,15 @@ def _record_delivery_event(purpose: str, outcome: str, reason_code: str | None =
 
 
 def _send_transactional_email(*, recipient: str, subject: str, body: str, purpose: str) -> bool:
-    """Send one PlaceAI transactional email without leaking SMTP/provider details."""
-    recipient = recipient.strip().lower()
-    if not recipient:
-        return False
-    if not _smtp_transport_configured():
-        _record_delivery_event(purpose, "not_configured", "smtp_not_configured")
-        return False
-
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = f"{settings.app_name} <{settings.smtp_from}>"
-    message["To"] = recipient
-    message.set_content(body)
-    try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=5) as smtp:
-            if settings.smtp_tls:
-                smtp.starttls()
-            if settings.smtp_user:
-                smtp.login(settings.smtp_user, settings.smtp_password)
-            smtp.send_message(message)
-        _record_delivery_event(purpose, "sent")
-        return True
-    except smtplib.SMTPAuthenticationError:
-        _record_delivery_event(purpose, "failed", "smtp_authentication_failed")
-    except (smtplib.SMTPException, OSError):
-        _record_delivery_event(purpose, "failed", "smtp_delivery_failed")
-    except Exception:
-        _record_delivery_event(purpose, "failed", "smtp_delivery_failed")
-    return False
+    """Send one PlaceAI transactional email through the shared resilient transport."""
+    outcome, reason = send_transactional_email(
+        settings,
+        recipient=recipient,
+        subject=subject,
+        body=body,
+    )
+    _record_delivery_event(purpose, outcome, reason)
+    return outcome == "sent"
 
 
 def _platform_admin_recipients(db: Session) -> list[str]:
@@ -479,18 +458,23 @@ def integration_status(
     db: Session = Depends(get_db),
 ):
     """Return booleans and aggregate counts only; never expose secret values."""
+    del current_user
     active_platform_admins = (
         db.query(User)
         .filter(User.role == UserRole.platform_admin, User.is_active.is_(True))
         .count()
     )
     fallback_configured = bool(os.getenv("ACCESS_REQUEST_NOTIFY_TO", "").strip())
-    smtp_ready = _smtp_transport_configured()
+    smtp_ready = smtp_transport_configured(settings)
+    brevo_api_ready = brevo_api_configured(settings)
+    email_ready = transactional_email_configured(settings)
     return {
         "database": not settings.database_url.startswith("sqlite"),
         "brevo_smtp": smtp_ready,
-        "access_request_notifications": smtp_ready and (active_platform_admins > 0 or fallback_configured),
-        "controlled_login_notifications": smtp_ready and active_platform_admins > 0,
+        "brevo_api": brevo_api_ready,
+        "transactional_email": email_ready,
+        "access_request_notifications": email_ready and (active_platform_admins > 0 or fallback_configured),
+        "controlled_login_notifications": email_ready and active_platform_admins > 0,
         "active_platform_admins": active_platform_admins,
         "gemini": bool(settings.gemini_api_key),
         "google_sign_in": bool(settings.google_client_id),
@@ -513,8 +497,9 @@ def password_reset_email_observability(
     last_success = base.filter(EmailDeliveryEvent.outcome == "sent").order_by(EmailDeliveryEvent.created_at.desc()).first()
     last_failure = base.filter(EmailDeliveryEvent.outcome == "failed").order_by(EmailDeliveryEvent.created_at.desc()).first()
 
-    credentials_consistent = bool(settings.smtp_user) == bool(settings.smtp_password)
-    transport_configured = bool(settings.smtp_host and settings.smtp_from and credentials_consistent)
+    smtp_ready = smtp_transport_configured(settings)
+    brevo_api_ready = brevo_api_configured(settings)
+    transport_configured = transactional_email_configured(settings)
     authentication_enabled = bool(settings.smtp_user)
     authentication_configured = bool(settings.smtp_user and settings.smtp_password)
 
@@ -529,7 +514,9 @@ def password_reset_email_observability(
 
     return {
         "status": operational_status,
-        "smtp_transport_configured": transport_configured,
+        "transactional_email_configured": transport_configured,
+        "smtp_transport_configured": smtp_ready,
+        "brevo_api_configured": brevo_api_ready,
         "smtp_authentication_enabled": authentication_enabled,
         "smtp_authentication_configured": authentication_configured,
         "tls_enabled": settings.smtp_tls,
