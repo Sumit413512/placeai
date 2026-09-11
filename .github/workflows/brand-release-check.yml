@@ -1,0 +1,30 @@
+name: Brand Release Check
+
+on:
+  push:
+    branches: [feat/brand-production-hardening-20260911]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install targeted test dependencies
+        run: pip install pytest==8.4.2
+      - name: Branding regression tests
+        run: pytest -q tests/test_brand_identity.py
+      - name: JavaScript syntax
+        run: |
+          node --check app/static/app.js
+          node --check app/static/mock-interview.js
+          node --check app/static/ui-state-fixes.js
+          node --check pages/assets/placeai-pages.js
+      - name: Calculate release hashes
+        run: |
+          sha256sum app/static/brand.css app/static/placeai-icon.svg app/static/placeai-logo.svg app/templates/index.html app/templates/mock-interview.html index.html tests/test_brand_identity.py
