@@ -2,6 +2,7 @@
   'use strict';
 
   const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  const provisioningFormIds = new Set(['institution-student-form', 'institution-recruiter-form', 'admin-form']);
 
   function validationMessage(data, status) {
     const detail = data?.detail;
@@ -20,6 +21,70 @@
     if (!/[0-9]/.test(password)) return 'Password must contain a number.';
     if (!/[^A-Za-z0-9]/.test(password)) return 'Password must contain a symbol.';
     return '';
+  }
+
+  function decorateProvisioningInputs(root = document) {
+    const inputs = root.querySelectorAll?.('input[name="temporary_password"]') || [];
+    inputs.forEach(input => {
+      const form = input.closest('form');
+      if (!form || !provisioningFormIds.has(form.id)) return;
+      input.setAttribute('autocomplete', 'new-password');
+      input.setAttribute('autocapitalize', 'none');
+      input.setAttribute('spellcheck', 'false');
+      input.dataset.placeaiSensitive = 'write-only';
+      if (form.querySelector('.provisioning-credential-note')) return;
+      const note = document.createElement('div');
+      note.className = 'provisioning-credential-note password-rotation-help';
+      note.setAttribute('role', 'note');
+      note.textContent = 'One-time credential. Share it through your approved secure channel before submitting. PlaceAI will not display this value again, and the account must replace it at first sign-in.';
+      const label = input.closest('label');
+      (label?.parentNode || form).insertBefore(note, label?.nextSibling || null);
+    });
+  }
+
+  function decorateCsvHandoff(root = document) {
+    const inputs = root.querySelectorAll?.('#student-csv-file') || [];
+    inputs.forEach(input => {
+      const container = input.closest('.data-toolbar, .row-actions') || input.parentElement;
+      if (!container || container.querySelector('.csv-credential-note')) return;
+      const note = document.createElement('div');
+      note.className = 'csv-credential-note password-rotation-help';
+      note.setAttribute('role', 'note');
+      note.textContent = 'CSV temporary passwords are one-time provisioning credentials. Transfer them through an approved secure channel, remove completed local copies, and do not expect PlaceAI to display them after import.';
+      container.appendChild(note);
+    });
+  }
+
+  function installProvisioningProtections() {
+    decorateProvisioningInputs();
+    decorateCsvHandoff();
+    const observer = new MutationObserver(records => {
+      for (const record of records) {
+        record.addedNodes.forEach(node => {
+          if (!(node instanceof Element)) return;
+          decorateProvisioningInputs(node);
+          decorateCsvHandoff(node);
+        });
+      }
+    });
+    observer.observe(document.body, {childList: true, subtree: true});
+
+    document.addEventListener('submit', event => {
+      const form = event.target instanceof HTMLFormElement ? event.target : null;
+      if (!form || !provisioningFormIds.has(form.id)) return;
+      const input = form.querySelector('input[name="temporary_password"]');
+      if (!input) return;
+      queueMicrotask(() => {
+        input.value = '';
+        input.dataset.clearedAfterSubmit = 'true';
+      });
+    });
+
+    document.addEventListener('change', event => {
+      const input = event.target instanceof HTMLInputElement ? event.target : null;
+      if (!input || input.id !== 'student-csv-file' || !input.files?.length) return;
+      queueMicrotask(() => { input.value = ''; });
+    });
   }
 
   function showRotation(user) {
@@ -51,9 +116,17 @@
       try {
         const response = await fetch('/auth/change-password', {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({current_password: body.current_password, new_password: body.new_password})});
         const data = await response.json().catch(() => ({}));
+        body.current_password = '';
+        body.new_password = '';
+        body.confirm_password = '';
+        form.reset();
         if (!response.ok) throw new Error(validationMessage(data, response.status));
         location.reload();
       } catch (err) {
+        body.current_password = '';
+        body.new_password = '';
+        body.confirm_password = '';
+        form.reset();
         error.textContent = err?.message || 'Password update failed.';
         error.classList.add('is-visible');
         button.disabled = false;
@@ -63,6 +136,7 @@
   }
 
   async function init() {
+    installProvisioningProtections();
     try {
       const response = await fetch('/auth/me', {credentials: 'include'});
       if (!response.ok) return;
