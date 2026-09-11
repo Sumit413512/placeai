@@ -316,12 +316,27 @@ def forgot_password(body: ForgotPasswordRequest, request: Request, db: Session =
     if not user or not user.is_active:
         return generic
 
+    previous_hash = user.reset_token_hash
+    previous_expires = user.reset_token_expires
     token = generate_reset_token()
-    user.reset_token_hash = hash_reset_token(token)
+    token_hash = hash_reset_token(token)
+    user.reset_token_hash = token_hash
     user.reset_token_expires = _utcnow() + timedelta(minutes=15)
     db.commit()
     link = f"{settings.base_url}/?reset_token={token}"
     delivery_outcome, delivery_reason = _send_reset_email(user.email, link)
+
+    if delivery_outcome != "sent":
+        # Restore the prior recovery credential only if this request still owns the
+        # token slot. A concurrent newer reset request must never be overwritten.
+        db.query(User).filter(User.id == user.id, User.reset_token_hash == token_hash).update(
+            {
+                User.reset_token_hash: previous_hash,
+                User.reset_token_expires: previous_expires,
+            },
+            synchronize_session=False,
+        )
+        db.commit()
     _record_reset_delivery_event(db, delivery_outcome, delivery_reason)
 
     if settings.environment == "development" and settings.dev_show_reset_token:
