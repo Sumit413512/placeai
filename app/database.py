@@ -1,23 +1,23 @@
 from __future__ import annotations
 
 import os
-from urllib.parse import quote
+from urllib.parse import parse_qsl
 
 from sqlalchemy import create_engine
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import URL, make_url
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import NullPool
 
 from app.config import get_settings
 
 
-def normalize_database_url_for_runtime(database_url: str) -> str:
-    """Normalize Render Postgres credentials without exposing or rewriting secrets.
+def build_runtime_database_url(database_url: str):
+    """Return a structured SQLAlchemy URL for Render Postgres connections.
 
-    Supabase pooler connection strings can be pasted with raw reserved characters in
-    the password. They also require pooler usernames in the form ROLE.PROJECT_REF.
-    Apply those two Render-only normalizations before SQLAlchemy/Psycopg parse the URL.
-    Vercel behavior remains unchanged.
+    Render receives DATABASE_URL as a secret string. Building a SQLAlchemy URL object
+    lets psycopg receive the exact password value even when it contains URI-reserved
+    characters. It also completes Supabase shared-pooler usernames as ROLE.PROJECT_REF.
+    Non-Render environments keep the existing string behavior unchanged.
     """
     raw = (database_url or "").strip()
     if not os.getenv("RENDER_EXTERNAL_HOSTNAME"):
@@ -38,20 +38,45 @@ def normalize_database_url_for_runtime(database_url: str) -> str:
     if not username:
         return raw
 
-    endpoint_authority = endpoint.split("/", 1)[0]
-    endpoint_host = endpoint_authority.rsplit(":", 1)[0].lower()
+    authority, slash, path_and_query = endpoint.partition("/")
+    if not authority:
+        return raw
+    host, port = authority, None
+    if ":" in authority:
+        host_candidate, port_candidate = authority.rsplit(":", 1)
+        if port_candidate.isdigit():
+            host = host_candidate
+            port = int(port_candidate)
+
+    database = None
+    query = {}
+    if slash:
+        database_part, query_sep, query_string = path_and_query.partition("?")
+        database = database_part or None
+        if query_sep:
+            query = dict(parse_qsl(query_string, keep_blank_values=True))
+
     project_ref = os.getenv("SUPABASE_PROJECT_REF", "").strip()
-    if (
-        project_ref
-        and endpoint_host.endswith("pooler.supabase.com")
-        and "." not in username
-    ):
+    if project_ref and host.lower().endswith("pooler.supabase.com") and "." not in username:
         username = f"{username}.{project_ref}"
 
-    # Preserve existing percent escapes while encoding raw reserved characters.
-    safe_username = quote(username, safe=".%")
-    safe_password = quote(password, safe="%")
-    return f"{prefix}{safe_username}:{safe_password}@{endpoint}"
+    return URL.create(
+        "postgresql+psycopg",
+        username=username,
+        password=password,
+        host=host,
+        port=port,
+        database=database,
+        query=query,
+    )
+
+
+def normalize_database_url_for_runtime(database_url: str) -> str:
+    """Render the structured runtime URL only when a string representation is needed."""
+    runtime_url = build_runtime_database_url(database_url)
+    if isinstance(runtime_url, URL):
+        return runtime_url.render_as_string(hide_password=False)
+    return runtime_url
 
 
 def build_engine_kwargs(settings):
@@ -59,11 +84,6 @@ def build_engine_kwargs(settings):
     connect_args = {"check_same_thread": False} if is_sqlite else {}
 
     if settings.running_on_vercel and not is_sqlite:
-        # Supabase recommends its transaction-mode Supavisor pooler for
-        # serverless/auto-scaling workloads. Psycopg prepared statements are not
-        # compatible with transaction pooling, so disable them per connection.
-        # Bound connection establishment as well: a bad pooler host/credential must
-        # produce a readiness result quickly rather than consuming a full invocation.
         connect_args.update(
             {
                 "prepare_threshold": None,
@@ -77,8 +97,6 @@ def build_engine_kwargs(settings):
         "pool_pre_ping": True,
     }
     if settings.running_on_vercel and not is_sqlite:
-        # Let Supavisor own pooling; Vercel functions should not retain their own
-        # SQLAlchemy connection pool between short-lived invocations.
         engine_kwargs["poolclass"] = NullPool
     return engine_kwargs
 
@@ -86,7 +104,7 @@ def build_engine_kwargs(settings):
 def safe_database_target(database_url: str) -> dict[str, object]:
     """Return non-secret connection metadata suitable for /health diagnostics."""
     try:
-        url = make_url(normalize_database_url_for_runtime(database_url))
+        url = make_url(build_runtime_database_url(database_url))
     except Exception:
         return {"driver": "invalid", "supabase_pooler": False, "port": None}
     host = (url.host or "").lower()
@@ -172,13 +190,9 @@ def classify_database_exception(exc: BaseException) -> str:
 settings = get_settings()
 engine_initialization_error_code: str | None = None
 try:
-    runtime_database_url = normalize_database_url_for_runtime(settings.database_url)
+    runtime_database_url = build_runtime_database_url(settings.database_url)
     engine = create_engine(runtime_database_url, **build_engine_kwargs(settings))
 except Exception:
-    # A malformed/unsupported production URL must never make the entire Vercel
-    # Python process unbootable. Bind an in-memory diagnostic engine only so the
-    # FastAPI process can expose readiness; protected traffic is blocked by app.py.
-    # This is never an application-data fallback.
     engine_initialization_error_code = "DATABASE_ENGINE_INITIALIZATION_FAILED"
     engine = create_engine(
         "sqlite:///:memory:",
