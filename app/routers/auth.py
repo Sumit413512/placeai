@@ -12,6 +12,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import Organization, RecruiterProfile, RefreshSession, StudentProfile, User, UserRole
+from app.telemetry_models import EmailDeliveryEvent
 from app.rate_limit import enforce_rate_limit
 from app.schemas import (
     ForgotPasswordRequest,
@@ -258,9 +259,11 @@ def google_auth(payload: GoogleAuthRequest, request: Request, response: Response
     return _token_response(user, response, db)
 
 
-def _send_reset_email(recipient: str, link: str) -> bool:
-    if not (settings.smtp_host and settings.smtp_from):
-        return False
+def _send_reset_email(recipient: str, link: str) -> tuple[str, str | None]:
+    """Send reset mail and return only sanitized operational outcome codes."""
+    credentials_consistent = bool(settings.smtp_user) == bool(settings.smtp_password)
+    if not (settings.smtp_host and settings.smtp_from and credentials_consistent):
+        return "not_configured", "smtp_not_configured"
     message = EmailMessage()
     message["Subject"] = f"Reset your {settings.app_name} password"
     message["From"] = settings.smtp_from
@@ -273,9 +276,19 @@ def _send_reset_email(recipient: str, link: str) -> bool:
             if settings.smtp_user:
                 smtp.login(settings.smtp_user, settings.smtp_password)
             smtp.send_message(message)
-        return True
+        return "sent", None
     except Exception:
-        return False
+        # Never persist exception text: SMTP/provider errors can contain addresses or infrastructure detail.
+        return "failed", "smtp_delivery_failed"
+
+
+def _record_reset_delivery_event(db: Session, outcome: str, reason_code: str | None) -> None:
+    """Persist aggregate-safe telemetry without changing the public recovery response."""
+    try:
+        db.add(EmailDeliveryEvent(purpose="password_reset", outcome=outcome, reason_code=reason_code))
+        db.commit()
+    except Exception:
+        db.rollback()
 
 
 @router.post("/forgot-password")
@@ -291,7 +304,8 @@ def forgot_password(body: ForgotPasswordRequest, request: Request, db: Session =
     user.reset_token_expires = _utcnow() + timedelta(minutes=15)
     db.commit()
     link = f"{settings.base_url}/?reset_token={token}"
-    _send_reset_email(user.email, link)
+    delivery_outcome, delivery_reason = _send_reset_email(user.email, link)
+    _record_reset_delivery_event(db, delivery_outcome, delivery_reason)
 
     if settings.environment == "development" and settings.dev_show_reset_token:
         generic["development_reset_token"] = token

@@ -45,6 +45,7 @@
     reports:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18H5zM8 16v-4M12 16V8M16 16v-6"/></svg>'
   };
   navIcons['mock-interview'] = navIcons.interviews;
+  navIcons.integrations = navIcons.verification;
   const navIcon = id => `<span class="nav-icon">${navIcons[id] || navIcons.dashboard}</span>`;
 
   const state = {
@@ -125,7 +126,7 @@
       ['Command centre','dashboard','Overview'],['Command centre','attention','Attention centre'],['Command centre','analytics2','Placement analytics'],['People','students','Students'],['People','approvals','Profile approvals'],['People','recruiters','Recruiters'],['Trust','verification','Company verification'],['Placements','jobs','Campus jobs'],['Placements','drives','Placement drives'],['Placements','pipeline','Drive pipelines'],['Placements','applications','Applications'],['Placements','interviews','Interviews'],['Placements','offers','Offer management'],['Operations','attendance','QR attendance'],['Operations','calendar','Placement calendar'],['Operations','announcements','Announcements'],['Operations','communications','Recruiter communication'],['Governance','policies','Placement policies'],['Governance','custom-fields','Custom fields'],['Governance','incidents','Incident reports'],['Governance','reports','Reports'],['Updates','notifications','Notifications'],['Governance','audit','Audit log']
     ],
     platform_admin: [
-      ['Platform','dashboard','Overview'],['Platform','organizations','Institutions'],['Access','leads','Access requests'],['Updates','notifications','Notifications']
+      ['Platform','dashboard','Overview'],['Platform','organizations','Institutions'],['Platform','integrations','Integrations'],['Access','leads','Access requests'],['Updates','notifications','Notifications']
     ]
   };
 
@@ -409,6 +410,13 @@
       setPage('Access requests','Platform control'); setContextAction();
       const rows = await api('/platform/access-requests');
       $('#app-content').innerHTML = `${pageHead('Access requests','Privileged workspace access requests stored in the production database.')}${rows.length ? `<div class="data-panel"><div class="data-toolbar"><span class="table-secondary">${rows.length} requests</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Requester</th><th>Role</th><th>Organization</th><th>Received</th><th>Status</th></tr></thead><tbody>${rows.map(r => `<tr><td><span class="table-primary">${esc(r.full_name)}</span><span class="table-secondary">${esc(r.work_email)}</span></td><td>${esc(r.requested_role.replaceAll('_',' '))}</td><td>${esc(r.organization_name || '—')}</td><td>${fmtDate(r.created_at)}</td><td>${statusBadge(r.status)}</td></tr>`).join('')}</tbody></table></div></div>` : emptyState('AR','No access requests','Privileged workspace requests will appear here when submitted.')}`;
+    } else if (view === 'integrations') {
+      setPage('Integrations','Platform control'); setContextAction();
+      const [summary, reset] = await Promise.all([api('/platform/integrations/status'), api('/platform/integrations/password-reset-email')]);
+      const resetLabel = String(reset.status || 'unknown').replaceAll('_',' ');
+      const safeBool = value => value ? statusBadge('approved') : statusBadge('pending');
+      $('#app-content').innerHTML = `${pageHead('Integrations','Production integration readiness and privacy-safe delivery telemetry.')}<div class="metric-grid"><article class="metric-card"><small>Database</small><strong>${summary.database ? 'Connected' : 'Not ready'}</strong><span>Persistent production data</span></article><article class="metric-card"><small>Brevo SMTP</small><strong>${summary.brevo_smtp ? 'Configured' : 'Not ready'}</strong><span>Transactional email transport</span></article><article class="metric-card"><small>Password reset email</small><strong>${esc(resetLabel)}</strong><span>${reset.successes_24h} successful / ${reset.failures_24h} failed in 24h</span></article><article class="metric-card"><small>Gemini</small><strong>${summary.gemini ? 'Configured' : 'Not configured'}</strong><span>AI provider readiness</span></article></div><div class="data-panel"><div class="data-toolbar"><div><span class="table-primary">Password recovery delivery health</span><span class="table-secondary">Aggregate operational telemetry only. Recipient addresses, reset tokens and SMTP secrets are never displayed or stored in this telemetry.</span></div></div><div class="table-wrap"><table class="data-table"><tbody><tr><th>SMTP transport</th><td>${safeBool(reset.smtp_transport_configured)}</td><th>TLS</th><td>${safeBool(reset.tls_enabled)}</td></tr><tr><th>SMTP authentication</th><td>${reset.smtp_authentication_enabled ? safeBool(reset.smtp_authentication_configured) : 'Not required by transport'}</td><th>HTTPS reset links</th><td>${safeBool(reset.base_url_https)}</td></tr><tr><th>Attempts (24h)</th><td>${reset.attempts_24h}</td><th>Not configured (24h)</th><td>${reset.not_configured_24h}</td></tr><tr><th>Last success</th><td>${reset.last_success_at ? fmtDate(reset.last_success_at) : 'None recorded'}</td><th>Last failure</th><td>${reset.last_failure_at ? fmtDate(reset.last_failure_at) : 'None recorded'}</td></tr></tbody></table></div></div>`;
+
     }
   }
 
