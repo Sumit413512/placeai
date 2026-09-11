@@ -263,3 +263,191 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, {once: true});
   else init();
 })();
+
+// Password recovery runs from this early-loaded shim, before app.js. Capture the
+// one-time token into sessionStorage before removing it from the address bar so a
+// refresh cannot destroy an otherwise valid recovery attempt.
+(() => {
+  'use strict';
+
+  const RESET_TOKEN_KEY = 'placeai.password.reset.v1';
+  const TOKEN_MIN = 20;
+  const TOKEN_MAX = 512;
+
+  const sessionGet = () => {
+    try { return sessionStorage.getItem(RESET_TOKEN_KEY) || ''; } catch { return ''; }
+  };
+  const sessionSet = value => {
+    try { sessionStorage.setItem(RESET_TOKEN_KEY, value); } catch {}
+  };
+  const sessionClear = () => {
+    try { sessionStorage.removeItem(RESET_TOKEN_KEY); } catch {}
+  };
+
+  let token = '';
+  try {
+    const url = new URL(location.href);
+    const incoming = url.searchParams.get('reset_token');
+    if (incoming !== null) {
+      if (incoming.length >= TOKEN_MIN && incoming.length <= TOKEN_MAX) {
+        token = incoming;
+        sessionSet(incoming);
+      } else {
+        sessionClear();
+      }
+      url.searchParams.delete('reset_token');
+      history.replaceState(history.state || {}, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+  } catch {}
+
+  if (!token) token = sessionGet();
+  if (!token || token.length < TOKEN_MIN || token.length > TOKEN_MAX) return;
+
+  window.__placeaiPasswordRecoveryActive = true;
+
+  const passwordChecks = value => ({
+    length: value.length >= 12,
+    lower: /[a-z]/.test(value),
+    upper: /[A-Z]/.test(value),
+    number: /[0-9]/.test(value),
+    symbol: /[^A-Za-z0-9]/.test(value)
+  });
+
+  const apiMessage = (payload, fallback) => {
+    if (typeof payload?.detail === 'string') return payload.detail;
+    if (Array.isArray(payload?.detail)) {
+      const messages = payload.detail
+        .map(item => String(item?.msg || '').replace(/^Value error,\s*/i, '').trim())
+        .filter(Boolean);
+      if (messages.length) return messages.join(' ');
+    }
+    return fallback;
+  };
+
+  function injectStyles() {
+    if (document.querySelector('#placeai-password-recovery-style')) return;
+    const style = document.createElement('style');
+    style.id = 'placeai-password-recovery-style';
+    style.textContent = `
+      .password-recovery-screen{position:fixed;inset:0;z-index:100000;display:grid;place-items:center;padding:24px;background:rgba(12,18,38,.78);backdrop-filter:blur(12px)}
+      .password-recovery-card{width:min(520px,100%);background:#fff;border-radius:24px;padding:32px;box-shadow:0 30px 90px rgba(7,15,40,.34);font-family:DM Sans,system-ui,sans-serif;color:#172033}
+      .password-recovery-brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;margin-bottom:24px}.password-recovery-dot{width:13px;height:13px;border-radius:4px;background:#5b5bd6;box-shadow:18px 0 0 #8b5cf6,36px 0 0 #c084fc;margin-right:36px}
+      .password-recovery-kicker{display:block;color:#5b5bd6;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px}.password-recovery-card h1{font-family:Manrope,system-ui,sans-serif;font-size:28px;line-height:1.15;margin:0 0 8px}.password-recovery-copy{color:#64748b;margin:0 0 22px;line-height:1.55}
+      .password-recovery-form{display:grid;gap:16px}.password-recovery-form label{display:grid;gap:7px;font-weight:700;font-size:14px}.password-recovery-form input{width:100%;box-sizing:border-box;border:1px solid #d8deea;border-radius:12px;padding:12px 14px;font:inherit;outline:none}.password-recovery-form input:focus{border-color:#5b5bd6;box-shadow:0 0 0 3px rgba(91,91,214,.12)}
+      .password-rules{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:2px 0 4px;font-size:12px;color:#7b8496}.password-rule::before{content:'○';margin-right:6px}.password-rule.ok{color:#16845b}.password-rule.ok::before{content:'✓'}
+      .password-recovery-error{min-height:20px;color:#b42318;font-size:13px;font-weight:650;line-height:1.45}.password-recovery-actions{display:flex;gap:10px;align-items:center}.password-recovery-submit{flex:1;border:0;border-radius:12px;padding:13px 16px;background:#5b5bd6;color:#fff;font:inherit;font-weight:800;cursor:pointer}.password-recovery-submit:disabled{opacity:.55;cursor:not-allowed}.password-recovery-cancel{border:0;background:transparent;color:#64748b;font:inherit;font-weight:700;cursor:pointer;padding:12px}
+      .password-recovery-success{text-align:center;padding:8px 0}.password-recovery-success-icon{display:grid;place-items:center;width:58px;height:58px;margin:0 auto 18px;border-radius:50%;background:#e9f8f1;color:#16845b;font-size:28px;font-weight:900}.password-recovery-continue{width:100%;margin-top:18px}
+      @media(max-width:560px){.password-recovery-card{padding:24px 20px;border-radius:20px}.password-rules{grid-template-columns:1fr}.password-recovery-actions{flex-direction:column}.password-recovery-cancel{width:100%}}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function mountRecovery() {
+    if (document.querySelector('#placeai-password-recovery')) return;
+    injectStyles();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'placeai-password-recovery';
+    overlay.className = 'password-recovery-screen';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'password-recovery-title');
+    overlay.innerHTML = `
+      <section class="password-recovery-card">
+        <div class="password-recovery-brand"><span class="password-recovery-dot" aria-hidden="true"></span><span>PlaceAI</span></div>
+        <span class="password-recovery-kicker">Secure account recovery</span>
+        <h1 id="password-recovery-title">Set a new password</h1>
+        <p class="password-recovery-copy">Use a strong password. This one-time recovery link remains available in this tab until the reset succeeds or you cancel.</p>
+        <form id="password-recovery-form" class="password-recovery-form" novalidate>
+          <label>New password<input id="password-recovery-new" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
+          <div class="password-rules" aria-live="polite">
+            <span class="password-rule" data-rule="length">12+ characters</span>
+            <span class="password-rule" data-rule="upper">Uppercase letter</span>
+            <span class="password-rule" data-rule="lower">Lowercase letter</span>
+            <span class="password-rule" data-rule="number">Number</span>
+            <span class="password-rule" data-rule="symbol">Symbol</span>
+            <span class="password-rule" data-rule="match">Passwords match</span>
+          </div>
+          <label>Confirm new password<input id="password-recovery-confirm" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
+          <div id="password-recovery-error" class="password-recovery-error" role="alert"></div>
+          <div class="password-recovery-actions">
+            <button id="password-recovery-submit" class="password-recovery-submit" type="submit" disabled>Reset password</button>
+            <button id="password-recovery-cancel" class="password-recovery-cancel" type="button">Cancel</button>
+          </div>
+        </form>
+      </section>`;
+    document.body.appendChild(overlay);
+    document.body.classList.add('modal-open');
+
+    const form = overlay.querySelector('#password-recovery-form');
+    const password = overlay.querySelector('#password-recovery-new');
+    const confirm = overlay.querySelector('#password-recovery-confirm');
+    const submit = overlay.querySelector('#password-recovery-submit');
+    const error = overlay.querySelector('#password-recovery-error');
+
+    const validate = () => {
+      const checks = passwordChecks(password.value);
+      const matches = Boolean(password.value) && password.value === confirm.value;
+      Object.entries(checks).forEach(([name, ok]) => overlay.querySelector(`[data-rule="${name}"]`)?.classList.toggle('ok', ok));
+      overlay.querySelector('[data-rule="match"]')?.classList.toggle('ok', matches);
+      submit.disabled = !(Object.values(checks).every(Boolean) && matches);
+      if (!submit.disabled) error.textContent = '';
+    };
+
+    password.addEventListener('input', validate);
+    confirm.addEventListener('input', validate);
+
+    overlay.querySelector('#password-recovery-cancel').addEventListener('click', () => {
+      sessionClear();
+      window.__placeaiPasswordRecoveryActive = false;
+      location.assign(location.pathname || '/');
+    });
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      validate();
+      if (submit.disabled) {
+        error.textContent = 'Your password must satisfy every requirement and both entries must match.';
+        return;
+      }
+
+      submit.disabled = true;
+      const originalLabel = submit.textContent;
+      submit.textContent = 'Resetting…';
+      error.textContent = '';
+
+      try {
+        const response = await fetch('/auth/reset-password', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({token, new_password: password.value})
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          if (response.status === 400) sessionClear();
+          throw new Error(apiMessage(payload, response.status === 400 ? 'This reset link is invalid or expired. Request a fresh reset link.' : 'Password reset failed. Please try again.'));
+        }
+
+        sessionClear();
+        window.__placeaiPasswordRecoveryActive = false;
+        overlay.querySelector('.password-recovery-card').innerHTML = `
+          <div class="password-recovery-success">
+            <div class="password-recovery-success-icon">✓</div>
+            <span class="password-recovery-kicker">Password updated</span>
+            <h1>Password reset successful</h1>
+            <p class="password-recovery-copy">Your previous sessions have been revoked. Sign in again using your new password.</p>
+            <button id="password-recovery-continue" class="password-recovery-submit password-recovery-continue" type="button">Continue to sign in</button>
+          </div>`;
+        overlay.querySelector('#password-recovery-continue').addEventListener('click', () => location.assign(location.pathname || '/'));
+      } catch (err) {
+        error.textContent = err instanceof Error ? err.message : 'Password reset failed. Please try again.';
+        submit.textContent = originalLabel;
+        submit.disabled = false;
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountRecovery, {once: true});
+  else mountRecovery();
+})();
