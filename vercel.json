@@ -3,11 +3,8 @@
   "regions": ["sin1"],
   "git": {
     "deploymentEnabled": {
-      "ops/*": false,
-      "audit/*": false,
-      "smoke/*": false,
-      "tmp/*": false,
-      "fix/*": false
+      "*": false,
+      "main": true
     }
   }
 }
