@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: placeai-rxpp
+    runtime: python
+    region: singapore
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    preDeployCommand: alembic upgrade head
+    startCommand: >-
+      sh -c 'export BASE_URL="${BASE_URL:-https://${RENDER_EXTERNAL_HOSTNAME}}";
+      export ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-$BASE_URL}";
+      exec uvicorn app.app:app --host 0.0.0.0 --port "$PORT" --workers 2'
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: APP_NAME
+        value: PlaceAI
+      - key: ENVIRONMENT
+        value: production
+      - key: AUTO_CREATE_SCHEMA
+        value: "false"
+      - key: DEV_SHOW_RESET_TOKEN
+        value: "false"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: JWT_REFRESH_SECRET_KEY
+        generateValue: true
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_FROM_EMAIL
+        value: skj1200519@gmail.com
