@@ -2,13 +2,18 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 from app.config import get_settings
-from app.database import Base
+from app.database import Base, normalize_database_url_for_runtime
 from app import models  # noqa: F401
 
 config = context.config
 if config.config_file_name:
     fileConfig(config.config_file_name)
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+
+database_url = normalize_database_url_for_runtime(get_settings().database_url)
+# Alembic's ConfigParser treats percent signs as interpolation tokens. Render URLs
+# can contain percent-encoded credentials, so escape percent characters here; the
+# value read back by Alembic resolves to the intended single-percent URL.
+config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 target_metadata = Base.metadata
 
 
