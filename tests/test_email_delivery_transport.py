@@ -30,32 +30,29 @@ def test_no_transport_is_reported_as_not_configured() -> None:
 
 def test_brevo_api_transport_sends_when_smtp_is_absent(monkeypatch) -> None:
     class Response:
-        status = 201
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
+        status_code = 201
 
     captured = {}
 
-    def fake_urlopen(request, timeout):
-        captured["url"] = request.full_url
+    def fake_post(url, *, json, headers, timeout):
+        captured["url"] = url
+        captured["json"] = json
         captured["timeout"] = timeout
-        captured["api_key"] = request.headers.get("Api-key") or request.headers.get("api-key")
+        captured["api_key"] = headers.get("api-key")
         return Response()
 
-    monkeypatch.setattr(email_delivery, "urlopen", fake_urlopen)
+    monkeypatch.setattr(email_delivery.httpx, "post", fake_post)
     settings = _settings(smtp_from="noreply@example.com", brevo_api_key="secret-api-key")
     outcome, reason = email_delivery.send_transactional_email(
         settings, recipient="user@example.com", subject="Reset", body="Use link"
     )
     assert outcome == "sent"
     assert reason is None
-    assert captured["url"] == "https://api.brevo.com/v3/smtp/email"
-    assert captured["timeout"] == 8
+    assert captured["url"] == email_delivery.BREVO_TRANSACTIONAL_EMAIL_URL
+    assert captured["timeout"] == 8.0
     assert captured["api_key"] == "secret-api-key"
+    assert captured["json"]["sender"]["name"] == "PlaceAI"
+    assert captured["json"]["to"] == [{"email": "user@example.com"}]
 
 
 def test_smtp_failure_falls_back_to_brevo_api(monkeypatch) -> None:
@@ -70,16 +67,10 @@ def test_smtp_failure_falls_back_to_brevo_api(monkeypatch) -> None:
             return False
 
     class Response:
-        status = 201
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
+        status_code = 201
 
     monkeypatch.setattr(email_delivery.smtplib, "SMTP", BrokenSMTP)
-    monkeypatch.setattr(email_delivery, "urlopen", lambda request, timeout: Response())
+    monkeypatch.setattr(email_delivery.httpx, "post", lambda *args, **kwargs: Response())
     settings = _settings(
         smtp_host="smtp-relay.brevo.com",
         smtp_user="login",
