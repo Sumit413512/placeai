@@ -1,0 +1,48 @@
+name: Refresh Vercel manifest hash
+
+on:
+  push:
+    branches:
+      - ops/vercel-build-conservation-20260911
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.event.head_commit.message != 'chore: refresh vercel manifest hash'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/vercel-build-conservation-20260911
+      - name: Refresh vercel.json SHA-256
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          path = Path('vercel.json')
+          digest = hashlib.sha256(path.read_bytes()).hexdigest()
+          manifest = Path('MANIFEST.sha256')
+          lines = manifest.read_text().splitlines()
+          updated = []
+          found = False
+          for line in lines:
+              if line.endswith('  vercel.json'):
+                  updated.append(f'{digest}  vercel.json')
+                  found = True
+              else:
+                  updated.append(line)
+          if not found:
+              raise SystemExit('vercel.json is missing from MANIFEST.sha256')
+          manifest.write_text('\n'.join(updated) + '\n')
+          print(digest)
+          PY
+      - name: Commit manifest
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add MANIFEST.sha256
+          git diff --cached --quiet && exit 0
+          git commit -m 'chore: refresh vercel manifest hash'
+          git push
