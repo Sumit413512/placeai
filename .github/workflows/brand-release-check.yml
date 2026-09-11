@@ -5,7 +5,7 @@ on:
     branches: [feat/brand-production-hardening-20260911]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
@@ -25,6 +25,18 @@ jobs:
           node --check app/static/mock-interview.js
           node --check app/static/ui-state-fixes.js
           node --check pages/assets/placeai-pages.js
-      - name: Calculate release hashes
+      - name: Refresh release manifest
         run: |
-          sha256sum app/static/brand.css app/static/placeai-icon.svg app/static/placeai-logo.svg app/templates/index.html app/templates/mock-interview.html index.html tests/test_brand_identity.py
+          git ls-files -z | while IFS= read -r -d '' file; do
+            case "$file" in
+              MANIFEST.sha256|.github/workflows/brand-release-check.yml) continue ;;
+            esac
+            sha256sum "$file"
+          done > MANIFEST.sha256
+          git config user.name "placeai-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add MANIFEST.sha256
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: refresh release manifest for official branding"
+            git push
+          fi
