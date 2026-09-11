@@ -1,0 +1,26 @@
+name: Probe PlaceAI preview
+
+on:
+  push:
+    branches:
+      - ops/vercel-build-conservation-20260911
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe health
+        run: |
+          URL='https://placeai-rxpp-git-fix-reset-26690e-skj1200519-gmailcoms-projects.vercel.app'
+          STATUS=$(curl -sS -o /tmp/health.txt -w '%{http_code}' "$URL/health" || true)
+          echo "HEALTH_STATUS=$STATUS"
+          cat /tmp/health.txt || true
+      - name: Probe password reset transport with nonexistent account
+        run: |
+          URL='https://placeai-rxpp-git-fix-reset-26690e-skj1200519-gmailcoms-projects.vercel.app'
+          STATUS=$(curl -sS -o /tmp/reset.txt -w '%{http_code}' -X POST "$URL/auth/forgot-password" -H 'content-type: application/json' --data '{"email":"transport-probe-no-account@placeai.example.com"}' || true)
+          echo "RESET_STATUS=$STATUS"
+          cat /tmp/reset.txt || true
