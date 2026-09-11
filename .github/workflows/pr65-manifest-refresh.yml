@@ -1,0 +1,29 @@
+name: PR65 Manifest Refresh
+
+on:
+  push:
+    branches: [release/production-grade-20260912]
+    paths: [.github/workflows/pr65-manifest-refresh.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: release/production-grade-20260912
+
+      - name: Remove one-shot workflow and refresh manifest
+        run: |
+          rm .github/workflows/pr65-manifest-refresh.yml
+          git config user.name "placeai-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git ls-files -z | grep -zv '^MANIFEST.sha256$' | sort -z | xargs -0 sha256sum > MANIFEST.sha256
+          git add MANIFEST.sha256
+          git commit -m "chore: refresh production release manifest"
+          git push origin HEAD:release/production-grade-20260912
