@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import smtplib
+from datetime import timedelta
 from email.message import EmailMessage
 from typing import Literal
 
@@ -14,6 +15,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies import require_platform_admin
 from app.models import User
+from app.telemetry_models import EmailDeliveryEvent
 from app.rate_limit import enforce_rate_limit
 from app.routers.auth import _token_response, _utcnow
 from app.schemas import TokenSchema
@@ -252,4 +254,49 @@ def integration_status(current_user: User = Depends(require_platform_admin)):
         "gemini": bool(settings.gemini_api_key),
         "google_sign_in": bool(settings.google_client_id),
         "production": settings.is_production,
+    }
+
+@router.get("/platform/integrations/password-reset-email")
+def password_reset_email_observability(
+    current_user: User = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+):
+    """Expose PII-free password-reset delivery health to Platform Admin only."""
+    del current_user
+    now = _utcnow()
+    cutoff = now - timedelta(hours=24)
+    base = db.query(EmailDeliveryEvent).filter(EmailDeliveryEvent.purpose == "password_reset")
+    recent = base.filter(EmailDeliveryEvent.created_at >= cutoff)
+    last_attempt = base.order_by(EmailDeliveryEvent.created_at.desc()).first()
+    last_success = base.filter(EmailDeliveryEvent.outcome == "sent").order_by(EmailDeliveryEvent.created_at.desc()).first()
+    last_failure = base.filter(EmailDeliveryEvent.outcome == "failed").order_by(EmailDeliveryEvent.created_at.desc()).first()
+
+    credentials_consistent = bool(settings.smtp_user) == bool(settings.smtp_password)
+    transport_configured = bool(settings.smtp_host and settings.smtp_from and credentials_consistent)
+    authentication_enabled = bool(settings.smtp_user)
+    authentication_configured = bool(settings.smtp_user and settings.smtp_password)
+
+    if not transport_configured:
+        operational_status = "not_configured"
+    elif last_attempt and last_attempt.outcome == "failed":
+        operational_status = "degraded"
+    elif last_success:
+        operational_status = "healthy"
+    else:
+        operational_status = "configured_no_recent_delivery"
+
+    return {
+        "status": operational_status,
+        "smtp_transport_configured": transport_configured,
+        "smtp_authentication_enabled": authentication_enabled,
+        "smtp_authentication_configured": authentication_configured,
+        "tls_enabled": settings.smtp_tls,
+        "base_url_https": settings.base_url.startswith("https://"),
+        "attempts_24h": recent.count(),
+        "successes_24h": recent.filter(EmailDeliveryEvent.outcome == "sent").count(),
+        "failures_24h": recent.filter(EmailDeliveryEvent.outcome == "failed").count(),
+        "not_configured_24h": recent.filter(EmailDeliveryEvent.outcome == "not_configured").count(),
+        "last_attempt_at": last_attempt.created_at if last_attempt else None,
+        "last_success_at": last_success.created_at if last_success else None,
+        "last_failure_at": last_failure.created_at if last_failure else None,
     }
