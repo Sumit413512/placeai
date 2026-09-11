@@ -6,7 +6,8 @@
       "ops/*": false,
       "audit/*": false,
       "smoke/*": false,
-      "tmp/*": false
+      "tmp/*": false,
+      "fix/*": false
     }
   }
 }
