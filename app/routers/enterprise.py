@@ -75,10 +75,118 @@ from app.services import (
     placement_readiness,
     record_audit,
 )
-from app.storage import file_download_response, save_file, safe_upload_filename, validate_upload_signature
+from app.storage import delete_file, file_download_response, save_file, safe_upload_filename, validate_upload_signature
 
 settings = get_settings()
 router = APIRouter(prefix="/enterprise", tags=["Enterprise Placement Operations"])
+
+
+PLACED_OFFER_STATUSES = {"accepted", "joining_confirmed", "joined"}
+VALID_OFFER_STATUSES = {"issued", "accepted", "declined", "withdrawn", "joining_confirmed", "joined"}
+STUDENT_OFFER_DECISIONS = {"accepted", "declined"}
+OPERATOR_OFFER_STATUSES = VALID_OFFER_STATUSES - STUDENT_OFFER_DECISIONS
+def _utc_naive_now() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+def _utc_naive(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+def _announcement_active(row: Announcement, now: datetime | None = None) -> bool:
+    point = now or _utc_naive_now()
+    starts_at = _utc_naive(row.starts_at)
+    expires_at = _utc_naive(row.expires_at)
+    if starts_at is not None and starts_at > point:
+        return False
+    if expires_at is not None and expires_at <= point:
+        return False
+    return True
+def _announcement_state(row: Announcement, now: datetime | None = None) -> str:
+    point = now or _utc_naive_now()
+    starts_at = _utc_naive(row.starts_at)
+    expires_at = _utc_naive(row.expires_at)
+    if expires_at is not None and expires_at <= point:
+        return "expired"
+    if starts_at is not None and starts_at > point:
+        return "scheduled"
+    return "active"
+def _announcement_payload(row: Announcement, now: datetime | None = None) -> dict:
+    return {
+        "id": row.id,
+        "title": row.title,
+        "body": row.body,
+        "audience_type": row.audience_type,
+        "audience_value": row.audience_value,
+        "priority": row.priority,
+        "starts_at": row.starts_at.isoformat() if row.starts_at else None,
+        "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "delivery_state": _announcement_state(row, now),
+    }
+def _ensure_announcement_notification(
+    db: Session,
+    row: Announcement,
+    student: StudentProfile,
+) -> bool:
+    link = f"announcements:{row.id}"
+    exists = db.query(Notification).filter(
+        Notification.user_id == student.user_id,
+        Notification.category == "announcement",
+        Notification.link == link,
+    ).first()
+    if exists:
+        return False
+    create_notification(
+        db,
+        student.user_id,
+        row.title,
+        row.body[:500],
+        organization_id=row.organization_id,
+        category="announcement",
+        priority=row.priority,
+        link=link,
+    )
+    return True
+def _drive_for_institution(drive_id: str, current_user: User, db: Session) -> PlacementDrive:
+    org = _org_for_user(current_user, db)
+    drive = db.query(PlacementDrive).filter(
+        PlacementDrive.id == drive_id,
+        PlacementDrive.organization_id == org.id,
+    ).first()
+    if not drive:
+        raise HTTPException(status_code=404, detail="Drive not found")
+    return drive
+def _pipeline_payload(drive_id: str, db: Session) -> list[dict]:
+    stages = db.query(DriveStage).filter(
+        DriveStage.drive_id == drive_id
+    ).order_by(DriveStage.order_index.asc()).all()
+    return [
+        {
+            "id": stage.id,
+            "stage_key": stage.stage_key,
+            "name": stage.name,
+            "order_index": stage.order_index,
+            "stage_type": stage.stage_type,
+            "is_terminal": stage.is_terminal,
+        }
+        for stage in stages
+    ]
+def _recalculate_student_placement_status(student_id: str, db: Session) -> str:
+    student = db.query(StudentProfile).filter(StudentProfile.id == student_id).first()
+    if not student:
+        return "unplaced"
+    statuses = [
+        offer.status
+        for offer in db.query(Offer)
+        .join(Application, Offer.application_id == Application.id)
+        .filter(Application.student_id == student.id)
+        .all()
+    ]
+    student.placement_status = (
+        "placed" if any((value or "").lower() in PLACED_OFFER_STATUSES for value in statuses) else "unplaced"
+    )
+    return student.placement_status
 
 
 def _org_for_user(user: User, db: Session) -> Organization:
@@ -222,23 +330,35 @@ def institution_company_verification(recruiter_id: str, current_user: User = Dep
 
 
 @router.post("/company-verification/authorization-letter")
-async def upload_authorization_letter(file: UploadFile = File(...), current_user: User = Depends(require_recruiter), db: Session = Depends(get_db)):
+async def upload_authorization_letter(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_recruiter),
+    db: Session = Depends(get_db),
+):
     profile = _recruiter(current_user, db)
-    ext = Path(file.filename or "letter.pdf").suffix.lower()
-    if ext != ".pdf":
+    extension = Path(file.filename or "letter.pdf").suffix.lower()
+    if extension != ".pdf":
         raise HTTPException(status_code=400, detail="Authorization letter must be a PDF")
     raw = await file.read(5 * 1024 * 1024 + 1)
     if len(raw) > 5 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Authorization letter must be 5 MB or smaller")
     validate_upload_signature(raw, ".pdf")
-    path = settings.upload_dir.parent / "company-verification" / f"{profile.id}-{secrets.token_hex(8)}.pdf"
-    profile.authorization_letter_path = save_file(
-        db, category="company-verification", original_filename=safe_upload_filename(file.filename, "authorization-letter.pdf"),
-        mime_type="application/pdf", data=raw, local_path=path
-    )
-    db.commit()
-    return {"uploaded": True, "filename": file.filename}
 
+    previous = profile.authorization_letter_path
+    path = settings.upload_dir.parent / "company-verification" / f"{profile.id}-{secrets.token_hex(8)}.pdf"
+    replacement = save_file(
+        db,
+        category="company-verification",
+        original_filename=safe_upload_filename(file.filename, "authorization-letter.pdf"),
+        mime_type="application/pdf",
+        data=raw,
+        local_path=path,
+    )
+    profile.authorization_letter_path = replacement
+    if previous and previous != replacement:
+        delete_file(db, previous)
+    db.commit()
+    return {"uploaded": True, "filename": safe_upload_filename(file.filename, "authorization-letter.pdf")}
 
 # Generic drive discovery for pipeline/calendar UI.
 @router.get("/drives")
@@ -289,35 +409,87 @@ def get_pipeline(drive_id: str, current_user: User = Depends(get_current_user), 
 
 
 @router.post("/drives/{drive_id}/pipeline/default")
-def install_default_pipeline(drive_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    drive = db.query(PlacementDrive).filter(PlacementDrive.id == drive_id).first()
-    if not drive:
-        raise HTTPException(status_code=404, detail="Drive not found")
-    allowed = (current_user.role == UserRole.institution_admin and current_user.organization_id == drive.organization_id) or (current_user.role == UserRole.recruiter and drive.job and drive.job.recruiter_id == _recruiter(current_user, db).id)
-    if not allowed:
-        raise HTTPException(status_code=403, detail="Not permitted")
+def install_default_pipeline(
+    drive_id: str,
+    current_user: User = Depends(require_institution_admin),
+    db: Session = Depends(get_db),
+):
+    drive = _drive_for_institution(drive_id, current_user, db)
     existing = db.query(DriveStage).filter(DriveStage.drive_id == drive.id).count()
     if not existing:
-        for i, (key, name, stage_type) in enumerate(DEFAULT_PIPELINE):
-            db.add(DriveStage(drive_id=drive.id, stage_key=key, name=name, order_index=i, stage_type=stage_type, is_terminal=(key == "joined")))
+        for index, (key, name, stage_type) in enumerate(DEFAULT_PIPELINE):
+            db.add(
+                DriveStage(
+                    drive_id=drive.id,
+                    stage_key=key,
+                    name=name,
+                    order_index=index,
+                    stage_type=stage_type,
+                    is_terminal=(key == "joined"),
+                )
+            )
+        record_audit(
+            db,
+            current_user,
+            "institution.drive.pipeline_default_installed",
+            organization_id=drive.organization_id,
+            entity_type="placement_drive",
+            entity_id=drive.id,
+        )
         db.commit()
-    return get_pipeline(drive_id, current_user, db)
-
+    return _pipeline_payload(drive.id, db)
 
 @router.post("/drives/{drive_id}/pipeline")
-def add_pipeline_stage(drive_id: str, data: DriveStageCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    drive = db.query(PlacementDrive).filter(PlacementDrive.id == drive_id).first()
-    if not drive:
-        raise HTTPException(status_code=404, detail="Drive not found")
-    allowed = (current_user.role == UserRole.institution_admin and current_user.organization_id == drive.organization_id) or (current_user.role == UserRole.recruiter and drive.job and drive.job.recruiter_id == _recruiter(current_user, db).id)
-    if not allowed:
-        raise HTTPException(status_code=403, detail="Not permitted")
+def add_pipeline_stage(
+    drive_id: str,
+    data: DriveStageCreate,
+    current_user: User = Depends(require_institution_admin),
+    db: Session = Depends(get_db),
+):
+    drive = _drive_for_institution(drive_id, current_user, db)
     key = (data.stage_key or data.name.lower().replace(" ", "-")).strip("-")
-    order = data.order_index if data.order_index is not None else db.query(DriveStage).filter(DriveStage.drive_id == drive.id).count()
-    stage = DriveStage(drive_id=drive.id, stage_key=key, name=data.name, order_index=order, stage_type=data.stage_type, is_terminal=data.is_terminal)
-    db.add(stage); db.commit(); db.refresh(stage)
-    return {"id": stage.id, "stage_key": stage.stage_key, "name": stage.name, "order_index": stage.order_index, "stage_type": stage.stage_type, "is_terminal": stage.is_terminal}
-
+    if not key:
+        raise HTTPException(status_code=422, detail="A valid pipeline stage key is required")
+    duplicate = db.query(DriveStage).filter(
+        DriveStage.drive_id == drive.id,
+        DriveStage.stage_key == key,
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=409, detail="Pipeline stage key already exists")
+    order_index = (
+        data.order_index
+        if data.order_index is not None
+        else db.query(DriveStage).filter(DriveStage.drive_id == drive.id).count()
+    )
+    stage = DriveStage(
+        drive_id=drive.id,
+        stage_key=key,
+        name=data.name,
+        order_index=order_index,
+        stage_type=data.stage_type,
+        is_terminal=data.is_terminal,
+    )
+    db.add(stage)
+    db.flush()
+    record_audit(
+        db,
+        current_user,
+        "institution.drive.pipeline_stage_added",
+        organization_id=drive.organization_id,
+        entity_type="drive_stage",
+        entity_id=stage.id,
+        metadata={"stage_key": key, "drive_id": drive.id},
+    )
+    db.commit()
+    db.refresh(stage)
+    return {
+        "id": stage.id,
+        "stage_key": stage.stage_key,
+        "name": stage.name,
+        "order_index": stage.order_index,
+        "stage_type": stage.stage_type,
+        "is_terminal": stage.is_terminal,
+    }
 
 @router.patch("/applications/{application_id}/pipeline/{stage_key}")
 def move_pipeline_stage(application_id: str, stage_key: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -511,58 +683,117 @@ def create_offer(data: OfferCreate, current_user: User = Depends(get_current_use
 
 
 @router.patch("/offers/{offer_id}")
-def update_offer(offer_id: str, data: OfferUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    offer = db.query(Offer).filter(Offer.id == offer_id).first()
-    if not offer: raise HTTPException(status_code=404, detail="Offer not found")
-    app = db.query(Application).filter(Application.id == offer.application_id).first()
-    if not app or not _application_access(current_user, app, db): raise HTTPException(status_code=403, detail="Not permitted")
-    if current_user.role == UserRole.student:
-        allowed = {"accepted", "declined"}
-        if data.status not in allowed: raise HTTPException(status_code=403, detail="Students may only accept or decline offers")
-        payload = {"status": data.status}
-    else:
-        payload = data.model_dump(exclude_unset=True)
-    for k,v in payload.items(): setattr(offer,k,v)
-    if app.student and offer.status in {"accepted", "joining_confirmed"}:
-        app.student.placement_status = "placed"
-    db.commit(); db.refresh(offer)
-    return _serialize_offer(offer, db)
-
-
-@router.post("/offers/{offer_id}/letter")
-async def upload_offer_letter(offer_id: str, file: UploadFile = File(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    offer = db.query(Offer).filter(Offer.id == offer_id).first()
-    if not offer: raise HTTPException(status_code=404, detail="Offer not found")
-    app = db.query(Application).filter(Application.id == offer.application_id).first()
-    if not app or not _application_access(current_user, app, db) or current_user.role == UserRole.student: raise HTTPException(status_code=403, detail="Not permitted")
-    raw = await file.read(8 * 1024 * 1024 + 1)
-    if len(raw) > 8 * 1024 * 1024: raise HTTPException(status_code=413, detail="Offer letter must be 8 MB or smaller")
-    validate_upload_signature(raw, ".pdf")
-    path = settings.upload_dir.parent / "offer-letters" / f"{offer.id}-{secrets.token_hex(8)}.pdf"
-    offer.offer_letter_path = save_file(
-        db, category="offer-letter", original_filename=safe_upload_filename(file.filename, "offer-letter.pdf"),
-        mime_type="application/pdf", data=raw, local_path=path
-    )
-    db.commit()
-    return {"uploaded": True, "filename": file.filename}
-
-
-@router.get("/offers/{offer_id}/letter")
-def download_offer_letter(offer_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Download an offer letter only when the caller can access the linked application."""
+def update_offer(
+    offer_id: str,
+    data: OfferUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     offer = db.query(Offer).filter(Offer.id == offer_id).first()
     if not offer:
         raise HTTPException(status_code=404, detail="Offer not found")
-    app = db.query(Application).filter(Application.id == offer.application_id).first()
-    if not app or not _application_access(current_user, app, db):
+    application = db.query(Application).filter(Application.id == offer.application_id).first()
+    if not application or not _application_access(current_user, application, db):
+        raise HTTPException(status_code=403, detail="Not permitted")
+
+    normalized_status = None
+    if data.status is not None:
+        normalized_status = data.status.strip().lower()
+        if not normalized_status or normalized_status not in VALID_OFFER_STATUSES:
+            raise HTTPException(status_code=422, detail="Unsupported offer status")
+
+    if current_user.role == UserRole.student:
+        if normalized_status not in STUDENT_OFFER_DECISIONS:
+            raise HTTPException(status_code=403, detail="Students may only accept or decline offers")
+        payload = {"status": normalized_status}
+    else:
+        if normalized_status in STUDENT_OFFER_DECISIONS:
+            raise HTTPException(status_code=403, detail="Only the student may accept or decline an offer")
+        payload = data.model_dump(exclude_unset=True)
+        if "status" in payload:
+            if normalized_status not in OPERATOR_OFFER_STATUSES:
+                raise HTTPException(status_code=422, detail="Unsupported offer status")
+            payload["status"] = normalized_status
+
+    for key, value in payload.items():
+        setattr(offer, key, value)
+    if application.student_id:
+        _recalculate_student_placement_status(application.student_id, db)
+    record_audit(
+        db,
+        current_user,
+        "offer.updated",
+        organization_id=application.student.organization_id if application.student else None,
+        entity_type="offer",
+        entity_id=offer.id,
+        metadata={"fields": sorted(payload)},
+    )
+    db.commit()
+    db.refresh(offer)
+    return _serialize_offer(offer, db)
+
+@router.post("/offers/{offer_id}/letter")
+async def upload_offer_letter(
+    offer_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    offer = db.query(Offer).filter(Offer.id == offer_id).first()
+    if not offer:
+        raise HTTPException(status_code=404, detail="Offer not found")
+    application = db.query(Application).filter(Application.id == offer.application_id).first()
+    if (
+        not application
+        or not _application_access(current_user, application, db)
+        or current_user.role == UserRole.student
+    ):
+        raise HTTPException(status_code=403, detail="Not permitted")
+
+    raw = await file.read(8 * 1024 * 1024 + 1)
+    if len(raw) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Offer letter must be 8 MB or smaller")
+    validate_upload_signature(raw, ".pdf")
+
+    previous = offer.offer_letter_path
+    path = settings.upload_dir.parent / "offer-letters" / f"{offer.id}-{secrets.token_hex(8)}.pdf"
+    replacement = save_file(
+        db,
+        category="offer-letter",
+        original_filename=safe_upload_filename(file.filename, "offer-letter.pdf"),
+        mime_type="application/pdf",
+        data=raw,
+        local_path=path,
+    )
+    offer.offer_letter_path = replacement
+    if previous and previous != replacement:
+        delete_file(db, previous)
+    db.commit()
+    return {"uploaded": True, "filename": safe_upload_filename(file.filename, "offer-letter.pdf")}
+
+@router.get("/offers/{offer_id}/letter")
+def download_offer_letter(
+    offer_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    offer = db.query(Offer).filter(Offer.id == offer_id).first()
+    if not offer:
+        raise HTTPException(status_code=404, detail="Offer not found")
+    application = db.query(Application).filter(Application.id == offer.application_id).first()
+    if not application or not _application_access(current_user, application, db):
         raise HTTPException(status_code=403, detail="Not permitted")
     if not offer.offer_letter_path:
         raise HTTPException(status_code=404, detail="Offer letter has not been uploaded")
-    safe_company = ''.join(ch for ch in (offer.company_name or 'company') if ch.isalnum() or ch in {'-', '_'})[:60] or 'company'
+    safe_company = "".join(
+        char for char in (offer.company_name or "company") if char.isalnum() or char in {"-", "_"}
+    )[:60] or "company"
     return file_download_response(
-        db, offer.offer_letter_path, media_type="application/pdf", filename=f"{safe_company}-offer-letter.pdf"
+        db,
+        offer.offer_letter_path,
+        media_type="application/pdf",
+        filename=f"{safe_company}-offer-letter.pdf",
     )
-
 
 # -----------------------------------------------------------------------------
 # Priority 10: Student document vault
@@ -821,23 +1052,85 @@ def _announcement_matches_student(a: Announcement, s: StudentProfile, db: Sessio
 
 
 @router.get("/announcements")
-def list_announcements(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_announcements(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     org = _org_for_user(current_user, db)
-    rows = db.query(Announcement).filter(Announcement.organization_id == org.id).order_by(Announcement.created_at.desc()).all()
-    if current_user.role == UserRole.student:
-        s = _student(current_user, db); rows = [a for a in rows if _announcement_matches_student(a, s, db)]
-    return [{"id":a.id,"title":a.title,"body":a.body,"audience_type":a.audience_type,"audience_value":a.audience_value,"priority":a.priority,"starts_at":a.starts_at.isoformat() if a.starts_at else None,"expires_at":a.expires_at.isoformat() if a.expires_at else None,"created_at":a.created_at.isoformat()} for a in rows]
+    rows = db.query(Announcement).filter(
+        Announcement.organization_id == org.id
+    ).order_by(Announcement.created_at.desc()).all()
+    now = _utc_naive_now()
 
+    if current_user.role == UserRole.student:
+        student = _student(current_user, db)
+        rows = [
+            row
+            for row in rows
+            if _announcement_active(row, now)
+            and _announcement_matches_student(row, student, db)
+        ]
+        created = False
+        for row in rows:
+            created = _ensure_announcement_notification(db, row, student) or created
+        if created:
+            db.commit()
+    return [_announcement_payload(row, now) for row in rows]
 
 @router.post("/announcements", status_code=status.HTTP_201_CREATED)
-def create_announcement(data: AnnouncementCreate, current_user: User = Depends(require_institution_admin), db: Session = Depends(get_db)):
-    org = _org_for_user(current_user, db); a = Announcement(organization_id=org.id, created_by_user_id=current_user.id, title=data.title, body=data.body, audience_type=data.audience_type, priority=data.priority, starts_at=data.starts_at, expires_at=data.expires_at); a.audience_value = data.audience_value; db.add(a); db.flush()
-    students = db.query(StudentProfile).filter(StudentProfile.organization_id == org.id).all()
-    for s in students:
-        if _announcement_matches_student(a, s, db): create_notification(db, s.user_id, data.title, data.body[:500], organization_id=org.id, category="announcement", priority=data.priority, link="announcements")
-    record_audit(db,current_user,"institution.announcement.created",organization_id=org.id,entity_type="announcement",entity_id=a.id,metadata={"audience":a.audience_type}); db.commit(); db.refresh(a)
-    return {"id":a.id,"title":a.title,"audience_type":a.audience_type,"notified_students":sum(1 for s in students if _announcement_matches_student(a,s,db))}
+def create_announcement(
+    data: AnnouncementCreate,
+    current_user: User = Depends(require_institution_admin),
+    db: Session = Depends(get_db),
+):
+    org = _org_for_user(current_user, db)
+    starts_at = _utc_naive(data.starts_at)
+    expires_at = _utc_naive(data.expires_at)
+    if starts_at is not None and expires_at is not None and expires_at <= starts_at:
+        raise HTTPException(status_code=422, detail="Announcement expiry must be after its start time")
 
+    row = Announcement(
+        organization_id=org.id,
+        created_by_user_id=current_user.id,
+        title=data.title,
+        body=data.body,
+        audience_type=data.audience_type,
+        priority=data.priority,
+        starts_at=starts_at,
+        expires_at=expires_at,
+    )
+    row.audience_value = data.audience_value
+    db.add(row)
+    db.flush()
+
+    students = db.query(StudentProfile).filter(StudentProfile.organization_id == org.id).all()
+    notified = 0
+    if _announcement_active(row):
+        for student in students:
+            if _announcement_matches_student(row, student, db):
+                notified += int(_ensure_announcement_notification(db, row, student))
+
+    record_audit(
+        db,
+        current_user,
+        "institution.announcement.created",
+        organization_id=org.id,
+        entity_type="announcement",
+        entity_id=row.id,
+        metadata={
+            "audience": row.audience_type,
+            "delivery_state": _announcement_state(row),
+        },
+    )
+    db.commit()
+    db.refresh(row)
+    return {
+        "id": row.id,
+        "title": row.title,
+        "audience_type": row.audience_type,
+        "delivery_state": _announcement_state(row),
+        "notified_students": notified,
+    }
 
 # -----------------------------------------------------------------------------
 # Priority 18: Recruiter communication hub
@@ -996,6 +1289,122 @@ def update_incident(incident_id:str,data:IncidentStatusUpdate,current_user:User=
     x.status=data.status;x.resolution_notes=data.resolution_notes;db.commit();return {"id":x.id,"status":x.status}
 
 
+_DANGEROUS_FORMULA_PREFIXES = ("=", "+", "-", "@")
+_LEADING_CONTROL_CHARS = ("\t", "\r", "\n")
+def spreadsheet_safe_cell(value: Any) -> Any:
+    """Neutralize spreadsheet formula execution while preserving non-string values.
+
+    CSV and XLSX consumers such as Excel may interpret attacker-controlled text beginning
+    with formula markers as executable formulas. Prefix risky strings with an apostrophe,
+    including values where spaces/control characters precede the formula marker.
+    """
+    if not isinstance(value, str) or not value:
+        return value
+    stripped = value.lstrip(" \t\r\n")
+    if value.startswith(_LEADING_CONTROL_CHARS) or stripped.startswith(_DANGEROUS_FORMULA_PREFIXES):
+        return "'" + value
+    return value
+def _safe_rows(rows: list[list[Any]]) -> list[list[Any]]:
+    return [[spreadsheet_safe_cell(cell) for cell in row] for row in rows]
+def _institution_report_rows(org_id: str, kind: str, db: Session) -> tuple[list[str], list[list[Any]]]:
+    """Return report rows whose company/job evidence actually belongs to this institution.
+
+    Public jobs are platform-wide. They belong in an institution participation report only
+    after one of that institution's students applies. Campus-targeted jobs are included even
+    before the first application. Other report kinds retain the established report builder.
+    """
+    if kind not in {"company-participation", "recruiter-activity"}:
+        return _report_rows(org_id, kind, db)
+
+    student_ids = [
+        row[0]
+        for row in db.query(StudentProfile.id).filter(StudentProfile.organization_id == org_id).all()
+    ]
+    applications = (
+        db.query(Application).filter(Application.student_id.in_(student_ids)).all()
+        if student_ids else []
+    )
+    applied_job_ids = {application.job_id for application in applications if application.job_id}
+
+    relevant_jobs = db.query(Job).filter(Job.target_organization_id == org_id).all()
+    relevant_job_ids = {job.id for job in relevant_jobs}
+    missing_applied_ids = applied_job_ids - relevant_job_ids
+    if missing_applied_ids:
+        relevant_jobs.extend(db.query(Job).filter(Job.id.in_(missing_applied_ids)).all())
+        relevant_job_ids.update(missing_applied_ids)
+
+    application_count_by_job: dict[str, int] = {}
+    for application in applications:
+        if application.job_id in relevant_job_ids:
+            application_count_by_job[application.job_id] = application_count_by_job.get(application.job_id, 0) + 1
+
+    if kind == "company-participation":
+        company: dict[str, dict[str, int]] = {}
+        for job in relevant_jobs:
+            name = job.recruiter.company_name if job.recruiter and job.recruiter.company_name else "Company"
+            bucket = company.setdefault(name, {"jobs": 0, "applications": 0, "offers": 0})
+            bucket["jobs"] += 1
+            bucket["applications"] += application_count_by_job.get(job.id, 0)
+
+        offers = (
+            db.query(Offer)
+            .join(Application, Offer.application_id == Application.id)
+            .filter(Application.student_id.in_(student_ids))
+            .all()
+            if student_ids else []
+        )
+        for offer in offers:
+            name = offer.company_name or "Company"
+            company.setdefault(name, {"jobs": 0, "applications": 0, "offers": 0})["offers"] += 1
+
+        headers = ["Company", "Jobs / drives", "Applications", "Offers"]
+        rows = [
+            [name, values["jobs"], values["applications"], values["offers"]]
+            for name, values in sorted(company.items(), key=lambda item: item[0].lower())
+        ]
+        return headers, rows
+
+    recruiter_ids = {
+        row[0]
+        for row in db.query(RecruiterProfile.id).filter(
+            RecruiterProfile.provisioned_by_organization_id == org_id
+        ).all()
+    }
+    recruiter_ids.update(job.recruiter_id for job in relevant_jobs if job.recruiter_id)
+    recruiters = (
+        db.query(RecruiterProfile).filter(RecruiterProfile.id.in_(recruiter_ids)).all()
+        if recruiter_ids else []
+    )
+    jobs_by_recruiter: dict[str, list[Job]] = {}
+    for job in relevant_jobs:
+        if job.recruiter_id:
+            jobs_by_recruiter.setdefault(job.recruiter_id, []).append(job)
+
+    headers = [
+        "Company",
+        "Recruiter",
+        "Verified",
+        "Jobs",
+        "Applications",
+        "Successful placements",
+        "Verification confidence",
+    ]
+    rows = []
+    for recruiter in sorted(recruiters, key=lambda item: (item.company_name or "").lower()):
+        recruiter_jobs = jobs_by_recruiter.get(recruiter.id, [])
+        app_count = sum(application_count_by_job.get(job.id, 0) for job in recruiter_jobs)
+        rows.append([
+            recruiter.company_name,
+            recruiter.full_name,
+            "Yes" if recruiter.is_verified else "No",
+            len(recruiter_jobs),
+            app_count,
+            recruiter.previous_successful_placements,
+            recruiter.company_verification_confidence,
+        ])
+    return headers, rows
+
+
 # -----------------------------------------------------------------------------
 # Priority 20: Institution reports (CSV/XLSX/PDF)
 # -----------------------------------------------------------------------------
@@ -1066,31 +1475,89 @@ def _report_rows(org_id: str, kind: str, db: Session) -> tuple[list[str], list[l
 
 
 @router.get("/reports/{kind}.{fmt}")
-def export_report(kind:str,fmt:str,current_user:User=Depends(require_institution_admin),db:Session=Depends(get_db)):
-    org=_org_for_user(current_user,db);headers,rows=_report_rows(org.id,kind,db);fmt=fmt.lower()
-    if fmt=="csv":
-        out=io.StringIO();w=csv.writer(out);w.writerow(headers);w.writerows(rows);return Response(out.getvalue(),media_type="text/csv",headers={"Content-Disposition":f'attachment; filename="{kind}.csv"'})
-    if fmt=="xlsx":
+def export_report(
+    kind: str,
+    fmt: str,
+    current_user: User = Depends(require_institution_admin),
+    db: Session = Depends(get_db),
+):
+    """Export institution-scoped reports with spreadsheet-formula neutralization."""
+    org = _org_for_user(current_user, db)
+    headers, rows = _institution_report_rows(org.id, kind, db)
+    fmt = fmt.lower()
+
+    if fmt == "csv":
+        out = io.StringIO(newline="")
+        writer = csv.writer(out)
+        writer.writerow(headers)
+        writer.writerows(_safe_rows(rows))
+        return Response(
+            out.getvalue(),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f'attachment; filename="{kind}.csv"',
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    if fmt == "xlsx":
         try:
             from openpyxl import Workbook
-        except Exception as exc: raise HTTPException(status_code=503,detail="XLSX export dependency unavailable") from exc
-        wb=Workbook();ws=wb.active;ws.title="PlaceAI Report";ws.append(headers)
-        for row in rows:ws.append(row)
-        b=io.BytesIO();wb.save(b);b.seek(0);return StreamingResponse(b,media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",headers={"Content-Disposition":f'attachment; filename="{kind}.xlsx"'})
-    if fmt=="pdf":
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="XLSX export dependency unavailable") from exc
+        workbook = Workbook()
+        worksheet = workbook.active
+        worksheet.title = "PlaceAI Report"
+        worksheet.append(headers)
+        for row in _safe_rows(rows):
+            worksheet.append(row)
+        output = io.BytesIO()
+        workbook.save(output)
+        output.seek(0)
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f'attachment; filename="{kind}.xlsx"',
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    if fmt == "pdf":
         try:
             from reportlab.lib.pagesizes import A4
             from reportlab.pdfgen import canvas
-        except Exception as exc: raise HTTPException(status_code=503,detail="PDF export dependency unavailable") from exc
-        b=io.BytesIO();c=canvas.Canvas(b,pagesize=A4);w,h=A4;c.setFont("Helvetica-Bold",14);c.drawString(36,h-40,f"{org.name} — {kind.replace('-', ' ').title()}");y=h-68;c.setFont("Helvetica",8)
-        c.drawString(36,y," | ".join(headers));y-=16
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="PDF export dependency unavailable") from exc
+        output = io.BytesIO()
+        pdf = canvas.Canvas(output, pagesize=A4)
+        _width, height = A4
+        pdf.setFont("Helvetica-Bold", 14)
+        pdf.drawString(36, height - 40, f"{org.name} — {kind.replace('-', ' ').title()}")
+        y = height - 68
+        pdf.setFont("Helvetica", 8)
+        pdf.drawString(36, y, " | ".join(headers))
+        y -= 16
         for row in rows:
-            line=" | ".join("" if x is None else str(x) for x in row)
-            c.drawString(36,y,line[:115]);y-=12
-            if y<40:c.showPage();y=h-40;c.setFont("Helvetica",8)
-        c.save();b.seek(0);return StreamingResponse(b,media_type="application/pdf",headers={"Content-Disposition":f'attachment; filename="{kind}.pdf"'})
-    raise HTTPException(status_code=400,detail="Format must be csv, xlsx or pdf")
+            line = " | ".join("" if cell is None else str(cell) for cell in row)
+            pdf.drawString(36, y, line[:115])
+            y -= 12
+            if y < 40:
+                pdf.showPage()
+                y = height - 40
+                pdf.setFont("Helvetica", 8)
+        pdf.save()
+        output.seek(0)
+        return StreamingResponse(
+            output,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{kind}.pdf"',
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
 
+    raise HTTPException(status_code=400, detail="Format must be csv, xlsx or pdf")
 
 # -----------------------------------------------------------------------------
 # Priority 21: Custom institution fields

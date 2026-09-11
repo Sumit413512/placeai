@@ -9,6 +9,11 @@ def test_canonical_router_ownership_has_no_bootstrap_shadow_filters():
     assert "_HARDENED_INSTITUTION_PATHS" not in source
     assert 'hardening = _import_router("hardening")' not in source
     assert not Path("app/routers/hardening.py").exists()
+    assert "_retired_enterprise_route" not in source
+    assert 'report_export_safe = _import_router("report_export_safe")' not in source
+    assert 'hardening2 = _import_router("hardening2")' not in source
+    assert not Path("app/routers/report_export_safe.py").exists()
+    assert not Path("app/routers/hardening2.py").exists()
 
 
 def test_canonical_routes_keep_hardened_and_compatibility_owners():
@@ -19,3 +24,29 @@ def test_canonical_routes_keep_hardened_and_compatibility_owners():
     assert schema["/ai/interview/questions"]["post"]["deprecated"] is True
     assert schema["/ai/interview/evaluate"]["post"]["deprecated"] is True
     assert "completed_interview_history" in schema["/ai/interviews"]["get"]["operationId"]
+
+
+def test_enterprise_paths_have_single_canonical_owner():
+    expected = [
+        ("/enterprise/announcements", "GET"),
+        ("/enterprise/announcements", "POST"),
+        ("/enterprise/drives/{drive_id}/pipeline/default", "POST"),
+        ("/enterprise/drives/{drive_id}/pipeline", "POST"),
+        ("/enterprise/offers/{offer_id}", "PATCH"),
+        ("/enterprise/company-verification/authorization-letter", "POST"),
+        ("/enterprise/offers/{offer_id}/letter", "POST"),
+        ("/enterprise/offers/{offer_id}/letter", "GET"),
+        ("/enterprise/reports/{kind}.{fmt}", "GET"),
+    ]
+    for path, method in expected:
+        matches = [
+            route
+            for route in app.routes
+            if getattr(route, "path", None) == path
+            and method in (getattr(route, "methods", set()) or set())
+        ]
+        assert len(matches) == 1, (path, method, [getattr(route, "name", None) for route in matches])
+
+    schema = app.openapi()["paths"]
+    assert "update_offer" in schema["/enterprise/offers/{offer_id}"]["patch"]["operationId"]
+    assert "export_report" in schema["/enterprise/reports/{kind}.{fmt}"]["get"]["operationId"]

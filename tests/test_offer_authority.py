@@ -4,7 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_offer_status_authority_is_explicit_in_backend() -> None:
-    source = (ROOT / "app/routers/hardening2.py").read_text(encoding="utf-8")
+    source = (ROOT / "app/routers/enterprise.py").read_text(encoding="utf-8")
     assert 'VALID_OFFER_STATUSES' in source
     assert 'STUDENT_OFFER_DECISIONS = {"accepted", "declined"}' in source
     assert 'OPERATOR_OFFER_STATUSES' in source
