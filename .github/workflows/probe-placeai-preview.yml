@@ -7,20 +7,33 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe health
+      - name: Mint GitHub OIDC token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            const token = await core.getIDToken();
+            core.setSecret(token);
+            core.setOutput('token', token);
+      - name: Probe health through Vercel trusted-source OIDC
+        env:
+          VERCEL_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: |
           URL='https://placeai-rxpp-git-fix-reset-26690e-skj1200519-gmailcoms-projects.vercel.app'
-          STATUS=$(curl -sS -o /tmp/health.txt -w '%{http_code}' "$URL/health" || true)
+          STATUS=$(curl -sS -L -o /tmp/health.txt -w '%{http_code}' "$URL/health" -H "x-vercel-trusted-oidc-idp-token: $VERCEL_OIDC_TOKEN" || true)
           echo "HEALTH_STATUS=$STATUS"
           cat /tmp/health.txt || true
       - name: Probe password reset transport with nonexistent account
+        env:
+          VERCEL_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: |
           URL='https://placeai-rxpp-git-fix-reset-26690e-skj1200519-gmailcoms-projects.vercel.app'
-          STATUS=$(curl -sS -o /tmp/reset.txt -w '%{http_code}' -X POST "$URL/auth/forgot-password" -H 'content-type: application/json' --data '{"email":"transport-probe-no-account@placeai.example.com"}' || true)
+          STATUS=$(curl -sS -L -o /tmp/reset.txt -w '%{http_code}' -X POST "$URL/auth/forgot-password" -H "x-vercel-trusted-oidc-idp-token: $VERCEL_OIDC_TOKEN" -H 'content-type: application/json' --data '{"email":"transport-probe-no-account@placeai.example.com"}' || true)
           echo "RESET_STATUS=$STATUS"
           cat /tmp/reset.txt || true
