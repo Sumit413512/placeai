@@ -1,0 +1,13 @@
+# PlaceAI production ownership
+* @Sumit413512
+
+# Security-sensitive surfaces
+/.github/workflows/ @Sumit413512
+/app/routers/auth.py @Sumit413512
+/app/routers/account_security.py @Sumit413512
+/app/routers/access.py @Sumit413512
+/app/config.py @Sumit413512
+/app/database.py @Sumit413512
+/app/storage.py @Sumit413512
+/render_proxy.py @Sumit413512
+/alembic/ @Sumit413512
