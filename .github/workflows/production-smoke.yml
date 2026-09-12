@@ -69,6 +69,7 @@ jobs:
           grep -qi '^x-frame-options: *DENY' /tmp/root.headers
           grep -qi '^referrer-policy: *strict-origin-when-cross-origin' /tmp/root.headers
           grep -q 'provisioning-password-fix.js' /tmp/root.html
+          grep -q 'ai-readiness.js' /tmp/root.html
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/favicon.ico" -o /tmp/favicon.svg
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/api-errors.js" -o /tmp/api-errors.js
           grep -q 'PASSWORD_POLICY_HELP' /tmp/api-errors.js
@@ -83,6 +84,29 @@ jobs:
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/integration-readiness.js" -o /tmp/integration-readiness.js
           grep -q 'Transactional email' /tmp/integration-readiness.js
           grep -q 'Brevo HTTPS API' /tmp/integration-readiness.js
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/ai-readiness.js" -o /tmp/ai-readiness.js
+          grep -q 'PlaceAIAIReadiness' /tmp/ai-readiness.js
+          grep -q 'AI_ACTIONS' /tmp/ai-readiness.js
+
+      - name: Verify AI readiness contract is safe
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/ai/status" -o /tmp/ai-status.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path('/tmp/ai-status.json').read_text(encoding='utf-8'))
+          expected = {'configured', 'sdk_available', 'model'}
+          if set(payload) != expected:
+              raise SystemExit(f'Unexpected AI status fields: {sorted(payload)}')
+          if not isinstance(payload.get('configured'), bool) or not isinstance(payload.get('sdk_available'), bool):
+              raise SystemExit(f'AI readiness booleans invalid: {payload}')
+          if not isinstance(payload.get('model'), str) or not payload['model'].strip():
+              raise SystemExit(f'AI model readiness value invalid: {payload}')
+          print('AI readiness contract is privacy-safe; configured=', payload['configured'])
+          PY
 
       - name: Verify unauthenticated auth boundaries
         shell: bash
