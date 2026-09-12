@@ -50,7 +50,8 @@ app = FastAPI(
     title=f"{settings.app_name} API",
     description="AI-assisted campus placement operating system for students, recruiters, and institution teams.",
     version="3.1.3",
-    docs_url="/docs" if not settings.is_production else "/api/docs",
+    docs_url=None if settings.is_production else "/docs",
+    openapi_url=None if settings.is_production else "/openapi.json",
     redoc_url=None,
     lifespan=lifespan,
 )
@@ -107,6 +108,8 @@ async def security_headers(request: Request, call_next):
         "img-src 'self' data: https:; "
         "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
     )
+    if path == "/health":
+        response.headers["Cache-Control"] = "no-store"
     if settings.is_production:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
@@ -226,7 +229,6 @@ def health_check():
             },
         )
 
-    target = safe_database_target(settings.database_url)
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
@@ -243,9 +245,10 @@ def health_check():
         "version": "3.1.3",
         "database": database,
         "configuration": "ok",
-        "database_target": target,
         "transactional_email": "ok" if transactional_email_configured(settings) else "not_configured",
     }
+    if not settings.is_production:
+        payload["database_target"] = safe_database_target(settings.database_url)
     if database_error:
         payload["database_error"] = database_error
     if database != "ok":
