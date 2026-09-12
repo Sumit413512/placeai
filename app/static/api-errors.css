@@ -7,6 +7,15 @@
   color: #b42318;
 }
 
+.placeai-password-policy {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  font-weight: 500;
+  color: #667085;
+}
+
 input[aria-invalid="true"],
 textarea[aria-invalid="true"],
 select[aria-invalid="true"] {
