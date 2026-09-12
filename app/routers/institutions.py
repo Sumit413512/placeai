@@ -155,10 +155,11 @@ def create_student(data: InstitutionStudentCreate, current_user: User = Depends(
     profile = StudentProfile(
         user_id=user.id, organization_id=org.id, college=org.name, full_name=data.full_name,
         degree=data.degree, branch=data.branch, graduation_year=data.graduation_year, cgpa=data.cgpa,
+        is_verified=True,
     )
     db.add(profile)
     db.flush()
-    record_audit(db, current_user, "institution.student.provisioned", organization_id=org.id, entity_type="student_profile", entity_id=profile.id, metadata={"email": user.email, "name": data.full_name})
+    record_audit(db, current_user, "institution.student.provisioned", organization_id=org.id, entity_type="student_profile", entity_id=profile.id, metadata={"email": user.email, "name": data.full_name, "verified": True})
     db.commit()
     db.refresh(user)
     return user
@@ -229,11 +230,12 @@ async def import_students_csv(file: UploadFile = File(...), current_user: User =
         profile = StudentProfile(
             user_id=user.id, organization_id=org.id, college=org.name, full_name=data.full_name,
             degree=data.degree, branch=data.branch, graduation_year=data.graduation_year, cgpa=data.cgpa,
+            is_verified=True,
         )
         db.add(profile)
         created += 1
 
-    record_audit(db, current_user, "institution.students.bulk_imported", organization_id=org.id, entity_type="student_profile", metadata={"created": created, "errors": len(errors), "filename": file.filename or "students.csv"})
+    record_audit(db, current_user, "institution.students.bulk_imported", organization_id=org.id, entity_type="student_profile", metadata={"created": created, "errors": len(errors), "filename": file.filename or "students.csv", "verified_at_creation": True})
     db.commit()
     return {"created": created, "failed": len(errors), "errors": errors[:100]}
 
