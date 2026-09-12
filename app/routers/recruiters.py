@@ -11,6 +11,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies import require_recruiter
 from app.models import Application, Job, RecruiterProfile, StudentProfile, User
+from app.placement_access import job_is_available
 from app.schemas import CompanyTrustAssessment, MockInterviewDetailOut, RecruiterAnalyticsOut, RecruiterProfileCreate, RecruiterProfileOut, SkillDistribution, StudentProfileOut
 from app.services import company_trust_assessment, student_out
 from app.storage import file_download_response
@@ -42,6 +43,16 @@ def _can_access_student(profile: RecruiterProfile, student: StudentProfile, db: 
     return student.id in _candidate_ids(profile, db)
 
 
+def _json_list(raw: str | None, *, nested_key: str | None = None) -> list:
+    try:
+        value = json.loads(raw or "[]")
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if nested_key and isinstance(value, dict):
+        value = value.get(nested_key, [])
+    return value if isinstance(value, list) else []
+
+
 @router.get("/dashboard")
 def dashboard(current_user: User = Depends(require_recruiter), db: Session = Depends(get_db)):
     profile = _profile(current_user, db)
@@ -49,7 +60,7 @@ def dashboard(current_user: User = Depends(require_recruiter), db: Session = Dep
     apps = [a for j in jobs for a in j.applications]
     return {
         "verified": profile.is_verified,
-        "active_jobs": sum(1 for j in jobs if j.is_active),
+        "active_jobs": sum(1 for j in jobs if job_is_available(j)),
         "applications": len(apps),
         "shortlisted": sum(1 for a in apps if a.status.value == "shortlisted"),
         "interviews": sum(1 for a in apps if a.status.value == "interview"),
@@ -148,16 +159,21 @@ def student_interviews(student_id: str, current_user: User = Depends(require_rec
     student = db.query(StudentProfile).filter(StudentProfile.id == student_id).first()
     if not student or not _can_access_student(profile, student, db):
         raise HTTPException(status_code=404, detail="Candidate not found or not available in your pipeline")
+
     results = []
     for iv in sorted(student.mock_interviews, key=lambda x: x.created_at, reverse=True):
+        # Candidate access does not grant one employer visibility into coaching sessions
+        # for another employer's role.
+        if not iv.job or iv.job.recruiter_id != profile.id:
+            continue
         results.append(MockInterviewDetailOut(
             id=iv.id,
             job_id=iv.job_id,
-            job_title=iv.job.title if iv.job else "Unknown role",
-            company_name=iv.job.recruiter.company_name if iv.job and iv.job.recruiter else None,
-            questions=json.loads(iv.questions_json or "[]"),
-            answers=json.loads(iv.answers_json or "[]"),
-            evaluations=json.loads(iv.evaluation_json or "[]"),
+            job_title=iv.job.title,
+            company_name=iv.job.recruiter.company_name if iv.job.recruiter else None,
+            questions=_json_list(iv.questions_json),
+            answers=_json_list(iv.answers_json),
+            evaluations=_json_list(iv.evaluation_json, nested_key="evaluations"),
             overall_score=iv.overall_score,
             overall_feedback=iv.overall_feedback,
             created_at=iv.created_at,
