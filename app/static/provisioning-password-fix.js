@@ -96,6 +96,87 @@
     root.querySelectorAll?.('input[name="temporary_password"]')?.forEach(decorateInput);
   }
 
+  function strongPasswordMessage(password) {
+    if (password.length < 12) return 'Password must be at least 12 characters long.';
+    if (password.length > 128) return 'Password must be 128 characters or fewer.';
+    if (!/[a-z]/.test(password)) return 'Password must contain a lowercase letter.';
+    if (!/[A-Z]/.test(password)) return 'Password must contain an uppercase letter.';
+    if (!/[0-9]/.test(password)) return 'Password must contain a number.';
+    if (!/[^A-Za-z0-9]/.test(password)) return 'Password must contain a symbol.';
+    return '';
+  }
+
+  function showRotationError(form, errorElement, error) {
+    const apiErrors = window.PlaceAIApiErrors;
+    if (apiErrors?.applyToForm) {
+      apiErrors.applyToForm(form, error, errorElement);
+      return;
+    }
+    errorElement.textContent = error?.message || 'Password could not be updated. Check the details and try again.';
+    errorElement.classList.add('is-visible');
+  }
+
+  async function submitPasswordRotation(form) {
+    if (form.dataset.placeaiRotationSubmitting === 'true') return;
+    const errorElement = form.querySelector('#password-rotation-error');
+    const button = form.querySelector('button[type="submit"]');
+    if (!(errorElement instanceof HTMLElement) || !(button instanceof HTMLButtonElement)) return;
+
+    errorElement.classList.remove('is-visible');
+    errorElement.textContent = '';
+    const body = Object.fromEntries(new FormData(form).entries());
+    const currentPassword = String(body.current_password || '');
+    const newPassword = String(body.new_password || '');
+    const confirmPassword = String(body.confirm_password || '');
+    const policyError = strongPasswordMessage(newPassword);
+    if (policyError) {
+      errorElement.textContent = policyError;
+      errorElement.classList.add('is-visible');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      errorElement.textContent = 'New password and confirmation do not match.';
+      errorElement.classList.add('is-visible');
+      return;
+    }
+    if (currentPassword === newPassword) {
+      errorElement.textContent = 'New password must be different from the current password.';
+      errorElement.classList.add('is-visible');
+      return;
+    }
+
+    form.dataset.placeaiRotationSubmitting = 'true';
+    button.disabled = true;
+    const forced = form.closest('#password-rotation-overlay')?.dataset.forced === 'true';
+    button.textContent = 'Updating password…';
+    try {
+      const response = await fetch('/auth/change-password', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const apiErrors = window.PlaceAIApiErrors;
+        throw apiErrors?.createError ? apiErrors.createError(data, response.status) : new Error(data.detail || 'Password update failed.');
+      }
+      form.reset();
+      location.reload();
+    } catch (error) {
+      // Deliberately preserve the entered values on an API failure. The legacy handler
+      // reset all fields before showing the server error, which made first-login retry
+      // loops unnecessarily destructive.
+      showRotationError(form, errorElement, error);
+      delete form.dataset.placeaiRotationSubmitting;
+      button.disabled = false;
+      button.textContent = forced ? 'Change password and continue' : 'Change password';
+    }
+  }
+
   function install() {
     enhance(document);
 
@@ -120,6 +201,17 @@
       queueMicrotask(() => {
         if (document.contains(input) && input.value !== credential) setPassword(input, credential);
       });
+    }, true);
+
+    // Intercept the dynamically-created password-rotation form before the legacy
+    // target-level submit listener. This keeps credentials intact on validation/API
+    // failure while retaining the same backend contract and successful reload path.
+    document.addEventListener('submit', event => {
+      const form = event.target instanceof HTMLFormElement ? event.target : null;
+      if (!form || form.id !== 'password-rotation-form') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      submitPasswordRotation(form);
     }, true);
   }
 
