@@ -68,6 +68,7 @@ jobs:
           grep -qi '^x-content-type-options: *nosniff' /tmp/root.headers
           grep -qi '^x-frame-options: *DENY' /tmp/root.headers
           grep -qi '^referrer-policy: *strict-origin-when-cross-origin' /tmp/root.headers
+          grep -q 'provisioning-password-fix.js' /tmp/root.html
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/favicon.ico" -o /tmp/favicon.svg
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/api-errors.js" -o /tmp/api-errors.js
           grep -q 'PASSWORD_POLICY_HELP' /tmp/api-errors.js
@@ -75,6 +76,10 @@ jobs:
           grep -q "'admin-form'" /tmp/api-errors.js
           grep -q "'institution-student-form'" /tmp/api-errors.js
           grep -q "'institution-recruiter-form'" /tmp/api-errors.js
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/provisioning-password-fix.js" -o /tmp/provisioning-password-fix.js
+          grep -q 'AUTO_TEMP_PASSWORD_FIX_V1' /tmp/provisioning-password-fix.js
+          grep -q 'secureTemporaryPassword' /tmp/provisioning-password-fix.js
+          grep -q 'data-temp-password-regenerate' /tmp/provisioning-password-fix.js
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/integration-readiness.js" -o /tmp/integration-readiness.js
           grep -q 'Transactional email' /tmp/integration-readiness.js
           grep -q 'Brevo HTTPS API' /tmp/integration-readiness.js
