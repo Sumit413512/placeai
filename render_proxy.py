@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 UPSTREAM_BASE = os.getenv("UPSTREAM_BASE", "https://placeai-rxpp.vercel.app").rstrip("/")
-ASSET_VERSION = os.getenv("ASSET_VERSION", "20260912-5")
+ASSET_VERSION = os.getenv("ASSET_VERSION", "20260912-6")
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "app" / "static"
 TEMPLATE_DIR = ROOT / "app" / "templates"
@@ -30,6 +30,7 @@ ASSET_INJECTION = (
     f'<script src="/static/account-security.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/provisioning-password-fix.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/integration-readiness.js?v={ASSET_VERSION}" defer></script>\n'
+    f'<script src="/static/ai-readiness.js?v={ASSET_VERSION}" defer></script>\n'
 )
 
 HOP_BY_HOP_HEADERS = {
