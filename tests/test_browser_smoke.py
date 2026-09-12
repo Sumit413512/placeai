@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -118,4 +119,62 @@ def test_password_recovery_token_survives_reload_and_enforces_rules(browser) -> 
     page.locator("#password-recovery-confirm").fill(strong)
     assert submit.is_enabled()
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+    page.close()
+
+
+def test_generated_temporary_password_survives_submit_capture_race(browser) -> None:
+    page = browser.new_page()
+    page.goto(BASE_URL, wait_until="domcontentloaded")
+    page.add_script_tag(url=f"{BASE_URL}/static/provisioning-password-fix.js")
+    page.evaluate(
+        """
+        () => {
+          const host = document.createElement('div');
+          host.innerHTML = '<form id="admin-form"><label>Temporary password<input name="temporary_password" type="password" minlength="12" required></label><button type="submit">Create</button></form>';
+          document.body.appendChild(host);
+        }
+        """
+    )
+    field = page.locator('#admin-form input[name="temporary_password"]')
+    field.wait_for(state="attached")
+    page.wait_for_function("document.querySelector('#admin-form input[name=\"temporary_password\"]')?.dataset.placeaiAutoTempPassword === '1'")
+    password = field.input_value()
+    assert 12 <= len(password) <= 128
+    assert re.search(r"[a-z]", password)
+    assert re.search(r"[A-Z]", password)
+    assert re.search(r"[0-9]", password)
+    assert re.search(r"[^A-Za-z0-9]", password)
+    assert field.is_editable() is False
+
+    page.evaluate(
+        """
+        () => document.querySelector('#admin-form').dispatchEvent(
+          new SubmitEvent('submit', {bubbles: true, cancelable: true})
+        )
+        """
+    )
+    page.wait_for_timeout(50)
+    assert field.input_value() == password
+    page.close()
+
+
+def test_unconfigured_ai_is_disabled_in_workspace_controls(browser) -> None:
+    page = browser.new_page()
+    page.goto(BASE_URL, wait_until="domcontentloaded")
+    page.add_script_tag(url=f"{BASE_URL}/static/ai-readiness.js")
+    page.evaluate(
+        """
+        () => {
+          const host = document.createElement('div');
+          host.innerHTML = '<button data-action="parse-resume">Parse resume</button><form id="assistant-form"><textarea name="message"></textarea><button type="submit">Ask</button></form>';
+          document.body.appendChild(host);
+        }
+        """
+    )
+    page.wait_for_function("window.PlaceAIAIReadiness?.snapshot().checked === true")
+    snapshot = page.evaluate("window.PlaceAIAIReadiness.snapshot()")
+    assert snapshot["ready"] is False
+    assert page.locator('[data-action="parse-resume"]').is_disabled()
+    assert page.locator('#assistant-form button[type="submit"]').is_disabled()
+    assert page.locator('#assistant-form .placeai-ai-unavailable-note').count() == 1
     page.close()
