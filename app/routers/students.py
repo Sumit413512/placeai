@@ -26,6 +26,10 @@ from app.storage import delete_file, file_download_response, save_file, safe_upl
 settings = get_settings()
 router = APIRouter(prefix="/students", tags=["Students"])
 
+# Kept for backward compatibility with the established regression-test/import contract.
+# Runtime logic remains centralized in app.placement_access.
+_deadline_has_passed = deadline_has_passed
+
 
 def get_or_create_profile(current_user: User, db: Session) -> StudentProfile:
     profile = db.query(StudentProfile).filter(StudentProfile.user_id == current_user.id).first()
