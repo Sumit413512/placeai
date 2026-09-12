@@ -186,6 +186,7 @@ def _remove_replaced_routes(module, replacements: set[tuple[str, str]]) -> None:
 
 auth = _import_router("auth")
 account_security = _import_router("account_security")
+account_security_secure = _import_router("account_security_secure")
 access = _import_router("access")
 students = _import_router("students")
 recruiters = _import_router("recruiters")
@@ -200,6 +201,12 @@ platform = _import_router("platform")
 enterprise = _import_router("enterprise")
 enterprise_secure = _import_router("enterprise_secure")
 
+_remove_replaced_routes(
+    account_security,
+    {
+        ("/auth/change-password", "POST"),
+    },
+)
 _remove_replaced_routes(
     jobs,
     {
@@ -236,6 +243,7 @@ _remove_replaced_routes(
 for module in (
     auth,
     account_security,
+    account_security_secure,
     access,
     students,
     recruiters,
