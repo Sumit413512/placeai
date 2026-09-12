@@ -3,9 +3,17 @@
   "regions": ["sin1"],
   "git": {
     "deploymentEnabled": {
-      "**": false
+      "**": false,
+      "main": true
     }
   },
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "https://placeai-recovery.onrender.com",
+      "permanent": false
+    }
+  ],
   "functions": {
     "app/app.py": {
       "includeFiles": "{app/templates/**,app/static/**}",
