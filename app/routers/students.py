@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -18,6 +19,13 @@ from app.storage import delete_file, file_download_response, save_file, safe_upl
 
 settings = get_settings()
 router = APIRouter(prefix="/students", tags=["Students"])
+
+
+def _deadline_has_passed(value: datetime | None) -> bool:
+    if value is None:
+        return False
+    deadline = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    return deadline <= datetime.now(timezone.utc)
 
 
 def get_or_create_profile(current_user: User, db: Session) -> StudentProfile:
@@ -134,15 +142,18 @@ def download_my_resume(current_user: User = Depends(require_student), db: Sessio
 
 def _visible_jobs_for(profile: StudentProfile, db: Session):
     jobs = db.query(Job).filter(Job.is_active.is_(True), Job.approval_status == ApprovalStatus.approved).all()
-    if not profile.organization_id:
-        return [j for j in jobs if j.visibility == "public"]
+    jobs = [job for job in jobs if not _deadline_has_passed(job.deadline)]
+    if not profile.organization_id or not profile.is_verified:
+        return [job for job in jobs if job.visibility == "public"]
     campus_job_ids = {
-        d.job_id for d in db.query(PlacementDrive).filter(
+        drive.job_id
+        for drive in db.query(PlacementDrive).filter(
             PlacementDrive.organization_id == profile.organization_id,
-            PlacementDrive.status.in_([DriveStatus.open, DriveStatus.draft]),
+            PlacementDrive.status == DriveStatus.open,
         ).all()
+        if not _deadline_has_passed(drive.registration_deadline)
     }
-    return [j for j in jobs if j.visibility == "public" or j.id in campus_job_ids]
+    return [job for job in jobs if job.visibility == "public" or job.id in campus_job_ids]
 
 
 @router.get("/jobs", response_model=List[JobOut])
@@ -169,7 +180,7 @@ def browse_jobs(search: Optional[str] = Query(None), skills: Optional[str] = Que
 @router.get("/drives", response_model=List[PlacementDriveOut])
 def my_placement_drives(current_user: User = Depends(require_student), db: Session = Depends(get_db)):
     profile = get_or_create_profile(current_user, db)
-    if not profile.organization_id:
+    if not profile.organization_id or not profile.is_verified:
         return []
     drives = db.query(PlacementDrive).filter(PlacementDrive.organization_id == profile.organization_id, PlacementDrive.status == DriveStatus.open).order_by(PlacementDrive.created_at.desc()).all()
     return [drive_out(d, db) for d in drives]
@@ -178,22 +189,49 @@ def my_placement_drives(current_user: User = Depends(require_student), db: Sessi
 @router.get("/drives/{drive_id}/eligibility")
 def drive_eligibility(drive_id: str, current_user: User = Depends(require_student), db: Session = Depends(get_db)):
     profile = get_or_create_profile(current_user, db)
-    drive = db.query(PlacementDrive).filter(PlacementDrive.id == drive_id, PlacementDrive.organization_id == profile.organization_id).first()
+    if not profile.is_verified:
+        raise HTTPException(status_code=403, detail="Institution verification is required for campus placement drives")
+    drive = db.query(PlacementDrive).filter(
+        PlacementDrive.id == drive_id,
+        PlacementDrive.organization_id == profile.organization_id,
+        PlacementDrive.status == DriveStatus.open,
+    ).first()
     if not drive:
         raise HTTPException(status_code=404, detail="Placement drive not found")
-    return evaluate_drive_eligibility(profile, drive, db)
+    result = evaluate_drive_eligibility(profile, drive, db)
+    if _deadline_has_passed(drive.registration_deadline):
+        result["eligible"] = False
+        result["checks"].append({
+            "key": "registration_deadline",
+            "label": "Registration deadline",
+            "passed": False,
+            "actual": datetime.now(timezone.utc).isoformat(),
+            "required": drive.registration_deadline.isoformat() if drive.registration_deadline else None,
+            "reason": "Registration deadline has passed",
+        })
+        result["reasons"].append("Registration deadline has passed")
+        result["summary"] = "Not eligible because: Registration deadline has passed"
+    return result
 
 
 @router.post("/jobs/{job_id}/apply", response_model=ApplicationOut, status_code=status.HTTP_201_CREATED)
 def apply_to_job(job_id: str, data: ApplicationCreate, current_user: User = Depends(require_student), db: Session = Depends(get_db)):
     profile = get_or_create_profile(current_user, db)
     job = db.query(Job).filter(Job.id == job_id, Job.is_active.is_(True), Job.approval_status == ApprovalStatus.approved).first()
-    if not job or job not in _visible_jobs_for(profile, db):
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found or no longer available")
+    if _deadline_has_passed(job.deadline):
+        raise HTTPException(status_code=400, detail="Application deadline has passed")
+    if job.visibility == "campus" and not profile.is_verified:
+        raise HTTPException(status_code=403, detail="Institution verification is required before applying to campus opportunities")
+    if job not in _visible_jobs_for(profile, db):
         raise HTTPException(status_code=404, detail="Job not found or no longer available")
     drive = db.query(PlacementDrive).filter(PlacementDrive.job_id == job.id, PlacementDrive.organization_id == profile.organization_id, PlacementDrive.status == DriveStatus.open).first()
     if job.visibility == "campus":
         if not drive:
             raise HTTPException(status_code=403, detail="This campus opportunity is not available to your institution")
+        if _deadline_has_passed(drive.registration_deadline):
+            raise HTTPException(status_code=400, detail="Placement drive registration deadline has passed")
         eligibility = evaluate_drive_eligibility(profile, drive, db)
         if not eligibility["eligible"]:
             raise HTTPException(status_code=403, detail=eligibility["summary"])
@@ -205,7 +243,6 @@ def apply_to_job(job_id: str, data: ApplicationCreate, current_user: User = Depe
         raise HTTPException(status_code=400, detail="You have already applied to this job")
     application = Application(student_id=profile.id, job_id=job_id, drive_id=drive.id if drive else None, pipeline_stage_key="registration", cover_note=data.cover_note)
     db.add(application)
-    # Notify the student, recruiter and linked placement team.
     create_notification(db, current_user.id, "Application submitted", f"Your application for {job.title} was submitted successfully.", organization_id=profile.organization_id, category="application", link="applications")
     if job.recruiter and job.recruiter.user_id:
         create_notification(db, job.recruiter.user_id, "New candidate application", f"{profile.full_name or current_user.username} applied for {job.title}.", organization_id=profile.organization_id, category="applicants", link="jobs")
