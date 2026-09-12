@@ -12,6 +12,7 @@ from app.ai_rate_limit import student_ai_guard
 from app.database import get_db
 from app.dependencies import require_student
 from app.models import ApprovalStatus, Job, MockInterview, StudentProfile, User
+from app.placement_access import job_is_visible_to_student
 from app.routers.ai import PROMPT_GUARDRAIL, call_gemini, extract_json_from_response, get_gemini_client
 
 router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])
@@ -63,13 +64,9 @@ def _accessible_job(profile: StudentProfile, job_id: str, db: Session) -> Job:
         Job.is_active.is_(True),
         Job.approval_status == ApprovalStatus.approved,
     ).first()
-    if not job:
+    if not job or not job_is_visible_to_student(profile, job, db):
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.visibility == "public":
-        return job
-    if profile.organization_id and job.target_organization_id == profile.organization_id:
-        return job
-    raise HTTPException(status_code=404, detail="Job not found")
+    return job
 
 
 def _issued_questions(row: MockInterview) -> list[dict[str, Any]]:
@@ -105,10 +102,7 @@ def mock_interview_jobs(
 ):
     profile = _profile(current_user, db)
     jobs = db.query(Job).filter(Job.is_active.is_(True), Job.approval_status == ApprovalStatus.approved).all()
-    visible = [
-        job for job in jobs
-        if job.visibility == "public" or (profile.organization_id and job.target_organization_id == profile.organization_id)
-    ]
+    visible = [job for job in jobs if job_is_visible_to_student(profile, job, db)]
     return [
         {
             "id": job.id,
@@ -176,9 +170,6 @@ Desired roles: {json.dumps(profile.desired_roles)}
     if len(normalized) < 3:
         raise HTTPException(status_code=502, detail="AI service returned an incomplete interview set")
 
-    # Persist the server-issued question set before it reaches the browser. Evaluation
-    # is later bound to this student-owned row so clients cannot substitute easier
-    # questions and save an artificial coaching score.
     interview = MockInterview(
         student_id=profile.id,
         job_id=job.id,

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,20 +11,24 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import require_student
-from app.models import Application, ApprovalStatus, DriveStatus, Job, PlacementDrive, ProfileChangeRequest, RecruiterProfile, Resume, StudentProfile, User, UserRole
+from app.models import Application, ApprovalStatus, DriveStatus, Job, PlacementDrive, ProfileChangeRequest, Resume, StudentProfile, User, UserRole
+from app.placement_access import (
+    available_drive_for_job,
+    available_drives_for_student,
+    deadline_has_passed,
+    job_is_available,
+    job_is_visible_to_student,
+)
 from app.schemas import ApplicationCreate, ApplicationOut, JobOut, PlacementDriveOut, ResumeOut, StudentProfileCreate, StudentProfileOut
-from app.services import application_out, create_notification, drive_out, evaluate_drive_eligibility, evaluate_placement_policies, is_student_eligible_for_drive, job_out, student_out
+from app.services import application_out, create_notification, drive_out, evaluate_drive_eligibility, evaluate_placement_policies, job_out, student_out
 from app.storage import delete_file, file_download_response, save_file, safe_upload_filename, validate_upload_signature
 
 settings = get_settings()
 router = APIRouter(prefix="/students", tags=["Students"])
 
-
-def _deadline_has_passed(value: datetime | None) -> bool:
-    if value is None:
-        return False
-    deadline = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
-    return deadline <= datetime.now(timezone.utc)
+# Kept for backward compatibility with the established regression-test/import contract.
+# Runtime logic remains centralized in app.placement_access.
+_deadline_has_passed = deadline_has_passed
 
 
 def get_or_create_profile(current_user: User, db: Session) -> StudentProfile:
@@ -140,20 +143,9 @@ def download_my_resume(current_user: User = Depends(require_student), db: Sessio
     return file_download_response(db, profile.resume.filepath, media_type="application/pdf", filename=profile.resume.original_filename)
 
 
-def _visible_jobs_for(profile: StudentProfile, db: Session):
+def _visible_jobs_for(profile: StudentProfile, db: Session) -> list[Job]:
     jobs = db.query(Job).filter(Job.is_active.is_(True), Job.approval_status == ApprovalStatus.approved).all()
-    jobs = [job for job in jobs if not _deadline_has_passed(job.deadline)]
-    if not profile.organization_id or not profile.is_verified:
-        return [job for job in jobs if job.visibility == "public"]
-    campus_job_ids = {
-        drive.job_id
-        for drive in db.query(PlacementDrive).filter(
-            PlacementDrive.organization_id == profile.organization_id,
-            PlacementDrive.status == DriveStatus.open,
-        ).all()
-        if not _deadline_has_passed(drive.registration_deadline)
-    }
-    return [job for job in jobs if job.visibility == "public" or job.id in campus_job_ids]
+    return [job for job in jobs if job_is_visible_to_student(profile, job, db)]
 
 
 @router.get("/jobs", response_model=List[JobOut])
@@ -180,10 +172,7 @@ def browse_jobs(search: Optional[str] = Query(None), skills: Optional[str] = Que
 @router.get("/drives", response_model=List[PlacementDriveOut])
 def my_placement_drives(current_user: User = Depends(require_student), db: Session = Depends(get_db)):
     profile = get_or_create_profile(current_user, db)
-    if not profile.organization_id or not profile.is_verified:
-        return []
-    drives = db.query(PlacementDrive).filter(PlacementDrive.organization_id == profile.organization_id, PlacementDrive.status == DriveStatus.open).order_by(PlacementDrive.created_at.desc()).all()
-    return [drive_out(d, db) for d in drives]
+    return [drive_out(drive, db) for drive in available_drives_for_student(profile, db)]
 
 
 @router.get("/drives/{drive_id}/eligibility")
@@ -196,21 +185,30 @@ def drive_eligibility(drive_id: str, current_user: User = Depends(require_studen
         PlacementDrive.organization_id == profile.organization_id,
         PlacementDrive.status == DriveStatus.open,
     ).first()
-    if not drive:
+    if not drive or not drive.job or drive.job.visibility != "campus" or drive.job.target_organization_id != profile.organization_id:
         raise HTTPException(status_code=404, detail="Placement drive not found")
+
     result = evaluate_drive_eligibility(profile, drive, db)
-    if _deadline_has_passed(drive.registration_deadline):
+    reasons: list[tuple[str, str, str]] = []
+    if not job_is_available(drive.job):
+        reasons.append(("job_availability", "Job availability", "The campus job is closed, expired, inactive, or awaiting approval"))
+    if deadline_has_passed(drive.registration_deadline):
+        reasons.append(("registration_deadline", "Registration deadline", "Registration deadline has passed"))
+
+    for key, label, reason in reasons:
         result["eligible"] = False
         result["checks"].append({
-            "key": "registration_deadline",
-            "label": "Registration deadline",
+            "key": key,
+            "label": label,
             "passed": False,
             "actual": datetime.now(timezone.utc).isoformat(),
-            "required": drive.registration_deadline.isoformat() if drive.registration_deadline else None,
-            "reason": "Registration deadline has passed",
+            "required": drive.registration_deadline.isoformat() if key == "registration_deadline" and drive.registration_deadline else None,
+            "reason": reason,
         })
-        result["reasons"].append("Registration deadline has passed")
-        result["summary"] = "Not eligible because: Registration deadline has passed"
+        if reason not in result["reasons"]:
+            result["reasons"].append(reason)
+    if reasons:
+        result["summary"] = "Not eligible because: " + "; ".join(result["reasons"])
     return result
 
 
@@ -220,18 +218,17 @@ def apply_to_job(job_id: str, data: ApplicationCreate, current_user: User = Depe
     job = db.query(Job).filter(Job.id == job_id, Job.is_active.is_(True), Job.approval_status == ApprovalStatus.approved).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found or no longer available")
-    if _deadline_has_passed(job.deadline):
+    if deadline_has_passed(job.deadline):
         raise HTTPException(status_code=400, detail="Application deadline has passed")
     if job.visibility == "campus" and not profile.is_verified:
         raise HTTPException(status_code=403, detail="Institution verification is required before applying to campus opportunities")
-    if job not in _visible_jobs_for(profile, db):
+    if not job_is_visible_to_student(profile, job, db):
         raise HTTPException(status_code=404, detail="Job not found or no longer available")
-    drive = db.query(PlacementDrive).filter(PlacementDrive.job_id == job.id, PlacementDrive.organization_id == profile.organization_id, PlacementDrive.status == DriveStatus.open).first()
+
+    drive = available_drive_for_job(profile, job, db) if job.visibility == "campus" else None
     if job.visibility == "campus":
         if not drive:
-            raise HTTPException(status_code=403, detail="This campus opportunity is not available to your institution")
-        if _deadline_has_passed(drive.registration_deadline):
-            raise HTTPException(status_code=400, detail="Placement drive registration deadline has passed")
+            raise HTTPException(status_code=403, detail="This campus opportunity is not currently available to your institution")
         eligibility = evaluate_drive_eligibility(profile, drive, db)
         if not eligibility["eligible"]:
             raise HTTPException(status_code=403, detail=eligibility["summary"])

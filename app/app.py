@@ -5,12 +5,12 @@ import importlib
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import DataError, IntegrityError, SQLAlchemyError
 
 from app.config import get_settings
 from app.database import (
@@ -25,6 +25,7 @@ from app.email_delivery import transactional_email_configured
 logger = logging.getLogger("placeai")
 settings = get_settings()
 runtime_readiness_errors = settings.configuration_error_codes()
+_router_import_failures: dict[str, str] = {}
 if engine_initialization_error_code and engine_initialization_error_code not in runtime_readiness_errors:
     runtime_readiness_errors.append(engine_initialization_error_code)
 
@@ -108,11 +109,30 @@ async def security_headers(request: Request, call_next):
         "img-src 'self' data: https:; "
         "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
     )
-    if path == "/health":
+    if path == "/health" or path.startswith("/auth/"):
         response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
     if settings.is_production:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
+
+
+@app.exception_handler(DataError)
+async def database_data_error_handler(request: Request, exc: DataError):
+    logger.warning("Database rejected invalid input on %s", request.url.path)
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "One or more input values are invalid or too large.", "code": "INVALID_INPUT"},
+    )
+
+
+@app.exception_handler(IntegrityError)
+async def database_integrity_error_handler(request: Request, exc: IntegrityError):
+    logger.warning("Database integrity conflict on %s", request.url.path)
+    return JSONResponse(
+        status_code=409,
+        content={"detail": "The requested change conflicts with existing data.", "code": "DATA_CONFLICT"},
+    )
 
 
 @app.exception_handler(SQLAlchemyError)
@@ -138,48 +158,99 @@ def _import_router(name: str):
     """Import one router without allowing an import-time failure to kill Vercel."""
     try:
         return importlib.import_module(f"app.routers.{name}")
-    except Exception:
+    except Exception as exc:
         code = f"ROUTER_IMPORT_{name.upper()}_FAILED"
+        _router_import_failures[name] = f"{type(exc).__name__}: {exc}"
         logger.exception("PlaceAI router bootstrap failed: %s", name)
         if code not in runtime_readiness_errors:
             runtime_readiness_errors.append(code)
         return None
 
 
-def _include_router(module) -> None:
-    if module is not None and getattr(module, "router", None) is not None:
+def _route_is_excluded(route, exclusions: set[tuple[str, str]]) -> bool:
+    path = getattr(route, "path", "")
+    methods = getattr(route, "methods", set()) or set()
+    return any((path, method) in exclusions for method in methods)
+
+
+def _include_router(module, exclusions: set[tuple[str, str]] | None = None) -> None:
+    """Include a router without mutating its canonical module-level route registry."""
+    if module is None or getattr(module, "router", None) is None:
+        return
+    if not exclusions:
         app.include_router(module.router)
+        return
+    filtered = APIRouter()
+    filtered.routes.extend(
+        route for route in module.router.routes if not _route_is_excluded(route, exclusions)
+    )
+    app.include_router(filtered)
 
 
 auth = _import_router("auth")
 account_security = _import_router("account_security")
+account_security_secure = _import_router("account_security_secure")
 access = _import_router("access")
 students = _import_router("students")
 recruiters = _import_router("recruiters")
 jobs = _import_router("jobs")
+jobs_secure = _import_router("jobs_secure")
 interview_compat = _import_router("interview_compat")
 ai = _import_router("ai")
 mock_interview = _import_router("mock_interview")
 institutions = _import_router("institutions")
+institution_secure = _import_router("institution_secure")
 platform = _import_router("platform")
 enterprise = _import_router("enterprise")
+enterprise_secure = _import_router("enterprise_secure")
 
+ACCOUNT_SECURITY_REPLACEMENTS = {
+    ("/auth/change-password", "POST"),
+}
+JOB_REPLACEMENTS = {
+    ("/jobs", "GET"),
+    ("/jobs/{job_id}", "GET"),
+}
+INSTITUTION_REPLACEMENTS = {
+    ("/institutions/dashboard", "GET"),
+    ("/institutions/jobs/{job_id}/approval", "PATCH"),
+    ("/institutions/drives", "POST"),
+    ("/institutions/drives/{drive_id}", "PUT"),
+    ("/institutions/applications", "GET"),
+}
+ENTERPRISE_REPLACEMENTS = {
+    ("/enterprise/drives", "GET"),
+    ("/enterprise/drives/{drive_id}/pipeline", "GET"),
+    ("/enterprise/drives/{drive_id}/eligibility", "GET"),
+    ("/enterprise/communications", "GET"),
+    ("/enterprise/attendance/sessions", "GET"),
+    ("/enterprise/attendance/check-in", "POST"),
+    ("/enterprise/search", "GET"),
+    ("/enterprise/calendar", "GET"),
+}
+ENTERPRISE_SECURE_EXCLUSIONS = {
+    # The canonical enterprise announcement reader already enforces organization,
+    # schedule and audience boundaries and intentionally allows institution-linked
+    # students to receive operational notices before verification is completed.
+    ("/enterprise/announcements", "GET"),
+}
 
-for module in (
-    auth,
-    account_security,
-    access,
-    students,
-    recruiters,
-    jobs,
-    interview_compat,
-    ai,
-    mock_interview,
-    institutions,
-    platform,
-    enterprise,
-):
-    _include_router(module)
+_include_router(auth)
+_include_router(account_security, ACCOUNT_SECURITY_REPLACEMENTS)
+_include_router(account_security_secure)
+_include_router(access)
+_include_router(students)
+_include_router(recruiters)
+_include_router(jobs, JOB_REPLACEMENTS)
+_include_router(jobs_secure)
+_include_router(interview_compat)
+_include_router(ai)
+_include_router(mock_interview)
+_include_router(institutions, INSTITUTION_REPLACEMENTS)
+_include_router(institution_secure)
+_include_router(platform)
+_include_router(enterprise, ENTERPRISE_REPLACEMENTS)
+_include_router(enterprise_secure, ENTERPRISE_SECURE_EXCLUSIONS)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
