@@ -31,6 +31,7 @@ ASSET_INJECTION = (
     f'<script src="/static/provisioning-password-fix.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/integration-readiness.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/ai-readiness.js?v={ASSET_VERSION}" defer></script>\n'
+    f'<script src="/static/legal-links.js?v={ASSET_VERSION}" defer></script>\n'
 )
 
 HOP_BY_HOP_HEADERS = {
