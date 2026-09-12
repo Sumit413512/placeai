@@ -38,11 +38,11 @@
     if (inFlight) return;
     const title = text(document.querySelector('#page-title'));
     const root = document.querySelector('#app-content');
-    if (title !== 'Integrations' || !root || root.dataset.placeaiIntegrationReconciled === '1') return;
+    if (title !== 'Integrations' || !root) return;
 
     const emailCard = [...root.querySelectorAll('.metric-card')]
       .find(card => ['Brevo SMTP', 'Transactional email'].includes(text(card.querySelector('small'))));
-    if (!emailCard) return;
+    if (!emailCard || emailCard.dataset.placeaiTransportAware === '1') return;
 
     inFlight = true;
     try {
@@ -99,7 +99,10 @@
         secondary.textContent += ' Historical failures are retained for audit and do not override a healthy latest delivery.';
       }
 
-      root.dataset.placeaiIntegrationReconciled = '1';
+      // Mark the rendered card rather than the persistent app-content container.
+      // app.js replaces this card on every navigation back to Integrations, so the
+      // new card is automatically reconciled again while mutation-loop protection remains.
+      emailCard.dataset.placeaiTransportAware = '1';
     } catch {
       // The existing screen remains available if the supplemental readiness check fails.
     } finally {
