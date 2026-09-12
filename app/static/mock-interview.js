@@ -41,6 +41,17 @@
     return data;
   }
 
+  async function aiReady() {
+    try {
+      const response = await fetch('/ai/status', {credentials:'include', cache:'no-store'});
+      if (!response.ok) return false;
+      const data = await response.json();
+      return Boolean(data.configured && data.sdk_available);
+    } catch {
+      return false;
+    }
+  }
+
   function setBusy(form, busy, label='Working…') {
     const button = form.querySelector('button[type="submit"]');
     if (!button) return;
@@ -148,6 +159,10 @@
       const me = await api('/auth/me');
       if (me.role !== 'student') {
         authState.textContent = 'Mock Interview Coach is available to student accounts only.';
+        return;
+      }
+      if (!(await aiReady())) {
+        authState.textContent = 'Mock Interview Coach is temporarily unavailable because the AI provider is not configured. Core PlaceAI placement workflows remain available.';
         return;
       }
       authState.classList.add('hidden');
