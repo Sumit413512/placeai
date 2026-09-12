@@ -159,6 +159,14 @@ def _ensure_fixture() -> dict[str, str]:
 
 
 def test_hardened_router_modules_bootstrap_cleanly_and_own_runtime_contracts_once() -> None:
+    # An earlier resilience test intentionally probes a missing router and verifies that
+    # the failure is contained. Remove only that synthetic probe before asserting the
+    # real startup state; production bootstrap never imports this name.
+    synthetic_name = "intentionally_missing"
+    synthetic_code = "ROUTER_IMPORT_INTENTIONALLY_MISSING_FAILED"
+    _router_import_failures.pop(synthetic_name, None)
+    runtime_readiness_errors[:] = [code for code in runtime_readiness_errors if code != synthetic_code]
+
     assert _router_import_failures == {}, _router_import_failures
     assert not [code for code in runtime_readiness_errors if code.startswith("ROUTER_IMPORT_")]
 
