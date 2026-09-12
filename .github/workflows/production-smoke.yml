@@ -20,6 +20,8 @@ jobs:
     timeout-minutes: 10
     env:
       BASE_URL: https://placeai-recovery.onrender.com
+      VERCEL_CANONICAL_URL: https://placeai-rxpp.vercel.app
+      VERCEL_MAIN_URL: https://placeai-rxpp-git-main-skj1200519-gmailcoms-projects.vercel.app
     steps:
       - name: Wait for Render production gateway
         shell: bash
@@ -75,6 +77,26 @@ jobs:
           grep -q "'admin-form'" /tmp/api-errors.js
           grep -q "'institution-student-form'" /tmp/api-errors.js
           grep -q "'institution-recruiter-form'" /tmp/api-errors.js
+
+      - name: Verify Vercel reset-link bridge preserves token query
+        shell: bash
+        run: |
+          set -euo pipefail
+          token='bridge-smoke-invalid-token-000000000000000000000000'
+          for origin in "$VERCEL_CANONICAL_URL" "$VERCEL_MAIN_URL"; do
+            effective=$(curl -L -sS --fail --connect-timeout 10 --max-time 30 \
+              -o /tmp/vercel-bridge.html -w '%{url_effective}' \
+              "$origin/?reset_token=$token")
+            grep -qi '<title>PlaceAI' /tmp/vercel-bridge.html
+            case "$effective" in
+              https://placeai-recovery.onrender.com/*) ;;
+              *) echo "Vercel reset bridge ended at unexpected URL: $effective" >&2; exit 1 ;;
+            esac
+            case "$effective" in
+              *"reset_token=$token"*) ;;
+              *) echo 'Vercel reset bridge did not preserve reset_token query.' >&2; exit 1 ;;
+            esac
+          done
 
       - name: Verify unauthenticated auth boundaries
         shell: bash
