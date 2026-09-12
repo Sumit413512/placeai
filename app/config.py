@@ -60,8 +60,6 @@ class Settings:
         elif self.vercel_environment == "development":
             default_environment = "development"
         else:
-            # VERCEL_ENV=production is the normal production path. Unknown/missing
-            # Vercel environment values deliberately fail closed as production.
             default_environment = "production"
         self.environment = os.getenv("ENVIRONMENT", default_environment).lower()
 
@@ -71,9 +69,6 @@ class Settings:
         else:
             default_database_url = "sqlite:///./placeai.db"
         database_url = os.getenv("DATABASE_URL", default_database_url).strip()
-        # Supabase and most Postgres dashboards emit postgresql:// URLs. PlaceAI
-        # ships psycopg3, so normalize the generic scheme to SQLAlchemy's psycopg3
-        # dialect instead of accidentally requiring the legacy psycopg2 driver.
         if database_url.startswith("postgresql://"):
             database_url = "postgresql+psycopg://" + database_url[len("postgresql://") :]
         self.database_url = database_url
@@ -83,9 +78,6 @@ class Settings:
         self.access_token_minutes = _bounded_env_int("ACCESS_TOKEN_MINUTES", 30, 1, 1440)
         self.refresh_token_days = _bounded_env_int("REFRESH_TOKEN_DAYS", 14, 1, 365)
 
-        # Vercel exposes generated/production hostnames as system environment
-        # variables. Use them only as non-secret URL defaults; explicit application
-        # configuration always wins.
         if self.running_on_vercel:
             if self.vercel_environment == "production":
                 vercel_host = (
@@ -102,8 +94,22 @@ class Settings:
             vercel_default_url = _https_url_from_vercel_host(vercel_host)
         else:
             vercel_default_url = ""
-        default_base_url = vercel_default_url or "http://localhost:8000"
-        self.base_url = os.getenv("BASE_URL", default_base_url).rstrip("/")
+
+        default_backend_url = vercel_default_url or "http://localhost:8000"
+        self.backend_base_url = os.getenv("BASE_URL", default_backend_url).rstrip("/")
+
+        # External links sent to users must point at the stable public frontend, not
+        # at a serverless backend hostname whose root may not serve the UI. Operators
+        # can override this with PUBLIC_APP_URL (preferred) or PASSWORD_RESET_BASE_URL.
+        if self.is_production and self.running_on_vercel:
+            default_public_app_url = "https://placeai-recovery.onrender.com"
+        else:
+            default_public_app_url = self.backend_base_url
+        self.base_url = (
+            _first_env("PUBLIC_APP_URL", "PASSWORD_RESET_BASE_URL")
+            or default_public_app_url
+        ).rstrip("/")
+
         default_allowed_origins = vercel_default_url or "http://localhost:8000"
         self.allowed_origins = [
             x.strip()
@@ -120,9 +126,6 @@ class Settings:
         self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
         self.dev_show_reset_token = os.getenv("DEV_SHOW_RESET_TOKEN", "false").lower() == "true"
 
-        # Transactional email supports the existing generic SMTP names plus common
-        # Brevo aliases. This lets production recover from earlier deployments that
-        # stored provider-specific variable names instead of SMTP_* names.
         brevo_smtp_user = _first_env("BREVO_SMTP_USER", "BREVO_SMTP_LOGIN")
         brevo_smtp_password = _first_env("BREVO_SMTP_PASSWORD", "BREVO_SMTP_KEY")
         self.smtp_user = _first_env("SMTP_USER") or brevo_smtp_user
@@ -170,7 +173,7 @@ class Settings:
             if self.auto_create_schema:
                 issues.append(("AUTO_CREATE_SCHEMA_ENABLED", "AUTO_CREATE_SCHEMA must be false in production; use reviewed migrations instead."))
             if not self.base_url.startswith("https://"):
-                issues.append(("BASE_URL_NOT_HTTPS", "BASE_URL must be an HTTPS URL in production."))
+                issues.append(("BASE_URL_NOT_HTTPS", "The public application URL must use HTTPS in production."))
             if "*" in self.allowed_origins:
                 issues.append(("CORS_WILDCARD_NOT_ALLOWED", "Wildcard CORS origins are not allowed with production credentials."))
             if any(not origin.startswith("https://") for origin in self.allowed_origins):
