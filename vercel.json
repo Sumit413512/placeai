@@ -3,7 +3,7 @@
   "regions": ["sin1"],
   "git": {
     "deploymentEnabled": {
-      "**": false
+      "**": true
     }
   },
   "redirects": [
