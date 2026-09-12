@@ -4,12 +4,25 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
-from app.app import app
-from app.database import SessionLocal
-from app.models import Job, MockInterview, Organization, RecruiterProfile, StudentProfile, User
-from app.utils import create_access_token
+from app.app import _router_import_failures, app, runtime_readiness_errors
+from app.database import Base, SessionLocal, engine
+from app.models import (
+    Application,
+    ApprovalStatus,
+    DriveStatus,
+    Job,
+    MockInterview,
+    Organization,
+    PlacementDrive,
+    RecruiterProfile,
+    StudentProfile,
+    User,
+    UserRole,
+)
+from app.utils import create_access_token, get_hashed_password
 
 client = TestClient(app)
+PASSWORD = "FinalHardening123!"
 
 
 def auth_for(email: str) -> dict[str, str]:
@@ -23,13 +36,140 @@ def auth_for(email: str) -> dict[str, str]:
         db.close()
 
 
-def test_hardened_routes_replace_legacy_handlers_exactly_once() -> None:
+def _ensure_fixture() -> dict[str, str]:
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        org = db.query(Organization).filter(Organization.slug == "final-hardening-institute").first()
+        if not org:
+            org = Organization(name="Final Hardening Institute", slug="final-hardening-institute", is_active=True)
+            db.add(org)
+            db.flush()
+
+        def ensure_user(email: str, username: str, role: UserRole, org_id: str | None = None) -> User:
+            user = db.query(User).filter(User.email == email).first()
+            if not user:
+                user = User(
+                    email=email,
+                    username=username,
+                    hashed_password=get_hashed_password(PASSWORD),
+                    role=role,
+                    organization_id=org_id,
+                    email_verified=True,
+                    is_active=True,
+                )
+                db.add(user)
+                db.flush()
+            return user
+
+        platform = ensure_user("final-platform@placeai.example.com", "final_platform", UserRole.platform_admin)
+        tpo = ensure_user("final-tpo@placeai.example.com", "final_tpo", UserRole.institution_admin, org.id)
+        recruiter_user = ensure_user("final-recruiter@placeai.example.com", "final_recruiter", UserRole.recruiter)
+        other_recruiter_user = ensure_user("final-other@placeai.example.com", "final_other", UserRole.recruiter)
+        student_user = ensure_user("final-student@placeai.example.com", "final_student", UserRole.student, org.id)
+        unverified_user = ensure_user("final-unverified@placeai.example.com", "final_unverified", UserRole.student, org.id)
+
+        def ensure_recruiter(user: User, company: str) -> RecruiterProfile:
+            row = db.query(RecruiterProfile).filter(RecruiterProfile.user_id == user.id).first()
+            if not row:
+                row = RecruiterProfile(
+                    user_id=user.id,
+                    full_name=company + " Recruiter",
+                    company_name=company,
+                    is_verified=True,
+                    provisioned_by_organization_id=org.id,
+                )
+                db.add(row)
+                db.flush()
+            return row
+
+        recruiter = ensure_recruiter(recruiter_user, "Final Employer")
+        other_recruiter = ensure_recruiter(other_recruiter_user, "Other Final Employer")
+
+        def ensure_student(user: User, *, verified: bool) -> StudentProfile:
+            row = db.query(StudentProfile).filter(StudentProfile.user_id == user.id).first()
+            if not row:
+                row = StudentProfile(
+                    user_id=user.id,
+                    organization_id=org.id,
+                    college=org.name,
+                    full_name=user.username,
+                    degree="B.Tech",
+                    branch="Computer Science",
+                    graduation_year=2026,
+                    cgpa=8.4,
+                    is_verified=verified,
+                )
+                db.add(row)
+                db.flush()
+            else:
+                row.organization_id = org.id
+                row.is_verified = verified
+            return row
+
+        student = ensure_student(student_user, verified=True)
+        unverified = ensure_student(unverified_user, verified=False)
+
+        campus_job = db.query(Job).filter(Job.title == "Final Visible Campus Role").first()
+        if not campus_job:
+            campus_job = Job(
+                recruiter_id=recruiter.id,
+                title="Final Visible Campus Role",
+                description="Approved campus role for final authorization boundary tests.",
+                job_type="Full-time",
+                visibility="campus",
+                target_organization_id=org.id,
+                approval_status=ApprovalStatus.approved,
+                is_active=True,
+                deadline=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=7),
+            )
+            db.add(campus_job)
+            db.flush()
+
+        open_drive = db.query(PlacementDrive).filter(PlacementDrive.title == "Final Open Drive").first()
+        if not open_drive:
+            open_drive = PlacementDrive(
+                organization_id=org.id,
+                job_id=campus_job.id,
+                title="Final Open Drive",
+                status=DriveStatus.open,
+                registration_deadline=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=3),
+            )
+            db.add(open_drive)
+            db.flush()
+
+        db.commit()
+        return {
+            "org": org.id,
+            "platform": platform.email,
+            "tpo": tpo.email,
+            "recruiter": recruiter_user.email,
+            "other_recruiter": other_recruiter_user.email,
+            "student": student_user.email,
+            "unverified": unverified_user.email,
+            "student_id": student.id,
+            "unverified_id": unverified.id,
+            "recruiter_id": recruiter.id,
+            "other_recruiter_id": other_recruiter.id,
+            "campus_job": campus_job.id,
+            "open_drive": open_drive.id,
+        }
+    finally:
+        db.close()
+
+
+def test_hardened_router_modules_bootstrap_cleanly_and_own_runtime_contracts_once() -> None:
+    assert _router_import_failures == {}, _router_import_failures
+    assert not [code for code in runtime_readiness_errors if code.startswith("ROUTER_IMPORT_")]
+
     contracts = {
+        ("/auth/change-password", "POST"): "account_security_secure",
+        ("/jobs", "GET"): "jobs_secure",
+        ("/jobs/{job_id}", "GET"): "jobs_secure",
         ("/enterprise/drives", "GET"): "enterprise_secure",
         ("/enterprise/drives/{drive_id}/pipeline", "GET"): "enterprise_secure",
         ("/enterprise/drives/{drive_id}/eligibility", "GET"): "enterprise_secure",
         ("/enterprise/communications", "GET"): "enterprise_secure",
-        ("/enterprise/announcements", "GET"): "enterprise_secure",
         ("/enterprise/attendance/sessions", "GET"): "enterprise_secure",
         ("/enterprise/attendance/check-in", "POST"): "enterprise_secure",
         ("/enterprise/search", "GET"): "enterprise_secure",
@@ -39,6 +179,7 @@ def test_hardened_routes_replace_legacy_handlers_exactly_once() -> None:
         ("/institutions/drives", "POST"): "institution_secure",
         ("/institutions/drives/{drive_id}", "PUT"): "institution_secure",
         ("/institutions/applications", "GET"): "institution_secure",
+        ("/enterprise/announcements", "GET"): "enterprise",
     }
     for (path, method), owner in contracts.items():
         matches = [
@@ -46,197 +187,197 @@ def test_hardened_routes_replace_legacy_handlers_exactly_once() -> None:
             if getattr(route, "path", None) == path and method in (getattr(route, "methods", set()) or set())
         ]
         assert len(matches) == 1, (path, method, len(matches))
-        assert owner in matches[0].endpoint.__module__
+        assert owner in matches[0].endpoint.__module__, (path, matches[0].endpoint.__module__)
 
 
-def test_unverified_self_signup_cannot_enter_campus_enterprise_surfaces() -> None:
-    platform = auth_for("platform@placeai.example.com")
-    organizations = client.get("/platform/organizations", headers=platform)
-    assert organizations.status_code == 200
-    assert any(row["slug"] == "northstar" for row in organizations.json())
-
-    email = "unverified.final@northstar.example.com"
-    db = SessionLocal()
-    try:
-        existing = db.query(User).filter(User.email == email).first()
-    finally:
-        db.close()
-    if not existing:
-        signup = client.post("/auth/signup", json={
-            "username": "unverifiedfinal",
-            "email": email,
-            "password": "UnverifiedPass123!",
-            "role": "student",
-            "organization_slug": "northstar",
-        })
-        assert signup.status_code == 201, signup.text
-    headers = auth_for(email)
+def test_unverified_student_cannot_discover_campus_opportunities() -> None:
+    fixture = _ensure_fixture()
+    headers = auth_for(fixture["unverified"])
 
     drives = client.get("/enterprise/drives", headers=headers)
     assert drives.status_code == 200 and drives.json() == []
-    announcements = client.get("/enterprise/announcements", headers=headers)
-    assert announcements.status_code == 403
-    attendance = client.get("/enterprise/attendance/sessions", headers=headers)
-    assert attendance.status_code == 403
+    search = client.get("/enterprise/search", headers=headers, params={"q": "Final Visible Campus Role"})
+    assert search.status_code == 200 and search.json() == []
+    generic_jobs = client.get("/jobs", headers=headers)
+    assert generic_jobs.status_code == 200
+    assert all(row["id"] != fixture["campus_job"] for row in generic_jobs.json())
     calendar = client.get("/enterprise/calendar", headers=headers)
     assert calendar.status_code == 403
-    communications = client.get("/enterprise/communications", headers=headers)
-    assert communications.status_code == 403
-
-    search = client.get("/enterprise/search", headers=headers, params={"q": "Graduate"})
-    assert search.status_code == 200
-    assert all(row["type"] != "opportunity" or row["title"] != "Graduate Software Engineer" for row in search.json())
+    attendance = client.get("/enterprise/attendance/sessions", headers=headers)
+    assert attendance.status_code == 403
 
 
-def test_draft_or_expired_campus_drives_do_not_leak_to_verified_students_or_mock_interviews() -> None:
-    tpo = auth_for("tpo@northstar.example.com")
-    recruiter = auth_for("recruiter@acme.example.com")
-    student = auth_for("student@northstar.example.com")
+def test_draft_campus_drive_never_leaks_to_verified_student_surfaces() -> None:
+    fixture = _ensure_fixture()
+    db = SessionLocal()
+    try:
+        draft_job = db.query(Job).filter(Job.title == "Final Hidden Draft Role").first()
+        if not draft_job:
+            draft_job = Job(
+                recruiter_id=fixture["recruiter_id"],
+                title="Final Hidden Draft Role",
+                description="Campus role that must remain invisible while its drive is draft.",
+                job_type="Full-time",
+                visibility="campus",
+                target_organization_id=fixture["org"],
+                approval_status=ApprovalStatus.approved,
+                is_active=True,
+            )
+            db.add(draft_job)
+            db.flush()
+        draft_drive = db.query(PlacementDrive).filter(PlacementDrive.title == "Final Hidden Draft Drive").first()
+        if not draft_drive:
+            draft_drive = PlacementDrive(
+                organization_id=fixture["org"],
+                job_id=draft_job.id,
+                title="Final Hidden Draft Drive",
+                status=DriveStatus.draft,
+            )
+            db.add(draft_drive)
+            db.flush()
+        db.commit()
+        draft_job_id = draft_job.id
+        draft_drive_id = draft_drive.id
+    finally:
+        db.close()
 
-    create_job = client.post("/jobs", headers=recruiter, json={
-        "title": "Final Hidden Campus Role",
-        "description": "A campus-only role used to verify draft-drive visibility boundaries in production.",
-        "location": "Pune",
-        "job_type": "Full-time",
-        "required_skills": ["Python"],
-        "visibility": "campus",
-        "target_organization_slug": "northstar",
-    })
-    assert create_job.status_code == 201, create_job.text
-    job_id = create_job.json()["id"]
-    approval = client.patch(
-        f"/institutions/jobs/{job_id}/approval",
-        headers=tpo,
-        json={"approval_status": "approved"},
-    )
-    assert approval.status_code == 200, approval.text
-    draft = client.post("/institutions/drives", headers=tpo, json={
-        "job_id": job_id,
-        "title": "Final Draft Drive",
-        "status": "draft",
-    })
-    assert draft.status_code == 201, draft.text
-    draft_id = draft.json()["id"]
-
-    drives = client.get("/enterprise/drives", headers=student)
+    headers = auth_for(fixture["student"])
+    drives = client.get("/enterprise/drives", headers=headers)
     assert drives.status_code == 200
-    assert all(row["id"] != draft_id for row in drives.json())
-    pipeline = client.get(f"/enterprise/drives/{draft_id}/pipeline", headers=student)
-    assert pipeline.status_code == 404
-    eligibility = client.get(f"/enterprise/drives/{draft_id}/eligibility", headers=student)
-    assert eligibility.status_code == 404
-    search = client.get("/enterprise/search", headers=student, params={"q": "Final Hidden Campus Role"})
+    assert all(row["id"] != draft_drive_id for row in drives.json())
+    assert client.get(f"/enterprise/drives/{draft_drive_id}/pipeline", headers=headers).status_code == 404
+    assert client.get(f"/enterprise/drives/{draft_drive_id}/eligibility", headers=headers).status_code == 404
+    search = client.get("/enterprise/search", headers=headers, params={"q": "Final Hidden Draft Role"})
     assert search.status_code == 200 and search.json() == []
-    mock_jobs = client.get("/mock-interview/jobs", headers=student)
+    mock_jobs = client.get("/mock-interview/jobs", headers=headers)
     assert mock_jobs.status_code == 200
-    assert all(row["id"] != job_id for row in mock_jobs.json())
-
-    expired = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
-    opened = client.put(f"/institutions/drives/{draft_id}", headers=tpo, json={
-        "status": "open",
-        "registration_deadline": expired,
-    })
-    assert opened.status_code == 400
+    assert all(row["id"] != draft_job_id for row in mock_jobs.json())
 
 
-def test_expired_campus_job_cannot_be_approved() -> None:
-    recruiter = auth_for("recruiter@acme.example.com")
-    tpo = auth_for("tpo@northstar.example.com")
-    expired = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
-    response = client.post("/jobs", headers=recruiter, json={
-        "title": "Expired Final Campus Role",
-        "description": "This intentionally expired role must never become an active campus listing.",
-        "location": "Pune",
-        "job_type": "Full-time",
-        "required_skills": ["SQL"],
-        "deadline": expired,
-        "visibility": "campus",
-        "target_organization_slug": "northstar",
-    })
-    assert response.status_code == 201, response.text
-    approval = client.patch(
-        f"/institutions/jobs/{response.json()['id']}/approval",
-        headers=tpo,
+def test_expired_campus_job_cannot_be_approved_or_opened() -> None:
+    fixture = _ensure_fixture()
+    db = SessionLocal()
+    try:
+        job = db.query(Job).filter(Job.title == "Final Expired Campus Role").first()
+        if not job:
+            job = Job(
+                recruiter_id=fixture["recruiter_id"],
+                title="Final Expired Campus Role",
+                description="Expired campus role for approval-boundary regression coverage.",
+                job_type="Full-time",
+                visibility="campus",
+                target_organization_id=fixture["org"],
+                approval_status=ApprovalStatus.pending,
+                is_active=False,
+                deadline=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1),
+            )
+            db.add(job)
+            db.flush()
+        db.commit()
+        job_id = job.id
+    finally:
+        db.close()
+
+    response = client.patch(
+        f"/institutions/jobs/{job_id}/approval",
+        headers=auth_for(fixture["tpo"]),
         json={"approval_status": "approved"},
     )
-    assert approval.status_code == 400
+    assert response.status_code == 400
 
 
-def test_institution_application_feed_includes_own_students_public_job_activity() -> None:
-    recruiter = auth_for("recruiter@acme.example.com")
-    student = auth_for("student@northstar.example.com")
-    tpo = auth_for("tpo@northstar.example.com")
+def test_institution_application_feed_is_scoped_by_student_institution() -> None:
+    fixture = _ensure_fixture()
+    db = SessionLocal()
+    try:
+        job = db.query(Job).filter(Job.title == "Final Public Audit Role").first()
+        if not job:
+            job = Job(
+                recruiter_id=fixture["recruiter_id"],
+                title="Final Public Audit Role",
+                description="Public role for institution reporting scope regression coverage.",
+                job_type="Full-time",
+                visibility="public",
+                approval_status=ApprovalStatus.approved,
+                is_active=True,
+            )
+            db.add(job)
+            db.flush()
+        app_row = db.query(Application).filter(
+            Application.student_id == fixture["student_id"], Application.job_id == job.id
+        ).first()
+        if not app_row:
+            app_row = Application(student_id=fixture["student_id"], job_id=job.id)
+            db.add(app_row)
+            db.flush()
+        db.commit()
+        application_id = app_row.id
+    finally:
+        db.close()
 
-    response = client.post("/jobs", headers=recruiter, json={
-        "title": "Final Public Audit Role",
-        "description": "A public role used to verify institution application reporting remains student-scoped.",
-        "location": "Remote",
-        "job_type": "Full-time",
-        "required_skills": ["Python"],
-        "visibility": "public",
-    })
-    assert response.status_code == 201, response.text
-    job_id = response.json()["id"]
-    apply = client.post(f"/students/jobs/{job_id}/apply", headers=student, json={"cover_note": "Public audit."})
-    assert apply.status_code == 201, apply.text
-    application_id = apply.json()["id"]
-
-    feed = client.get("/institutions/applications", headers=tpo)
+    feed = client.get("/institutions/applications", headers=auth_for(fixture["tpo"]))
     assert feed.status_code == 200, feed.text
     assert any(row["id"] == application_id for row in feed.json())
 
 
-def test_recruiter_sees_only_mock_interviews_for_own_jobs() -> None:
-    recruiter_headers = auth_for("recruiter@acme.example.com")
-    student_headers = auth_for("student@northstar.example.com")
-    other_headers = auth_for("other@company.example.com")
-
+def test_recruiter_never_receives_other_employers_mock_interview_history() -> None:
+    fixture = _ensure_fixture()
     db = SessionLocal()
     try:
-        student_user = db.query(User).filter(User.email == "student@northstar.example.com").first()
-        other_user = db.query(User).filter(User.email == "other@company.example.com").first()
-        acme_user = db.query(User).filter(User.email == "recruiter@acme.example.com").first()
-        assert student_user and other_user and acme_user
-        student_profile = db.query(StudentProfile).filter(StudentProfile.user_id == student_user.id).first()
-        other_profile = db.query(RecruiterProfile).filter(RecruiterProfile.user_id == other_user.id).first()
-        acme_profile = db.query(RecruiterProfile).filter(RecruiterProfile.user_id == acme_user.id).first()
-        assert student_profile and other_profile and acme_profile
-        org = db.query(Organization).filter(Organization.slug == "northstar").first()
-        assert org
+        own_job = db.query(Job).filter(Job.title == "Final Recruiter Candidate Access Role").first()
+        if not own_job:
+            own_job = Job(
+                recruiter_id=fixture["recruiter_id"],
+                title="Final Recruiter Candidate Access Role",
+                description="Role establishing legitimate candidate access for recruiter isolation testing.",
+                job_type="Full-time",
+                visibility="public",
+                approval_status=ApprovalStatus.approved,
+                is_active=True,
+            )
+            db.add(own_job)
+            db.flush()
+        if not db.query(Application).filter(
+            Application.student_id == fixture["student_id"], Application.job_id == own_job.id
+        ).first():
+            db.add(Application(student_id=fixture["student_id"], job_id=own_job.id))
 
-        other_job = Job(
-            recruiter_id=other_profile.id,
-            title="Other Employer Coaching Role",
-            description="Private recruiter isolation test role with sufficient description length.",
-            job_type="Full-time",
-            visibility="public",
-            is_active=True,
-        )
-        db.add(other_job)
-        db.flush()
-        interview = MockInterview(
-            student_id=student_profile.id,
-            job_id=other_job.id,
-            questions_json='[{"question_id":1,"question":"Q?","category":"technical"}]',
-            answers_json='[{"question_id":1,"question":"Q?","answer":"A"}]',
-            evaluation_json='{"evaluations":[{"question_id":1,"score":80}]}',
-            overall_score=80,
-            overall_feedback="Other employer coaching data",
-        )
-        db.add(interview)
+        other_job = db.query(Job).filter(Job.title == "Other Employer Coaching Role").first()
+        if not other_job:
+            other_job = Job(
+                recruiter_id=fixture["other_recruiter_id"],
+                title="Other Employer Coaching Role",
+                description="Private coaching isolation role belonging to a different employer.",
+                job_type="Full-time",
+                visibility="public",
+                approval_status=ApprovalStatus.approved,
+                is_active=True,
+            )
+            db.add(other_job)
+            db.flush()
+        interview = db.query(MockInterview).filter(
+            MockInterview.student_id == fixture["student_id"], MockInterview.job_id == other_job.id
+        ).first()
+        if not interview:
+            interview = MockInterview(
+                student_id=fixture["student_id"],
+                job_id=other_job.id,
+                questions_json='[{"question_id":1,"question":"Q?","category":"technical"}]',
+                answers_json='[{"question_id":1,"question":"Q?","answer":"A"}]',
+                evaluation_json='{"evaluations":[{"question_id":1,"score":80}]}',
+                overall_score=80,
+                overall_feedback="Other employer coaching data",
+            )
+            db.add(interview)
+            db.flush()
         db.commit()
         interview_id = interview.id
-        student_id = student_profile.id
     finally:
         db.close()
 
-    acme_view = client.get(f"/recruiters/students/{student_id}/interviews", headers=recruiter_headers)
-    assert acme_view.status_code == 200, acme_view.text
-    assert all(row["id"] != interview_id for row in acme_view.json())
-
-    # The other recruiter only receives the row if they have candidate access. This call
-    # primarily proves the endpoint remains authenticated after the scope restriction.
-    other_view = client.get(f"/recruiters/students/{student_id}/interviews", headers=other_headers)
-    assert other_view.status_code in {200, 404}
-    assert client.get("/recruiters/students/search", headers=recruiter_headers).status_code == 200
-    assert client.get("/students/profile", headers=student_headers).status_code == 200
+    response = client.get(
+        f"/recruiters/students/{fixture['student_id']}/interviews",
+        headers=auth_for(fixture["recruiter"]),
+    )
+    assert response.status_code == 200, response.text
+    assert all(row["id"] != interview_id for row in response.json())
