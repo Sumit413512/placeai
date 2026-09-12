@@ -7,13 +7,29 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_platform_admin
-from app.models import Job, Organization, OrganizationType, RecruiterProfile, StudentProfile, User, UserRole
+from app.models import Job, Organization, OrganizationType, RecruiterProfile, User, UserRole
 from app.schemas import AdminUserProvision, OrganizationCreate, OrganizationOut, PlatformOverviewOut, UserOut
 from app.services import record_audit
 from app.access_models import AccessRequest
 from app.utils import get_hashed_password
 
 router = APIRouter(prefix="/platform", tags=["Platform Admin"])
+
+_ORG_FIELD_LIMITS = {
+    "domain": 200,
+    "website": 500,
+    "city": 120,
+    "state": 120,
+    "country": 120,
+    "primary_color": 20,
+}
+
+
+def _validate_organization_fields(data: OrganizationCreate) -> None:
+    for field, limit in _ORG_FIELD_LIMITS.items():
+        value = getattr(data, field, None)
+        if value is not None and len(str(value)) > limit:
+            raise HTTPException(status_code=422, detail=f"{field} must be {limit} characters or fewer")
 
 
 @router.get("/overview", response_model=PlatformOverviewOut)
@@ -36,6 +52,7 @@ def organizations(current_user: User = Depends(require_platform_admin), db: Sess
 
 @router.post("/organizations", response_model=OrganizationOut, status_code=status.HTTP_201_CREATED)
 def create_organization(data: OrganizationCreate, current_user: User = Depends(require_platform_admin), db: Session = Depends(get_db)):
+    _validate_organization_fields(data)
     if db.query(Organization).filter(Organization.slug == data.slug).first():
         raise HTTPException(status_code=400, detail="Organization slug already exists")
     org = Organization(
@@ -55,7 +72,7 @@ def create_organization(data: OrganizationCreate, current_user: User = Depends(r
 def provision_institution_admin(data: AdminUserProvision, current_user: User = Depends(require_platform_admin), db: Session = Depends(get_db)):
     if not data.organization_slug:
         raise HTTPException(status_code=400, detail="organization_slug is required")
-    org = db.query(Organization).filter(Organization.slug == data.organization_slug.lower()).first()
+    org = db.query(Organization).filter(Organization.slug == data.organization_slug.lower(), Organization.is_active.is_(True)).first()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
     if db.query(User).filter((User.email == data.email.lower()) | (User.username == data.username)).first():
