@@ -1,0 +1,42 @@
+name: Verify Live OpenAI Provider
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-live-openai.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify Vercel and Render report OpenAI primary
+        shell: bash
+        run: |
+          set -euo pipefail
+          verify_ai() {
+            url="$1"
+            body="$(curl -fsS --retry 5 --retry-delay 2 --connect-timeout 15 --max-time 30 "$url")"
+            URL="$url" BODY="$body" python - <<'PY'
+          import json, os
+          url = os.environ['URL']
+          payload = json.loads(os.environ['BODY'])
+          configured = payload.get('configured') is True
+          model = str(payload.get('model') or '')
+          sdk_available = payload.get('sdk_available') is True
+          if not configured:
+              raise SystemExit(f'{url}: AI provider is not configured')
+          if not sdk_available:
+              raise SystemExit(f'{url}: AI runtime is not available')
+          if model != 'gpt-5.6-terra':
+              raise SystemExit(f'{url}: expected OpenAI model gpt-5.6-terra, got {model!r}')
+          print(f'{url}: configured=true sdk_available=true model={model}')
+          PY
+          }
+
+          verify_ai 'https://placeai-rxpp.vercel.app/ai/status'
+          verify_ai 'https://placeai-recovery.onrender.com/ai/status'
