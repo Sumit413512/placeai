@@ -17,6 +17,9 @@
     event_date: 'Event date',
   };
 
+  const PASSWORD_POLICY_HELP = 'Use 12–128 characters with uppercase, lowercase, a number and a symbol.';
+  const PASSWORD_PATTERN = '(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{12,128}';
+
   const cleanMessage = value => String(value || '')
     .replace(/^Value error,\s*/i, '')
     .replace(/^Assertion failed,\s*/i, '')
@@ -41,6 +44,79 @@
     if (status === 429) return 'Too many requests were submitted. Wait briefly and try again.';
     if (status >= 500) return 'PlaceAI could not complete this request right now. Please try again.';
     return 'PlaceAI could not complete this request. Please review the form and try again.';
+  }
+
+  function strongPasswordMessage(value) {
+    const password = String(value || '');
+    if (!password) return '';
+    if (password.length < 12) return 'Password must be at least 12 characters long.';
+    if (password.length > 128) return 'Password must be 128 characters or fewer.';
+    if (!/[a-z]/.test(password)) return 'Password must contain a lowercase letter.';
+    if (!/[A-Z]/.test(password)) return 'Password must contain an uppercase letter.';
+    if (!/[0-9]/.test(password)) return 'Password must contain a number.';
+    if (!/[^A-Za-z0-9]/.test(password)) return 'Password must contain a symbol.';
+    return '';
+  }
+
+  function isStrongPasswordField(input) {
+    if (!(input instanceof HTMLInputElement) || input.type !== 'password') return false;
+    const name = input.name;
+    if (name === 'temporary_password' || name === 'new_password') return true;
+    if (name !== 'password') return false;
+    const formId = input.closest('form')?.id || '';
+    return formId === 'role-student-signup-form' || formId === 'signup-form';
+  }
+
+  function syncPasswordValidity(input) {
+    if (!isStrongPasswordField(input)) return;
+    input.setCustomValidity(strongPasswordMessage(input.value));
+  }
+
+  function decoratePasswordField(input) {
+    if (!isStrongPasswordField(input) || input.dataset.placeaiPasswordPolicy === 'true') return;
+    input.dataset.placeaiPasswordPolicy = 'true';
+    input.minLength = 12;
+    input.maxLength = 128;
+    input.pattern = PASSWORD_PATTERN;
+    input.title = PASSWORD_POLICY_HELP;
+    if (input.name !== 'password') input.autocomplete = 'new-password';
+
+    const existingHelpId = input.getAttribute('aria-describedby');
+    if (!existingHelpId) {
+      const help = document.createElement('small');
+      const id = `placeai-password-policy-${Math.random().toString(36).slice(2, 10)}`;
+      help.id = id;
+      help.className = 'placeai-password-policy';
+      help.textContent = PASSWORD_POLICY_HELP;
+      input.setAttribute('aria-describedby', id);
+      const label = input.closest('label');
+      if (label) label.appendChild(help);
+      else input.insertAdjacentElement('afterend', help);
+    }
+
+    input.addEventListener('input', () => syncPasswordValidity(input));
+    input.addEventListener('change', () => syncPasswordValidity(input));
+    input.addEventListener('invalid', () => syncPasswordValidity(input));
+    syncPasswordValidity(input);
+  }
+
+  function enhancePasswordPolicies(root = document) {
+    const inputs = [];
+    if (root instanceof HTMLInputElement) inputs.push(root);
+    root.querySelectorAll?.('input[type="password"]')?.forEach(input => inputs.push(input));
+    inputs.forEach(decoratePasswordField);
+  }
+
+  function installPasswordPolicyContract() {
+    enhancePasswordPolicies();
+    const observer = new MutationObserver(records => {
+      for (const record of records) {
+        record.addedNodes.forEach(node => {
+          if (node instanceof Element) enhancePasswordPolicies(node);
+        });
+      }
+    });
+    if (document.body) observer.observe(document.body, {childList: true, subtree: true});
   }
 
   function normalize(payload = {}, status = 0) {
@@ -155,5 +231,13 @@
     clearForm,
     applyToForm,
     fieldLabel,
+    strongPasswordMessage,
+    enhancePasswordPolicies,
   });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installPasswordPolicyContract, {once: true});
+  } else {
+    installPasswordPolicyContract();
+  }
 })();
