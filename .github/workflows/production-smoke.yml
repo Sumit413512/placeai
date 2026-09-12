@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 10
     env:
       BASE_URL: https://placeai-recovery.onrender.com
+      BACKEND_URL: https://placeai-rxpp.vercel.app
     steps:
       - name: Wait for Render production gateway
         shell: bash
@@ -46,9 +47,60 @@ jobs:
             echo "Render production gateway not ready yet (attempt $attempt/24, HTTP $code)."
             sleep 10
           done
-          echo 'Render production health endpoint did not become healthy in time.' >&2
+          echo 'Render production gateway health endpoint did not become healthy in time.' >&2
           cat /tmp/health.json 2>/dev/null || true
           exit 1
+
+      - name: Verify frozen Vercel backend directly
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --connect-timeout 10 --max-time 30 -D /tmp/vercel-health.headers -o /tmp/vercel-health.json "$BACKEND_URL/health"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('/tmp/vercel-health.json').read_text(encoding='utf-8'))
+          required = {
+              'status': 'healthy',
+              'database': 'ok',
+              'configuration': 'ok',
+              'transactional_email': 'ok',
+          }
+          bad = {key: (payload.get(key), expected) for key, expected in required.items() if payload.get(key) != expected}
+          if bad:
+              raise SystemExit(f'Vercel backend health contract failed: {bad}; payload={payload}')
+          if not isinstance(payload.get('version'), str) or not payload['version'].strip():
+              raise SystemExit(f'Vercel backend version missing: {payload}')
+          print('Vercel backend health contract passed; version=', payload['version'])
+          PY
+          grep -qi '^strict-transport-security:' /tmp/vercel-health.headers
+          grep -qi '^x-content-type-options: *nosniff' /tmp/vercel-health.headers
+          grep -qi '^x-frame-options: *DENY' /tmp/vercel-health.headers
+          grep -qi '^cache-control: *no-store' /tmp/vercel-health.headers
+
+          curl -fsS --connect-timeout 10 --max-time 20 "$BACKEND_URL/ai/status" -o /tmp/vercel-ai-status.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('/tmp/vercel-ai-status.json').read_text(encoding='utf-8'))
+          expected = {'configured', 'sdk_available', 'model'}
+          if set(payload) != expected:
+              raise SystemExit(f'Unexpected direct-backend AI status fields: {sorted(payload)}')
+          if not isinstance(payload.get('configured'), bool) or not isinstance(payload.get('sdk_available'), bool):
+              raise SystemExit(f'Direct-backend AI readiness booleans invalid: {payload}')
+          if not isinstance(payload.get('model'), str) or not payload['model'].strip():
+              raise SystemExit(f'Direct-backend AI model value invalid: {payload}')
+          print('Direct Vercel AI readiness contract passed; configured=', payload['configured'])
+          PY
+
+          me_code=$(curl -sS -o /tmp/vercel-me.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BACKEND_URL/auth/me")
+          test "$me_code" = '401'
+          jobs_code=$(curl -sS -o /tmp/vercel-jobs.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BACKEND_URL/jobs")
+          test "$jobs_code" = '401'
+          drives_code=$(curl -sS -o /tmp/vercel-drives.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BACKEND_URL/enterprise/drives")
+          test "$drives_code" = '401'
+          dashboard_code=$(curl -sS -o /tmp/vercel-dashboard.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BACKEND_URL/institutions/dashboard")
+          test "$dashboard_code" = '401'
 
       - name: Verify public shell, legal surface, release assets and security headers
         shell: bash
@@ -154,11 +206,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "Production smoke passed for $BASE_URL"
+          echo "Production smoke passed for gateway $BASE_URL and backend $BACKEND_URL"
           python - <<'PY'
           import json
           from pathlib import Path
-          payload = json.loads(Path('/tmp/health.json').read_text(encoding='utf-8'))
-          safe = {key: payload.get(key) for key in ('status','gateway','upstream','database','configuration','transactional_email')}
-          print(json.dumps(safe, sort_keys=True))
+          gateway = json.loads(Path('/tmp/health.json').read_text(encoding='utf-8'))
+          backend = json.loads(Path('/tmp/vercel-health.json').read_text(encoding='utf-8'))
+          safe_gateway = {key: gateway.get(key) for key in ('status','gateway','upstream','database','configuration','transactional_email')}
+          safe_backend = {key: backend.get(key) for key in ('status','service','version','database','configuration','transactional_email')}
+          print('gateway=', json.dumps(safe_gateway, sort_keys=True))
+          print('backend=', json.dumps(safe_backend, sort_keys=True))
           PY
