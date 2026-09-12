@@ -5,7 +5,7 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: '17 */6 * * *'
+    - cron: '17 * * * *'
 
 permissions:
   contents: read
@@ -31,15 +31,10 @@ jobs:
               python - <<'PY'
           import json
           from pathlib import Path
-
           payload = json.loads(Path('/tmp/health.json').read_text(encoding='utf-8'))
           required = {
-              'status': 'healthy',
-              'gateway': 'ok',
-              'upstream': 'healthy',
-              'database': 'ok',
-              'configuration': 'ok',
-              'transactional_email': 'ok',
+              'status': 'healthy', 'gateway': 'ok', 'upstream': 'healthy',
+              'database': 'ok', 'configuration': 'ok', 'transactional_email': 'ok',
           }
           bad = {key: (payload.get(key), expected) for key, expected in required.items() if payload.get(key) != expected}
           if bad:
@@ -55,7 +50,7 @@ jobs:
           cat /tmp/health.json 2>/dev/null || true
           exit 1
 
-      - name: Verify public shell, release assets and security headers
+      - name: Verify public shell, legal surface, release assets and security headers
         shell: bash
         run: |
           set -euo pipefail
@@ -70,6 +65,7 @@ jobs:
           grep -qi '^referrer-policy: *strict-origin-when-cross-origin' /tmp/root.headers
           grep -q 'provisioning-password-fix.js' /tmp/root.html
           grep -q 'ai-readiness.js' /tmp/root.html
+          grep -q 'legal-links.js' /tmp/root.html
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/favicon.ico" -o /tmp/favicon.svg
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/api-errors.js" -o /tmp/api-errors.js
           grep -q 'PASSWORD_POLICY_HELP' /tmp/api-errors.js
@@ -87,6 +83,22 @@ jobs:
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/ai-readiness.js" -o /tmp/ai-readiness.js
           grep -q 'PlaceAIAIReadiness' /tmp/ai-readiness.js
           grep -q 'AI_ACTIONS' /tmp/ai-readiness.js
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/legal-links.js" -o /tmp/legal-links.js
+          grep -q '/privacy' /tmp/legal-links.js
+          grep -q '/terms' /tmp/legal-links.js
+          grep -q '/acceptable-use' /tmp/legal-links.js
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/privacy" -o /tmp/privacy.html
+          grep -qi '<title>Privacy Policy — PlaceAI</title>' /tmp/privacy.html
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/terms" -o /tmp/terms.html
+          grep -qi '<title>Terms of Use — PlaceAI</title>' /tmp/terms.html
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/acceptable-use" -o /tmp/aup.html
+          grep -qi '<title>Acceptable Use — PlaceAI</title>' /tmp/aup.html
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/robots.txt" -o /tmp/robots.txt
+          grep -q '^Sitemap:' /tmp/robots.txt
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/sitemap.xml" -o /tmp/sitemap.xml
+          grep -q '/privacy' /tmp/sitemap.xml
+          grep -q '/terms' /tmp/sitemap.xml
+          grep -q '/acceptable-use' /tmp/sitemap.xml
 
       - name: Verify AI readiness contract is safe
         shell: bash
@@ -96,7 +108,6 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-
           payload = json.loads(Path('/tmp/ai-status.json').read_text(encoding='utf-8'))
           expected = {'configured', 'sdk_available', 'model'}
           if set(payload) != expected:
@@ -112,10 +123,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          refresh_code=$(curl -sS -o /tmp/refresh.json -w '%{http_code}' \
-            -H 'Content-Type: application/json' \
-            -d '{}' \
-            "$BASE_URL/auth/refresh")
+          refresh_code=$(curl -sS -o /tmp/refresh.json -w '%{http_code}' -H 'Content-Type: application/json' -d '{}' "$BASE_URL/auth/refresh")
           test "$refresh_code" = '401'
           python - <<'PY'
           import json
@@ -131,17 +139,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          reset_code=$(curl -sS -o /tmp/reset.json -w '%{http_code}' --max-time 30 \
-            -X POST "$BASE_URL/auth/reset-password" \
-            -H 'Content-Type: application/json' \
-            --data '{"token":"invalid-production-smoke-token-000000000000000000000000000000000000","new_password":"ProductionSmokeOnly!123"}')
+          reset_code=$(curl -sS -o /tmp/reset.json -w '%{http_code}' --max-time 30 -X POST "$BASE_URL/auth/reset-password" -H 'Content-Type: application/json' --data '{"token":"invalid-production-smoke-token-000000000000000000000000000000000000","new_password":"ProductionSmokeOnly!123"}')
           case "$reset_code" in
             400|422|429) ;;
-            *)
-              echo "Unexpected password-reset probe status: $reset_code" >&2
-              cat /tmp/reset.json
-              exit 1
-              ;;
+            *) echo "Unexpected password-reset probe status: $reset_code" >&2; cat /tmp/reset.json; exit 1 ;;
           esac
           if grep -q 'Unexpected server error' /tmp/reset.json; then
             echo 'Reset endpoint leaked an unexpected server error.' >&2
@@ -158,13 +159,6 @@ jobs:
           import json
           from pathlib import Path
           payload = json.loads(Path('/tmp/health.json').read_text(encoding='utf-8'))
-          safe = {
-              'status': payload.get('status'),
-              'gateway': payload.get('gateway'),
-              'upstream': payload.get('upstream'),
-              'database': payload.get('database'),
-              'configuration': payload.get('configuration'),
-              'transactional_email': payload.get('transactional_email'),
-          }
+          safe = {key: payload.get(key) for key in ('status','gateway','upstream','database','configuration','transactional_email')}
           print(json.dumps(safe, sort_keys=True))
           PY
