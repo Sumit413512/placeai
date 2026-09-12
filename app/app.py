@@ -190,6 +190,7 @@ access = _import_router("access")
 students = _import_router("students")
 recruiters = _import_router("recruiters")
 jobs = _import_router("jobs")
+jobs_secure = _import_router("jobs_secure")
 interview_compat = _import_router("interview_compat")
 ai = _import_router("ai")
 mock_interview = _import_router("mock_interview")
@@ -199,6 +200,13 @@ platform = _import_router("platform")
 enterprise = _import_router("enterprise")
 enterprise_secure = _import_router("enterprise_secure")
 
+_remove_replaced_routes(
+    jobs,
+    {
+        ("/jobs", "GET"),
+        ("/jobs/{job_id}", "GET"),
+    },
+)
 _remove_replaced_routes(
     institutions,
     {
@@ -232,6 +240,7 @@ for module in (
     students,
     recruiters,
     jobs,
+    jobs_secure,
     interview_compat,
     ai,
     mock_interview,
