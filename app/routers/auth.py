@@ -349,7 +349,14 @@ def forgot_password(body: ForgotPasswordRequest, request: Request, db: Session =
 def reset_password(body: ResetPasswordRequest, request: Request, db: Session = Depends(get_db)):
     enforce_rate_limit(db, request, scope="reset-password", limit=10, window_seconds=900, block_seconds=1800)
     digest = hash_reset_token(body.token)
-    user = db.query(User).filter(User.reset_token_hash == digest).first()
+    # Lock the recovery credential so a one-time token cannot be consumed by two
+    # concurrent reset requests before either transaction clears it.
+    user = (
+        db.query(User)
+        .filter(User.reset_token_hash == digest)
+        .with_for_update()
+        .first()
+    )
     if not user or not user.reset_token_expires or user.reset_token_expires < _utcnow():
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
     user.hashed_password = get_hashed_password(body.new_password)
