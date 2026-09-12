@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import DataError, IntegrityError, SQLAlchemyError
 
 from app.config import get_settings
 from app.database import (
@@ -108,11 +108,30 @@ async def security_headers(request: Request, call_next):
         "img-src 'self' data: https:; "
         "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
     )
-    if path == "/health":
+    if path == "/health" or path.startswith("/auth/"):
         response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
     if settings.is_production:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
+
+
+@app.exception_handler(DataError)
+async def database_data_error_handler(request: Request, exc: DataError):
+    logger.warning("Database rejected invalid input on %s", request.url.path)
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "One or more input values are invalid or too large.", "code": "INVALID_INPUT"},
+    )
+
+
+@app.exception_handler(IntegrityError)
+async def database_integrity_error_handler(request: Request, exc: IntegrityError):
+    logger.warning("Database integrity conflict on %s", request.url.path)
+    return JSONResponse(
+        status_code=409,
+        content={"detail": "The requested change conflicts with existing data.", "code": "DATA_CONFLICT"},
+    )
 
 
 @app.exception_handler(SQLAlchemyError)
@@ -151,6 +170,20 @@ def _include_router(module) -> None:
         app.include_router(module.router)
 
 
+def _remove_replaced_routes(module, replacements: set[tuple[str, str]]) -> None:
+    """Remove legacy handlers when a hardened implementation owns the same contract."""
+    if module is None or getattr(module, "router", None) is None:
+        return
+    retained = []
+    for route in module.router.routes:
+        path = getattr(route, "path", "")
+        methods = getattr(route, "methods", set()) or set()
+        if any((path, method) in replacements for method in methods):
+            continue
+        retained.append(route)
+    module.router.routes[:] = retained
+
+
 auth = _import_router("auth")
 account_security = _import_router("account_security")
 access = _import_router("access")
@@ -163,6 +196,22 @@ mock_interview = _import_router("mock_interview")
 institutions = _import_router("institutions")
 platform = _import_router("platform")
 enterprise = _import_router("enterprise")
+enterprise_secure = _import_router("enterprise_secure")
+
+_remove_replaced_routes(
+    enterprise,
+    {
+        ("/enterprise/drives", "GET"),
+        ("/enterprise/drives/{drive_id}/pipeline", "GET"),
+        ("/enterprise/drives/{drive_id}/eligibility", "GET"),
+        ("/enterprise/communications", "GET"),
+        ("/enterprise/announcements", "GET"),
+        ("/enterprise/attendance/sessions", "GET"),
+        ("/enterprise/attendance/check-in", "POST"),
+        ("/enterprise/search", "GET"),
+        ("/enterprise/calendar", "GET"),
+    },
+)
 
 
 for module in (
@@ -178,6 +227,7 @@ for module in (
     institutions,
     platform,
     enterprise,
+    enterprise_secure,
 ):
     _include_router(module)
 
