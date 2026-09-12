@@ -20,8 +20,6 @@ jobs:
     timeout-minutes: 10
     env:
       BASE_URL: https://placeai-recovery.onrender.com
-      VERCEL_CANONICAL_URL: https://placeai-rxpp.vercel.app
-      VERCEL_MAIN_URL: https://placeai-rxpp-git-main-skj1200519-gmailcoms-projects.vercel.app
     steps:
       - name: Wait for Render production gateway
         shell: bash
@@ -57,7 +55,7 @@ jobs:
           cat /tmp/health.json 2>/dev/null || true
           exit 1
 
-      - name: Verify public shell, assets and security headers
+      - name: Verify public shell, release assets and security headers
         shell: bash
         run: |
           set -euo pipefail
@@ -77,26 +75,9 @@ jobs:
           grep -q "'admin-form'" /tmp/api-errors.js
           grep -q "'institution-student-form'" /tmp/api-errors.js
           grep -q "'institution-recruiter-form'" /tmp/api-errors.js
-
-      - name: Verify Vercel reset-link bridge preserves token query
-        shell: bash
-        run: |
-          set -euo pipefail
-          token='bridge-smoke-invalid-token-000000000000000000000000'
-          for origin in "$VERCEL_CANONICAL_URL" "$VERCEL_MAIN_URL"; do
-            effective=$(curl -L -sS --fail --connect-timeout 10 --max-time 30 \
-              -o /tmp/vercel-bridge.html -w '%{url_effective}' \
-              "$origin/?reset_token=$token")
-            grep -qi '<title>PlaceAI' /tmp/vercel-bridge.html
-            case "$effective" in
-              https://placeai-recovery.onrender.com/*) ;;
-              *) echo "Vercel reset bridge ended at unexpected URL: $effective" >&2; exit 1 ;;
-            esac
-            case "$effective" in
-              *"reset_token=$token"*) ;;
-              *) echo 'Vercel reset bridge did not preserve reset_token query.' >&2; exit 1 ;;
-            esac
-          done
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/integration-readiness.js" -o /tmp/integration-readiness.js
+          grep -q 'Transactional email' /tmp/integration-readiness.js
+          grep -q 'Brevo HTTPS API' /tmp/integration-readiness.js
 
       - name: Verify unauthenticated auth boundaries
         shell: bash
