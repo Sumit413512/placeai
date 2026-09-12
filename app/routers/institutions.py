@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
@@ -56,6 +57,23 @@ def _org(current_user: User, db: Session) -> Organization:
     if not org:
         raise HTTPException(status_code=403, detail="Your account is not linked to an active institution")
     return org
+
+
+def _deadline_has_passed(value: datetime | None) -> bool:
+    if value is None:
+        return False
+    deadline = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    return deadline <= datetime.now(timezone.utc)
+
+
+def _spreadsheet_safe_cell(value: object) -> object:
+    """Prevent CSV cells from being interpreted as spreadsheet formulas."""
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    text = str(value)
+    if text.lstrip().startswith(("=", "+", "-", "@")):
+        return "'" + text
+    return text
 
 
 @router.get("/me", response_model=OrganizationOut)
@@ -321,8 +339,10 @@ def create_drive(data: PlacementDriveCreate, current_user: User = Depends(requir
     job = db.query(Job).filter(Job.id == data.job_id, Job.target_organization_id == org.id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job is not targeted to this institution")
-    if job.approval_status != ApprovalStatus.approved:
-        raise HTTPException(status_code=400, detail="Approve the campus job before opening a placement drive")
+    if job.approval_status != ApprovalStatus.approved or not job.is_active:
+        raise HTTPException(status_code=400, detail="Approve and activate the campus job before opening a placement drive")
+    if data.status.value == DriveStatus.open.value and _deadline_has_passed(data.registration_deadline):
+        raise HTTPException(status_code=400, detail="An open drive must have a future registration deadline")
     drive = PlacementDrive(
         organization_id=org.id,
         job_id=job.id,
@@ -364,7 +384,13 @@ def update_drive(drive_id: str, data: PlacementDriveUpdate, current_user: User =
     drive = db.query(PlacementDrive).filter(PlacementDrive.id == drive_id, PlacementDrive.organization_id == org.id).first()
     if not drive:
         raise HTTPException(status_code=404, detail="Placement drive not found")
-    for field, value in data.model_dump(exclude_unset=True).items():
+    changes = data.model_dump(exclude_unset=True)
+    target_status = changes.get("status", drive.status)
+    target_status_value = target_status.value if hasattr(target_status, "value") else str(target_status)
+    target_deadline = changes.get("registration_deadline", drive.registration_deadline)
+    if target_status_value == DriveStatus.open.value and _deadline_has_passed(target_deadline):
+        raise HTTPException(status_code=400, detail="An open drive must have a future registration deadline")
+    for field, value in changes.items():
         if field == "allowed_graduation_years":
             drive.allowed_graduation_years = value
         elif field == "allowed_branches":
@@ -389,12 +415,13 @@ def update_drive(drive_id: str, data: PlacementDriveUpdate, current_user: User =
 
 @router.delete("/drives/{drive_id}", status_code=204)
 def delete_drive(drive_id: str, current_user: User = Depends(require_institution_admin), db: Session = Depends(get_db)):
+    """Archive a drive without deleting application and stage history."""
     org = _org(current_user, db)
     drive = db.query(PlacementDrive).filter(PlacementDrive.id == drive_id, PlacementDrive.organization_id == org.id).first()
     if not drive:
         raise HTTPException(status_code=404, detail="Placement drive not found")
-    record_audit(db, current_user, "institution.drive.deleted", organization_id=org.id, entity_type="placement_drive", entity_id=drive.id, metadata={"title": drive.title})
-    db.delete(drive)
+    drive.status = DriveStatus.closed
+    record_audit(db, current_user, "institution.drive.archived", organization_id=org.id, entity_type="placement_drive", entity_id=drive.id, metadata={"title": drive.title})
     db.commit()
 
 
@@ -426,5 +453,6 @@ def export_students(current_user: User = Depends(require_institution_admin), db:
     writer = csv.writer(buffer)
     writer.writerow(["Name", "Email", "Degree", "Branch", "Graduation Year", "CGPA", "Verified", "Skills"])
     for s in students:
-        writer.writerow([s.full_name, s.user.email if s.user else "", s.degree, s.branch, s.graduation_year, s.cgpa, s.is_verified, ", ".join(s.skills)])
+        row = [s.full_name, s.user.email if s.user else "", s.degree, s.branch, s.graduation_year, s.cgpa, s.is_verified, ", ".join(s.skills)]
+        writer.writerow([_spreadsheet_safe_cell(value) for value in row])
     return Response(buffer.getvalue(), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{org.slug}-students.csv"'})
