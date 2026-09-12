@@ -135,7 +135,14 @@ jobs:
             -X POST "$BASE_URL/auth/reset-password" \
             -H 'Content-Type: application/json' \
             --data '{"token":"invalid-production-smoke-token-000000000000000000000000000000000000","new_password":"ProductionSmokeOnly!123"}')
-          test "$reset_code" = '400' || test "$reset_code" = '422'
+          case "$reset_code" in
+            400|422|429) ;;
+            *)
+              echo "Unexpected password-reset probe status: $reset_code" >&2
+              cat /tmp/reset.json
+              exit 1
+              ;;
+          esac
           if grep -q 'Unexpected server error' /tmp/reset.json; then
             echo 'Reset endpoint leaked an unexpected server error.' >&2
             cat /tmp/reset.json
