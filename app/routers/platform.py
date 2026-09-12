@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_platform_admin
-from app.models import Job, Organization, OrganizationType, RecruiterProfile, User, UserRole
+from app.models import Application, Job, Organization, OrganizationType, RecruiterProfile, User, UserRole
 from app.schemas import AdminUserProvision, OrganizationCreate, OrganizationOut, PlatformOverviewOut, UserOut
 from app.services import record_audit
 from app.access_models import AccessRequest
@@ -40,7 +40,7 @@ def overview(current_user: User = Depends(require_platform_admin), db: Session =
         recruiters=db.query(User).filter(User.role == UserRole.recruiter).count(),
         institution_admins=db.query(User).filter(User.role == UserRole.institution_admin).count(),
         active_jobs=db.query(Job).filter(Job.is_active.is_(True)).count(),
-        applications=sum(len(j.applications) for j in db.query(Job).all()),
+        applications=db.query(Application).count(),
         access_requests=db.query(AccessRequest).filter(AccessRequest.status.in_(["new", "under_review", "approved"])).count(),
     )
 
