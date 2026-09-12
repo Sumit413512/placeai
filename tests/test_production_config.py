@@ -19,6 +19,8 @@ def test_vercel_defaults_to_production_and_fails_closed(monkeypatch):
     monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
     monkeypatch.delenv("JWT_REFRESH_SECRET_KEY", raising=False)
     monkeypatch.delenv("BASE_URL", raising=False)
+    monkeypatch.delenv("PUBLIC_APP_URL", raising=False)
+    monkeypatch.delenv("PASSWORD_RESET_BASE_URL", raising=False)
     monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
     monkeypatch.delenv("AUTO_CREATE_SCHEMA", raising=False)
 
@@ -35,12 +37,14 @@ def test_vercel_defaults_to_production_and_fails_closed(monkeypatch):
         settings.validate_for_startup()
 
 
-def test_vercel_production_uses_system_url_defaults(monkeypatch):
+def test_vercel_production_uses_stable_public_url_and_system_backend_url(monkeypatch):
     monkeypatch.setenv("VERCEL", "1")
     monkeypatch.setenv("VERCEL_ENV", "production")
     monkeypatch.setenv("VERCEL_PROJECT_PRODUCTION_URL", "placeai-rxpp.vercel.app")
     monkeypatch.delenv("ENVIRONMENT", raising=False)
     monkeypatch.delenv("BASE_URL", raising=False)
+    monkeypatch.delenv("PUBLIC_APP_URL", raising=False)
+    monkeypatch.delenv("PASSWORD_RESET_BASE_URL", raising=False)
     monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
     monkeypatch.setenv(
         "DATABASE_URL",
@@ -52,8 +56,29 @@ def test_vercel_production_uses_system_url_defaults(monkeypatch):
 
     settings = Settings()
 
-    assert settings.base_url == "https://placeai-rxpp.vercel.app"
+    assert settings.backend_base_url == "https://placeai-rxpp.vercel.app"
+    assert settings.base_url == "https://placeai-recovery.onrender.com"
     assert settings.allowed_origins == ["https://placeai-rxpp.vercel.app"]
+    settings.validate_for_startup()
+
+
+def test_public_app_url_override_wins_for_production_links(monkeypatch):
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("VERCEL_ENV", "production")
+    monkeypatch.setenv("VERCEL_PROJECT_PRODUCTION_URL", "placeai-rxpp.vercel.app")
+    monkeypatch.setenv("PUBLIC_APP_URL", "https://app.placeai.example/")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://postgres.example:placeholder@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres",
+    )
+    monkeypatch.setenv("JWT_SECRET_KEY", "A" * 40)
+    monkeypatch.setenv("JWT_REFRESH_SECRET_KEY", "B" * 40)
+    monkeypatch.setenv("AUTO_CREATE_SCHEMA", "false")
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://app.placeai.example")
+
+    settings = Settings()
+
+    assert settings.base_url == "https://app.placeai.example"
     settings.validate_for_startup()
 
 
@@ -65,6 +90,8 @@ def test_vercel_preview_uses_test_defaults(monkeypatch):
     monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
     monkeypatch.delenv("JWT_REFRESH_SECRET_KEY", raising=False)
     monkeypatch.delenv("BASE_URL", raising=False)
+    monkeypatch.delenv("PUBLIC_APP_URL", raising=False)
+    monkeypatch.delenv("PASSWORD_RESET_BASE_URL", raising=False)
     monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
     monkeypatch.delenv("AUTO_CREATE_SCHEMA", raising=False)
 
@@ -89,6 +116,8 @@ def test_vercel_framework_discovery_can_import_without_runtime_secrets():
         "JWT_SECRET_KEY",
         "JWT_REFRESH_SECRET_KEY",
         "BASE_URL",
+        "PUBLIC_APP_URL",
+        "PASSWORD_RESET_BASE_URL",
         "ALLOWED_ORIGINS",
         "AUTO_CREATE_SCHEMA",
     ):
@@ -118,6 +147,8 @@ def test_vercel_production_runtime_reports_missing_configuration_without_crashin
         "JWT_SECRET_KEY",
         "JWT_REFRESH_SECRET_KEY",
         "BASE_URL",
+        "PUBLIC_APP_URL",
+        "PASSWORD_RESET_BASE_URL",
         "ALLOWED_ORIGINS",
         "AUTO_CREATE_SCHEMA",
     ):
