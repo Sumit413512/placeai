@@ -194,10 +194,21 @@ interview_compat = _import_router("interview_compat")
 ai = _import_router("ai")
 mock_interview = _import_router("mock_interview")
 institutions = _import_router("institutions")
+institution_secure = _import_router("institution_secure")
 platform = _import_router("platform")
 enterprise = _import_router("enterprise")
 enterprise_secure = _import_router("enterprise_secure")
 
+_remove_replaced_routes(
+    institutions,
+    {
+        ("/institutions/dashboard", "GET"),
+        ("/institutions/jobs/{job_id}/approval", "PATCH"),
+        ("/institutions/drives", "POST"),
+        ("/institutions/drives/{drive_id}", "PUT"),
+        ("/institutions/applications", "GET"),
+    },
+)
 _remove_replaced_routes(
     enterprise,
     {
@@ -225,6 +236,7 @@ for module in (
     ai,
     mock_interview,
     institutions,
+    institution_secure,
     platform,
     enterprise,
     enterprise_secure,
