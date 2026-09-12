@@ -15,353 +15,64 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Migrate PlaceAI to OpenAI primary with fallback chain
+      - name: Patch AI router to provider abstraction
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          provider = r'''from __future__ import annotations
+          path = Path('app/routers/ai.py')
+          text = path.read_text(encoding='utf-8')
 
-import os
-from contextvars import ContextVar
+          anchor = 'from app.storage import read_file_bytes\n'
+          provider_import = 'from app.ai_provider import ai_status_payload, call_ai_text, current_ai_model, current_ai_provider\n'
+          if provider_import not in text:
+              if anchor not in text:
+                  raise SystemExit('AI router import anchor not found')
+              text = text.replace(anchor, anchor + provider_import, 1)
 
-import httpx
-from fastapi import HTTPException, status
+          old_marker = '@router.get("/status", summary="Gemini configuration status")'
+          if old_marker in text:
+              start = text.index(old_marker)
+              end = text.index('\ndef extract_json_from_response', start)
+              replacement = (
+                  '@router.get("/status", summary="AI provider configuration status")\n'
+                  'def ai_status():\n'
+                  '    """Return privacy-safe AI readiness without exposing API keys."""\n'
+                  '    return ai_status_payload()\n\n\n'
+                  'def get_gemini_client():\n'
+                  '    """Compatibility shim retained for existing call sites during provider migration."""\n'
+                  '    return None\n\n\n'
+                  'def call_gemini(_client, prompt: str) -> str:\n'
+                  '    """Route OpenAI primary -> OpenAI backup -> Gemini fallback."""\n'
+                  '    return call_ai_text(prompt)\n\n'
+              )
+              text = text[:start] + replacement + text[end + 1:]
 
-try:
-    from google import genai
-except Exception:
-    genai = None
-
-from app.config import get_settings
-
-settings = get_settings()
-_LAST_AI_MODEL: ContextVar[str] = ContextVar("placeai_last_ai_model", default="")
-_LAST_AI_PROVIDER: ContextVar[str] = ContextVar("placeai_last_ai_provider", default="")
-
-
-def _usable_key(value: str | None) -> str:
-    key = (value or "").strip()
-    if not key or key.startswith("your-") or key.lower() in {"replace-me", "changeme", "none", "null"}:
-        return ""
-    return key
-
-
-def _openai_keys() -> list[str]:
-    candidates = [
-        _usable_key(os.getenv("OPENAI_API_KEY") or settings.openai_api_key),
-        _usable_key(os.getenv("OPENAI_BACKUP_API_KEY") or settings.openai_backup_api_key),
-    ]
-    result: list[str] = []
-    for key in candidates:
-        if key and key not in result:
-            result.append(key)
-    return result
-
-
-def _gemini_key() -> str:
-    return _usable_key(os.getenv("GEMINI_API_KEY") or settings.gemini_api_key)
-
-
-def _extract_openai_text(payload: dict) -> str:
-    direct = payload.get("output_text")
-    if isinstance(direct, str) and direct.strip():
-        return direct.strip()
-
-    parts: list[str] = []
-    for item in payload.get("output") or []:
-        if not isinstance(item, dict):
-            continue
-        for content in item.get("content") or []:
-            if not isinstance(content, dict):
-                continue
-            if content.get("type") == "output_text" and isinstance(content.get("text"), str):
-                text = content["text"].strip()
-                if text:
-                    parts.append(text)
-    return "\n".join(parts).strip()
-
-
-def _call_openai(api_key: str, prompt: str) -> str:
-    response = httpx.post(
-        "https://api.openai.com/v1/responses",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": settings.openai_model,
-            "input": prompt,
-            "max_output_tokens": settings.ai_max_output_tokens,
-        },
-        timeout=settings.ai_request_timeout_seconds,
-    )
-    response.raise_for_status()
-    text = _extract_openai_text(response.json())
-    if not text:
-        raise RuntimeError("OpenAI returned an empty response")
-    _LAST_AI_MODEL.set(settings.openai_model)
-    _LAST_AI_PROVIDER.set("openai")
-    return text
-
-
-def _call_gemini(api_key: str, prompt: str) -> str:
-    if genai is None:
-        raise RuntimeError("Gemini SDK unavailable")
-    client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(model=settings.gemini_model, contents=prompt)
-    text = getattr(response, "text", None)
-    if not isinstance(text, str) or not text.strip():
-        raise RuntimeError("Gemini returned an empty response")
-    _LAST_AI_MODEL.set(settings.gemini_model)
-    _LAST_AI_PROVIDER.set("gemini")
-    return text.strip()
-
-
-def ai_status_payload() -> dict[str, object]:
-    openai_ready = bool(_openai_keys())
-    gemini_ready = bool(_gemini_key())
-    if openai_ready:
-        return {
-            "configured": True,
-            "sdk_available": True,
-            "model": settings.openai_model,
-        }
-    if gemini_ready:
-        return {
-            "configured": True,
-            "sdk_available": genai is not None,
-            "model": settings.gemini_model,
-        }
-    return {
-        "configured": False,
-        "sdk_available": True,
-        "model": settings.openai_model,
-    }
-
-
-def current_ai_model() -> str:
-    model = _LAST_AI_MODEL.get().strip()
-    if model:
-        return model
-    return ai_status_payload()["model"]  # type: ignore[return-value]
-
-
-def current_ai_provider() -> str:
-    provider = _LAST_AI_PROVIDER.get().strip()
-    if provider:
-        return provider
-    if _openai_keys():
-        return "openai"
-    if _gemini_key():
-        return "gemini"
-    return "unavailable"
-
-
-def call_ai_text(prompt: str) -> str:
-    """Use OpenAI primary, then a second OpenAI key, then Gemini fallback."""
-    attempted = False
-    for api_key in _openai_keys():
-        attempted = True
-        try:
-            return _call_openai(api_key, prompt)
-        except Exception:
-            continue
-
-    gemini_api_key = _gemini_key()
-    if gemini_api_key:
-        attempted = True
-        try:
-            return _call_gemini(gemini_api_key, prompt)
-        except Exception:
-            pass
-
-    if attempted:
-        detail = "AI service is temporarily unavailable. Please try again later."
-    else:
-        detail = "AI service is not configured yet. Please contact the PlaceAI administrator."
-    raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
-'''
-          Path('app/ai_provider.py').write_text(provider, encoding='utf-8')
-
-          config_path = Path('app/config.py')
-          config = config_path.read_text(encoding='utf-8')
-          old = '''        self.google_client_id = os.getenv("GOOGLE_CLIENT_ID", "")
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
-        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
-        self.dev_show_reset_token = os.getenv("DEV_SHOW_RESET_TOKEN", "false").lower() == "true"
-'''
-          new = '''        self.google_client_id = os.getenv("GOOGLE_CLIENT_ID", "")
-        self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
-        self.openai_backup_api_key = os.getenv("OPENAI_BACKUP_API_KEY", "")
-        self.openai_model = os.getenv("OPENAI_MODEL", "gpt-5.6-terra").strip() or "gpt-5.6-terra"
-        self.ai_request_timeout_seconds = _bounded_env_int("AI_REQUEST_TIMEOUT_SECONDS", 45, 5, 120)
-        self.ai_max_output_tokens = _bounded_env_int("AI_MAX_OUTPUT_TOKENS", 5000, 512, 12000)
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
-        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
-        self.dev_show_reset_token = os.getenv("DEV_SHOW_RESET_TOKEN", "false").lower() == "true"
-'''
-          if old not in config:
-              raise SystemExit('config.py AI settings block not found')
-          config_path.write_text(config.replace(old, new), encoding='utf-8')
-
-          env_path = Path('.env.example')
-          env_text = env_path.read_text(encoding='utf-8')
-          old = '''DEV_SHOW_RESET_TOKEN=false
-GEMINI_API_KEY=
-GEMINI_MODEL=gemini-3.8-flash
-GOOGLE_CLIENT_ID=
-'''
-          new = '''DEV_SHOW_RESET_TOKEN=false
-# AI routing: OpenAI primary -> second OpenAI key -> Gemini fallback.
-OPENAI_API_KEY=
-OPENAI_BACKUP_API_KEY=
-OPENAI_MODEL=gpt-5.6-terra
-AI_REQUEST_TIMEOUT_SECONDS=45
-AI_MAX_OUTPUT_TOKENS=5000
-GEMINI_API_KEY=
-GEMINI_MODEL=gemini-3.8-flash
-GOOGLE_CLIENT_ID=
-'''
-          if old not in env_text:
-              raise SystemExit('.env.example AI block not found')
-          env_path.write_text(env_text.replace(old, new), encoding='utf-8')
-
-          js_path = Path('app/static/ai-readiness.js')
-          js = js_path.read_text(encoding='utf-8')
-          js = js.replace(
-              "AI features are temporarily unavailable until the Gemini provider is configured.",
-              "AI features are temporarily unavailable until an AI provider is configured.",
-          ).replace(
-              "An administrator must configure the Gemini provider before this AI feature can run.",
-              "An administrator must configure OpenAI or the Gemini fallback before this AI feature can run.",
+          text = text.replace('AI-powered features using Google Gemini.', 'AI-powered features using OpenAI with Gemini fallback.')
+          text = text.replace('using Gemini AI.', 'using the configured AI provider.')
+          text = text.replace('plus Gemini.', 'through the configured AI provider.')
+          text = text.replace('from a Gemini response', 'from an AI provider response')
+          text = text.replace(
+              '"model": settings.gemini_model, "guardrail"',
+              '"model": current_ai_model(), "provider": current_ai_provider(), "guardrail"',
           )
-          js_path.write_text(js, encoding='utf-8')
 
-          ai_path = Path('app/routers/ai.py')
-          ai = ai_path.read_text(encoding='utf-8')
-          import_anchor = 'from app.storage import read_file_bytes\n'
-          import_add = 'from app.storage import read_file_bytes\nfrom app.ai_provider import ai_status_payload, call_ai_text, current_ai_model, current_ai_provider\n'
-          if import_anchor not in ai:
-              raise SystemExit('ai.py import anchor not found')
-          ai = ai.replace(import_anchor, import_add, 1)
-
-          start = ai.find('@router.get("/status", summary="Gemini configuration status")')
-          end = ai.find('\ndef extract_json_from_response', start)
-          if start < 0 or end < 0:
-              raise SystemExit('ai.py provider block not found')
-          compatibility = '''@router.get("/status", summary="AI provider configuration status")
-def ai_status():
-    """Return privacy-safe AI readiness without exposing API keys."""
-    return ai_status_payload()
-
-
-def get_gemini_client():
-    """Compatibility shim retained for existing call sites during provider migration."""
-    return None
-
-
-def call_gemini(_client, prompt: str) -> str:
-    """Compatibility shim: route OpenAI primary -> OpenAI backup -> Gemini fallback."""
-    return call_ai_text(prompt)
-
-'''
-          ai = ai[:start] + compatibility + ai[end+1:]
-          ai = ai.replace('AI-powered features using Google Gemini.', 'AI-powered features using OpenAI with Gemini fallback.')
-          ai = ai.replace('using Gemini AI.', 'using the configured AI provider.')
-          ai = ai.replace('plus Gemini.', 'through the configured AI provider.')
-          ai = ai.replace('from a Gemini response', 'from an AI provider response')
-          ai = ai.replace('"model": settings.gemini_model, "guardrail"', '"model": current_ai_model(), "provider": current_ai_provider(), "guardrail"')
-          ai_path.write_text(ai, encoding='utf-8')
-
-          test_path = Path('tests/test_ai_provider_fallback.py')
-          test_path.write_text(r'''from __future__ import annotations
-
-import os
-
-import pytest
-from fastapi import HTTPException
-
-from app import ai_provider
-
-
-def test_openai_primary_is_preferred(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "primary-key")
-    monkeypatch.setenv("OPENAI_BACKUP_API_KEY", "backup-key")
-    monkeypatch.setenv("GEMINI_API_KEY", "gemini-key")
-    seen = []
-
-    def fake_openai(key, prompt):
-        seen.append((key, prompt))
-        return "primary-ok"
-
-    monkeypatch.setattr(ai_provider, "_call_openai", fake_openai)
-    monkeypatch.setattr(ai_provider, "_call_gemini", lambda *_: pytest.fail("Gemini should not be used"))
-    assert ai_provider.call_ai_text("hello") == "primary-ok"
-    assert seen == [("primary-key", "hello")]
-
-
-def test_second_openai_key_then_gemini_fallback(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "primary-key")
-    monkeypatch.setenv("OPENAI_BACKUP_API_KEY", "backup-key")
-    monkeypatch.setenv("GEMINI_API_KEY", "gemini-key")
-    attempted = []
-
-    def fake_openai(key, _prompt):
-        attempted.append(key)
-        raise RuntimeError("provider unavailable")
-
-    monkeypatch.setattr(ai_provider, "_call_openai", fake_openai)
-    monkeypatch.setattr(ai_provider, "_call_gemini", lambda key, prompt: f"gemini:{key}:{prompt}")
-    assert ai_provider.call_ai_text("hello") == "gemini:gemini-key:hello"
-    assert attempted == ["primary-key", "backup-key"]
-
-
-def test_duplicate_openai_keys_are_not_retried(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "same-key")
-    monkeypatch.setenv("OPENAI_BACKUP_API_KEY", "same-key")
-    assert ai_provider._openai_keys() == ["same-key"]
-
-
-def test_no_provider_fails_closed(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "")
-    monkeypatch.setenv("OPENAI_BACKUP_API_KEY", "")
-    monkeypatch.setenv("GEMINI_API_KEY", "")
-    monkeypatch.setattr(ai_provider.settings, "openai_api_key", "")
-    monkeypatch.setattr(ai_provider.settings, "openai_backup_api_key", "")
-    monkeypatch.setattr(ai_provider.settings, "gemini_api_key", "")
-    with pytest.raises(HTTPException) as exc:
-        ai_provider.call_ai_text("hello")
-    assert exc.value.status_code == 503
-
-
-def test_status_keeps_public_contract(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "primary-key")
-    monkeypatch.setenv("OPENAI_BACKUP_API_KEY", "")
-    monkeypatch.setenv("GEMINI_API_KEY", "")
-    payload = ai_provider.ai_status_payload()
-    assert set(payload) == {"configured", "sdk_available", "model"}
-    assert payload["configured"] is True
-    assert payload["sdk_available"] is True
-    assert payload["model"] == ai_provider.settings.openai_model
-''', encoding='utf-8')
-
-          # Source-level contract: no browser/client bundle may contain server-side keys.
-          if 'OPENAI_API_KEY' in js_path.read_text(encoding='utf-8'):
-              raise SystemExit('OpenAI key name leaked into client readiness bundle')
+          if 'call_ai_text(prompt)' not in text or provider_import not in text:
+              raise SystemExit('AI provider migration verification failed')
+          path.write_text(text, encoding='utf-8')
           PY
 
-      - name: Commit migration
+      - name: Commit AI router migration
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'PlaceAI Release Automation'
           git config user.email 'actions@users.noreply.github.com'
-          git add app/ai_provider.py app/routers/ai.py app/config.py app/static/ai-readiness.js .env.example tests/test_ai_provider_fallback.py
+          git add app/routers/ai.py
           if git diff --cached --quiet; then
-            echo 'No migration changes required.'
+            echo 'AI router already migrated.'
             exit 0
           fi
-          git commit -m 'feat: OpenAI primary with Gemini fallback'
+          git commit -m 'feat: route PlaceAI AI through OpenAI with Gemini fallback'
           git push origin HEAD:main
