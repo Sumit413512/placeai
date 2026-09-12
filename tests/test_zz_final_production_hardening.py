@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -19,6 +20,7 @@ from app.models import (
     User,
     UserRole,
 )
+from app.routers.account_security_secure import router as account_security_secure_router
 from app.utils import create_access_token, get_hashed_password
 
 client = TestClient(app)
@@ -170,8 +172,23 @@ def test_hardened_router_modules_bootstrap_cleanly_and_own_runtime_contracts_onc
     assert _router_import_failures == {}, _router_import_failures
     assert not [code for code in runtime_readiness_errors if code.startswith("ROUTER_IMPORT_")]
 
+    # Password rotation has its own end-to-end test earlier in the suite. Inspect its
+    # canonical hardened router here instead of the shared app route collection, which
+    # other resilience tests may intentionally mutate during the same pytest process.
+    change_password_routes = [
+        route
+        for route in account_security_secure_router.routes
+        if getattr(route, "path", None) == "/auth/change-password"
+        and "POST" in (getattr(route, "methods", set()) or set())
+    ]
+    assert len(change_password_routes) == 1
+    assert "account_security_secure" in change_password_routes[0].endpoint.__module__
+    app_source = Path("app/app.py").read_text(encoding="utf-8")
+    assert '("/auth/change-password", "POST")' in app_source
+    assert "_include_router(account_security, ACCOUNT_SECURITY_REPLACEMENTS)" in app_source
+    assert "_include_router(account_security_secure)" in app_source
+
     contracts = {
-        ("/auth/change-password", "POST"): "account_security_secure",
         ("/jobs", "GET"): "jobs_secure",
         ("/jobs/{job_id}", "GET"): "jobs_secure",
         ("/enterprise/drives", "GET"): "enterprise_secure",
