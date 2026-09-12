@@ -3,7 +3,7 @@
 
   const AI_ACTIONS = new Set(['parse-resume', 'generate-summary', 'rank-candidates']);
   const AI_FORM_IDS = new Set(['assistant-form']);
-  const UNAVAILABLE = 'AI features are temporarily unavailable until the Gemini provider is configured.';
+  const UNAVAILABLE = 'AI features are temporarily unavailable until an AI provider is configured.';
   const state = { checked: false, ready: false, configured: false, sdkAvailable: false, model: '' };
   let checkPromise = null;
 
@@ -29,7 +29,7 @@
     const note = document.createElement('div');
     note.className = 'note-box placeai-ai-unavailable-note';
     note.setAttribute('role', 'status');
-    note.innerHTML = '<strong>AI temporarily unavailable</strong><p>Core placement workflows remain available. An administrator must configure the Gemini provider before this AI feature can run.</p>';
+    note.innerHTML = '<strong>AI temporarily unavailable</strong><p>Core placement workflows remain available. An administrator must configure OpenAI or the Gemini fallback before this AI feature can run.</p>';
     form.prepend(note);
   }
 
