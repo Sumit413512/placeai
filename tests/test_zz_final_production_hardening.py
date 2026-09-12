@@ -21,6 +21,10 @@ from app.models import (
     UserRole,
 )
 from app.routers.account_security_secure import router as account_security_secure_router
+from app.routers.enterprise import router as enterprise_router
+from app.routers.enterprise_secure import router as enterprise_secure_router
+from app.routers.institution_secure import router as institution_secure_router
+from app.routers.jobs_secure import router as jobs_secure_router
 from app.utils import create_access_token, get_hashed_password
 
 client = TestClient(app)
@@ -160,6 +164,16 @@ def _ensure_fixture() -> dict[str, str]:
         db.close()
 
 
+def _assert_router_contract(router, path: str, method: str, owner: str) -> None:
+    matches = [
+        route for route in router.routes
+        if getattr(route, "path", None) == path
+        and method in (getattr(route, "methods", set()) or set())
+    ]
+    assert len(matches) == 1, (path, method, len(matches))
+    assert owner in matches[0].endpoint.__module__, (path, matches[0].endpoint.__module__)
+
+
 def test_hardened_router_modules_bootstrap_cleanly_and_own_runtime_contracts_once() -> None:
     # An earlier resilience test intentionally probes a missing router and verifies that
     # the failure is contained. Remove only that synthetic probe before asserting the
@@ -172,47 +186,43 @@ def test_hardened_router_modules_bootstrap_cleanly_and_own_runtime_contracts_onc
     assert _router_import_failures == {}, _router_import_failures
     assert not [code for code in runtime_readiness_errors if code.startswith("ROUTER_IMPORT_")]
 
-    # Password rotation has its own end-to-end test earlier in the suite. Inspect its
-    # canonical hardened router here instead of the shared app route collection, which
-    # other resilience tests may intentionally mutate during the same pytest process.
-    change_password_routes = [
-        route
-        for route in account_security_secure_router.routes
-        if getattr(route, "path", None) == "/auth/change-password"
-        and "POST" in (getattr(route, "methods", set()) or set())
-    ]
-    assert len(change_password_routes) == 1
-    assert "account_security_secure" in change_password_routes[0].endpoint.__module__
+    _assert_router_contract(account_security_secure_router, "/auth/change-password", "POST", "account_security_secure")
+    _assert_router_contract(jobs_secure_router, "/jobs", "GET", "jobs_secure")
+    _assert_router_contract(jobs_secure_router, "/jobs/{job_id}", "GET", "jobs_secure")
+
+    for path, method in (
+        ("/enterprise/drives", "GET"),
+        ("/enterprise/drives/{drive_id}/pipeline", "GET"),
+        ("/enterprise/drives/{drive_id}/eligibility", "GET"),
+        ("/enterprise/communications", "GET"),
+        ("/enterprise/attendance/sessions", "GET"),
+        ("/enterprise/attendance/check-in", "POST"),
+        ("/enterprise/search", "GET"),
+        ("/enterprise/calendar", "GET"),
+    ):
+        _assert_router_contract(enterprise_secure_router, path, method, "enterprise_secure")
+
+    for path, method in (
+        ("/institutions/dashboard", "GET"),
+        ("/institutions/jobs/{job_id}/approval", "PATCH"),
+        ("/institutions/drives", "POST"),
+        ("/institutions/drives/{drive_id}", "PUT"),
+        ("/institutions/applications", "GET"),
+    ):
+        _assert_router_contract(institution_secure_router, path, method, "institution_secure")
+
+    _assert_router_contract(enterprise_router, "/enterprise/announcements", "GET", "enterprise")
+
     app_source = Path("app/app.py").read_text(encoding="utf-8")
     assert '("/auth/change-password", "POST")' in app_source
     assert "_include_router(account_security, ACCOUNT_SECURITY_REPLACEMENTS)" in app_source
     assert "_include_router(account_security_secure)" in app_source
-
-    contracts = {
-        ("/jobs", "GET"): "jobs_secure",
-        ("/jobs/{job_id}", "GET"): "jobs_secure",
-        ("/enterprise/drives", "GET"): "enterprise_secure",
-        ("/enterprise/drives/{drive_id}/pipeline", "GET"): "enterprise_secure",
-        ("/enterprise/drives/{drive_id}/eligibility", "GET"): "enterprise_secure",
-        ("/enterprise/communications", "GET"): "enterprise_secure",
-        ("/enterprise/attendance/sessions", "GET"): "enterprise_secure",
-        ("/enterprise/attendance/check-in", "POST"): "enterprise_secure",
-        ("/enterprise/search", "GET"): "enterprise_secure",
-        ("/enterprise/calendar", "GET"): "enterprise_secure",
-        ("/institutions/dashboard", "GET"): "institution_secure",
-        ("/institutions/jobs/{job_id}/approval", "PATCH"): "institution_secure",
-        ("/institutions/drives", "POST"): "institution_secure",
-        ("/institutions/drives/{drive_id}", "PUT"): "institution_secure",
-        ("/institutions/applications", "GET"): "institution_secure",
-        ("/enterprise/announcements", "GET"): "enterprise",
-    }
-    for (path, method), owner in contracts.items():
-        matches = [
-            route for route in app.routes
-            if getattr(route, "path", None) == path and method in (getattr(route, "methods", set()) or set())
-        ]
-        assert len(matches) == 1, (path, method, len(matches))
-        assert owner in matches[0].endpoint.__module__, (path, matches[0].endpoint.__module__)
+    assert "_include_router(jobs, JOB_REPLACEMENTS)" in app_source
+    assert "_include_router(jobs_secure)" in app_source
+    assert "_include_router(institutions, INSTITUTION_REPLACEMENTS)" in app_source
+    assert "_include_router(institution_secure)" in app_source
+    assert "_include_router(enterprise, ENTERPRISE_REPLACEMENTS)" in app_source
+    assert "_include_router(enterprise_secure, ENTERPRISE_SECURE_EXCLUSIONS)" in app_source
 
 
 def test_unverified_student_cannot_discover_campus_opportunities() -> None:
