@@ -122,6 +122,11 @@ class Settings:
         self.public_recruiter_signup = os.getenv("PUBLIC_RECRUITER_SIGNUP", "false").lower() == "true"
         self.allow_talent_pool_search = os.getenv("ALLOW_TALENT_POOL_SEARCH", "false").lower() == "true"
         self.google_client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
+        self.openai_backup_api_key = os.getenv("OPENAI_BACKUP_API_KEY", "")
+        self.openai_model = os.getenv("OPENAI_MODEL", "gpt-5.6-terra").strip() or "gpt-5.6-terra"
+        self.ai_request_timeout_seconds = _bounded_env_int("AI_REQUEST_TIMEOUT_SECONDS", 45, 5, 120)
+        self.ai_max_output_tokens = _bounded_env_int("AI_MAX_OUTPUT_TOKENS", 5000, 512, 12000)
         self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
         self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
         self.dev_show_reset_token = os.getenv("DEV_SHOW_RESET_TOKEN", "false").lower() == "true"
