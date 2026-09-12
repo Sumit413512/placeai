@@ -291,20 +291,10 @@
 
     document.addEventListener('submit', event => {
       const form = event.target instanceof HTMLFormElement ? event.target : null;
-      if (!form) return;
-      if (form.id === 'placeai-access-review-form') {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        submitAccessReview(form);
-        return;
-      }
-      if (!provisioningFormIds.has(form.id)) return;
-      const input = form.querySelector('input[name="temporary_password"]');
-      if (!input) return;
-      queueMicrotask(() => {
-        input.value = '';
-        input.dataset.clearedAfterSubmit = 'true';
-      });
+      if (!form || form.id !== 'placeai-access-review-form') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      submitAccessReview(form);
     }, true);
 
     document.addEventListener('change', event => {
