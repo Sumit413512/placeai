@@ -20,6 +20,57 @@
   const PASSWORD_POLICY_HELP = 'Use 12–128 characters with uppercase, lowercase, a number and a symbol.';
   const PASSWORD_PATTERN = '(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{12,128}';
 
+  const FORM_CONTRACTS = Object.freeze({
+    'admin-form': {
+      username: {minLength: 3, maxLength: 80},
+      full_name: {maxLength: 200},
+      temporary_password: {minLength: 12, maxLength: 128},
+    },
+    'institution-student-form': {
+      full_name: {minLength: 2, maxLength: 200},
+      username: {minLength: 3, maxLength: 80},
+      temporary_password: {minLength: 12, maxLength: 128},
+      graduation_year: {min: 2020, max: 2040},
+      cgpa: {min: 0, max: 10, step: 0.01},
+    },
+    'institution-recruiter-form': {
+      full_name: {maxLength: 200},
+      company_name: {maxLength: 250},
+      username: {minLength: 3, maxLength: 80},
+      temporary_password: {minLength: 12, maxLength: 128},
+    },
+    'org-form': {
+      name: {minLength: 2, maxLength: 200},
+      slug: {
+        minLength: 2,
+        maxLength: 120,
+        pattern: '[A-Za-z0-9-]+',
+        title: 'Use only letters, numbers and hyphens.',
+      },
+    },
+    'job-form': {
+      title: {minLength: 3, maxLength: 200},
+      description: {minLength: 20, maxLength: 12000},
+      location: {maxLength: 200},
+      salary_range: {maxLength: 120},
+      experience_required: {maxLength: 120},
+    },
+    'drive-form': {
+      title: {minLength: 3, maxLength: 250},
+      min_cgpa: {min: 0, max: 10, step: 0.01},
+      min_tenth_percentage: {min: 0, max: 100, step: 0.01},
+      min_twelfth_percentage: {min: 0, max: 100, step: 0.01},
+      min_diploma_percentage: {min: 0, max: 100, step: 0.01},
+      max_active_backlogs: {min: 0},
+      max_historical_backlogs: {min: 0},
+      max_academic_gap_months: {min: 0},
+      notes: {maxLength: 5000},
+    },
+    'apply-form': {
+      cover_note: {maxLength: 5000},
+    },
+  });
+
   const cleanMessage = value => String(value || '')
     .replace(/^Value error,\s*/i, '')
     .replace(/^Assertion failed,\s*/i, '')
@@ -107,12 +158,54 @@
     inputs.forEach(decoratePasswordField);
   }
 
-  function installPasswordPolicyContract() {
+  function applyContractToControl(control, contract) {
+    if (!control || !contract) return;
+    if (Number.isInteger(contract.minLength)) control.minLength = contract.minLength;
+    if (Number.isInteger(contract.maxLength)) control.maxLength = contract.maxLength;
+    if (contract.min !== undefined) control.min = String(contract.min);
+    if (contract.max !== undefined) control.max = String(contract.max);
+    if (contract.step !== undefined) control.step = String(contract.step);
+    if (contract.pattern) control.pattern = contract.pattern;
+    if (contract.title) control.title = contract.title;
+  }
+
+  function syncCampusTargetRequirement(form) {
+    if (!(form instanceof HTMLFormElement) || form.id !== 'job-form') return;
+    const visibility = form.querySelector('[name="visibility"]');
+    const target = form.querySelector('[name="target_organization_slug"]');
+    if (!visibility || !target) return;
+    target.required = visibility.value === 'campus';
+    target.setAttribute('aria-required', target.required ? 'true' : 'false');
+  }
+
+  function enhanceFormContracts(root = document) {
+    const forms = [];
+    if (root instanceof HTMLFormElement) forms.push(root);
+    root.querySelectorAll?.('form[id]')?.forEach(form => forms.push(form));
+
+    for (const form of forms) {
+      const contract = FORM_CONTRACTS[form.id];
+      if (!contract) continue;
+      for (const [name, rules] of Object.entries(contract)) {
+        applyContractToControl(form.querySelector(`[name="${name}"]`), rules);
+      }
+      if (form.id === 'job-form' && form.dataset.placeaiCampusContract !== 'true') {
+        form.dataset.placeaiCampusContract = 'true';
+        form.querySelector('[name="visibility"]')?.addEventListener('change', () => syncCampusTargetRequirement(form));
+      }
+      syncCampusTargetRequirement(form);
+    }
+  }
+
+  function installClientContracts() {
     enhancePasswordPolicies();
+    enhanceFormContracts();
     const observer = new MutationObserver(records => {
       for (const record of records) {
         record.addedNodes.forEach(node => {
-          if (node instanceof Element) enhancePasswordPolicies(node);
+          if (!(node instanceof Element)) return;
+          enhancePasswordPolicies(node);
+          enhanceFormContracts(node);
         });
       }
     });
@@ -233,11 +326,12 @@
     fieldLabel,
     strongPasswordMessage,
     enhancePasswordPolicies,
+    enhanceFormContracts,
   });
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', installPasswordPolicyContract, {once: true});
+    document.addEventListener('DOMContentLoaded', installClientContracts, {once: true});
   } else {
-    installPasswordPolicyContract();
+    installClientContracts();
   }
 })();
