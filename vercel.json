@@ -3,14 +3,13 @@
   "regions": ["sin1"],
   "git": {
     "deploymentEnabled": {
-      "**": false,
-      "main": true
+      "**": false
     }
   },
   "functions": {
     "app/app.py": {
       "includeFiles": "{app/templates/**,app/static/**}",
-      "excludeFiles": "{tests/**,docs/**,alembic/**,scripts/**,.github/**,pages/**,*.md,index.html,PlaceAI_API.postman_collection.json,Dockerfile,docker-compose.yml,MANIFEST.sha256}"
+      "excludeFiles": "{tests/**,docs/**,alembic/**,scripts/**,.github/**,pages/**,*.md,index.html,PlaceAI_API.postman_collection.json,Dockerfile,docker-compose.yml}"
     }
   }
 }
