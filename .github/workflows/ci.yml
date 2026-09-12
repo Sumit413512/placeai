@@ -61,6 +61,7 @@ jobs:
           node --check app/static/ui-state-fixes.js
           node --check app/static/integration-readiness.js
           node --check app/static/ai-readiness.js
+          node --check app/static/legal-links.js
 
       - name: Critical Python static analysis
         run: ruff check app scripts tests alembic --select E9,F63,F7,F82
