@@ -162,7 +162,6 @@ platform = _import_router("platform")
 enterprise = _import_router("enterprise")
 
 
-
 for module in (
     auth,
     account_security,
@@ -197,6 +196,9 @@ def root():
         '<script src="/static/access-portal.js" defer></script>\n'
         '<script src="/static/ui-state-fixes.js" defer></script>\n'
         '<script src="/static/account-security.js" defer></script>\n'
+        '<script src="/static/provisioning-password-fix.js" defer></script>\n'
+        '<script src="/static/integration-readiness.js" defer></script>\n'
+        '<script src="/static/ai-readiness.js" defer></script>\n'
     )
     if "/static/access-portal.js" not in html:
         html = html.replace("</head>", f"{assets}</head>", 1)
