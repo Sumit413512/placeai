@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 UPSTREAM_BASE = os.getenv("UPSTREAM_BASE", "https://placeai-rxpp.vercel.app").rstrip("/")
-ASSET_VERSION = os.getenv("ASSET_VERSION", "20260912-6")
+ASSET_VERSION = os.getenv("ASSET_VERSION", "20260912-7")
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "app" / "static"
 TEMPLATE_DIR = ROOT / "app" / "templates"
@@ -31,6 +31,7 @@ ASSET_INJECTION = (
     f'<script src="/static/provisioning-password-fix.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/integration-readiness.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/ai-readiness.js?v={ASSET_VERSION}" defer></script>\n'
+    f'<script src="/static/legal-links.js?v={ASSET_VERSION}" defer></script>\n'
 )
 
 HOP_BY_HOP_HEADERS = {
@@ -67,6 +68,10 @@ def _safe_validation_fields(payload: object) -> list[str]:
     return sorted(fields)
 
 
+def _public_base(request: Request) -> str:
+    return str(request.base_url).rstrip("/")
+
+
 @app.middleware("http")
 async def recovery_security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -77,7 +82,7 @@ async def recovery_security_headers(request: Request, call_next):
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["X-PlaceAI-Gateway"] = "render"
-    if request.url.path in {"/", "/mock-interview"}:
+    if request.url.path in {"/", "/mock-interview", "/privacy", "/terms", "/acceptable-use"}:
         response.headers["Cache-Control"] = "no-store"
     elif request.url.path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-cache, must-revalidate"
@@ -106,6 +111,37 @@ def favicon() -> FileResponse:
 @app.get("/mock-interview", include_in_schema=False)
 def mock_interview_page() -> FileResponse:
     return FileResponse(TEMPLATE_DIR / "mock-interview.html")
+
+
+@app.api_route("/privacy", methods=["GET", "HEAD"], include_in_schema=False)
+def privacy_page() -> FileResponse:
+    return FileResponse(TEMPLATE_DIR / "privacy.html", media_type="text/html")
+
+
+@app.api_route("/terms", methods=["GET", "HEAD"], include_in_schema=False)
+def terms_page() -> FileResponse:
+    return FileResponse(TEMPLATE_DIR / "terms.html", media_type="text/html")
+
+
+@app.api_route("/acceptable-use", methods=["GET", "HEAD"], include_in_schema=False)
+def acceptable_use_page() -> FileResponse:
+    return FileResponse(TEMPLATE_DIR / "acceptable-use.html", media_type="text/html")
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots(request: Request) -> Response:
+    body = f"User-agent: *\nAllow: /\nSitemap: {_public_base(request)}/sitemap.xml\n"
+    return Response(content=body, media_type="text/plain")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+def sitemap(request: Request) -> Response:
+    base = _public_base(request)
+    urls = ["/", "/privacy", "/terms", "/acceptable-use"]
+    body = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    body += "\n".join(f"  <url><loc>{base}{path}</loc></url>" for path in urls)
+    body += "\n</urlset>\n"
+    return Response(content=body, media_type="application/xml")
 
 
 @app.get("/_recovery/health", include_in_schema=False)
