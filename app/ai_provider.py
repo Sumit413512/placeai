@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from contextvars import ContextVar
 
@@ -14,6 +15,7 @@ except Exception:
 from app.config import get_settings
 
 settings = get_settings()
+LOGGER = logging.getLogger("placeai.ai")
 _LAST_AI_MODEL: ContextVar[str] = ContextVar("placeai_last_ai_model", default="")
 _LAST_AI_PROVIDER: ContextVar[str] = ContextVar("placeai_last_ai_provider", default="")
 
@@ -99,6 +101,14 @@ def _call_gemini(api_key: str, prompt: str) -> str:
     return text.strip()
 
 
+def _safe_failure_metadata(exc: Exception) -> tuple[str, int | None]:
+    """Return non-secret provider failure metadata suitable for production logs."""
+    status_code = None
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+        status_code = exc.response.status_code
+    return type(exc).__name__, status_code
+
+
 def ai_status_payload() -> dict[str, object]:
     openai_ready = bool(_openai_keys())
     gemini_ready = bool(_gemini_key())
@@ -142,20 +152,36 @@ def current_ai_provider() -> str:
 def call_ai_text(prompt: str) -> str:
     """Use OpenAI primary, then a second OpenAI key, then Gemini fallback."""
     attempted = False
-    for api_key in _openai_keys():
+    for slot, api_key in enumerate(_openai_keys(), start=1):
         attempted = True
         try:
-            return _call_openai(api_key, prompt)
-        except Exception:
-            continue
+            result = _call_openai(api_key, prompt)
+            if slot > 1:
+                LOGGER.warning("AI fallback succeeded provider=openai slot=%s", slot)
+            return result
+        except Exception as exc:
+            error_type, status_code = _safe_failure_metadata(exc)
+            LOGGER.warning(
+                "AI provider attempt failed provider=openai slot=%s error_type=%s status_code=%s",
+                slot,
+                error_type,
+                status_code,
+            )
 
     gemini_api_key = _gemini_key()
     if gemini_api_key:
         attempted = True
         try:
-            return _call_gemini(gemini_api_key, prompt)
-        except Exception:
-            pass
+            result = _call_gemini(gemini_api_key, prompt)
+            LOGGER.warning("AI fallback succeeded provider=gemini")
+            return result
+        except Exception as exc:
+            error_type, status_code = _safe_failure_metadata(exc)
+            LOGGER.warning(
+                "AI provider attempt failed provider=gemini error_type=%s status_code=%s",
+                error_type,
+                status_code,
+            )
 
     detail = (
         "AI service is temporarily unavailable. Please try again later."
