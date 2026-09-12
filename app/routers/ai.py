@@ -1,5 +1,5 @@
 """
-AI-powered features using Google Gemini.
+AI-powered features using OpenAI with Gemini fallback.
 All endpoints use structured prompts to ensure consistent JSON responses.
 """
 
@@ -37,6 +37,7 @@ from app.schemas import (
 )
 from app.dependencies import get_current_user, require_recruiter, require_student
 from app.storage import read_file_bytes
+from app.ai_provider import ai_status_payload, call_ai_text, current_ai_model, current_ai_provider
 
 load_dotenv()
 
@@ -91,60 +92,23 @@ def _student_job_or_404(profile: StudentProfile, job_id: str, db: Session) -> Jo
 router = APIRouter(prefix="/ai", tags=["AI Features ✨"])
 
 
-@router.get("/status", summary="Gemini configuration status")
+@router.get("/status", summary="AI provider configuration status")
 def ai_status():
-    """Return non-secret Gemini configuration details for local diagnostics.
-
-    This endpoint is intentionally public because it exposes only booleans and the
-    configured model name. It never returns the API key.
-    """
-    api_key = os.getenv("GEMINI_API_KEY", settings.gemini_api_key).strip()
-    configured = bool(api_key and not api_key.startswith("your-") and api_key != "your-gemini-api-key-here")
-    return {
-        "configured": configured,
-        "sdk_available": genai is not None,
-        "model": settings.gemini_model,
-    }
+    """Return privacy-safe AI readiness without exposing API keys."""
+    return ai_status_payload()
 
 
 def get_gemini_client():
-    """Initialize and return the Gemini client. Reads API key fresh from env each call."""
-    api_key = os.getenv("GEMINI_API_KEY", settings.gemini_api_key).strip()
-    if not api_key or api_key == "your-gemini-api-key-here" or api_key.startswith("your-"):
-        return None
-    if genai is None:
-        return None
-    try:
-        return genai.Client(api_key=api_key)
-    except Exception:
-        return None
+    """Compatibility shim retained for existing call sites during provider migration."""
+    return None
 
 
-def call_gemini(client, prompt: str) -> str:
-    """Call Gemini and fail closed when the provider is unavailable or unconfigured."""
-    try:
-        if client is None:
-            raise RuntimeError("AI service is not configured")
-        response = client.models.generate_content(model=settings.gemini_model, contents=prompt)
-        if not getattr(response, "text", None):
-            raise RuntimeError("AI service returned an empty response")
-        return response.text
-    except Exception as exc:
-        api_key = os.getenv("GEMINI_API_KEY", settings.gemini_api_key).strip()
-        if not api_key or api_key.startswith("your-") or api_key == "your-gemini-api-key-here":
-            detail = "Gemini is not configured. Add GEMINI_API_KEY to your .env file, restart the server, and try again."
-        elif genai is None:
-            detail = "Google GenAI SDK is not installed. Run: python -m pip install -r requirements.txt"
-        else:
-            detail = f"Gemini request failed using {settings.gemini_model}. Verify the API key, model access, quota, billing/rate limits, and internet connection."
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=detail,
-        ) from exc
-
+def call_gemini(_client, prompt: str) -> str:
+    """Route OpenAI primary -> OpenAI backup -> Gemini fallback."""
+    return call_ai_text(prompt)
 
 def extract_json_from_response(text: str) -> dict:
-    """Extract a JSON object from a Gemini response that may contain markdown fences."""
+    """Extract a JSON object from an AI provider response that may contain markdown fences."""
     text = text.strip()
     # Remove markdown code fences if present
     if text.startswith("```"):
@@ -198,7 +162,7 @@ def parse_my_resume(
     db: Session = Depends(get_db),
 ):
     """
-    Extracts structured information from your uploaded PDF resume using Gemini AI.
+    Extracts structured information from your uploaded PDF resume using the configured AI provider.
     Returns skills, work experience, education, certifications, and languages.
     The result is stored and shown on your profile.
     """
@@ -630,7 +594,7 @@ def placement_assistant(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Answer placement questions using role-scoped PlaceAI context plus Gemini.
+    """Answer placement questions using role-scoped PlaceAI context through the configured AI provider.
 
     The assistant never receives data outside the signed-in user's authorized scope.
     """
@@ -694,4 +658,4 @@ USER QUESTION:
 {data.message}
 """
     raw = call_gemini(client, prompt)
-    return {"answer": raw.strip(), "role": current_user.role.value, "model": settings.gemini_model, "guardrail": "Role-scoped context; no autonomous placement or hiring decision."}
+    return {"answer": raw.strip(), "role": current_user.role.value, "model": current_ai_model(), "provider": current_ai_provider(), "guardrail": "Role-scoped context; no autonomous placement or hiring decision."}
