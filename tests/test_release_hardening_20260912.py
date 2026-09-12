@@ -73,12 +73,15 @@ def test_drives_are_archived_instead_of_hard_deleted():
 
 
 def test_student_campus_visibility_excludes_draft_drives():
-    source = (ROOT / "app" / "routers" / "students.py").read_text(encoding="utf-8")
-    visibility_section = source.split("def _visible_jobs_for", 1)[1].split('@router.get("/jobs"', 1)[0]
-    assert "PlacementDrive.status == DriveStatus.open" in visibility_section
+    student_source = (ROOT / "app" / "routers" / "students.py").read_text(encoding="utf-8")
+    visibility_section = student_source.split("def _visible_jobs_for", 1)[1].split('@router.get("/jobs"', 1)[0]
+    assert "job_is_visible_to_student(profile, job, db)" in visibility_section
+
+    policy_source = (ROOT / "app" / "placement_access.py").read_text(encoding="utf-8")
+    assert "PlacementDrive.status == DriveStatus.open" in policy_source
+    assert "student.is_verified" in policy_source
+    assert "registration_deadline" in policy_source
     assert "DriveStatus.draft" not in visibility_section
-    assert "profile.is_verified" in visibility_section
-    assert "registration_deadline" in visibility_section
 
 
 def test_password_reset_consumption_locks_recovery_credential():
