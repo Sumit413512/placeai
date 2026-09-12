@@ -14,29 +14,45 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify Vercel and Render report OpenAI primary
+      - name: Fingerprint Vercel AI deployment
         shell: bash
         run: |
           set -euo pipefail
-          verify_ai() {
-            url="$1"
-            body="$(curl -fsS --retry 5 --retry-delay 2 --connect-timeout 15 --max-time 30 "$url")"
-            URL="$url" BODY="$body" python - <<'PY'
+          status_body="$(curl -fsS --retry 5 --retry-delay 2 --connect-timeout 15 --max-time 30 'https://placeai-rxpp.vercel.app/ai/status')"
+          openapi_body="$(curl -fsS --retry 5 --retry-delay 2 --connect-timeout 15 --max-time 30 'https://placeai-rxpp.vercel.app/openapi.json')"
+          STATUS_BODY="$status_body" OPENAPI_BODY="$openapi_body" python - <<'PY'
           import json, os
-          url = os.environ['URL']
-          payload = json.loads(os.environ['BODY'])
-          configured = payload.get('configured') is True
-          model = str(payload.get('model') or '')
-          sdk_available = payload.get('sdk_available') is True
-          if not configured:
-              raise SystemExit(f'{url}: AI provider is not configured')
-          if not sdk_available:
-              raise SystemExit(f'{url}: AI runtime is not available')
+          status = json.loads(os.environ['STATUS_BODY'])
+          spec = json.loads(os.environ['OPENAPI_BODY'])
+          op = (((spec.get('paths') or {}).get('/ai/status') or {}).get('get') or {})
+          summary = str(op.get('summary') or '')
+          model = str(status.get('model') or '')
+          configured = status.get('configured') is True
+          sdk_available = status.get('sdk_available') is True
+          print(f'Vercel AI status: configured={configured} sdk_available={sdk_available} model={model}')
+          print(f'Vercel /ai/status OpenAPI summary: {summary!r}')
+          if summary != 'AI provider configuration status':
+              raise SystemExit('LIVE_SOURCE_OLD: Vercel is not running the OpenAI-primary backend source.')
+          if not configured or not sdk_available:
+              raise SystemExit('LIVE_PROVIDER_UNAVAILABLE: AI provider is not ready.')
           if model != 'gpt-5.6-terra':
-              raise SystemExit(f'{url}: expected OpenAI model gpt-5.6-terra, got {model!r}')
-          print(f'{url}: configured=true sdk_available=true model={model}')
+              raise SystemExit('OPENAI_KEY_NOT_ACTIVE: new source is live, but OPENAI_API_KEY is not active in the production runtime.')
+          print('VERCEL_OPENAI_PRIMARY_OK')
           PY
-          }
 
-          verify_ai 'https://placeai-rxpp.vercel.app/ai/status'
-          verify_ai 'https://placeai-recovery.onrender.com/ai/status'
+      - name: Verify Render gateway sees the same OpenAI provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(curl -fsS --retry 5 --retry-delay 2 --connect-timeout 15 --max-time 30 'https://placeai-recovery.onrender.com/ai/status')"
+          BODY="$body" python - <<'PY'
+          import json, os
+          payload = json.loads(os.environ['BODY'])
+          model = str(payload.get('model') or '')
+          configured = payload.get('configured') is True
+          sdk_available = payload.get('sdk_available') is True
+          print(f'Render gateway AI status: configured={configured} sdk_available={sdk_available} model={model}')
+          if not configured or not sdk_available or model != 'gpt-5.6-terra':
+              raise SystemExit('RENDER_GATEWAY_NOT_ON_OPENAI_PRIMARY')
+          print('RENDER_OPENAI_PRIMARY_OK')
+          PY
