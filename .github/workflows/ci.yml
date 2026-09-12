@@ -40,6 +40,8 @@ jobs:
         run: |
           node --check app/static/app.js
           node --check app/static/access-portal.js
+          node --check app/static/api-errors.js
+          node --check app/static/account-security.js
           node --check app/static/mock-interview.js
           node --check app/static/ui-state-fixes.js
 
