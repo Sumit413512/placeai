@@ -1,0 +1,81 @@
+name: PlaceAI Platform Access Production Smoke
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '43 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: placeai-platform-access-production-smoke
+  cancel-in-progress: true
+
+jobs:
+  platform-access:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BASE_URL: https://placeai-rxpp.vercel.app
+    steps:
+      - name: Wait for production assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            health_code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/health" || true)
+            portal_code=$(curl -sS -o /tmp/access-portal.js -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/static/access-portal.js" || true)
+            core_code=$(curl -sS -o /tmp/app-core.js -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/static/app-core.js" || true)
+            if [ "$health_code" = '200' ] && [ "$portal_code" = '200' ] && [ "$core_code" = '200' ] \
+              && ! grep -q 'renderPlatformAccessRequests' /tmp/access-portal.js \
+              && grep -q "api('/platform/access-requests')" /tmp/app-core.js; then
+              exit 0
+            fi
+            echo "Platform Access release not converged yet (attempt $attempt/30; health=$health_code portal=$portal_code core=$core_code)."
+            sleep 10
+          done
+          echo 'Production did not converge to the Platform Access hotfix.' >&2
+          exit 1
+
+      - name: Verify single-owner Access Control frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s /tmp/access-portal.js
+          test -s /tmp/app-core.js
+          ! grep -q 'async function platformToken' /tmp/access-portal.js
+          ! grep -q 'renderPlatformAccessRequests' /tmp/access-portal.js
+          ! grep -q 'data-access-request-status' /tmp/access-portal.js
+          ! grep -q "fetch('/platform/access-requests'" /tmp/access-portal.js
+          grep -q "view === 'leads'" /tmp/app-core.js
+          grep -q "const rows = await api('/platform/access-requests');" /tmp/app-core.js
+
+      - name: Verify Platform Admin API remains protected
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/access-response.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/platform/access-requests")
+          test "$code" = '401'
+          if grep -q 'Unexpected server error' /tmp/access-response.json; then
+            echo 'Platform Access endpoint leaked an unexpected server error.' >&2
+            cat /tmp/access-response.json
+            exit 1
+          fi
+
+      - name: Verify production health contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('/tmp/health.json').read_text(encoding='utf-8'))
+          required = {'status': 'healthy', 'database': 'ok', 'configuration': 'ok'}
+          bad = {key: (payload.get(key), expected) for key, expected in required.items() if payload.get(key) != expected}
+          if bad:
+              raise SystemExit(f'Production health contract failed: {bad}; payload={payload}')
+          print('Platform Access production smoke passed; version=', payload.get('version'))
+          PY

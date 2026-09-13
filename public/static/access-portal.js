@@ -2,7 +2,6 @@
   'use strict';
 
   const $ = (selector, root = document) => root.querySelector(selector);
-  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const esc = (value = '') => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 
   const roles = {
@@ -31,6 +30,7 @@
       access: 'Restricted internal access'
     }
   };
+
   const roleOrder = ['student', 'recruiter', 'institution_admin', 'platform_admin'];
   let loginRole = 'student';
   let createRole = 'student';
@@ -100,13 +100,6 @@
     return data;
   }
 
-  function showError(id, message) {
-    const node = $(`#${id}`);
-    if (!node) return;
-    node.textContent = message;
-    node.classList.add('is-visible');
-  }
-
   function setBusy(form, busy) {
     const button = $('button[type="submit"]', form);
     if (!button) return;
@@ -130,9 +123,7 @@
   function validateStudentSignup(body) {
     const username = String(body.username || '').trim();
     const password = String(body.password || '');
-    if (!/^[A-Za-z0-9._-]{3,80}$/.test(username)) {
-      throw new Error('Username may only contain letters, numbers, dot, underscore, and hyphen.');
-    }
+    if (!/^[A-Za-z0-9._-]{3,80}$/.test(username)) throw new Error('Username may only contain letters, numbers, dot, underscore, and hyphen.');
     if (password.length < 12) throw new Error('Password must be at least 12 characters long.');
     if (!/[a-z]/.test(password)) throw new Error('Password must contain a lowercase letter.');
     if (!/[A-Z]/.test(password)) throw new Error('Password must contain an uppercase letter.');
@@ -170,52 +161,6 @@
     } catch (error) {
       apiErrors.applyToForm(form, error, $('#role-create-error'));
       setBusy(form, false);
-    }
-  }
-
-  async function platformToken() {
-    const response = await fetch('/auth/refresh', {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: '{}'});
-    if (!response.ok) throw new Error('Your administrative session has expired. Sign in again.');
-    const data = await response.json();
-    return data.access_token;
-  }
-
-  function fmtDate(value) {
-    if (!value) return '—';
-    try { return new Intl.DateTimeFormat('en-IN', {day: '2-digit', month: 'short', year: 'numeric'}).format(new Date(value)); }
-    catch { return '—'; }
-  }
-
-  async function renderPlatformAccessRequests() {
-    const content = $('#app-content');
-    if (!content) return;
-    const pageTitle = $('#page-title');
-    const eyebrow = $('#page-eyebrow');
-    if (pageTitle) pageTitle.textContent = 'Access requests';
-    if (eyebrow) eyebrow.textContent = 'Platform control';
-    $$('#app-nav button').forEach(button => button.classList.toggle('active', button.dataset.view === 'leads'));
-    content.innerHTML = '<div class="access-loading">Loading access requests…</div>';
-    try {
-      const token = await platformToken();
-      const response = await fetch('/platform/access-requests', {headers: {Authorization: `Bearer ${token}`}, credentials: 'include'});
-      if (!response.ok) throw new Error('Could not load access requests.');
-      const rows = await response.json();
-      content.innerHTML = `<section><div class="access-requests-panel"><div class="access-requests-head"><div><h2>Privileged account access</h2><p>Real requests submitted from the public access flow. Only persisted production requests are displayed.</p></div><span>${rows.length} request${rows.length === 1 ? '' : 's'}</span></div>${rows.length ? `<div class="access-table-wrap"><table class="access-table"><thead><tr><th>Requester</th><th>Role</th><th>Organization</th><th>Context</th><th>Received</th><th>Status</th></tr></thead><tbody>${rows.map(row => `<tr><td><strong>${esc(row.full_name)}</strong><span>${esc(row.work_email)}${row.phone ? ` · ${esc(row.phone)}` : ''}</span></td><td>${esc(roles[row.requested_role]?.label || row.requested_role)}</td><td>${esc(row.organization_name || '—')}</td><td>${esc((row.message || '—').slice(0, 180))}</td><td>${fmtDate(row.created_at)}</td><td><select data-access-request-status data-id="${esc(row.id)}"><option value="new" ${row.status === 'new' ? 'selected' : ''}>New</option><option value="under_review" ${row.status === 'under_review' ? 'selected' : ''}>Under review</option><option value="approved" ${row.status === 'approved' ? 'selected' : ''}>Approved</option><option value="rejected" ${row.status === 'rejected' ? 'selected' : ''}>Rejected</option><option value="provisioned" ${row.status === 'provisioned' ? 'selected' : ''}>Provisioned</option></select></td></tr>`).join('')}</tbody></table></div>` : '<div class="access-empty">No access requests have been submitted.</div>'}</div></section>`;
-    } catch (error) {
-      content.innerHTML = `<div class="access-empty">${esc(error.message)}</div>`;
-    }
-  }
-
-  async function updateAccessRequestStatus(select) {
-    select.disabled = true;
-    try {
-      const token = await platformToken();
-      const response = await fetch(`/platform/access-requests/${encodeURIComponent(select.dataset.id)}`, {method: 'PATCH', credentials: 'include', headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`}, body: JSON.stringify({status: select.value})});
-      if (!response.ok) throw new Error('Status update failed.');
-    } catch (error) {
-      alert(error.message);
-    } finally {
-      select.disabled = false;
     }
   }
 
@@ -270,13 +215,6 @@
         input.type = input.type === 'password' ? 'text' : 'password';
         togglePassword.textContent = input.type === 'password' ? 'Show' : 'Hide';
       }
-      return;
-    }
-    const leadView = event.target.closest('#app-nav button[data-view="leads"]');
-    if (leadView) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      renderPlatformAccessRequests();
     }
   }, true);
 
@@ -288,13 +226,6 @@
     if (form.id === 'role-login-form') loginSubmit(form);
     else if (form.id === 'role-student-signup-form') studentSignupSubmit(form);
     else accessRequestSubmit(form);
-  }, true);
-
-  document.addEventListener('change', event => {
-    const select = event.target.closest('[data-access-request-status]');
-    if (!select) return;
-    event.stopImmediatePropagation();
-    updateAccessRequestStatus(select);
   }, true);
 
   const observer = new MutationObserver(() => relabelPlatformNavigation());
