@@ -15,6 +15,7 @@ from app.config import get_settings
 
 settings = get_settings()
 password_hash = PasswordHasher()
+MAX_SIGNED_TOKEN_LENGTH = 4096
 
 
 def get_hashed_password(password: str) -> str:
@@ -55,6 +56,8 @@ def _token(subject: str, secret: str, expires_delta: timedelta, token_type: str,
 
 def decode_token(token: str, secret: str, expected_type: str) -> dict:
     try:
+        if not isinstance(token, str) or not token or len(token) > MAX_SIGNED_TOKEN_LENGTH:
+            raise ValueError("token length")
         head, body, signature = token.split(".")
         header = json.loads(_b64url_decode(head))
         if header.get("alg") != "HS256" or header.get("typ") != "JWT":

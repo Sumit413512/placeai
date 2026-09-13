@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -11,13 +11,24 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import require_student
-from app.models import Application, ApprovalStatus, DriveStatus, Job, PlacementDrive, ProfileChangeRequest, RecruiterProfile, Resume, StudentProfile, User, UserRole
+from app.models import Application, ApprovalStatus, DriveStatus, Job, PlacementDrive, ProfileChangeRequest, Resume, StudentProfile, User, UserRole
+from app.placement_access import (
+    available_drive_for_job,
+    available_drives_for_student,
+    deadline_has_passed,
+    job_is_available,
+    job_is_visible_to_student,
+)
 from app.schemas import ApplicationCreate, ApplicationOut, JobOut, PlacementDriveOut, ResumeOut, StudentProfileCreate, StudentProfileOut
-from app.services import application_out, create_notification, drive_out, evaluate_drive_eligibility, evaluate_placement_policies, is_student_eligible_for_drive, job_out, student_out
+from app.services import application_out, create_notification, drive_out, evaluate_drive_eligibility, evaluate_placement_policies, job_out, student_out
 from app.storage import delete_file, file_download_response, save_file, safe_upload_filename, validate_upload_signature
 
 settings = get_settings()
 router = APIRouter(prefix="/students", tags=["Students"])
+
+# Kept for backward compatibility with the established regression-test/import contract.
+# Runtime logic remains centralized in app.placement_access.
+_deadline_has_passed = deadline_has_passed
 
 
 def get_or_create_profile(current_user: User, db: Session) -> StudentProfile:
@@ -132,17 +143,9 @@ def download_my_resume(current_user: User = Depends(require_student), db: Sessio
     return file_download_response(db, profile.resume.filepath, media_type="application/pdf", filename=profile.resume.original_filename)
 
 
-def _visible_jobs_for(profile: StudentProfile, db: Session):
+def _visible_jobs_for(profile: StudentProfile, db: Session) -> list[Job]:
     jobs = db.query(Job).filter(Job.is_active.is_(True), Job.approval_status == ApprovalStatus.approved).all()
-    if not profile.organization_id:
-        return [j for j in jobs if j.visibility == "public"]
-    campus_job_ids = {
-        d.job_id for d in db.query(PlacementDrive).filter(
-            PlacementDrive.organization_id == profile.organization_id,
-            PlacementDrive.status.in_([DriveStatus.open, DriveStatus.draft]),
-        ).all()
-    }
-    return [j for j in jobs if j.visibility == "public" or j.id in campus_job_ids]
+    return [job for job in jobs if job_is_visible_to_student(profile, job, db)]
 
 
 @router.get("/jobs", response_model=List[JobOut])
@@ -169,31 +172,63 @@ def browse_jobs(search: Optional[str] = Query(None), skills: Optional[str] = Que
 @router.get("/drives", response_model=List[PlacementDriveOut])
 def my_placement_drives(current_user: User = Depends(require_student), db: Session = Depends(get_db)):
     profile = get_or_create_profile(current_user, db)
-    if not profile.organization_id:
-        return []
-    drives = db.query(PlacementDrive).filter(PlacementDrive.organization_id == profile.organization_id, PlacementDrive.status == DriveStatus.open).order_by(PlacementDrive.created_at.desc()).all()
-    return [drive_out(d, db) for d in drives]
+    return [drive_out(drive, db) for drive in available_drives_for_student(profile, db)]
 
 
 @router.get("/drives/{drive_id}/eligibility")
 def drive_eligibility(drive_id: str, current_user: User = Depends(require_student), db: Session = Depends(get_db)):
     profile = get_or_create_profile(current_user, db)
-    drive = db.query(PlacementDrive).filter(PlacementDrive.id == drive_id, PlacementDrive.organization_id == profile.organization_id).first()
-    if not drive:
+    if not profile.is_verified:
+        raise HTTPException(status_code=403, detail="Institution verification is required for campus placement drives")
+    drive = db.query(PlacementDrive).filter(
+        PlacementDrive.id == drive_id,
+        PlacementDrive.organization_id == profile.organization_id,
+        PlacementDrive.status == DriveStatus.open,
+    ).first()
+    if not drive or not drive.job or drive.job.visibility != "campus" or drive.job.target_organization_id != profile.organization_id:
         raise HTTPException(status_code=404, detail="Placement drive not found")
-    return evaluate_drive_eligibility(profile, drive, db)
+
+    result = evaluate_drive_eligibility(profile, drive, db)
+    reasons: list[tuple[str, str, str]] = []
+    if not job_is_available(drive.job):
+        reasons.append(("job_availability", "Job availability", "The campus job is closed, expired, inactive, or awaiting approval"))
+    if deadline_has_passed(drive.registration_deadline):
+        reasons.append(("registration_deadline", "Registration deadline", "Registration deadline has passed"))
+
+    for key, label, reason in reasons:
+        result["eligible"] = False
+        result["checks"].append({
+            "key": key,
+            "label": label,
+            "passed": False,
+            "actual": datetime.now(timezone.utc).isoformat(),
+            "required": drive.registration_deadline.isoformat() if key == "registration_deadline" and drive.registration_deadline else None,
+            "reason": reason,
+        })
+        if reason not in result["reasons"]:
+            result["reasons"].append(reason)
+    if reasons:
+        result["summary"] = "Not eligible because: " + "; ".join(result["reasons"])
+    return result
 
 
 @router.post("/jobs/{job_id}/apply", response_model=ApplicationOut, status_code=status.HTTP_201_CREATED)
 def apply_to_job(job_id: str, data: ApplicationCreate, current_user: User = Depends(require_student), db: Session = Depends(get_db)):
     profile = get_or_create_profile(current_user, db)
     job = db.query(Job).filter(Job.id == job_id, Job.is_active.is_(True), Job.approval_status == ApprovalStatus.approved).first()
-    if not job or job not in _visible_jobs_for(profile, db):
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found or no longer available")
-    drive = db.query(PlacementDrive).filter(PlacementDrive.job_id == job.id, PlacementDrive.organization_id == profile.organization_id, PlacementDrive.status == DriveStatus.open).first()
+    if deadline_has_passed(job.deadline):
+        raise HTTPException(status_code=400, detail="Application deadline has passed")
+    if job.visibility == "campus" and not profile.is_verified:
+        raise HTTPException(status_code=403, detail="Institution verification is required before applying to campus opportunities")
+    if not job_is_visible_to_student(profile, job, db):
+        raise HTTPException(status_code=404, detail="Job not found or no longer available")
+
+    drive = available_drive_for_job(profile, job, db) if job.visibility == "campus" else None
     if job.visibility == "campus":
         if not drive:
-            raise HTTPException(status_code=403, detail="This campus opportunity is not available to your institution")
+            raise HTTPException(status_code=403, detail="This campus opportunity is not currently available to your institution")
         eligibility = evaluate_drive_eligibility(profile, drive, db)
         if not eligibility["eligible"]:
             raise HTTPException(status_code=403, detail=eligibility["summary"])
@@ -205,7 +240,6 @@ def apply_to_job(job_id: str, data: ApplicationCreate, current_user: User = Depe
         raise HTTPException(status_code=400, detail="You have already applied to this job")
     application = Application(student_id=profile.id, job_id=job_id, drive_id=drive.id if drive else None, pipeline_stage_key="registration", cover_note=data.cover_note)
     db.add(application)
-    # Notify the student, recruiter and linked placement team.
     create_notification(db, current_user.id, "Application submitted", f"Your application for {job.title} was submitted successfully.", organization_id=profile.organization_id, category="application", link="applications")
     if job.recruiter and job.recruiter.user_id:
         create_notification(db, job.recruiter.user_id, "New candidate application", f"{profile.full_name or current_user.username} applied for {job.title}.", organization_id=profile.organization_id, category="applicants", link="jobs")

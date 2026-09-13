@@ -5,12 +5,12 @@ import importlib
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import DataError, IntegrityError, SQLAlchemyError
 
 from app.config import get_settings
 from app.database import (
@@ -25,6 +25,7 @@ from app.email_delivery import transactional_email_configured
 logger = logging.getLogger("placeai")
 settings = get_settings()
 runtime_readiness_errors = settings.configuration_error_codes()
+_router_import_failures: dict[str, str] = {}
 if engine_initialization_error_code and engine_initialization_error_code not in runtime_readiness_errors:
     runtime_readiness_errors.append(engine_initialization_error_code)
 
@@ -49,8 +50,9 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title=f"{settings.app_name} API",
     description="AI-assisted campus placement operating system for students, recruiters, and institution teams.",
-    version="3.1.3",
-    docs_url="/docs" if not settings.is_production else "/api/docs",
+    version="3.1.4",
+    docs_url=None if settings.is_production else "/docs",
+    openapi_url=None if settings.is_production else "/openapi.json",
     redoc_url=None,
     lifespan=lifespan,
 )
@@ -107,9 +109,30 @@ async def security_headers(request: Request, call_next):
         "img-src 'self' data: https:; "
         "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
     )
+    if path == "/health" or path.startswith("/auth/"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
     if settings.is_production:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
+
+
+@app.exception_handler(DataError)
+async def database_data_error_handler(request: Request, exc: DataError):
+    logger.warning("Database rejected invalid input on %s", request.url.path)
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "One or more input values are invalid or too large.", "code": "INVALID_INPUT"},
+    )
+
+
+@app.exception_handler(IntegrityError)
+async def database_integrity_error_handler(request: Request, exc: IntegrityError):
+    logger.warning("Database integrity conflict on %s", request.url.path)
+    return JSONResponse(
+        status_code=409,
+        content={"detail": "The requested change conflicts with existing data.", "code": "DATA_CONFLICT"},
+    )
 
 
 @app.exception_handler(SQLAlchemyError)
@@ -135,48 +158,113 @@ def _import_router(name: str):
     """Import one router without allowing an import-time failure to kill Vercel."""
     try:
         return importlib.import_module(f"app.routers.{name}")
-    except Exception:
+    except Exception as exc:
         code = f"ROUTER_IMPORT_{name.upper()}_FAILED"
+        _router_import_failures[name] = f"{type(exc).__name__}: {exc}"
         logger.exception("PlaceAI router bootstrap failed: %s", name)
         if code not in runtime_readiness_errors:
             runtime_readiness_errors.append(code)
         return None
 
 
-def _include_router(module) -> None:
-    if module is not None and getattr(module, "router", None) is not None:
+def _route_is_excluded(route, exclusions: set[tuple[str, str]]) -> bool:
+    path = getattr(route, "path", "")
+    methods = getattr(route, "methods", set()) or set()
+    return any((path, method) in exclusions for method in methods)
+
+
+def _include_router(module, exclusions: set[tuple[str, str]] | None = None) -> None:
+    """Include a router without mutating its canonical module-level route registry."""
+    if module is None or getattr(module, "router", None) is None:
+        return
+    if not exclusions:
         app.include_router(module.router)
+        return
+    filtered = APIRouter()
+    filtered.routes.extend(
+        route for route in module.router.routes if not _route_is_excluded(route, exclusions)
+    )
+    app.include_router(filtered)
 
 
 auth = _import_router("auth")
 account_security = _import_router("account_security")
+account_security_secure = _import_router("account_security_secure")
 access = _import_router("access")
 students = _import_router("students")
 recruiters = _import_router("recruiters")
 jobs = _import_router("jobs")
+jobs_secure = _import_router("jobs_secure")
 interview_compat = _import_router("interview_compat")
 ai = _import_router("ai")
+ai_experience = _import_router("ai_experience")
 mock_interview = _import_router("mock_interview")
+mock_interview_v2 = _import_router("mock_interview_v2")
 institutions = _import_router("institutions")
+institution_secure = _import_router("institution_secure")
 platform = _import_router("platform")
 enterprise = _import_router("enterprise")
+enterprise_secure = _import_router("enterprise_secure")
+student_workspace_v2 = _import_router("student_workspace_v2")
 
+ACCOUNT_SECURITY_REPLACEMENTS = {
+    ("/auth/change-password", "POST"),
+}
+JOB_REPLACEMENTS = {
+    ("/jobs", "GET"),
+    ("/jobs/{job_id}", "GET"),
+}
+AI_REPLACEMENTS = {
+    ("/ai/parse-resume", "POST"),
+    ("/ai/generate-summary", "POST"),
+}
+MOCK_INTERVIEW_REPLACEMENTS = {
+    ("/mock-interview/start", "POST"),
+    ("/mock-interview/evaluate", "POST"),
+}
+INSTITUTION_REPLACEMENTS = {
+    ("/institutions/dashboard", "GET"),
+    ("/institutions/jobs/{job_id}/approval", "PATCH"),
+    ("/institutions/drives", "POST"),
+    ("/institutions/drives/{drive_id}", "PUT"),
+    ("/institutions/applications", "GET"),
+}
+ENTERPRISE_REPLACEMENTS = {
+    ("/enterprise/drives", "GET"),
+    ("/enterprise/drives/{drive_id}/pipeline", "GET"),
+    ("/enterprise/drives/{drive_id}/eligibility", "GET"),
+    ("/enterprise/communications", "GET"),
+    ("/enterprise/attendance/sessions", "GET"),
+    ("/enterprise/attendance/check-in", "POST"),
+    ("/enterprise/search", "GET"),
+    ("/enterprise/calendar", "GET"),
+    ("/enterprise/announcements", "GET"),
+    ("/enterprise/custom-fields", "GET"),
+}
+ENTERPRISE_SECURE_EXCLUSIONS = {
+    ("/enterprise/announcements", "GET"),
+    ("/enterprise/calendar", "GET"),
+}
 
-for module in (
-    auth,
-    account_security,
-    access,
-    students,
-    recruiters,
-    jobs,
-    interview_compat,
-    ai,
-    mock_interview,
-    institutions,
-    platform,
-    enterprise,
-):
-    _include_router(module)
+_include_router(auth)
+_include_router(account_security, ACCOUNT_SECURITY_REPLACEMENTS)
+_include_router(account_security_secure)
+_include_router(access)
+_include_router(students)
+_include_router(recruiters)
+_include_router(jobs, JOB_REPLACEMENTS)
+_include_router(jobs_secure)
+_include_router(interview_compat)
+_include_router(ai, AI_REPLACEMENTS)
+_include_router(ai_experience)
+_include_router(mock_interview, MOCK_INTERVIEW_REPLACEMENTS)
+_include_router(mock_interview_v2)
+_include_router(institutions, INSTITUTION_REPLACEMENTS)
+_include_router(institution_secure)
+_include_router(platform)
+_include_router(enterprise, ENTERPRISE_REPLACEMENTS)
+_include_router(enterprise_secure, ENTERPRISE_SECURE_EXCLUSIONS)
+_include_router(student_workspace_v2)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -192,6 +280,7 @@ def root():
         '<link rel="stylesheet" href="/static/access-portal.css">\n'
         '<link rel="stylesheet" href="/static/ui-fixes.css">\n'
         '<link rel="stylesheet" href="/static/account-security.css">\n'
+        '<script src="/static/workspace-runtime.js" defer></script>\n'
         '<script src="/static/api-errors.js" defer></script>\n'
         '<script src="/static/access-portal.js" defer></script>\n'
         '<script src="/static/ui-state-fixes.js" defer></script>\n'
@@ -219,14 +308,13 @@ def health_check():
             content={
                 "status": "degraded",
                 "service": service_name,
-                "version": "3.1.3",
+                "version": "3.1.4",
                 "database": "not_checked",
                 "configuration": "invalid",
                 "configuration_errors": runtime_readiness_errors,
             },
         )
 
-    target = safe_database_target(settings.database_url)
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
@@ -240,12 +328,13 @@ def health_check():
     payload = {
         "status": "healthy" if database == "ok" else "degraded",
         "service": service_name,
-        "version": "3.1.3",
+        "version": "3.1.4",
         "database": database,
         "configuration": "ok",
-        "database_target": target,
         "transactional_email": "ok" if transactional_email_configured(settings) else "not_configured",
     }
+    if not settings.is_production:
+        payload["database_target"] = safe_database_target(settings.database_url)
     if database_error:
         payload["database_error"] = database_error
     if database != "ok":

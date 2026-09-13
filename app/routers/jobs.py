@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_recruiter
-from app.models import Application, ApplicationStatus, ApprovalStatus, Job, Organization, RecruiterProfile, User, UserRole
+from app.models import Application, ApplicationStatus, ApprovalStatus, DriveStatus, Job, Organization, PlacementDrive, RecruiterProfile, StudentProfile, User, UserRole
 from app.schemas import ApplicationOut, ApplicationStatusUpdate, JobCreate, JobOut, JobUpdate
 from app.services import application_out, create_notification, job_out, record_audit
 
@@ -24,6 +26,25 @@ _CAMPUS_MATERIAL_FIELDS = {
     "preferred_roles",
     "deadline",
 }
+_JOB_UPDATE_LENGTH_LIMITS = {
+    "location": 200,
+    "job_type": 60,
+    "salary_range": 120,
+    "experience_required": 120,
+    "visibility": 30,
+    "target_organization_slug": 120,
+}
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _deadline_has_passed(value: datetime | None) -> bool:
+    if value is None:
+        return False
+    deadline = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    return deadline <= datetime.now(timezone.utc)
 
 
 def _profile(current_user: User, db: Session) -> RecruiterProfile:
@@ -50,6 +71,13 @@ def _resolve_active_org(slug: str, db: Session) -> Organization:
 
 def _normalize_list(values: list[str] | None, limit: int) -> list[str]:
     return [str(value).strip() for value in (values or []) if str(value).strip()][:limit]
+
+
+def _validate_update_lengths(update: dict) -> None:
+    for field, limit in _JOB_UPDATE_LENGTH_LIMITS.items():
+        value = update.get(field)
+        if value is not None and len(str(value)) > limit:
+            raise HTTPException(status_code=422, detail=f"{field} must be {limit} characters or fewer")
 
 
 def _material_job_change(job: Job, update: dict) -> bool:
@@ -111,20 +139,27 @@ def my_job_listings(current_user: User = Depends(require_recruiter), db: Session
 def list_jobs(search: Optional[str] = Query(None), job_type: Optional[str] = Query(None), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     query = db.query(Job).filter(Job.is_active.is_(True), Job.approval_status == ApprovalStatus.approved)
     if current_user.role == UserRole.student:
-        if current_user.organization_id:
-            query = query.filter((Job.visibility == "public") | (Job.target_organization_id == current_user.organization_id))
+        query = query.filter(or_(Job.deadline.is_(None), Job.deadline > _utcnow()))
+        student = db.query(StudentProfile).filter(StudentProfile.user_id == current_user.id).first()
+        if current_user.organization_id and student and student.is_verified:
+            open_campus_jobs = db.query(PlacementDrive.job_id).filter(
+                PlacementDrive.organization_id == current_user.organization_id,
+                PlacementDrive.status == DriveStatus.open,
+                or_(PlacementDrive.registration_deadline.is_(None), PlacementDrive.registration_deadline > _utcnow()),
+            )
+            query = query.filter(or_(Job.visibility == "public", Job.id.in_(open_campus_jobs)))
         else:
             query = query.filter(Job.visibility == "public")
     elif current_user.role == UserRole.institution_admin:
-        query = query.filter((Job.visibility == "public") | (Job.target_organization_id == current_user.organization_id))
+        query = query.filter(or_(Job.visibility == "public", Job.target_organization_id == current_user.organization_id))
     elif current_user.role == UserRole.recruiter:
         profile = db.query(RecruiterProfile).filter(RecruiterProfile.user_id == current_user.id).first()
         if profile:
-            query = query.filter((Job.visibility == "public") | (Job.recruiter_id == profile.id))
+            query = query.filter(or_(Job.visibility == "public", Job.recruiter_id == profile.id))
         else:
             query = query.filter(Job.visibility == "public")
     if search:
-        query = query.filter((Job.title.ilike(f"%{search}%")) | (Job.description.ilike(f"%{search}%")))
+        query = query.filter(or_(Job.title.ilike(f"%{search}%"), Job.description.ilike(f"%{search}%")))
     if job_type:
         query = query.filter(Job.job_type.ilike(f"%{job_type}%"))
     return [job_out(j) for j in query.order_by(Job.created_at.desc()).limit(200).all()]
@@ -146,10 +181,22 @@ def get_job(job_id: str, current_user: User = Depends(get_current_user), db: Ses
 
     if not job.is_active or job.approval_status != ApprovalStatus.approved:
         raise HTTPException(status_code=404, detail="Job not found")
+    if current_user.role == UserRole.student and _deadline_has_passed(job.deadline):
+        raise HTTPException(status_code=404, detail="Job not found")
     if job.visibility == "public":
         return job_out(job)
-    if current_user.role in {UserRole.student, UserRole.institution_admin} and current_user.organization_id and job.target_organization_id == current_user.organization_id:
+    if current_user.role == UserRole.institution_admin and current_user.organization_id and job.target_organization_id == current_user.organization_id:
         return job_out(job)
+    if current_user.role == UserRole.student and current_user.organization_id and job.target_organization_id == current_user.organization_id:
+        student = db.query(StudentProfile).filter(StudentProfile.user_id == current_user.id, StudentProfile.is_verified.is_(True)).first()
+        if student:
+            drive = db.query(PlacementDrive).filter(
+                PlacementDrive.job_id == job.id,
+                PlacementDrive.organization_id == current_user.organization_id,
+                PlacementDrive.status == DriveStatus.open,
+            ).first()
+            if drive and not _deadline_has_passed(drive.registration_deadline):
+                return job_out(job)
     raise HTTPException(status_code=404, detail="Job not found")
 
 
@@ -160,6 +207,8 @@ def create_job(data: JobCreate, current_user: User = Depends(require_recruiter),
     visibility = data.visibility.lower().strip()
     if visibility not in {"public", "campus"}:
         raise HTTPException(status_code=400, detail="visibility must be public or campus")
+    if data.deadline is not None and _deadline_has_passed(data.deadline):
+        raise HTTPException(status_code=400, detail="Application deadline must be in the future")
 
     target_slug = (data.target_organization_slug or "").strip() or None
     if visibility != "campus" and target_slug:
@@ -208,6 +257,7 @@ def update_job(job_id: str, data: JobUpdate, current_user: User = Depends(requir
         raise HTTPException(status_code=404, detail="Job not found or access denied")
 
     update = data.model_dump(exclude_unset=True)
+    _validate_update_lengths(update)
     target_slug_raw = update.pop("target_organization_slug", None)
     target_slug = str(target_slug_raw).strip() if target_slug_raw is not None else None
     target_slug = target_slug or None
@@ -277,13 +327,21 @@ def update_job(job_id: str, data: JobUpdate, current_user: User = Depends(requir
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_job(job_id: str, current_user: User = Depends(require_recruiter), db: Session = Depends(get_db)):
+    """Archive a listing without destroying placement-drive or application history."""
     profile = _profile(current_user, db)
     job = db.query(Job).filter(Job.id == job_id, Job.recruiter_id == profile.id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found or access denied")
-    if job.target_organization_id:
-        record_audit(db, current_user, "recruiter.campus_job.deleted", organization_id=job.target_organization_id, entity_type="job", entity_id=job.id, metadata={"title": job.title})
-    db.delete(job)
+    job.is_active = False
+    record_audit(
+        db,
+        current_user,
+        "recruiter.job.archived",
+        organization_id=job.target_organization_id,
+        entity_type="job",
+        entity_id=job.id,
+        metadata={"title": job.title, "visibility": job.visibility},
+    )
     db.commit()
 
 
