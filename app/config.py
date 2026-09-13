@@ -98,9 +98,9 @@ class Settings:
         default_backend_url = vercel_default_url or "http://localhost:8000"
         self.backend_base_url = os.getenv("BASE_URL", default_backend_url).rstrip("/")
 
-        # External links sent to users must land on the production workspace. The
-        # historical Render gateway remains a fallback only; stale environment values
-        # pointing there are ignored when the application is running in Vercel production.
+        # External links sent to users must land on the canonical production origin.
+        # The historical Render gateway remains a fallback only; an exact stale
+        # override pointing there is ignored when PlaceAI runs in Vercel production.
         configured_public_app_url = _first_env("PUBLIC_APP_URL", "PASSWORD_RESET_BASE_URL").rstrip("/")
         if (
             self.is_production
@@ -109,8 +109,7 @@ class Settings:
         ):
             configured_public_app_url = ""
         if self.is_production and self.running_on_vercel:
-            public_origin = vercel_default_url or self.backend_base_url
-            default_public_app_url = f"{public_origin.rstrip('/')}/workspace"
+            default_public_app_url = vercel_default_url or self.backend_base_url
         else:
             default_public_app_url = self.backend_base_url
         self.base_url = (configured_public_app_url or default_public_app_url).rstrip("/")
