@@ -90,7 +90,10 @@ jobs:
 
   deploy:
     name: Deploy GitHub Pages
-    if: github.event_name != 'pull_request'
+    # PlaceAI production is served from Render. Keep the static surface validated in
+    # private repositories without attempting a Pages deployment that GitHub has not
+    # been configured to host.
+    if: github.event_name != 'pull_request' && github.event.repository.private == false
     needs: validate
     environment:
       name: github-pages
