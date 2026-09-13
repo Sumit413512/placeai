@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const productionBase = new URL('/workspace', window.location.origin).toString();
+  const productionBase = 'https://placeai-rxpp.vercel.app';
   const portalLabels = {
     student: 'Student workspace',
     recruiter: 'Employer / recruiter workspace',
@@ -20,7 +20,6 @@
       ['Scattered résumés', 'Scattered resumes'],
       ['résumé parsing', 'resume parsing'],
       ['Résumé parsing', 'Resume parsing'],
-      ['Release 3.1.3', 'Release 3.1.4'],
     ]);
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const nodes = [];
