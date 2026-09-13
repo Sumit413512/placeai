@@ -21,6 +21,13 @@ from app.database import (
     safe_database_target,
 )
 from app.email_delivery import transactional_email_configured
+from app.embedded_pages import (
+    ACCEPTABLE_USE_HTML,
+    INDEX_HTML,
+    MOCK_INTERVIEW_HTML,
+    PRIVACY_HTML,
+    TERMS_HTML,
+)
 
 logger = logging.getLogger("placeai")
 settings = get_settings()
@@ -291,10 +298,19 @@ def _public_base(request: Request) -> str:
     return str(request.base_url).rstrip("/")
 
 
+def _template_html(name: str, fallback: str) -> str:
+    """Read the editable template, with an imported fallback for serverless bundles."""
+    try:
+        return (TEMPLATE_DIR / name).read_text(encoding="utf-8")
+    except OSError as exc:
+        logger.warning("Using embedded PlaceAI page for %s: %s", name, type(exc).__name__)
+        return fallback
+
+
 @app.get("/", include_in_schema=False)
 def root():
     """Serve the production workspace shell with the role-aware access layer."""
-    html = (TEMPLATE_DIR / "index.html").read_text(encoding="utf-8")
+    html = _template_html("index.html", INDEX_HTML)
     assets = (
         '<link rel="stylesheet" href="/static/api-errors.css">\n'
         '<link rel="stylesheet" href="/static/access-portal.css">\n'
@@ -322,23 +338,23 @@ def favicon() -> FileResponse:
 
 
 @app.get("/mock-interview", include_in_schema=False)
-def mock_interview_page():
-    return FileResponse(TEMPLATE_DIR / "mock-interview.html")
+def mock_interview_page() -> HTMLResponse:
+    return HTMLResponse(_template_html("mock-interview.html", MOCK_INTERVIEW_HTML))
 
 
 @app.api_route("/privacy", methods=["GET", "HEAD"], include_in_schema=False)
-def privacy_page() -> FileResponse:
-    return FileResponse(TEMPLATE_DIR / "privacy.html", media_type="text/html")
+def privacy_page() -> HTMLResponse:
+    return HTMLResponse(_template_html("privacy.html", PRIVACY_HTML))
 
 
 @app.api_route("/terms", methods=["GET", "HEAD"], include_in_schema=False)
-def terms_page() -> FileResponse:
-    return FileResponse(TEMPLATE_DIR / "terms.html", media_type="text/html")
+def terms_page() -> HTMLResponse:
+    return HTMLResponse(_template_html("terms.html", TERMS_HTML))
 
 
 @app.api_route("/acceptable-use", methods=["GET", "HEAD"], include_in_schema=False)
-def acceptable_use_page() -> FileResponse:
-    return FileResponse(TEMPLATE_DIR / "acceptable-use.html", media_type="text/html")
+def acceptable_use_page() -> HTMLResponse:
+    return HTMLResponse(_template_html("acceptable-use.html", ACCEPTABLE_USE_HTML))
 
 
 @app.get("/robots.txt", include_in_schema=False)
