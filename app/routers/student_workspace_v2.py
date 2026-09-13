@@ -33,13 +33,21 @@ from app.routers.enterprise_secure import (
 router = APIRouter(prefix="/enterprise", tags=["Enterprise Placement Operations"])
 
 
-def _student_campus_context(student: StudentProfile, db: Session) -> Organization | None:
-    if not student.organization_id or not student.is_verified:
+def _linked_student_organization(student: StudentProfile, db: Session) -> Organization | None:
+    """Return the active linked institution without implying campus verification."""
+    if not student.organization_id:
         return None
     return db.query(Organization).filter(
         Organization.id == student.organization_id,
         Organization.is_active.is_(True),
     ).first()
+
+
+def _student_campus_context(student: StudentProfile, db: Session) -> Organization | None:
+    """Return campus context only after the placement office verifies the student."""
+    if not student.is_verified:
+        return None
+    return _linked_student_organization(student, db)
 
 
 @router.get("/student-campus-status")
@@ -50,11 +58,9 @@ def student_campus_status(
     if current_user.role != UserRole.student:
         raise HTTPException(status_code=403, detail="Student workspace only")
     student = _student(current_user, db)
-    organization = None
-    if student.organization_id:
-        organization = db.query(Organization).filter(Organization.id == student.organization_id).first()
+    organization = _linked_student_organization(student, db)
     linked = organization is not None
-    verified = bool(linked and student.is_verified and organization.is_active)
+    verified = bool(linked and student.is_verified)
     return {
         "linked": linked,
         "verified": verified,
@@ -118,10 +124,11 @@ def announcements_read_v2(
         raise HTTPException(status_code=403, detail="Announcements are limited to institution teams and students")
 
     student = _student(current_user, db)
-    organization = _student_campus_context(student, db)
+    # Operational announcements are safe for an account already linked to an active
+    # institution, even while placement-office verification is pending. Verification
+    # still gates campus jobs, drives, eligibility and institution custom fields.
+    organization = _linked_student_organization(student, db)
     if not organization:
-        # An unlinked student still has a valid PlaceAI account. Campus-only content is
-        # simply unavailable until verification, rather than turning the entire view into an error.
         return []
 
     now = _utc_naive_now()
