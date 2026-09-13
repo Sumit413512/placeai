@@ -26,7 +26,9 @@ class MockInterviewStartV2(BaseModel):
 
     job_id: str
     focus: str = Field(default="balanced", pattern="^(balanced|technical|behavioral|hr)$")
-    question_count: int = Field(default=8, ge=5, le=15)
+    # Existing API clients historically used 3-question rounds. Keep that contract while
+    # the upgraded production UI deliberately offers 5-15 questions for richer practice.
+    question_count: int = Field(default=8, ge=3, le=15)
     difficulty: str = Field(default="mixed", pattern="^(easy|medium|hard|mixed)$")
     mode: str = Field(default="practice", pattern="^(practice|assessment)$")
 
@@ -244,7 +246,9 @@ def _generate_unique_questions(
             if len(accepted) >= count:
                 break
         avoid.extend(item["question"] for item in accepted)
-    if len(accepted) < max(5, count - 1):
+    # A legacy 3-question API client must still receive the exact requested round.
+    minimum_viable = count if count < 5 else max(5, count - 1)
+    if len(accepted) < minimum_viable:
         raise HTTPException(status_code=502, detail="AI service could not generate a sufficiently unique interview set. Please try again.")
     return [
         {"question_id": index, **item}
