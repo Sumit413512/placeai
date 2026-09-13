@@ -9,10 +9,8 @@
   },
   "rewrites": [
     { "source": "/", "destination": "/index.html" },
-    { "source": "/privacy", "destination": "/privacy.html" },
-    { "source": "/terms", "destination": "/terms.html" },
-    { "source": "/acceptable-use", "destination": "/acceptable-use.html" },
-    { "source": "/mock-interview", "destination": "/mock-interview.html" }
+    { "source": "/workspace", "destination": "/workspace.html" },
+    { "source": "/workspace/", "destination": "/workspace.html" }
   ],
   "headers": [
     {
@@ -35,7 +33,21 @@
       ]
     },
     {
-      "source": "/(privacy|terms|acceptable-use)",
+      "source": "/workspace",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "Pragma", "value": "no-cache" }
+      ]
+    },
+    {
+      "source": "/workspace/",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "Pragma", "value": "no-cache" }
+      ]
+    },
+    {
+      "source": "/(privacy|terms|acceptable-use|mock-interview)",
       "headers": [
         { "key": "Cache-Control", "value": "no-store" },
         { "key": "Pragma", "value": "no-cache" }
@@ -45,7 +57,7 @@
   "functions": {
     "app/app.py": {
       "includeFiles": "app/**",
-      "excludeFiles": "{tests/**,docs/**,alembic/**,scripts/**,.github/**,pages/**,*.md,index.html,PlaceAI_API.postman_collection.json,Dockerfile,docker-compose.yml}"
+      "excludeFiles": "{tests/**,docs/**,alembic/**,scripts/**,.github/**,pages/**,*.md,index.html,workspace.html,PlaceAI_API.postman_collection.json,Dockerfile,docker-compose.yml}"
     }
   }
 }
