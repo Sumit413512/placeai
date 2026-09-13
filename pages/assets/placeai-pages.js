@@ -15,6 +15,24 @@
   const menu = document.querySelector('#mobile-menu');
   const nav = document.querySelector('.nav');
 
+  function normalizeIndianEnglishResumeCopy() {
+    const replacements = new Map([
+      ['Scattered résumés', 'Scattered resumes'],
+      ['résumé parsing', 'resume parsing'],
+      ['Résumé parsing', 'Resume parsing'],
+    ]);
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      const parent = node.parentElement;
+      if (!parent || ['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT'].includes(parent.tagName)) continue;
+      let value = node.nodeValue || '';
+      for (const [from, to] of replacements.entries()) value = value.replaceAll(from, to);
+      node.nodeValue = value;
+    }
+  }
+
   function portalUrl(role) {
     const url = new URL(productionBase);
     url.searchParams.set('portal', role);
@@ -40,6 +58,8 @@
     modal?.classList.add('hidden');
     document.body.style.overflow = '';
   }
+
+  normalizeIndianEnglishResumeCopy();
 
   document.querySelectorAll('[data-portal-link]').forEach(link => {
     link.setAttribute('href', portalUrl(link.dataset.portalLink));

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 import logging
 import os
 from pathlib import Path
@@ -10,13 +11,29 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 UPSTREAM_BASE = os.getenv("UPSTREAM_BASE", "https://placeai-rxpp.vercel.app").rstrip("/")
-ASSET_VERSION = os.getenv("ASSET_VERSION", "20260912-7")
+ASSET_VERSION = os.getenv("ASSET_VERSION", "20260913-2")
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "app" / "static"
 TEMPLATE_DIR = ROOT / "app" / "templates"
 LOGGER = logging.getLogger("placeai.render_gateway")
 
-app = FastAPI(title="PlaceAI Render Gateway", docs_url=None, redoc_url=None, openapi_url=None)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Reuse upstream TCP/TLS connections instead of paying a new Vercel handshake for
+    # every API request. This materially reduces proxy latency on normal workspace use.
+    app.state.upstream_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(60.0, connect=8.0, read=60.0, write=30.0, pool=8.0),
+        follow_redirects=False,
+        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20, keepalive_expiry=30.0),
+    )
+    try:
+        yield
+    finally:
+        await app.state.upstream_client.aclose()
+
+
+app = FastAPI(title="PlaceAI Render Gateway", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 ASSET_INJECTION = (
@@ -24,27 +41,21 @@ ASSET_INJECTION = (
     f'<link rel="stylesheet" href="/static/access-portal.css?v={ASSET_VERSION}">\n'
     f'<link rel="stylesheet" href="/static/ui-fixes.css?v={ASSET_VERSION}">\n'
     f'<link rel="stylesheet" href="/static/account-security.css?v={ASSET_VERSION}">\n'
+    f'<script src="/static/workspace-runtime.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/api-errors.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/access-portal.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/ui-state-fixes.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/account-security.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/provisioning-password-fix.js?v={ASSET_VERSION}" defer></script>\n'
+    f'<script src="/static/release-ux-fixes.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/integration-readiness.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/ai-readiness.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/legal-links.js?v={ASSET_VERSION}" defer></script>\n'
 )
 
 HOP_BY_HOP_HEADERS = {
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailers",
-    "transfer-encoding",
-    "upgrade",
-    "host",
-    "content-length",
+    "connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te",
+    "trailers", "transfer-encoding", "upgrade", "host", "content-length",
 }
 
 
@@ -145,29 +156,25 @@ def sitemap(request: Request) -> Response:
 
 
 @app.get("/_recovery/health", include_in_schema=False)
-async def recovery_health() -> Response:
+async def recovery_health(request: Request) -> Response:
     try:
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
-            upstream = await client.get(f"{UPSTREAM_BASE}/health", headers={"accept-encoding": "identity"})
+        client: httpx.AsyncClient = request.app.state.upstream_client
+        upstream = await client.get(
+            f"{UPSTREAM_BASE}/health",
+            headers={"accept-encoding": "identity"},
+            timeout=15.0,
+        )
         if upstream.status_code != 200:
             return JSONResponse(
                 status_code=503,
-                content={
-                    "status": "degraded",
-                    "gateway": "ok",
-                    "release_target": "render",
-                    "upstream_status": upstream.status_code,
-                },
+                content={"status": "degraded", "gateway": "ok", "release_target": "render", "upstream_status": upstream.status_code},
             )
         payload = upstream.json()
         return JSONResponse(
             status_code=200,
             content={
-                "status": "healthy",
-                "gateway": "ok",
-                "release_target": "render",
-                "upstream": payload.get("status"),
-                "database": payload.get("database"),
+                "status": "healthy", "gateway": "ok", "release_target": "render",
+                "upstream": payload.get("status"), "database": payload.get("database"),
                 "configuration": payload.get("configuration"),
                 "transactional_email": payload.get("transactional_email"),
             },
@@ -190,23 +197,22 @@ async def proxy(path: str, request: Request) -> Response:
         upstream_url = f"{upstream_url}?{request.url.query}"
 
     forwarded_headers = {
-        key: value
-        for key, value in request.headers.items()
+        key: value for key, value in request.headers.items()
         if key.lower() not in HOP_BY_HOP_HEADERS
     }
     forwarded_headers["accept-encoding"] = "identity"
     forwarded_headers["x-forwarded-host"] = request.headers.get("host", "")
     forwarded_headers["x-forwarded-proto"] = "https"
-
     body = await request.body()
     try:
-        async with httpx.AsyncClient(timeout=60.0, follow_redirects=False) as client:
-            upstream = await client.request(
-                request.method,
-                upstream_url,
-                headers=forwarded_headers,
-                content=body,
-            )
+        client: httpx.AsyncClient = request.app.state.upstream_client
+        upstream = await client.request(
+            request.method,
+            upstream_url,
+            headers=forwarded_headers,
+            content=body,
+            timeout=60.0,
+        )
     except httpx.HTTPError:
         return JSONResponse(
             status_code=502,

@@ -50,7 +50,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title=f"{settings.app_name} API",
     description="AI-assisted campus placement operating system for students, recruiters, and institution teams.",
-    version="3.1.3",
+    version="3.1.4",
     docs_url=None if settings.is_production else "/docs",
     openapi_url=None if settings.is_production else "/openapi.json",
     redoc_url=None,
@@ -197,12 +197,15 @@ jobs = _import_router("jobs")
 jobs_secure = _import_router("jobs_secure")
 interview_compat = _import_router("interview_compat")
 ai = _import_router("ai")
+ai_experience = _import_router("ai_experience")
 mock_interview = _import_router("mock_interview")
+mock_interview_v2 = _import_router("mock_interview_v2")
 institutions = _import_router("institutions")
 institution_secure = _import_router("institution_secure")
 platform = _import_router("platform")
 enterprise = _import_router("enterprise")
 enterprise_secure = _import_router("enterprise_secure")
+student_workspace_v2 = _import_router("student_workspace_v2")
 
 ACCOUNT_SECURITY_REPLACEMENTS = {
     ("/auth/change-password", "POST"),
@@ -210,6 +213,14 @@ ACCOUNT_SECURITY_REPLACEMENTS = {
 JOB_REPLACEMENTS = {
     ("/jobs", "GET"),
     ("/jobs/{job_id}", "GET"),
+}
+AI_REPLACEMENTS = {
+    ("/ai/parse-resume", "POST"),
+    ("/ai/generate-summary", "POST"),
+}
+MOCK_INTERVIEW_REPLACEMENTS = {
+    ("/mock-interview/start", "POST"),
+    ("/mock-interview/evaluate", "POST"),
 }
 INSTITUTION_REPLACEMENTS = {
     ("/institutions/dashboard", "GET"),
@@ -227,12 +238,12 @@ ENTERPRISE_REPLACEMENTS = {
     ("/enterprise/attendance/check-in", "POST"),
     ("/enterprise/search", "GET"),
     ("/enterprise/calendar", "GET"),
+    ("/enterprise/announcements", "GET"),
+    ("/enterprise/custom-fields", "GET"),
 }
 ENTERPRISE_SECURE_EXCLUSIONS = {
-    # The canonical enterprise announcement reader already enforces organization,
-    # schedule and audience boundaries and intentionally allows institution-linked
-    # students to receive operational notices before verification is completed.
     ("/enterprise/announcements", "GET"),
+    ("/enterprise/calendar", "GET"),
 }
 
 _include_router(auth)
@@ -244,13 +255,16 @@ _include_router(recruiters)
 _include_router(jobs, JOB_REPLACEMENTS)
 _include_router(jobs_secure)
 _include_router(interview_compat)
-_include_router(ai)
-_include_router(mock_interview)
+_include_router(ai, AI_REPLACEMENTS)
+_include_router(ai_experience)
+_include_router(mock_interview, MOCK_INTERVIEW_REPLACEMENTS)
+_include_router(mock_interview_v2)
 _include_router(institutions, INSTITUTION_REPLACEMENTS)
 _include_router(institution_secure)
 _include_router(platform)
 _include_router(enterprise, ENTERPRISE_REPLACEMENTS)
 _include_router(enterprise_secure, ENTERPRISE_SECURE_EXCLUSIONS)
+_include_router(student_workspace_v2)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -266,6 +280,7 @@ def root():
         '<link rel="stylesheet" href="/static/access-portal.css">\n'
         '<link rel="stylesheet" href="/static/ui-fixes.css">\n'
         '<link rel="stylesheet" href="/static/account-security.css">\n'
+        '<script src="/static/workspace-runtime.js" defer></script>\n'
         '<script src="/static/api-errors.js" defer></script>\n'
         '<script src="/static/access-portal.js" defer></script>\n'
         '<script src="/static/ui-state-fixes.js" defer></script>\n'
@@ -293,7 +308,7 @@ def health_check():
             content={
                 "status": "degraded",
                 "service": service_name,
-                "version": "3.1.3",
+                "version": "3.1.4",
                 "database": "not_checked",
                 "configuration": "invalid",
                 "configuration_errors": runtime_readiness_errors,
@@ -313,7 +328,7 @@ def health_check():
     payload = {
         "status": "healthy" if database == "ok" else "degraded",
         "service": service_name,
-        "version": "3.1.3",
+        "version": "3.1.4",
         "database": database,
         "configuration": "ok",
         "transactional_email": "ok" if transactional_email_configured(settings) else "not_configured",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from contextvars import ContextVar
 
 import httpx
@@ -18,6 +19,15 @@ settings = get_settings()
 LOGGER = logging.getLogger("placeai.ai")
 _LAST_AI_MODEL: ContextVar[str] = ContextVar("placeai_last_ai_model", default="")
 _LAST_AI_PROVIDER: ContextVar[str] = ContextVar("placeai_last_ai_provider", default="")
+_RETRYABLE_HTTP_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
+_RETRYABLE_HTTP_ERRORS = (
+    httpx.TimeoutException,
+    httpx.ConnectError,
+    httpx.ReadError,
+    httpx.WriteError,
+    httpx.RemoteProtocolError,
+)
+_ALLOWED_REASONING_EFFORTS = {"none", "low", "medium", "high", "xhigh", "max"}
 
 
 def _usable_key(value: str | None) -> str:
@@ -47,7 +57,6 @@ def _extract_openai_text(payload: dict) -> str:
     direct = payload.get("output_text")
     if isinstance(direct, str) and direct.strip():
         return direct.strip()
-
     parts: list[str] = []
     for item in payload.get("output") or []:
         if not isinstance(item, dict):
@@ -62,47 +71,106 @@ def _extract_openai_text(payload: dict) -> str:
     return "\n".join(parts).strip()
 
 
-def _call_openai(api_key: str, prompt: str) -> str:
+def _request_timeout() -> httpx.Timeout:
+    total = max(10.0, min(float(getattr(settings, "ai_request_timeout_seconds", 45) or 45), 55.0))
+    return httpx.Timeout(total, connect=min(7.0, total), read=total, write=min(10.0, total), pool=min(7.0, total))
+
+
+def _retry_delay(response: httpx.Response | None, attempt: int) -> float:
+    if response is not None:
+        raw = (response.headers.get("retry-after") or "").strip()
+        try:
+            return max(0.1, min(float(raw), 2.0))
+        except (TypeError, ValueError):
+            pass
+    return min(0.35 * (2 ** attempt), 1.25)
+
+
+def _call_openai(
+    api_key: str,
+    prompt: str,
+    *,
+    reasoning_effort: str | None = None,
+    max_output_tokens: int | None = None,
+) -> str:
     model = getattr(settings, "openai_model", "gpt-5.6-terra")
-    max_output_tokens = getattr(settings, "ai_max_output_tokens", 5000)
-    timeout_seconds = getattr(settings, "ai_request_timeout_seconds", 45)
-    response = httpx.post(
-        "https://api.openai.com/v1/responses",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": model,
-            "input": prompt,
-            "max_output_tokens": max_output_tokens,
-        },
-        timeout=timeout_seconds,
-    )
-    response.raise_for_status()
-    text = _extract_openai_text(response.json())
-    if not text:
-        raise RuntimeError("OpenAI returned an empty response")
-    _LAST_AI_MODEL.set(model)
-    _LAST_AI_PROVIDER.set("openai")
-    return text
+    output_limit = int(max_output_tokens or getattr(settings, "ai_max_output_tokens", 5000) or 5000)
+    output_limit = max(256, min(output_limit, 8000))
+    payload: dict[str, object] = {
+        "model": model,
+        "input": prompt,
+        "max_output_tokens": output_limit,
+        "store": False,
+    }
+    if reasoning_effort in _ALLOWED_REASONING_EFFORTS:
+        payload["reasoning"] = {"effort": reasoning_effort}
+
+    last_error: Exception | None = None
+    for attempt in range(2):
+        response: httpx.Response | None = None
+        try:
+            response = httpx.post(
+                "https://api.openai.com/v1/responses",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json=payload,
+                timeout=_request_timeout(),
+            )
+            if response.status_code in _RETRYABLE_HTTP_STATUS and attempt == 0:
+                LOGGER.warning(
+                    "AI provider transient response provider=openai status_code=%s retry=1",
+                    response.status_code,
+                )
+                time.sleep(_retry_delay(response, attempt))
+                continue
+            response.raise_for_status()
+            text = _extract_openai_text(response.json())
+            if not text:
+                raise RuntimeError("OpenAI returned an empty response")
+            _LAST_AI_MODEL.set(model)
+            _LAST_AI_PROVIDER.set("openai")
+            return text
+        except _RETRYABLE_HTTP_ERRORS as exc:
+            last_error = exc
+            if attempt == 0:
+                LOGGER.warning("AI provider network retry provider=openai error_type=%s", type(exc).__name__)
+                time.sleep(_retry_delay(response, attempt))
+                continue
+            raise
+        except Exception as exc:
+            last_error = exc
+            raise
+    if last_error:
+        raise last_error
+    raise RuntimeError("OpenAI request did not complete")
 
 
 def _call_gemini(api_key: str, prompt: str) -> str:
     if genai is None:
         raise RuntimeError("Gemini SDK unavailable")
-    client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(model=settings.gemini_model, contents=prompt)
-    text = getattr(response, "text", None)
-    if not isinstance(text, str) or not text.strip():
-        raise RuntimeError("Gemini returned an empty response")
-    _LAST_AI_MODEL.set(settings.gemini_model)
-    _LAST_AI_PROVIDER.set("gemini")
-    return text.strip()
+    last_error: Exception | None = None
+    for attempt in range(2):
+        try:
+            client = genai.Client(api_key=api_key)
+            response = client.models.generate_content(model=settings.gemini_model, contents=prompt)
+            text = getattr(response, "text", None)
+            if not isinstance(text, str) or not text.strip():
+                raise RuntimeError("Gemini returned an empty response")
+            _LAST_AI_MODEL.set(settings.gemini_model)
+            _LAST_AI_PROVIDER.set("gemini")
+            return text.strip()
+        except Exception as exc:
+            last_error = exc
+            if attempt == 0:
+                LOGGER.warning("AI provider retry provider=gemini error_type=%s", type(exc).__name__)
+                time.sleep(0.35)
+                continue
+            raise
+    if last_error:
+        raise last_error
+    raise RuntimeError("Gemini request did not complete")
 
 
 def _safe_failure_metadata(exc: Exception) -> tuple[str, int | None]:
-    """Return non-secret provider failure metadata suitable for production logs."""
     status_code = None
     if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
         status_code = exc.response.status_code
@@ -113,29 +181,15 @@ def ai_status_payload() -> dict[str, object]:
     openai_ready = bool(_openai_keys())
     gemini_ready = bool(_gemini_key())
     if openai_ready:
-        return {
-            "configured": True,
-            "sdk_available": True,
-            "model": getattr(settings, "openai_model", "gpt-5.6-terra"),
-        }
+        return {"configured": True, "sdk_available": True, "model": getattr(settings, "openai_model", "gpt-5.6-terra")}
     if gemini_ready:
-        return {
-            "configured": True,
-            "sdk_available": genai is not None,
-            "model": settings.gemini_model,
-        }
-    return {
-        "configured": False,
-        "sdk_available": True,
-        "model": getattr(settings, "openai_model", "gpt-5.6-terra"),
-    }
+        return {"configured": True, "sdk_available": genai is not None, "model": settings.gemini_model}
+    return {"configured": False, "sdk_available": True, "model": getattr(settings, "openai_model", "gpt-5.6-terra")}
 
 
 def current_ai_model() -> str:
     model = _LAST_AI_MODEL.get().strip()
-    if model:
-        return model
-    return str(ai_status_payload()["model"])
+    return model or str(ai_status_payload()["model"])
 
 
 def current_ai_provider() -> str:
@@ -149,13 +203,28 @@ def current_ai_provider() -> str:
     return "unavailable"
 
 
-def call_ai_text(prompt: str) -> str:
-    """Use OpenAI primary, then a second OpenAI key, then Gemini fallback."""
+def call_ai_text(
+    prompt: str,
+    *,
+    reasoning_effort: str | None = None,
+    max_output_tokens: int | None = None,
+) -> str:
+    """OpenAI primary -> OpenAI backup -> Gemini fallback with bounded transient retries."""
     attempted = False
     for slot, api_key in enumerate(_openai_keys(), start=1):
         attempted = True
         try:
-            result = _call_openai(api_key, prompt)
+            # Preserve the original two-argument private-call contract for legacy tests/callers
+            # when no task-specific controls are requested.
+            if reasoning_effort is None and max_output_tokens is None:
+                result = _call_openai(api_key, prompt)
+            else:
+                result = _call_openai(
+                    api_key,
+                    prompt,
+                    reasoning_effort=reasoning_effort,
+                    max_output_tokens=max_output_tokens,
+                )
             if slot > 1:
                 LOGGER.warning("AI fallback succeeded provider=openai slot=%s", slot)
             return result
@@ -163,9 +232,7 @@ def call_ai_text(prompt: str) -> str:
             error_type, status_code = _safe_failure_metadata(exc)
             LOGGER.warning(
                 "AI provider attempt failed provider=openai slot=%s error_type=%s status_code=%s",
-                slot,
-                error_type,
-                status_code,
+                slot, error_type, status_code,
             )
 
     gemini_api_key = _gemini_key()
@@ -179,12 +246,11 @@ def call_ai_text(prompt: str) -> str:
             error_type, status_code = _safe_failure_metadata(exc)
             LOGGER.warning(
                 "AI provider attempt failed provider=gemini error_type=%s status_code=%s",
-                error_type,
-                status_code,
+                error_type, status_code,
             )
 
     detail = (
-        "AI service is temporarily unavailable. Please try again later."
+        "AI service is temporarily unavailable. Please try again in a moment."
         if attempted
         else "AI service is not configured yet. Please contact the PlaceAI administrator."
     )
