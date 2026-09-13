@@ -28,6 +28,40 @@
     }
   }
 
+  function randomChars(length, alphabet) {
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    return [...bytes].map(value => alphabet[value % alphabet.length]).join('');
+  }
+
+  function secureTemporaryPassword() {
+    const lower = 'abcdefghijkmnopqrstuvwxyz';
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const digits = '23456789';
+    const symbols = '!@#$%^&*_-+=';
+    const all = lower + upper + digits + symbols;
+    const chars = [
+      randomChars(1, lower),
+      randomChars(1, upper),
+      randomChars(1, digits),
+      randomChars(1, symbols),
+      ...randomChars(20, all),
+    ].join('').split('');
+    for (let i = chars.length - 1; i > 0; i -= 1) {
+      const byte = new Uint8Array(1);
+      crypto.getRandomValues(byte);
+      const j = byte[0] % (i + 1);
+      [chars[i], chars[j]] = [chars[j], chars[i]];
+    }
+    return chars.join('');
+  }
+
+  function recruiterUsername(email) {
+    const local = String(email || '').split('@')[0].replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._-]+|[._-]+$/g, '') || 'recruiter';
+    const suffix = randomChars(6, 'abcdefghijkmnopqrstuvwxyz23456789');
+    return `${local.slice(0, 72)}_${suffix}`;
+  }
+
   function statusMessage(cell, text, kind = 'ok') {
     let node = cell.querySelector('.placeai-recruiter-provision-status');
     if (!node) {
@@ -65,7 +99,7 @@
         cell.appendChild(button);
       }
       button.textContent = select.value === 'provisioned' ? 'Resend password setup link' : 'Provision recruiter';
-      button.title = 'Creates or reuses the approved Recruiter account and emails a one-time password setup link. No administrator chooses the permanent password.';
+      button.title = 'Creates the approved Recruiter account with an inaccessible one-time credential, then emails the recruiter a password setup link. No administrator chooses the permanent password.';
     });
   }
 
@@ -94,14 +128,28 @@
     return payload.access_token;
   }
 
+  async function requestJson(path, options = {}) {
+    const response = await fetch(path, {credentials: 'include', ...options});
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw apiErrors?.createError ? apiErrors.createError(payload, response.status) : new Error(payload.detail || 'Request failed.');
+    }
+    return payload;
+  }
+
   async function provisionRecruiter(button) {
     if (provisioning) return;
     const requestId = button.dataset.provisionRecruiterRequest;
     const row = button.closest('tr');
     const select = row?.querySelector('select[data-access-request-status]');
     const cell = button.closest('td');
-    const email = row?.children[0]?.querySelector('span')?.textContent?.trim() || 'the approved work email';
-    if (!requestId || !cell) return;
+    const name = row?.children[0]?.querySelector('strong')?.textContent?.trim() || '';
+    const emailText = row?.children[0]?.querySelector('span')?.textContent?.trim() || '';
+    const email = emailText.split(' · ')[0].trim();
+    const companyText = row?.children[2]?.textContent?.trim() || '';
+    const company = companyText === '—' ? null : companyText;
+    if (!requestId || !cell || !email) return;
+
     const resend = select?.value === 'provisioned';
     const prompt = resend
       ? `Send a new one-time password setup link to ${email}?`
@@ -114,22 +162,37 @@
     button.textContent = resend ? 'Sending setup link…' : 'Provisioning recruiter…';
     try {
       const token = await platformToken();
-      const response = await fetch(`/platform/access-requests/${encodeURIComponent(requestId)}/provision-recruiter`, {
+      if (!resend) {
+        const temporaryPassword = secureTemporaryPassword();
+        await requestJson('/platform/recruiters', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
+          body: JSON.stringify({
+            email,
+            username: recruiterUsername(email),
+            full_name: name || null,
+            company_name: company,
+            temporary_password: temporaryPassword,
+            organization_slug: null,
+          }),
+        });
+        await requestJson(`/platform/access-requests/${encodeURIComponent(requestId)}`, {
+          method: 'PATCH',
+          headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
+          body: JSON.stringify({
+            status: 'provisioned',
+            review_note: 'Recruiter account provisioned. Permanent password is set by the recruiter through the one-time email setup link.',
+          }),
+        });
+        if (select) select.value = 'provisioned';
+      }
+
+      await requestJson('/auth/forgot-password', {
         method: 'POST',
-        credentials: 'include',
-        headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
-        body: '{}',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({email}),
       });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw apiErrors?.createError ? apiErrors.createError(payload, response.status) : new Error(payload.detail || 'Recruiter provisioning failed.');
-      }
-      if (select && payload.status) select.value = payload.status;
-      if (payload.setup_email_sent) {
-        statusMessage(cell, 'Recruiter account ready. A one-time password setup link was sent to the approved work email.');
-      } else {
-        statusMessage(cell, 'The account exists, but the setup email was not delivered. Check email integration health and retry this button.', 'error');
-      }
+      statusMessage(cell, 'Recruiter account ready. A one-time password setup link was sent to the approved work email.');
       decorateAccessRows(row || document);
     } catch (error) {
       statusMessage(cell, error?.message || 'Recruiter provisioning failed.', 'error');
