@@ -9,7 +9,7 @@
   },
   "functions": {
     "app/app.py": {
-      "includeFiles": "{app/templates/**,app/static/**}",
+      "includeFiles": "app/**",
       "excludeFiles": "{tests/**,docs/**,alembic/**,scripts/**,.github/**,pages/**,*.md,index.html,PlaceAI_API.postman_collection.json,Dockerfile,docker-compose.yml}"
     }
   }
