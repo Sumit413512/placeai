@@ -20,11 +20,10 @@ jobs:
     timeout-minutes: 10
     env:
       PRIMARY_URL: https://placeai-rxpp.vercel.app
-      WORKSPACE_URL: https://placeai-rxpp.vercel.app/workspace
       FALLBACK_URL: https://placeai-recovery.onrender.com
       EXPECTED_VERSION: 3.1.4
     steps:
-      - name: Wait for Vercel production backend
+      - name: Wait for exact Vercel production release
         shell: bash
         run: |
           set -euo pipefail
@@ -41,7 +40,7 @@ jobs:
           }
           bad = {k: (payload.get(k), v) for k, v in required.items() if payload.get(k) != v}
           if bad:
-              raise SystemExit(f'waiting for exact production release: {bad}')
+              raise SystemExit(f'waiting for exact release: {bad}')
           print('Exact Vercel production backend release is healthy.')
           PY
               then exit 0; fi
@@ -53,30 +52,25 @@ jobs:
           cat /tmp/health.json 2>/dev/null || true
           exit 1
 
-      - name: Verify production public site and workspace
+      - name: Verify primary production shell and hardened assets
         shell: bash
         run: |
           set -euo pipefail
           curl -fsS -D /tmp/root.headers -o /tmp/root.html --connect-timeout 10 --max-time 25 "$PRIMARY_URL/"
-          grep -qi '<title>PlaceAI' /tmp/root.html
+          grep -qi '<title>PlaceAI — Campus placement operations</title>' /tmp/root.html
+          grep -q '/static/workspace-runtime.js' /tmp/root.html
+          grep -q '/static/provisioning-password-fix.js' /tmp/root.html
+          grep -q '/static/integration-readiness.js' /tmp/root.html
+          grep -q '/static/ai-readiness.js' /tmp/root.html
+          grep -q '/static/release-ux-fixes.js' /tmp/root.html
+          grep -q '/static/legal-links.js' /tmp/root.html
+          grep -q '/static/app.js' /tmp/root.html
           grep -qi '^strict-transport-security:' /tmp/root.headers
           grep -qi '^content-security-policy:' /tmp/root.headers
           grep -qi '^x-content-type-options: *nosniff' /tmp/root.headers
           grep -qi '^x-frame-options: *DENY' /tmp/root.headers
-
-          curl -fsS -D /tmp/workspace.headers -o /tmp/workspace.html --connect-timeout 10 --max-time 25 "$WORKSPACE_URL"
-          grep -qi '<title>PlaceAI — Campus placement operations</title>' /tmp/workspace.html
-          grep -q '/static/workspace-runtime.js' /tmp/workspace.html
-          grep -q '/static/release-ux-fixes.js' /tmp/workspace.html
-          grep -q '/static/provisioning-password-fix.js' /tmp/workspace.html
-          grep -q '/static/integration-readiness.js' /tmp/workspace.html
-          grep -q '/static/ai-readiness.js' /tmp/workspace.html
-          grep -q '/static/legal-links.js' /tmp/workspace.html
-          grep -q '/static/app.js' /tmp/workspace.html
-          grep -qi '^cache-control: *no-store' /tmp/workspace.headers
-
-          curl -fsS "$PRIMARY_URL/pages/assets/placeai-pages.js" -o /tmp/pages.js
-          grep -Fq "new URL('/workspace', window.location.origin)" /tmp/pages.js
+          grep -qi '^referrer-policy: *strict-origin-when-cross-origin' /tmp/root.headers
+          grep -qi '^cache-control: *no-store' /tmp/root.headers
 
           curl -fsS "$PRIMARY_URL/static/release-ux-fixes.js" -o /tmp/release-ux.js
           grep -q 'data-provision-recruiter-request' /tmp/release-ux.js
@@ -93,7 +87,7 @@ jobs:
           curl -fsS "$PRIMARY_URL/acceptable-use" -o /tmp/aup.html
           grep -qi '<title>Acceptable Use — PlaceAI</title>' /tmp/aup.html
           curl -fsS "$PRIMARY_URL/mock-interview" -o /tmp/mock.html
-          grep -qi '<title>.*PlaceAI' /tmp/mock.html
+          grep -qi '<title>PlaceAI — Mock Interview Coach</title>' /tmp/mock.html
 
       - name: Verify AI provider readiness
         shell: bash
@@ -110,7 +104,7 @@ jobs:
               raise SystemExit(f'AI provider is not production-ready: {payload}')
           if not isinstance(payload.get('model'), str) or not payload['model'].strip():
               raise SystemExit(f'AI model is missing: {payload}')
-          print('AI provider is configured and SDK-ready; model=', payload['model'])
+          print('AI provider ready; model=', payload['model'])
           PY
 
       - name: Verify unauthenticated authorization boundaries
@@ -131,7 +125,7 @@ jobs:
             test "$code" = '401'
           done
 
-      - name: Verify password reset failure contract
+      - name: Verify password-reset failure contract
         shell: bash
         run: |
           set -euo pipefail
@@ -174,5 +168,5 @@ jobs:
           safe_ai = {k: ai.get(k) for k in ('configured','sdk_available','model')}
           print('primary=', json.dumps(safe_health, sort_keys=True))
           print('ai=', json.dumps(safe_ai, sort_keys=True))
-          print('workspace=https://placeai-rxpp.vercel.app/workspace')
+          print('application=https://placeai-rxpp.vercel.app/')
           PY
