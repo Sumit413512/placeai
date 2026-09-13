@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+import app.app as application
 from app.app import app
 from app.routers.ai_experience import _repair_pdf_text, _merge_profile_skills
 from app.routers.mock_interview_v2 import MockInterviewStartV2, _too_similar
@@ -18,7 +19,10 @@ def _route(path: str, method: str):
         route for route in app.routes
         if getattr(route, "path", None) == path and method in (getattr(route, "methods", set()) or set())
     ]
-    assert len(matches) == 1, f"expected exactly one {method} {path}, got {len(matches)}"
+    assert len(matches) == 1, (
+        f"expected exactly one {method} {path}, got {len(matches)}; "
+        f"router_import_failures={application._router_import_failures}"
+    )
     return matches[0]
 
 
@@ -42,12 +46,13 @@ def test_resume_text_repairs_common_pdf_artifacts_and_merges_skills():
     assert skills == ["Python", "Docker", "React.js", "SQL"]
 
 
-def test_mock_interview_supports_longer_role_specific_rounds():
+def test_mock_interview_supports_longer_role_specific_rounds_and_legacy_clients():
     config = MockInterviewStartV2(
         job_id="job-1", focus="technical", question_count=15, difficulty="hard", mode="practice"
     )
     assert config.question_count == 15
     assert config.difficulty == "hard"
+    assert MockInterviewStartV2(job_id="job-1", question_count=3).question_count == 3
     with pytest.raises(ValidationError):
         MockInterviewStartV2(job_id="job-1", question_count=16)
 
