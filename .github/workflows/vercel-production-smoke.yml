@@ -28,9 +28,9 @@ jobs:
           for attempt in $(seq 1 30); do
             health_code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/health" || true)
             root_code=$(curl -sS -o /tmp/root.html -D /tmp/root.headers -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/" || true)
-            if [ "$health_code" = "200" ] && [ "$root_code" = "200" ] \
-              && grep -q 'release-ux-fixes.js' /tmp/root.html \
-              && grep -q 'legal-links.js' /tmp/root.html; then
+            bootstrap_code=$(curl -sS -o /tmp/bootstrap.js -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/static/app.js" || true)
+            if [ "$health_code" = "200" ] && [ "$root_code" = "200" ] && [ "$bootstrap_code" = "200" ] \
+              && grep -q '__PLACEAI_PRODUCTION_BOOTSTRAP__' /tmp/bootstrap.js; then
               python - <<'PY'
           import json
           from pathlib import Path
@@ -48,11 +48,13 @@ jobs:
           PY
               exit 0
             fi
-            echo "Vercel production not on the expected release yet (attempt $attempt/30; health=$health_code root=$root_code)."
+            echo "Vercel production not on the expected release yet (attempt $attempt/30; health=$health_code root=$root_code bootstrap=$bootstrap_code)."
             sleep 10
           done
           echo 'Canonical Vercel production did not converge to the expected release.' >&2
           cat /tmp/health.json 2>/dev/null || true
+          echo 'Root response:' >&2
+          cat /tmp/root.html 2>/dev/null || true
           exit 1
 
       - name: Verify public shell and security headers
@@ -60,22 +62,24 @@ jobs:
         run: |
           set -euo pipefail
           grep -qi '<title>PlaceAI' /tmp/root.html
+          grep -q '/static/app.js' /tmp/root.html
           grep -qi '^strict-transport-security:' /tmp/root.headers
           grep -qi '^content-security-policy:' /tmp/root.headers
           grep -qi '^x-content-type-options: *nosniff' /tmp/root.headers
           grep -qi '^x-frame-options: *DENY' /tmp/root.headers
           grep -qi '^referrer-policy: *strict-origin-when-cross-origin' /tmp/root.headers
           grep -qi '^cache-control: *no-store' /tmp/root.headers
-          grep -q 'provisioning-password-fix.js' /tmp/root.html
-          grep -q 'release-ux-fixes.js' /tmp/root.html
-          grep -q 'integration-readiness.js' /tmp/root.html
-          grep -q 'ai-readiness.js' /tmp/root.html
-          grep -q 'legal-links.js' /tmp/root.html
+          grep -q '__PLACEAI_PRODUCTION_BOOTSTRAP__' /tmp/bootstrap.js
+          grep -q '/static/app-core.js' /tmp/bootstrap.js
+          grep -q '/static/release-ux-fixes.js' /tmp/bootstrap.js
+          grep -q '/static/legal-links.js' /tmp/bootstrap.js
 
       - name: Verify current release assets
         shell: bash
         run: |
           set -euo pipefail
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/app-core.js" -o /tmp/app-core.js
+          test -s /tmp/app-core.js
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/api-errors.js" -o /tmp/api-errors.js
           grep -q 'FORM_CONTRACTS' /tmp/api-errors.js
           grep -q 'PASSWORD_POLICY_HELP' /tmp/api-errors.js
@@ -107,6 +111,8 @@ jobs:
           grep -q "$BASE_URL/privacy" /tmp/sitemap.xml
           grep -q "$BASE_URL/terms" /tmp/sitemap.xml
           grep -q "$BASE_URL/acceptable-use" /tmp/sitemap.xml
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/mock-interview" -o /tmp/mock-interview.html
+          grep -qi '<title>' /tmp/mock-interview.html
 
       - name: Verify AI readiness contract
         shell: bash
@@ -165,7 +171,9 @@ jobs:
           import json
           from pathlib import Path
           payload = json.loads(Path('/tmp/health.json').read_text(encoding='utf-8'))
+          ai = json.loads(Path('/tmp/ai-status.json').read_text(encoding='utf-8'))
           safe = {k: payload.get(k) for k in ('status','service','version','database','configuration','transactional_email')}
           print('production=', json.dumps(safe, sort_keys=True))
+          print('ai_configured=', ai.get('configured'), 'sdk_available=', ai.get('sdk_available'), 'model=', ai.get('model'))
           print('url=https://placeai-rxpp.vercel.app')
           PY
