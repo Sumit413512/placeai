@@ -1,28 +1,30 @@
-# PlaceAI Commercial V3.1.3
+# PlaceAI Commercial V3.1.4
 
 PlaceAI is a multi-tenant campus placement operating system for institutions, recruiters and students. It connects student records, controlled recruiter access, campus opportunities, placement drives, eligibility, applications, interviews, offers, attendance, reporting and human-reviewed AI assistance in one role-aware platform.
 
 ## Production architecture
 
-The current verified release topology is intentionally Render-first:
+The production topology is Vercel-primary with a Render fallback:
 
-- **Public production application:** `https://placeai-recovery.onrender.com`
-- **Release authority:** Render production gateway and the Render-targeted production smoke workflow.
-- **Backend API runtime:** Vercel FastAPI runtime remains an upstream dependency behind the Render gateway. Automatic Vercel Git deployments are frozen to avoid build/function quota churn.
+- **Public product site:** `https://placeai-rxpp.vercel.app/`
+- **Authenticated production workspace:** `https://placeai-rxpp.vercel.app/workspace`
+- **Backend API runtime:** the same Vercel production origin, served by the FastAPI application.
+- **Fallback gateway:** `https://placeai-recovery.onrender.com` remains available as a secondary recovery path; it is not the release authority.
 - **Database:** Supabase PostgreSQL in `ap-southeast-1`.
-- **Persistence:** production application/file state is durable and database backed; local development may use SQLite/filesystem fallbacks.
-- **Email:** transactional delivery supports Brevo HTTPS API and SMTP transport. Production password recovery fails closed when no delivery transport is configured.
+- **Persistence:** production application/file state is durable and database-backed; local development may use SQLite/filesystem fallbacks.
+- **Email:** transactional delivery supports Brevo HTTPS API and SMTP. Production password recovery fails closed when no delivery transport is configured.
+- **AI:** the live readiness contract is exposed by `/ai/status`; production smoke requires the provider to be configured and its SDK ready.
 
-Do not treat the Vercel root URL as the user-facing production application.
+The public product site and the authenticated workspace deliberately share one origin. This keeps cookies, password recovery and API calls same-origin and removes an unnecessary proxy hop from the primary user path.
 
 ## Core workspaces
 
 ### Platform Admin
 
 - Create and manage institutions.
-- Provision institution/TPO administrators.
+- Provision institution/TPO administrators and approved recruiter accounts.
 - Review privileged access requests.
-- Inspect production integration readiness and operational telemetry.
+- Inspect integration readiness and operational state.
 - Audit platform-level activity.
 
 ### Institution / TPO Admin
@@ -46,54 +48,41 @@ Do not treat the Vercel root URL as the user-facing production application.
 - View authorized opportunities and placement drives.
 - Check explainable eligibility and submit applications.
 - Track application/interview/offer activity.
-- Use AI-assisted resume/readiness/mock-interview functions only when the configured provider is available.
+- Use AI-assisted resume, readiness and mock-interview functions subject to provider readiness and human review.
 
 ## Security model
 
-PlaceAI is designed around backend-enforced role and tenant boundaries. Frontend visibility is not treated as authorization.
+PlaceAI is designed around backend-enforced role and tenant boundaries. Frontend visibility is never treated as authorization.
 
 Production hardening includes:
 
-- Argon2 password hashing.
-- Strong password policy and first-login password rotation for provisioned accounts.
+- Argon2 password hashing and strong password policy.
+- First-login password rotation for provisioned accounts.
 - Cryptographically generated one-time temporary provisioning passwords.
 - Database-backed refresh sessions with rotation/revocation.
-- Password reset tokens stored as digests and non-enumerating recovery responses.
+- Password-reset tokens stored as digests and non-enumerating recovery responses.
 - Database-backed abuse/rate-limit state.
 - Cross-institution reference validation.
-- Strict security headers and HTTPS production requirements.
+- Strict HTTPS/security headers and no wildcard production CORS.
 - Bounded/signature-aware upload validation.
 - Human-review requirements for AI-assisted decisions.
-- No synthetic AI fallback when Gemini is unavailable.
-- Per-commit SHA-256 release integrity evidence in CI.
-- Tracked-secret scanning, Bandit and dependency auditing in the security workflow.
+- No fabricated AI fallback when a provider is unavailable.
+- Per-commit release integrity evidence in CI.
+- Tracked-secret scanning, Bandit and dependency auditing.
 
-See `SECURITY.md` for the vulnerability-reporting policy.
+The GitHub repository is private. `CODEOWNERS`, the production PR checklist, `SECURITY.md`, CI/security gates and secret scanning remain part of the release controls.
 
-## Temporary account provisioning
+## Account provisioning
 
-Institution/TPO, student and recruiter provisioning no longer requires an administrator to invent a compliant temporary password. PlaceAI generates a strong one-time credential in the browser using `crypto.getRandomValues`, provides Copy/Regenerate controls, and requires the new account to replace it at first sign-in.
+Institution/TPO, student and recruiter provisioning does not require an administrator to invent a compliant temporary password. PlaceAI generates a strong one-time credential using `crypto.getRandomValues`, supports Copy/Regenerate where appropriate, and requires the account holder to establish a permanent password.
 
-The temporary credential remains present after a failed form submission so validation or unrelated field errors cannot silently turn it into an empty password. Successful account creation closes the provisioning dialog; PlaceAI does not expose the credential again afterward.
+Recruiter access requests can be reviewed and provisioned through the Platform Admin workflow. The approved recruiter receives a one-time password setup link at the approved work email. Permanent passwords are not selected by the administrator.
 
-## AI / Gemini behavior
+## AI behavior
 
-Gemini is optional for the core placement system.
+`/ai/status` exposes only non-secret readiness fields: `configured`, `sdk_available` and `model`. Production smoke requires `configured=true` and `sdk_available=true` before the release is accepted.
 
-Set:
-
-```text
-GEMINI_API_KEY=<valid provider key>
-```
-
-to enable Gemini-backed features. `/ai/status` exposes only non-secret readiness fields (`configured`, `sdk_available`, `model`).
-
-When Gemini is unconfigured or unavailable:
-
-- PlaceAI does not invent candidate analysis.
-- AI buttons/forms are disabled with a clear unavailable state.
-- Mock Interview Coach does not start a provider-backed session.
-- Core institution, recruiter, student, application, eligibility, interview, offer, attendance, notification and reporting workflows remain available.
+AI-assisted output is decision support only. PlaceAI does not invent candidate analysis when a provider is unavailable, and core institution/recruiter/student workflows remain server-authorized independently of model output.
 
 ## Local development
 
@@ -139,9 +128,9 @@ python scripts/bootstrap.py \
   --admin-password 'CHANGE-ME-STRONGLY'
 ```
 
-Never place real credentials in source control, shell history intended for sharing, documentation or public issues.
+Never place real credentials in source control, shared shell history, documentation or public issues.
 
-## Verification
+## Verification and release gates
 
 Run locally:
 
@@ -153,11 +142,11 @@ python scripts/secret_hygiene.py
 
 The GitHub release gates are:
 
-1. **PlaceAI CI** — Python compilation, JS syntax checks, browser/regression tests, static analysis, release hygiene and integrity evidence.
+1. **PlaceAI CI** — Python compilation, JavaScript syntax checks, browser/regression tests, static analysis, release hygiene and integrity evidence.
 2. **PlaceAI Security Audit** — tracked-secret hygiene, Bandit and production dependency audit.
-3. **PlaceAI Production Smoke** — live Render health, release assets, security headers, auth boundaries, password-reset failure behavior and AI readiness contract.
+3. **PlaceAI Production Smoke** — exact Vercel production version, public site, same-origin `/workspace`, release assets, legal pages, AI readiness, authorization boundaries and password-reset failure behavior. Render fallback availability is recorded but is non-blocking.
 
-A release should not be called production-ready until the exact revision is deployed to Render and all three gates are green.
+A release is production-ready only after the exact revision is deployed to Vercel and the live production smoke gate passes.
 
 ## Database and migrations
 
@@ -167,8 +156,8 @@ Supabase browser Data API access is not the application authorization layer; Pla
 
 ## Operational notes
 
-The active Render service currently runs one Singapore instance. Recent measurements during release verification were well below its CPU and memory limits and recent log inspection showed no 5xx or 422/502/503 responses in the queried window. The current service is still on Render's free tier; move to a paid production tier before relying on paid-tier availability characteristics or meaningful client traffic.
+The Render recovery service remains in Singapore on its existing free plan and should be treated only as a fallback while its private-repository Git integration is not authorized for new deployments. Do not make the repository public to restore that integration; reconnect Render to the private repository instead if the fallback must be updated.
 
-The GitHub repository is currently public and `main` is currently unprotected. `CODEOWNERS`, a production PR checklist, `SECURITY.md`, CI/security gates and secret scanning are committed as compensating controls, but repository visibility and an enforced GitHub ruleset still require repository-administration changes in GitHub Settings.
+For commercial institutional traffic, review provider plan/SLA requirements, custom domain/DNS, monitoring and branch-protection policy before promising contractual availability. These commercial infrastructure choices may incur charges and are intentionally not changed automatically.
 
-See `DEPLOYMENT_PREP_STATUS.md` for the current launch checklist and external owner actions.
+See `DEPLOYMENT_PREP_STATUS.md` and `docs/PRODUCTION_OPERATIONS.md` for operational procedures.
