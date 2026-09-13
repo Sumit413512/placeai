@@ -1,41 +1,85 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-import app.app as application
-from app.app import app
-from app.routers.ai_experience import _repair_pdf_text, _merge_profile_skills
-from app.routers.mock_interview_v2 import MockInterviewStartV2, _too_similar
+from app.routers.ai_experience import _merge_profile_skills, _repair_pdf_text, router as ai_experience_router
+from app.routers.mock_interview_v2 import MockInterviewStartV2, _too_similar, router as mock_interview_v2_router
+from app.routers.student_workspace_v2 import router as student_workspace_v2_router
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _route(path: str, method: str):
+def _module_route(router, path: str, method: str):
     matches = [
-        route for route in app.routes
+        route for route in router.routes
         if getattr(route, "path", None) == path and method in (getattr(route, "methods", set()) or set())
     ]
-    assert len(matches) == 1, (
-        f"expected exactly one {method} {path}, got {len(matches)}; "
-        f"router_import_failures={application._router_import_failures}"
-    )
+    assert len(matches) == 1, (path, method, len(matches))
     return matches[0]
 
 
+def test_replacement_routes_bootstrap_once_in_fresh_application_process():
+    expected = {
+        "/ai/parse-resume|POST": "app.routers.ai_experience",
+        "/ai/generate-summary|POST": "app.routers.ai_experience",
+        "/enterprise/calendar|GET": "app.routers.student_workspace_v2",
+        "/enterprise/announcements|GET": "app.routers.student_workspace_v2",
+        "/enterprise/custom-fields|GET": "app.routers.student_workspace_v2",
+        "/enterprise/student-campus-status|GET": "app.routers.student_workspace_v2",
+        "/mock-interview/start|POST": "app.routers.mock_interview_v2",
+        "/mock-interview/evaluate|POST": "app.routers.mock_interview_v2",
+    }
+    code = r'''
+import json
+from app.app import app, _router_import_failures
+wanted = {
+    "/ai/parse-resume|POST", "/ai/generate-summary|POST",
+    "/enterprise/calendar|GET", "/enterprise/announcements|GET",
+    "/enterprise/custom-fields|GET", "/enterprise/student-campus-status|GET",
+    "/mock-interview/start|POST", "/mock-interview/evaluate|POST",
+}
+found = {}
+for route in app.routes:
+    path = getattr(route, "path", "")
+    for method in (getattr(route, "methods", set()) or set()):
+        key = f"{path}|{method}"
+        if key in wanted:
+            found.setdefault(key, []).append(route.endpoint.__module__)
+print(json.dumps({"found": found, "failures": _router_import_failures}, sort_keys=True))
+'''
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout.strip().splitlines()[-1])
+    assert payload["failures"] == {}, payload
+    assert set(payload["found"]) == set(expected), payload
+    for key, owner in expected.items():
+        assert payload["found"][key] == [owner], (key, payload["found"][key])
+
+
 def test_user_reported_ai_routes_use_hardened_implementation():
-    assert _route("/ai/parse-resume", "POST").endpoint.__module__ == "app.routers.ai_experience"
-    assert _route("/ai/generate-summary", "POST").endpoint.__module__ == "app.routers.ai_experience"
+    assert _module_route(ai_experience_router, "/ai/parse-resume", "POST").endpoint.__module__ == "app.routers.ai_experience"
+    assert _module_route(ai_experience_router, "/ai/generate-summary", "POST").endpoint.__module__ == "app.routers.ai_experience"
 
 
 def test_user_reported_campus_views_use_graceful_student_workspace_routes():
-    assert _route("/enterprise/calendar", "GET").endpoint.__module__ == "app.routers.student_workspace_v2"
-    assert _route("/enterprise/announcements", "GET").endpoint.__module__ == "app.routers.student_workspace_v2"
-    assert _route("/enterprise/custom-fields", "GET").endpoint.__module__ == "app.routers.student_workspace_v2"
-    assert _route("/enterprise/student-campus-status", "GET").endpoint.__module__ == "app.routers.student_workspace_v2"
+    assert _module_route(student_workspace_v2_router, "/enterprise/calendar", "GET").endpoint.__module__ == "app.routers.student_workspace_v2"
+    assert _module_route(student_workspace_v2_router, "/enterprise/announcements", "GET").endpoint.__module__ == "app.routers.student_workspace_v2"
+    assert _module_route(student_workspace_v2_router, "/enterprise/custom-fields", "GET").endpoint.__module__ == "app.routers.student_workspace_v2"
+    assert _module_route(student_workspace_v2_router, "/enterprise/student-campus-status", "GET").endpoint.__module__ == "app.routers.student_workspace_v2"
 
 
 def test_resume_text_repairs_common_pdf_artifacts_and_merges_skills():
@@ -64,8 +108,8 @@ def test_mock_interview_similarity_guard_rejects_repeat_and_paraphrase():
 
 
 def test_mock_interview_v2_owns_start_and_evaluation_routes():
-    assert _route("/mock-interview/start", "POST").endpoint.__module__ == "app.routers.mock_interview_v2"
-    assert _route("/mock-interview/evaluate", "POST").endpoint.__module__ == "app.routers.mock_interview_v2"
+    assert _module_route(mock_interview_v2_router, "/mock-interview/start", "POST").endpoint.__module__ == "app.routers.mock_interview_v2"
+    assert _module_route(mock_interview_v2_router, "/mock-interview/evaluate", "POST").endpoint.__module__ == "app.routers.mock_interview_v2"
 
 
 def test_frontend_exposes_extended_interview_and_runtime_performance_controls():
