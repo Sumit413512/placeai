@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const productionBase = 'https://placeai-rxpp.vercel.app/workspace';
+  const productionBase = new URL('/workspace', window.location.origin).toString();
   const portalLabels = {
     student: 'Student workspace',
     recruiter: 'Employer / recruiter workspace',
