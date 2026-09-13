@@ -24,10 +24,10 @@ def _production_vercel_env(monkeypatch) -> None:
     monkeypatch.delenv("PASSWORD_RESET_BASE_URL", raising=False)
 
 
-def test_vercel_production_recovery_links_land_on_workspace(monkeypatch) -> None:
+def test_vercel_production_recovery_links_land_on_primary_origin(monkeypatch) -> None:
     _production_vercel_env(monkeypatch)
     settings = Settings()
-    assert settings.base_url == "https://placeai-rxpp.vercel.app/workspace"
+    assert settings.base_url == "https://placeai-rxpp.vercel.app"
     assert settings.configuration_error_codes() == []
 
 
@@ -35,7 +35,7 @@ def test_stale_render_public_app_override_is_retired_on_vercel(monkeypatch) -> N
     _production_vercel_env(monkeypatch)
     monkeypatch.setenv("PUBLIC_APP_URL", "https://placeai-recovery.onrender.com")
     settings = Settings()
-    assert settings.base_url == "https://placeai-rxpp.vercel.app/workspace"
+    assert settings.base_url == "https://placeai-rxpp.vercel.app"
 
 
 def test_explicit_custom_public_domain_is_preserved(monkeypatch) -> None:
@@ -45,28 +45,22 @@ def test_explicit_custom_public_domain_is_preserved(monkeypatch) -> None:
     assert settings.base_url == "https://app.placeai.in"
 
 
-def test_vercel_routes_public_site_and_same_origin_workspace() -> None:
+def test_vercel_routes_primary_origin_through_fastapi_shell() -> None:
     config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
-    rewrites = {(row["source"], row["destination"]) for row in config["rewrites"]}
-    assert ("/", "/index.html") in rewrites
-    assert ("/workspace", "/workspace.html") in rewrites
-    assert ("/workspace/", "/workspace.html") in rewrites
-    assert not any(source in {"/privacy", "/terms", "/acceptable-use", "/mock-interview"} for source, _ in rewrites)
+    assert "rewrites" not in config
+    assert config["git"]["deploymentEnabled"]["main"] is True
+    assert config["git"]["deploymentEnabled"]["**"] is False
 
-    workspace = (ROOT / "workspace.html").read_text(encoding="utf-8")
+    app_source = (ROOT / "app" / "app.py").read_text(encoding="utf-8")
     for asset in (
         "/static/workspace-runtime.js",
-        "/static/release-ux-fixes.js",
         "/static/provisioning-password-fix.js",
         "/static/integration-readiness.js",
         "/static/ai-readiness.js",
-        "/static/legal-links.js",
-        "/static/app.js",
     ):
-        assert asset in workspace
-
-    portal_js = (ROOT / "pages" / "assets" / "placeai-pages.js").read_text(encoding="utf-8")
-    assert "new URL('/workspace', window.location.origin)" in portal_js
+        assert asset in app_source
+    assert 'def root()' in app_source
+    assert 'TEMPLATE_DIR / "index.html"' in app_source
 
 
 def test_release_version_matches_live_backend_contract() -> None:
