@@ -10,12 +10,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.ai_provider import call_ai_text
 from app.ai_rate_limit import student_ai_guard
 from app.database import get_db
 from app.dependencies import require_student
 from app.models import ApprovalStatus, Job, MockInterview, StudentProfile, User
 from app.placement_access import job_is_visible_to_student
+from app.routers import mock_interview as legacy_mock_interview
 from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
 
 router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])
@@ -45,6 +45,17 @@ class MockInterviewEvaluationV2(BaseModel):
 
     interview_id: str
     answers: list[MockInterviewAnswerV2] = Field(min_length=1, max_length=15)
+
+
+def _call_interview_ai(prompt: str, *, max_output_tokens: int) -> str:
+    """Use the canonical provider chain through the long-standing interview call seam.
+
+    Production still resolves OpenAI primary -> OpenAI backup -> Gemini fallback through
+    `call_gemini`; retaining this seam also keeps older API integrations and regression
+    harnesses compatible while the v2 route owns the richer interview contract.
+    """
+    del max_output_tokens
+    return legacy_mock_interview.call_gemini(legacy_mock_interview.get_gemini_client(), prompt)
 
 
 def _clamp_score(value: Any) -> int:
@@ -225,7 +236,7 @@ def _generate_unique_questions(
             count=needed + (2 if round_index == 0 and needed >= 5 else 0),
             avoid=avoid,
         )
-        raw = call_ai_text(prompt, reasoning_effort="low", max_output_tokens=3200)
+        raw = _call_interview_ai(prompt, max_output_tokens=3200)
         data = extract_json_from_response(raw)
         source = data.get("questions", []) if isinstance(data, dict) else []
         if not isinstance(source, list):
@@ -246,7 +257,6 @@ def _generate_unique_questions(
             if len(accepted) >= count:
                 break
         avoid.extend(item["question"] for item in accepted)
-    # A legacy 3-question API client must still receive the exact requested round.
     minimum_viable = count if count < 5 else max(5, count - 1)
     if len(accepted) < minimum_viable:
         raise HTTPException(status_code=502, detail="AI service could not generate a sufficiently unique interview set. Please try again.")
@@ -379,7 +389,7 @@ CANDIDATE CONTEXT
 QUESTIONS AND ANSWERS
 {json.dumps(answers_payload, ensure_ascii=False, indent=2)[:42_000]}
 """
-    raw = call_ai_text(prompt, reasoning_effort="medium", max_output_tokens=7600)
+    raw = _call_interview_ai(prompt, max_output_tokens=7600)
     data = extract_json_from_response(raw)
     if not isinstance(data, dict):
         raise HTTPException(status_code=502, detail="AI service returned an invalid interview evaluation")
