@@ -1,0 +1,179 @@
+name: PlaceAI Vercel Production Smoke
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '37 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: placeai-vercel-production-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BASE_URL: https://placeai-rxpp.vercel.app
+    steps:
+      - name: Wait for canonical Vercel release
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            health_code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/health" || true)
+            root_code=$(curl -sS -o /tmp/root.html -D /tmp/root.headers -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/" || true)
+            bootstrap_code=$(curl -sS -o /tmp/bootstrap.js -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/static/app.js" || true)
+            if [ "$health_code" = "200" ] && [ "$root_code" = "200" ] && [ "$bootstrap_code" = "200" ] \
+              && grep -q '__PLACEAI_PRODUCTION_BOOTSTRAP__' /tmp/bootstrap.js; then
+              python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('/tmp/health.json').read_text(encoding='utf-8'))
+          required = {
+              'status': 'healthy',
+              'database': 'ok',
+              'configuration': 'ok',
+              'transactional_email': 'ok',
+          }
+          bad = {k: (payload.get(k), v) for k, v in required.items() if payload.get(k) != v}
+          if bad:
+              raise SystemExit(f'Production health contract failed: {bad}; payload={payload}')
+          print('Canonical Vercel release is healthy; version=', payload.get('version'))
+          PY
+              exit 0
+            fi
+            echo "Vercel production not on the expected release yet (attempt $attempt/30; health=$health_code root=$root_code bootstrap=$bootstrap_code)."
+            sleep 10
+          done
+          echo 'Canonical Vercel production did not converge to the expected release.' >&2
+          cat /tmp/health.json 2>/dev/null || true
+          echo 'Root response:' >&2
+          cat /tmp/root.html 2>/dev/null || true
+          exit 1
+
+      - name: Verify public shell and security headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -qi '<title>PlaceAI' /tmp/root.html
+          grep -q '/static/app.js' /tmp/root.html
+          grep -qi '^strict-transport-security:' /tmp/root.headers
+          grep -qi '^content-security-policy:' /tmp/root.headers
+          grep -qi '^x-content-type-options: *nosniff' /tmp/root.headers
+          grep -qi '^x-frame-options: *DENY' /tmp/root.headers
+          grep -qi '^referrer-policy: *strict-origin-when-cross-origin' /tmp/root.headers
+          grep -qi '^cache-control: *no-store' /tmp/root.headers
+          grep -q '__PLACEAI_PRODUCTION_BOOTSTRAP__' /tmp/bootstrap.js
+          grep -q '/static/app-core.js' /tmp/bootstrap.js
+          grep -q '/static/release-ux-fixes.js' /tmp/bootstrap.js
+          grep -q '/static/legal-links.js' /tmp/bootstrap.js
+
+      - name: Verify current release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/app-core.js" -o /tmp/app-core.js
+          test -s /tmp/app-core.js
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/api-errors.js" -o /tmp/api-errors.js
+          grep -q 'FORM_CONTRACTS' /tmp/api-errors.js
+          grep -q 'PASSWORD_POLICY_HELP' /tmp/api-errors.js
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/provisioning-password-fix.js" -o /tmp/provisioning-password-fix.js
+          grep -q 'AUTO_TEMP_PASSWORD_FIX_V1' /tmp/provisioning-password-fix.js
+          grep -q 'secureTemporaryPassword' /tmp/provisioning-password-fix.js
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/release-ux-fixes.js" -o /tmp/release-ux-fixes.js
+          test -s /tmp/release-ux-fixes.js
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/integration-readiness.js" -o /tmp/integration-readiness.js
+          grep -q 'Transactional email' /tmp/integration-readiness.js
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/ai-readiness.js" -o /tmp/ai-readiness.js
+          grep -q 'PlaceAIAIReadiness' /tmp/ai-readiness.js
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/favicon.ico" -o /tmp/favicon.svg
+          test -s /tmp/favicon.svg
+
+      - name: Verify legal and crawler surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/privacy" -o /tmp/privacy.html
+          grep -qi '<title>Privacy Policy — PlaceAI</title>' /tmp/privacy.html
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/terms" -o /tmp/terms.html
+          grep -qi '<title>Terms of Use — PlaceAI</title>' /tmp/terms.html
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/acceptable-use" -o /tmp/aup.html
+          grep -qi '<title>Acceptable Use — PlaceAI</title>' /tmp/aup.html
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/robots.txt" -o /tmp/robots.txt
+          grep -q "Sitemap: $BASE_URL/sitemap.xml" /tmp/robots.txt
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/sitemap.xml" -o /tmp/sitemap.xml
+          grep -q "$BASE_URL/privacy" /tmp/sitemap.xml
+          grep -q "$BASE_URL/terms" /tmp/sitemap.xml
+          grep -q "$BASE_URL/acceptable-use" /tmp/sitemap.xml
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/mock-interview" -o /tmp/mock-interview.html
+          grep -qi '<title>' /tmp/mock-interview.html
+
+      - name: Verify AI readiness contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/ai/status" -o /tmp/ai-status.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('/tmp/ai-status.json').read_text(encoding='utf-8'))
+          expected = {'configured', 'sdk_available', 'model'}
+          if set(payload) != expected:
+              raise SystemExit(f'Unexpected AI status fields: {sorted(payload)}')
+          if not isinstance(payload.get('configured'), bool) or not isinstance(payload.get('sdk_available'), bool):
+              raise SystemExit(f'AI readiness booleans invalid: {payload}')
+          if not isinstance(payload.get('model'), str) or not payload['model'].strip():
+              raise SystemExit(f'AI model readiness value invalid: {payload}')
+          print('AI readiness contract passed; configured=', payload['configured'])
+          PY
+
+      - name: Verify unauthenticated authorization boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          me_code=$(curl -sS -o /tmp/me.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/auth/me")
+          test "$me_code" = '401'
+          jobs_code=$(curl -sS -o /tmp/jobs.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/jobs")
+          test "$jobs_code" = '401'
+          drives_code=$(curl -sS -o /tmp/drives.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/enterprise/drives")
+          test "$drives_code" = '401'
+          dashboard_code=$(curl -sS -o /tmp/dashboard.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/institutions/dashboard")
+          test "$dashboard_code" = '401'
+          refresh_code=$(curl -sS -o /tmp/refresh.json -w '%{http_code}' -H 'Content-Type: application/json' -d '{}' "$BASE_URL/auth/refresh")
+          test "$refresh_code" = '401'
+
+      - name: Verify password-reset failure contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          reset_code=$(curl -sS -o /tmp/reset.json -w '%{http_code}' --max-time 30 -X POST "$BASE_URL/auth/reset-password" -H 'Content-Type: application/json' --data '{"token":"invalid-production-smoke-token-000000000000000000000000000000000000","new_password":"ProductionSmokeOnly!123"}')
+          case "$reset_code" in
+            400|422|429) ;;
+            *) echo "Unexpected password-reset probe status: $reset_code" >&2; cat /tmp/reset.json; exit 1 ;;
+          esac
+          if grep -q 'Unexpected server error' /tmp/reset.json; then
+            echo 'Reset endpoint leaked an unexpected server error.' >&2
+            cat /tmp/reset.json
+            exit 1
+          fi
+
+      - name: Record canonical production evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('/tmp/health.json').read_text(encoding='utf-8'))
+          ai = json.loads(Path('/tmp/ai-status.json').read_text(encoding='utf-8'))
+          safe = {k: payload.get(k) for k in ('status','service','version','database','configuration','transactional_email')}
+          print('production=', json.dumps(safe, sort_keys=True))
+          print('ai_configured=', ai.get('configured'), 'sdk_available=', ai.get('sdk_available'), 'model=', ai.get('model'))
+          print('url=https://placeai-rxpp.vercel.app')
+          PY

@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_render_is_authoritative_production_smoke_target() -> None:
+def test_render_gateway_remains_monitored_as_fallback() -> None:
     workflow = (ROOT / ".github" / "workflows" / "production-smoke.yml").read_text(encoding="utf-8")
     assert "BASE_URL: https://placeai-recovery.onrender.com" in workflow
     assert "/_recovery/health" in workflow
@@ -14,20 +14,26 @@ def test_render_is_authoritative_production_smoke_target() -> None:
     assert "integration-readiness.js" in workflow
 
 
-def test_vercel_git_deployments_are_frozen_while_render_is_release_target() -> None:
+def test_vercel_main_is_the_authoritative_production_release_branch() -> None:
     config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
     deployment_enabled = config["git"]["deploymentEnabled"]
-    assert deployment_enabled == {"**": False}
+    assert deployment_enabled.get("main") is True
+    assert deployment_enabled.get("**") is False
 
 
-def test_vercel_root_redirects_plain_ui_requests_to_render() -> None:
+def test_vercel_serves_the_complete_ui_instead_of_redirecting_to_render() -> None:
     config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
     redirects = config.get("redirects") or []
-    assert {
-        "source": "/",
-        "destination": "https://placeai-recovery.onrender.com",
-        "permanent": False,
-    } in redirects
+    assert not any(item.get("source") == "/" for item in redirects)
+
+    app_source = (ROOT / "app" / "app.py").read_text(encoding="utf-8")
+    assert 'release-ux-fixes.js' in app_source
+    assert 'legal-links.js' in app_source
+    assert '@app.api_route("/privacy"' in app_source
+    assert '@app.api_route("/terms"' in app_source
+    assert '@app.api_route("/acceptable-use"' in app_source
+    assert '@app.get("/robots.txt"' in app_source
+    assert '@app.get("/sitemap.xml"' in app_source
 
 
 def test_ci_generates_commit_specific_integrity_evidence() -> None:

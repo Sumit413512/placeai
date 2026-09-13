@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import DataError, IntegrityError, SQLAlchemyError
@@ -21,9 +21,21 @@ from app.database import (
     safe_database_target,
 )
 from app.email_delivery import transactional_email_configured
+from app.embedded_pages import (
+    ACCEPTABLE_USE_HTML,
+    INDEX_HTML,
+    MOCK_INTERVIEW_HTML,
+    PRIVACY_HTML,
+    TERMS_HTML,
+)
 
 logger = logging.getLogger("placeai")
 settings = get_settings()
+# Vercel now serves the complete production application directly. Ensure links emitted
+# by backend workflows (notably password reset) use the stable production Vercel host
+# rather than the legacy Render gateway when no explicit public URL override is set.
+if settings.is_production and settings.running_on_vercel:
+    settings.base_url = settings.backend_base_url
 runtime_readiness_errors = settings.configuration_error_codes()
 _router_import_failures: dict[str, str] = {}
 if engine_initialization_error_code and engine_initialization_error_code not in runtime_readiness_errors:
@@ -66,7 +78,16 @@ app.add_middleware(
 )
 
 
-_DIAGNOSTIC_PATHS = {"/", "/health"}
+_DIAGNOSTIC_PATHS = {
+    "/",
+    "/health",
+    "/favicon.ico",
+    "/privacy",
+    "/terms",
+    "/acceptable-use",
+    "/robots.txt",
+    "/sitemap.xml",
+}
 
 
 @app.middleware("http")
@@ -109,7 +130,9 @@ async def security_headers(request: Request, call_next):
         "img-src 'self' data: https:; "
         "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
     )
-    if path == "/health" or path.startswith("/auth/"):
+    if path == "/health" or path.startswith("/auth/") or path in {
+        "/", "/privacy", "/terms", "/acceptable-use"
+    }:
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
     if settings.is_production:
@@ -271,10 +294,23 @@ TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
+def _public_base(request: Request) -> str:
+    return str(request.base_url).rstrip("/")
+
+
+def _template_html(name: str, fallback: str) -> str:
+    """Read the editable template, with an imported fallback for serverless bundles."""
+    try:
+        return (TEMPLATE_DIR / name).read_text(encoding="utf-8")
+    except OSError as exc:
+        logger.warning("Using embedded PlaceAI page for %s: %s", name, type(exc).__name__)
+        return fallback
+
+
 @app.get("/", include_in_schema=False)
 def root():
     """Serve the production workspace shell with the role-aware access layer."""
-    html = (TEMPLATE_DIR / "index.html").read_text(encoding="utf-8")
+    html = _template_html("index.html", INDEX_HTML)
     assets = (
         '<link rel="stylesheet" href="/static/api-errors.css">\n'
         '<link rel="stylesheet" href="/static/access-portal.css">\n'
@@ -286,17 +322,55 @@ def root():
         '<script src="/static/ui-state-fixes.js" defer></script>\n'
         '<script src="/static/account-security.js" defer></script>\n'
         '<script src="/static/provisioning-password-fix.js" defer></script>\n'
+        '<script src="/static/release-ux-fixes.js" defer></script>\n'
         '<script src="/static/integration-readiness.js" defer></script>\n'
         '<script src="/static/ai-readiness.js" defer></script>\n'
+        '<script src="/static/legal-links.js" defer></script>\n'
     )
     if "/static/access-portal.js" not in html:
         html = html.replace("</head>", f"{assets}</head>", 1)
     return HTMLResponse(html)
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> FileResponse:
+    return FileResponse(STATIC_DIR / "placeai-icon.svg", media_type="image/svg+xml")
+
+
 @app.get("/mock-interview", include_in_schema=False)
-def mock_interview_page():
-    return FileResponse(TEMPLATE_DIR / "mock-interview.html")
+def mock_interview_page() -> HTMLResponse:
+    return HTMLResponse(_template_html("mock-interview.html", MOCK_INTERVIEW_HTML))
+
+
+@app.api_route("/privacy", methods=["GET", "HEAD"], include_in_schema=False)
+def privacy_page() -> HTMLResponse:
+    return HTMLResponse(_template_html("privacy.html", PRIVACY_HTML))
+
+
+@app.api_route("/terms", methods=["GET", "HEAD"], include_in_schema=False)
+def terms_page() -> HTMLResponse:
+    return HTMLResponse(_template_html("terms.html", TERMS_HTML))
+
+
+@app.api_route("/acceptable-use", methods=["GET", "HEAD"], include_in_schema=False)
+def acceptable_use_page() -> HTMLResponse:
+    return HTMLResponse(_template_html("acceptable-use.html", ACCEPTABLE_USE_HTML))
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots(request: Request) -> Response:
+    body = f"User-agent: *\nAllow: /\nSitemap: {_public_base(request)}/sitemap.xml\n"
+    return Response(content=body, media_type="text/plain")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+def sitemap(request: Request) -> Response:
+    base = _public_base(request)
+    urls = ["/", "/privacy", "/terms", "/acceptable-use"]
+    body = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    body += "\n".join(f"  <url><loc>{base}{path}</loc></url>" for path in urls)
+    body += "\n</urlset>\n"
+    return Response(content=body, media_type="application/xml")
 
 
 @app.get("/health", tags=["System"])

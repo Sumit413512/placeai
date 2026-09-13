@@ -1,0 +1,63 @@
+name: Export Vercel Production Bundle
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/export-vercel-bundle.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout verified source
+        uses: actions/checkout@v6
+
+      - name: Build deterministic production source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import zipfile
+          from pathlib import Path
+
+          root = Path('.')
+          out = Path('/tmp/placeai-vercel-bundle.zip')
+          wanted = [Path('.python-version'), Path('requirements.txt'), Path('VERSION')]
+          wanted += sorted(p for p in Path('app').rglob('*') if p.is_file())
+
+          config = {
+              '$schema': 'https://openapi.vercel.sh/vercel.json',
+              'regions': ['sin1'],
+              'git': {'deploymentEnabled': {'**': False}},
+              'functions': {
+                  'app/app.py': {
+                      'includeFiles': '{app/templates/**,app/static/**}',
+                      'excludeFiles': '{tests/**,docs/**,alembic/**,scripts/**,.github/**,pages/**,*.md,index.html,PlaceAI_API.postman_collection.json,Dockerfile,docker-compose.yml}',
+                  }
+              },
+          }
+
+          with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+              for path in wanted:
+                  archive.write(path, path.as_posix())
+              archive.writestr('vercel.json', json.dumps(config, indent=2) + '\n')
+          print(f'Created {out} ({out.stat().st_size} bytes) with {len(wanted) + 1} files')
+          PY
+          sha256sum /tmp/placeai-vercel-bundle.zip > /tmp/placeai-vercel-bundle.sha256
+          cat /tmp/placeai-vercel-bundle.sha256
+
+      - name: Upload deployment bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: placeai-vercel-production-bundle-${{ github.sha }}
+          path: |
+            /tmp/placeai-vercel-bundle.zip
+            /tmp/placeai-vercel-bundle.sha256
+          if-no-files-found: error
+          retention-days: 7

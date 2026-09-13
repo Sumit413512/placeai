@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="PlaceAI Mock Interview Coach for student placement preparation.">
+  <meta name="theme-color" content="#071f45">
+  <title>PlaceAI — Mock Interview Coach</title>
+  <link rel="icon" type="image/svg+xml" href="/static/placeai-icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/api-errors.css">
+  <link rel="stylesheet" href="/static/mock-interview.css">
+  <link rel="stylesheet" href="/static/brand.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark"><i></i><i></i><i></i></span><span>PlaceAI</span></a>
+    <div class="top-actions"><span class="secure">Student coaching workspace</span><a href="/">Back to PlaceAI</a></div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <span class="eyebrow">AI-assisted preparation</span>
+        <h1>Mock Interview Coach</h1>
+        <p>Practice against a real PlaceAI opportunity with role-specific, non-repeating questions. After each round, receive question-by-question analysis, missing concepts, stronger answer structures, example solutions and a targeted next-practice plan.</p>
+      </div>
+      <div class="guardrail"><strong>Text-only coaching</strong><span>Scores are preparation signals. They do not measure accent, spoken fluency, personality or employability.</span></div>
+    </section>
+
+    <div id="auth-state" class="notice">Checking your student session…</div>
+
+    <section id="setup-panel" class="panel hidden">
+      <div class="panel-head">
+        <div><span class="step">01</span><h2>Configure the practice round</h2><p>Choose the role, focus, difficulty and round length. PlaceAI avoids questions used in your recent attempts for the same role.</p></div>
+      </div>
+      <form id="setup-form" class="setup-grid">
+        <label>Opportunity<select id="job-select" name="job_id" required><option value="">Loading opportunities…</option></select></label>
+        <label>Interview focus<select name="focus"><option value="balanced">Balanced</option><option value="technical">Technical</option><option value="behavioral">Behavioral</option><option value="hr">HR / communication</option></select></label>
+        <label>Difficulty<select name="difficulty"><option value="mixed" selected>Mixed progression</option><option value="easy">Foundation</option><option value="medium">Intermediate</option><option value="hard">Advanced</option></select></label>
+        <label>Mode<select name="mode"><option value="practice" selected>Practice + coaching</option><option value="assessment">Assessment simulation</option></select></label>
+        <label>Questions<select name="question_count"><option value="5">5 questions</option><option value="8" selected>8 questions</option><option value="10">10 questions</option><option value="12">12 questions</option><option value="15">15 questions</option></select></label>
+        <button class="button primary" type="submit">Generate new interview</button>
+      </form>
+    </section>
+
+    <section id="interview-panel" class="panel hidden">
+      <div class="panel-head">
+        <div><span class="step">02</span><h2 id="interview-title">Answer the interview</h2><p id="interview-context"></p></div>
+        <span class="status-pill">Human practice · AI coaching</span>
+      </div>
+      <form id="interview-form">
+        <div id="question-list" class="question-list"></div>
+        <div class="form-actions"><button type="button" class="button secondary" id="restart-button">Start over</button><button class="button primary" type="submit">Finish & analyse answers</button></div>
+      </form>
+    </section>
+
+    <section id="result-panel" class="panel hidden">
+      <div class="panel-head">
+        <div><span class="step">03</span><h2>Your interview analysis</h2><p>Use the evidence below to improve the next attempt.</p></div>
+        <div class="score-badge"><strong id="overall-score">—</strong><span>/100</span></div>
+      </div>
+      <p id="overall-feedback" class="overall-feedback"></p>
+      <div id="dimension-grid" class="dimension-grid"></div>
+      <div class="two-col">
+        <article class="feedback-box good"><h3>Strengths</h3><ul id="strength-list"></ul></article>
+        <article class="feedback-box"><h3>Highest-value improvements</h3><ul id="improvement-list"></ul></article>
+      </div>
+      <div class="two-col">
+        <article class="feedback-box"><h3>Weak topics to revise</h3><ul id="weak-topic-list"></ul></article>
+        <article class="feedback-box good"><h3>Next practice plan</h3><ol id="practice-plan-list"></ol></article>
+      </div>
+      <div id="answer-feedback" class="answer-feedback"></div>
+      <p id="result-disclaimer" class="disclaimer"></p>
+      <div class="form-actions"><button class="button primary" id="practice-again" type="button">Generate another fresh round</button></div>
+    </section>
+
+    <section id="history-panel" class="panel hidden">
+      <div class="panel-head">
+        <div><span class="step">History</span><h2>Previous attempts</h2><p>Your recent evaluated rounds are also used to avoid repeating questions for the same role.</p></div>
+      </div>
+      <div id="history-list" class="history-list"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+  <script src="/static/api-errors.js" defer></script>
+  <script src="/static/mock-interview.js" defer></script>
+</body>
+</html>
