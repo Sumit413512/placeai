@@ -98,17 +98,22 @@ class Settings:
         default_backend_url = vercel_default_url or "http://localhost:8000"
         self.backend_base_url = os.getenv("BASE_URL", default_backend_url).rstrip("/")
 
-        # External links sent to users must point at the stable public frontend, not
-        # at a serverless backend hostname whose root may not serve the UI. Operators
-        # can override this with PUBLIC_APP_URL (preferred) or PASSWORD_RESET_BASE_URL.
+        # External links sent to users must land on the production workspace. The
+        # historical Render gateway remains a fallback only; stale environment values
+        # pointing there are ignored when the application is running in Vercel production.
+        configured_public_app_url = _first_env("PUBLIC_APP_URL", "PASSWORD_RESET_BASE_URL").rstrip("/")
+        if (
+            self.is_production
+            and self.running_on_vercel
+            and configured_public_app_url == "https://placeai-recovery.onrender.com"
+        ):
+            configured_public_app_url = ""
         if self.is_production and self.running_on_vercel:
-            default_public_app_url = "https://placeai-recovery.onrender.com"
+            public_origin = vercel_default_url or self.backend_base_url
+            default_public_app_url = f"{public_origin.rstrip('/')}/workspace"
         else:
             default_public_app_url = self.backend_base_url
-        self.base_url = (
-            _first_env("PUBLIC_APP_URL", "PASSWORD_RESET_BASE_URL")
-            or default_public_app_url
-        ).rstrip("/")
+        self.base_url = (configured_public_app_url or default_public_app_url).rstrip("/")
 
         default_allowed_origins = vercel_default_url or "http://localhost:8000"
         self.allowed_origins = [
