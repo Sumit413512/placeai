@@ -7,13 +7,6 @@
       "**": false
     }
   },
-  "rewrites": [
-    { "source": "/", "destination": "/index.html" },
-    { "source": "/privacy", "destination": "/privacy.html" },
-    { "source": "/terms", "destination": "/terms.html" },
-    { "source": "/acceptable-use", "destination": "/acceptable-use.html" },
-    { "source": "/mock-interview", "destination": "/mock-interview.html" }
-  ],
   "headers": [
     {
       "source": "/:path*",
@@ -45,7 +38,7 @@
   "functions": {
     "app/app.py": {
       "includeFiles": "app/**",
-      "excludeFiles": "{tests/**,docs/**,alembic/**,scripts/**,.github/**,pages/**,*.md,index.html,PlaceAI_API.postman_collection.json,Dockerfile,docker-compose.yml}"
+      "excludeFiles": "{tests/**,docs/**,alembic/**,scripts/**,.github/**,pages/**,public/**,*.md,index.html,PlaceAI_API.postman_collection.json,Dockerfile,docker-compose.yml}"
     }
   }
 }
