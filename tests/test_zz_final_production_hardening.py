@@ -166,18 +166,15 @@ def _ensure_fixture() -> dict[str, str]:
 
 def _assert_router_contract(router, path: str, method: str, owner: str) -> None:
     matches = [
-        route for route in router.routes
-        if getattr(route, "path", None) == path
-        and method in (getattr(route, "methods", set()) or set())
+        route
+        for route in router.routes
+        if getattr(route, "path", None) == path and method in (getattr(route, "methods", set()) or set())
     ]
     assert len(matches) == 1, (path, method, len(matches))
     assert owner in matches[0].endpoint.__module__, (path, matches[0].endpoint.__module__)
 
 
 def test_hardened_router_modules_bootstrap_cleanly_and_own_runtime_contracts_once() -> None:
-    # An earlier resilience test intentionally probes a missing router and verifies that
-    # the failure is contained. Remove only that synthetic probe before asserting the
-    # real startup state; production bootstrap never imports this name.
     synthetic_name = "intentionally_missing"
     synthetic_code = "ROUTER_IMPORT_INTENTIONALLY_MISSING_FAILED"
     _router_import_failures.pop(synthetic_name, None)
@@ -198,7 +195,6 @@ def test_hardened_router_modules_bootstrap_cleanly_and_own_runtime_contracts_onc
         ("/enterprise/attendance/sessions", "GET"),
         ("/enterprise/attendance/check-in", "POST"),
         ("/enterprise/search", "GET"),
-        ("/enterprise/calendar", "GET"),
     ):
         _assert_router_contract(enterprise_secure_router, path, method, "enterprise_secure")
 
@@ -214,15 +210,19 @@ def test_hardened_router_modules_bootstrap_cleanly_and_own_runtime_contracts_onc
     _assert_router_contract(enterprise_router, "/enterprise/announcements", "GET", "enterprise")
 
     app_source = Path("app/app.py").read_text(encoding="utf-8")
-    assert '("/auth/change-password", "POST")' in app_source
-    assert "_include_router(account_security, ACCOUNT_SECURITY_REPLACEMENTS)" in app_source
-    assert "_include_router(account_security_secure)" in app_source
-    assert "_include_router(jobs, JOB_REPLACEMENTS)" in app_source
-    assert "_include_router(jobs_secure)" in app_source
-    assert "_include_router(institutions, INSTITUTION_REPLACEMENTS)" in app_source
-    assert "_include_router(institution_secure)" in app_source
-    assert "_include_router(enterprise, ENTERPRISE_REPLACEMENTS)" in app_source
-    assert "_include_router(enterprise_secure, ENTERPRISE_SECURE_EXCLUSIONS)" in app_source
+    for required in (
+        '("/auth/change-password", "POST")',
+        "_include_router(account_security, ACCOUNT_SECURITY_REPLACEMENTS)",
+        "_include_router(account_security_secure)",
+        "_include_router(jobs, JOB_REPLACEMENTS)",
+        "_include_router(jobs_secure)",
+        "_include_router(institutions, INSTITUTION_REPLACEMENTS)",
+        "_include_router(institution_secure)",
+        "_include_router(enterprise, ENTERPRISE_REPLACEMENTS)",
+        "_include_router(enterprise_secure, ENTERPRISE_SECURE_EXCLUSIONS)",
+        "_include_router(student_workspace_v2)",
+    ):
+        assert required in app_source
 
 
 def test_unverified_student_cannot_discover_campus_opportunities() -> None:
@@ -236,8 +236,18 @@ def test_unverified_student_cannot_discover_campus_opportunities() -> None:
     generic_jobs = client.get("/jobs", headers=headers)
     assert generic_jobs.status_code == 200
     assert all(row["id"] != fixture["campus_job"] for row in generic_jobs.json())
+
+    # Calendar is intentionally graceful before institution verification: personal
+    # events may be returned, but campus-only drive/announcement data must not leak.
     calendar = client.get("/enterprise/calendar", headers=headers)
-    assert calendar.status_code == 403
+    assert calendar.status_code == 200, calendar.text
+    assert all(item.get("type") not in {"registration_deadline", "placement_drive", "announcement"} for item in calendar.json())
+
+    announcements = client.get("/enterprise/announcements", headers=headers)
+    assert announcements.status_code == 200 and announcements.json() == []
+    custom_fields = client.get("/enterprise/custom-fields", headers=headers)
+    assert custom_fields.status_code == 200 and custom_fields.json() == []
+
     attendance = client.get("/enterprise/attendance/sessions", headers=headers)
     assert attendance.status_code == 403
 
