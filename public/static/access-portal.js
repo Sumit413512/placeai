@@ -72,13 +72,15 @@
   }
 
   function focusAccessForm(formId) {
+    const panel = $('.auth-form-panel');
+    if (panel) panel.scrollTop = 0;
     requestAnimationFrame(() => {
       const form = document.getElementById(formId);
-      const panel = $('.auth-form-panel');
       if (!form || !panel) return;
       const formRect = form.getBoundingClientRect();
       const panelRect = panel.getBoundingClientRect();
-      panel.scrollTop = Math.max(0, panel.scrollTop + formRect.top - panelRect.top - 12);
+      const formTop = formRect.top - panelRect.top + panel.scrollTop;
+      panel.scrollTop = Math.max(0, formTop - 12);
       const firstInput = [...form.querySelectorAll('input:not([type="hidden"]):not([disabled])')].find(input => input.getClientRects().length);
       if (firstInput) firstInput.focus({preventScroll: true});
     });
