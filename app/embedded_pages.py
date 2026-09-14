@@ -163,7 +163,7 @@ INDEX_HTML = '''<!doctype html>
     </div>
   </div>
 
-  <div id="auth-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+  <div id="auth-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="auth-title" tabindex="-1">
     <div class="auth-modal">
       <button class="modal-close" data-action="close-auth" aria-label="Close">×</button>
       <div class="auth-brand-panel"><a class="brand brand-light" href="#"><span class="brand-mark"><span></span><span></span><span></span></span><span>PlaceAI</span></a><div><span class="auth-panel-kicker">Controlled access</span><h2>One secure entry point for every PlaceAI workspace.</h2><p>Select the role assigned to your account. Privileged roles require authorized provisioning.</p></div><div class="auth-proof"><span>Role verification</span><span>Institution tenancy</span><span>Privacy-first candidate access</span></div></div>
@@ -175,7 +175,7 @@ INDEX_HTML = '''<!doctype html>
     </div>
   </div>
 
-  <div id="generic-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Dialog">
+  <div id="generic-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Dialog" tabindex="-1">
     <div class="generic-modal-card">
       <button class="modal-close" data-action="close-generic-modal" aria-label="Close dialog">×</button>
       <div id="generic-modal-content" class="generic-modal-content"></div>
