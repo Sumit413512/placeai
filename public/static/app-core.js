@@ -99,6 +99,7 @@
 
   const modalFocusableSelector = 'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
   const modalOpeners = {auth: null, generic: null};
+  const modalScrollLockOwners = new Set();
   const modalElement = kind => kind === 'generic' ? $('#generic-modal') : $('#auth-overlay');
   const modalIsVisible = element => element && !element.classList.contains('hidden');
   const modalFocusables = element => [...element.querySelectorAll(modalFocusableSelector)].filter(item => item.getClientRects().length && !item.disabled);
@@ -111,12 +112,17 @@
   const focusModal = element => {
     requestAnimationFrame(() => {
       if (!modalIsVisible(element)) return;
-      const target = modalFocusables(element).find(item => /^(INPUT|SELECT|TEXTAREA)$/.test(item.tagName)) || element.querySelector('[data-action="close-auth"], [data-action="close-generic-modal"], button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])');
-      target?.focus?.({preventScroll: true});
+      const target = modalFocusables(element).find(item => /^(INPUT|SELECT|TEXTAREA)$/.test(item.tagName)) || element.querySelector('[data-action="close-auth"], [data-action="close-generic-modal"], button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])') || element;
+      if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+      target.focus?.({preventScroll: true});
     });
   };
   const syncModalState = () => {
-    document.body.classList.toggle('modal-open', modalIsVisible($('#auth-overlay')) || modalIsVisible($('#generic-modal')));
+    for (const kind of ['auth', 'generic']) {
+      if (modalIsVisible(modalElement(kind))) modalScrollLockOwners.add(kind);
+      else modalScrollLockOwners.delete(kind);
+    }
+    document.body.classList.toggle('modal-open', modalScrollLockOwners.size > 0);
   };
   const rememberModalOpener = (kind = 'auth') => {
     const dialog = modalElement(kind);
@@ -285,9 +291,11 @@
     await updateNotificationBadge();
   }
 
+  let bootWorkspaceCompleted = false;
   let bootWorkspaceInFlight = null;
 
   function bootWorkspace() {
+    if (bootWorkspaceCompleted) return Promise.resolve(true);
     if (bootWorkspaceInFlight) return bootWorkspaceInFlight;
     const run = (async () => {
     try {
@@ -317,7 +325,10 @@
     })();
     bootWorkspaceInFlight = run;
     run.then(
-      () => { if (bootWorkspaceInFlight === run) bootWorkspaceInFlight = null; },
+      result => {
+        if (bootWorkspaceInFlight === run) bootWorkspaceInFlight = null;
+        if (result) bootWorkspaceCompleted = true;
+      },
       () => { if (bootWorkspaceInFlight === run) bootWorkspaceInFlight = null; }
     );
     return run;
