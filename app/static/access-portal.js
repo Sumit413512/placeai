@@ -38,9 +38,9 @@
   let createRole = 'student';
 
   function roleCards(selected, mode) {
-    return `<div class="access-role-grid">${roleOrder.map(key => {
+    return `<div class="access-role-grid" role="tablist" aria-label="${mode === 'login' ? 'Sign-in role' : 'Account access role'}">${roleOrder.map(key => {
       const role = roles[key];
-      return `<button type="button" class="access-role-card ${selected === key ? 'is-selected' : ''}" data-access-role="${key}" data-access-role-mode="${mode}" aria-pressed="${selected === key ? 'true' : 'false'}"><strong>${role.label}</strong><span>${role.description}</span><em>${role.access}</em></button>`;
+      return `<button type="button" class="access-role-card ${selected === key ? 'is-selected' : ''}" data-access-role="${key}" data-access-role-mode="${mode}" role="tab" aria-selected="${selected === key ? 'true' : 'false'}"><strong>${role.label}</strong><span>${role.description}</span><em>${role.access}</em></button>`;
     }).join('')}</div>`;
   }
 

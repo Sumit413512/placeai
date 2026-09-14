@@ -171,6 +171,8 @@
   }
   function closeAuth() {
     $('#auth-overlay').classList.add('hidden');
+    const panel = $('.auth-form-panel');
+    if (panel) panel.scrollTop = 0;
     syncModalState();
     restoreModalOpener('auth');
   }
