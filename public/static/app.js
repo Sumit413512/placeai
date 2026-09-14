@@ -34,15 +34,35 @@
   const loadNext = (index) => {
     if (index >= scripts.length) return;
     const candidateSrc = new URL(scripts[index], document.baseURI).href;
-    if ([...document.scripts].some(existing => existing.src === candidateSrc)) {
-      loadNext(index + 1);
+    const existing = [...document.scripts].find(script => script.src === candidateSrc);
+    if (existing) {
+      const state = existing.dataset.placeaiLoaderState;
+      const parsedBeforeLoader = document.readyState !== 'loading' && !existing.async && existing !== document.currentScript;
+      const alreadySettled = state === 'loaded' || state === 'error' || existing.readyState === 'complete' || (!state && (document.readyState === 'complete' || parsedBeforeLoader));
+      if (alreadySettled) {
+        loadNext(index + 1);
+        return;
+      }
+      const settle = () => {
+        existing.removeEventListener('load', settle);
+        existing.removeEventListener('error', settle);
+        loadNext(index + 1);
+      };
+      existing.addEventListener('load', settle, {once: true});
+      existing.addEventListener('error', settle, {once: true});
+      if (existing.readyState === 'complete') settle();
       return;
     }
     const script = document.createElement('script');
     script.src = scripts[index];
     script.async = false;
-    script.onload = () => loadNext(index + 1);
+    script.dataset.placeaiLoaderState = 'loading';
+    script.onload = () => {
+      script.dataset.placeaiLoaderState = 'loaded';
+      loadNext(index + 1);
+    };
     script.onerror = () => {
+      script.dataset.placeaiLoaderState = 'error';
       console.error(`PlaceAI production asset failed to load: ${scripts[index]}`);
       loadNext(index + 1);
     };
