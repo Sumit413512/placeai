@@ -1,5 +1,7 @@
 (() => {
   'use strict';
+  if (window.__PLACEAI_UI_STATE_SHIM_LOADED__) return;
+  window.__PLACEAI_UI_STATE_SHIM_LOADED__ = true;
 
   const STORAGE_KEY = 'placeai.workspace.view.v1';
   const SESSION_HINT_KEY = 'placeai.session.active.v1';
@@ -269,6 +271,8 @@
 // refresh cannot destroy an otherwise valid recovery attempt.
 (() => {
   'use strict';
+  if (window.__PLACEAI_RECOVERY_SHIM_LOADED__) return;
+  window.__PLACEAI_RECOVERY_SHIM_LOADED__ = true;
 
   const RESET_TOKEN_KEY = 'placeai.password.reset.v1';
   const TOKEN_MIN = 20;
