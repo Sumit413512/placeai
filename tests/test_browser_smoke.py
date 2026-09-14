@@ -222,7 +222,7 @@ def test_auth_modal_focus_lock_escape_and_opener_restoration(browser) -> None:
     page.keyboard.press("Escape")
     page.wait_for_function("document.querySelector('#auth-overlay').classList.contains('hidden')")
     assert not page.evaluate("document.body.classList.contains('modal-open')")
-    assert page.evaluate("document.activeElement === document.querySelector('.hero button[data-open-auth=\\\"login\\\"]')")
+    assert page.evaluate("document.activeElement?.getAttribute('data-open-auth') === 'login'")
     page.close()
 
 
@@ -231,7 +231,7 @@ def test_privileged_role_rerender_focuses_visible_form_on_mobile(browser) -> Non
     page.goto(BASE_URL, wait_until="domcontentloaded")
     page.locator('.hero button[data-open-auth="login"]').click()
     page.locator("#auth-overlay").wait_for(state="visible")
-    page.locator('[data-access-switch="create"]').click()
+    page.locator('#login-view [data-access-switch="create"]').click()
     page.wait_for_function("!document.querySelector('#signup-view').classList.contains('hidden')")
 
     for role in ("recruiter", "institution_admin", "platform_admin"):
