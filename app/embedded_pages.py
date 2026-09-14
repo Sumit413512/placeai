@@ -1,4 +1,4 @@
-from __future__ import annotations
+<h2 id="auth-create-title">Create or request access</h2><h2 id="auth-reset-title">Reset your password</h2><div id="generic-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Dialog">from __future__ import annotations
 
 # Vercel's Python runtime traces imported Python modules reliably, while non-Python
 # template files can be omitted from a serverless function bundle. These copies are
