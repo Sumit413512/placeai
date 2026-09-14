@@ -136,8 +136,7 @@ def test_auth_role_focus_contract_and_mirror_equivalence() -> None:
     assert "if (panel) panel.scrollTop = 0;" in portal
     assert "const formTop = formRect.top - panelRect.top + panel.scrollTop;" in portal
     assert "firstInput.focus({preventScroll: true});" in portal
-    for role in ("recruiter", "institution_admin", "platform_admin"):
-        assert f'data-access-role="{role}"' in portal
+    assert "const roleOrder = ['student', 'recruiter', 'institution_admin', 'platform_admin'];" in portal
     assert 'id="auth-create-title"' in embedded
     assert 'id="auth-reset-title"' in embedded
     assert 'aria-label="Dialog"' in embedded
