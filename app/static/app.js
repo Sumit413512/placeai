@@ -111,7 +111,7 @@
   const focusModal = element => {
     requestAnimationFrame(() => {
       if (!modalIsVisible(element)) return;
-      const target = element.querySelector('input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])') || element.querySelector('[data-action="close-auth"], [data-action="close-generic-modal"], button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])');
+      const target = modalFocusables(element).find(item => /^(INPUT|SELECT|TEXTAREA)$/.test(item.tagName)) || element.querySelector('[data-action="close-auth"], [data-action="close-generic-modal"], button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])');
       target?.focus?.({preventScroll: true});
     });
   };
