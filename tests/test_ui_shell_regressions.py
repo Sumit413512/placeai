@@ -79,8 +79,15 @@ def test_primary_workspace_boot_keeps_server_session_refresh_path() -> None:
 
 def test_production_loader_deduplicates_scripts_and_exposes_sentinels() -> None:
     loader = (ROOT / "public/static/app.js").read_text(encoding="utf-8")
+    core = (ROOT / "app/static/app.js").read_text(encoding="utf-8")
+    portal = (ROOT / "app/static/access-portal.js").read_text(encoding="utf-8")
+    ui_state = (ROOT / "app/static/ui-state-fixes.js").read_text(encoding="utf-8")
 
     assert "if (window.__PLACEAI_PRODUCTION_BOOTSTRAP__) return;" in loader
+    assert "if (window.__PLACEAI_APP_CORE_LOADED__) return;" in core
+    assert "if (window.__PLACEAI_ACCESS_PORTAL_LOADED__) return;" in portal
+    assert "if (window.__PLACEAI_UI_STATE_SHIM_LOADED__) return;" in ui_state
+    assert "if (window.__PLACEAI_RECOVERY_SHIM_LOADED__) return;" in ui_state
     assert "const candidateSrc = new URL(scripts[index], document.baseURI).href;" in loader
     assert "const existing = [...document.scripts].find(script => script.src === candidateSrc);" in loader
     assert "script.dataset.placeaiLoaderState = 'loading';" in loader
@@ -114,6 +121,9 @@ def test_modal_lock_ownership_and_escape_priority_are_coordinated() -> None:
     assert escape.index("closeCommandPalette()") < escape.index("closeModal()") < escape.index("closeAuth()")
     assert "restoreModalOpener('auth')" in core
     assert "restoreModalOpener('generic')" in core
+    close_auth = core.split("function closeAuth()", 1)[1].split("function openModal", 1)[0]
+    assert "const panel = $('.auth-form-panel');" in close_auth
+    assert "if (panel) panel.scrollTop = 0;" in close_auth
     assert 'id="auth-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="auth-title" tabindex="-1"' in html
     assert 'id="generic-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Dialog" tabindex="-1"' in html
 
@@ -121,6 +131,7 @@ def test_modal_lock_ownership_and_escape_priority_are_coordinated() -> None:
 def test_auth_role_focus_contract_and_mirror_equivalence() -> None:
     portal = (ROOT / "app/static/access-portal.js").read_text(encoding="utf-8")
     public_portal = (ROOT / "public/static/access-portal.js").read_text(encoding="utf-8")
+    core = (ROOT / "app/static/app.js").read_text(encoding="utf-8")
     ui_state = (ROOT / "app/static/ui-state-fixes.js").read_text(encoding="utf-8")
     public_ui_state = (ROOT / "public/static/ui-state-fixes.js").read_text(encoding="utf-8")
     html = (ROOT / "app/templates/index.html").read_text(encoding="utf-8")
@@ -130,6 +141,13 @@ def test_auth_role_focus_contract_and_mirror_equivalence() -> None:
     assert portal == public_portal
     assert ui_state == public_ui_state
     assert html == public_html
+    assert 'role="tablist"' in portal
+    assert 'role="tab"' in portal
+    assert 'aria-selected=' in portal
+    assert 'aria-pressed=' not in portal
+    assert '<h2 id="auth-title">' in portal
+    assert '<h2 id="auth-create-title">' in portal
+    assert "view === 'signup' ? 'auth-create-title' : view === 'reset' ? 'auth-reset-title' : 'auth-title'" in core
     assert portal.count('<h2 id="auth-create-title">') == 1
     assert "name === 'create' ? 'auth-create-title'" in portal
     assert "function focusAccessForm(formId)" in portal

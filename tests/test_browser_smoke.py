@@ -255,8 +255,18 @@ def test_privileged_role_rerender_focuses_visible_form_on_mobile(browser) -> Non
             }"""
         )
         assert state["focused"], role
+        assert page.locator("#role-access-request-form").is_visible(), role
+        assert page.locator(".auth-form-panel").evaluate("panel => panel.contains(document.querySelector('#role-access-request-form'))")
         assert state["inputTop"] >= state["panelTop"] - 1, (role, state)
         assert state["inputBottom"] <= state["panelBottom"] + 1, (role, state)
         assert state["scrollTop"] >= 0
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+    page.evaluate("document.querySelector('.auth-form-panel').scrollTop = document.querySelector('.auth-form-panel').scrollHeight")
+    page.locator('#auth-overlay [data-action="close-auth"]').click()
+    page.wait_for_timeout(100)
+    assert page.locator("#auth-overlay").evaluate("element => element.classList.contains('hidden')")
+    assert page.evaluate("document.querySelector('.auth-form-panel').scrollTop === 0")
+    page.locator('.hero button[data-open-auth="login"]').click()
+    page.locator("#auth-overlay").wait_for(state="visible")
+    assert page.evaluate("document.querySelector('.auth-form-panel').scrollTop === 0")
     page.close()
