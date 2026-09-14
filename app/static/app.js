@@ -1,5 +1,7 @@
 (() => {
   'use strict';
+  if (window.__PLACEAI_APP_CORE_LOADED__) return;
+  window.__PLACEAI_APP_CORE_LOADED__ = true;
 
   const $ = (s, root = document) => root.querySelector(s);
   const $$ = (s, root = document) => [...root.querySelectorAll(s)];
