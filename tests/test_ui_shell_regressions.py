@@ -34,6 +34,21 @@ def test_auth_dialog_is_bounded_to_dynamic_viewport() -> None:
     assert "body.modal-open" in css
 
 
+def test_signup_cancel_button_stays_in_normal_flow() -> None:
+    app_css = (ROOT / "app/static/ui-fixes.css").read_text(encoding="utf-8")
+    public_css = (ROOT / "public/static/ui-fixes.css").read_text(encoding="utf-8")
+
+    assert app_css == public_css
+    cancel_rules = [part.split("}", 1)[0] for part in app_css.split(".auth-inline-cancel")[1:]]
+    assert len(cancel_rules) == 1
+
+    cancel_rule = cancel_rules[0]
+    assert "position: static" in cancel_rule
+    assert "box-shadow: none" in cancel_rule
+    for forbidden in ("position: sticky", "position: fixed", "bottom:", "z-index:"):
+        assert forbidden not in cancel_rule
+
+
 def test_workspace_reload_restores_session_and_view_without_web_storage_tokens() -> None:
     js = (ROOT / "app/static/ui-state-fixes.js").read_text(encoding="utf-8")
     assert "sessionStorage" in js
