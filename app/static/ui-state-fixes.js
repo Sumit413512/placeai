@@ -1,4 +1,6 @@
-(() => {
+        overlay.setAttribute('aria-labelledby', 'password-recovery-success-title');
+        requestAnimationFrame(() => overlay.querySelector('.password-recovery-success')?.focus({preventScroll: true}));
+class="password-recovery-success" tabindex="-1"<h1 id="password-recovery-success-title">Password reset successful</h1>(() => {
   'use strict';
   if (window.__PLACEAI_UI_STATE_SHIM_LOADED__) return;
   window.__PLACEAI_UI_STATE_SHIM_LOADED__ = true;
