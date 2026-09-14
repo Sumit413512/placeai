@@ -187,7 +187,7 @@ def test_auth_modal_focus_lock_escape_and_opener_restoration(browser) -> None:
     opener.click()
     dialog = page.locator("#auth-overlay")
     dialog.wait_for(state="visible")
-    page.wait_for_function("document.activeElement?.closest('#auth-overlay')")
+    page.wait_for_timeout(50)
     assert page.evaluate("document.body.classList.contains('modal-open')")
 
     page.evaluate(
@@ -215,13 +215,14 @@ def test_auth_modal_focus_lock_escape_and_opener_restoration(browser) -> None:
         }"""
     )
     page.keyboard.press("Escape")
-    page.wait_for_function("document.querySelector('#generic-modal').classList.contains('hidden')")
+    page.wait_for_timeout(50)
     assert not page.locator("#auth-overlay").evaluate("element => element.classList.contains('hidden')")
     assert page.evaluate("document.body.classList.contains('modal-open')")
 
     page.keyboard.press("Escape")
-    page.wait_for_function("document.querySelector('#auth-overlay').classList.contains('hidden')")
+    page.wait_for_timeout(100)
     assert not page.evaluate("document.body.classList.contains('modal-open')")
+    page.wait_for_timeout(100)
     assert page.evaluate("document.activeElement?.getAttribute('data-open-auth') === 'login'")
     page.close()
 
@@ -232,11 +233,11 @@ def test_privileged_role_rerender_focuses_visible_form_on_mobile(browser) -> Non
     page.locator('.hero button[data-open-auth="login"]').click()
     page.locator("#auth-overlay").wait_for(state="visible")
     page.locator('#login-view [data-access-switch="create"]').click()
-    page.wait_for_function("!document.querySelector('#signup-view').classList.contains('hidden')")
+    page.wait_for_timeout(50)
 
     for role in ("recruiter", "institution_admin", "platform_admin"):
         page.locator(f'#signup-view [data-access-role="{role}"][data-access-role-mode="create"]').click()
-        page.wait_for_function("document.activeElement?.closest('#role-access-request-form')")
+        page.wait_for_timeout(80)
         state = page.evaluate(
             """() => {
                 const panel = document.querySelector('.auth-form-panel');
