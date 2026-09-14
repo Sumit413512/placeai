@@ -178,3 +178,84 @@ def test_unconfigured_ai_is_disabled_in_workspace_controls(browser) -> None:
     assert page.locator('#assistant-form button[type="submit"]').is_disabled()
     assert page.locator('#assistant-form .placeai-ai-unavailable-note').count() == 1
     page.close()
+
+
+def test_auth_modal_focus_lock_escape_and_opener_restoration(browser) -> None:
+    page = browser.new_page(viewport={"width": 390, "height": 844})
+    page.goto(BASE_URL, wait_until="domcontentloaded")
+    opener = page.locator('.hero button[data-open-auth="login"]')
+    opener.click()
+    dialog = page.locator("#auth-overlay")
+    dialog.wait_for(state="visible")
+    page.wait_for_function("document.activeElement?.closest('#auth-overlay')")
+    assert page.evaluate("document.body.classList.contains('modal-open')")
+
+    page.evaluate(
+        """() => {
+            const dialog = document.querySelector('#auth-overlay');
+            const items = [...dialog.querySelectorAll('input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])')].filter(item => item.getClientRects().length);
+            items[items.length - 1].focus();
+        }"""
+    )
+    page.keyboard.press("Tab")
+    assert page.evaluate(
+        """() => {
+            const dialog = document.querySelector('#auth-overlay');
+            const items = [...dialog.querySelectorAll('input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])')].filter(item => item.getClientRects().length);
+            return dialog.contains(document.activeElement) && document.activeElement === items[0];
+        }"""
+    )
+
+    page.evaluate(
+        """() => {
+            const generic = document.querySelector('#generic-modal');
+            generic.querySelector('#generic-modal-content').innerHTML = '<h2 id="smoke-generic-title">Smoke dialog</h2>';
+            generic.classList.remove('hidden');
+            window.PlaceAIModalState.sync();
+        }"""
+    )
+    page.keyboard.press("Escape")
+    page.wait_for_function("document.querySelector('#generic-modal').classList.contains('hidden')")
+    assert not page.locator("#auth-overlay").evaluate("element => element.classList.contains('hidden')")
+    assert page.evaluate("document.body.classList.contains('modal-open')")
+
+    page.keyboard.press("Escape")
+    page.wait_for_function("document.querySelector('#auth-overlay').classList.contains('hidden')")
+    assert not page.evaluate("document.body.classList.contains('modal-open')")
+    assert page.evaluate("document.activeElement === document.querySelector('.hero button[data-open-auth=\\\"login\\\"]')")
+    page.close()
+
+
+def test_privileged_role_rerender_focuses_visible_form_on_mobile(browser) -> None:
+    page = browser.new_page(viewport={"width": 390, "height": 844})
+    page.goto(BASE_URL, wait_until="domcontentloaded")
+    page.locator('.hero button[data-open-auth="login"]').click()
+    page.locator("#auth-overlay").wait_for(state="visible")
+    page.locator('[data-access-switch="create"]').click()
+    page.wait_for_function("!document.querySelector('#signup-view').classList.contains('hidden')")
+
+    for role in ("recruiter", "institution_admin", "platform_admin"):
+        page.locator(f'#signup-view [data-access-role="{role}"][data-access-role-mode="create"]').click()
+        page.wait_for_function("document.activeElement?.closest('#role-access-request-form')")
+        state = page.evaluate(
+            """() => {
+                const panel = document.querySelector('.auth-form-panel');
+                const input = document.querySelector('#role-access-request-form input:not([type="hidden"]):not([disabled])');
+                const panelRect = panel.getBoundingClientRect();
+                const inputRect = input.getBoundingClientRect();
+                return {
+                    focused: document.activeElement === input,
+                    scrollTop: panel.scrollTop,
+                    inputTop: inputRect.top,
+                    inputBottom: inputRect.bottom,
+                    panelTop: panelRect.top,
+                    panelBottom: panelRect.bottom,
+                };
+            }"""
+        )
+        assert state["focused"], role
+        assert state["inputTop"] >= state["panelTop"] - 1, (role, state)
+        assert state["inputBottom"] <= state["panelBottom"] + 1, (role, state)
+        assert state["scrollTop"] >= 0
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+    page.close()
