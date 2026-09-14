@@ -1,5 +1,7 @@
 (() => {
   'use strict';
+  if (window.__PLACEAI_APP_CORE_LOADED__) return;
+  window.__PLACEAI_APP_CORE_LOADED__ = true;
 
   const $ = (s, root = document) => root.querySelector(s);
   const $$ = (s, root = document) => [...root.querySelectorAll(s)];
@@ -95,22 +97,111 @@
     } catch { return false; }
   }
 
+  const modalFocusableSelector = 'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+  const modalOpeners = {auth: null, generic: null};
+  const modalScrollLockOwners = new Set();
+  const modalElement = kind => kind === 'generic' ? $('#generic-modal') : $('#auth-overlay');
+  const modalIsVisible = element => element && !element.classList.contains('hidden');
+  const modalFocusables = element => [...element.querySelectorAll(modalFocusableSelector)].filter(item => item.getClientRects().length && !item.disabled);
+  const topmostModal = () => {
+    const generic = $('#generic-modal');
+    if (modalIsVisible(generic)) return generic;
+    const auth = $('#auth-overlay');
+    return modalIsVisible(auth) ? auth : null;
+  };
+  const focusModal = element => {
+    requestAnimationFrame(() => {
+      if (!modalIsVisible(element)) return;
+      const target = modalFocusables(element).find(item => /^(INPUT|SELECT|TEXTAREA)$/.test(item.tagName)) || element.querySelector('[data-action="close-auth"], [data-action="close-generic-modal"], button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])') || element;
+      if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+      target.focus?.({preventScroll: true});
+    });
+  };
+  const syncModalState = () => {
+    for (const kind of ['auth', 'generic']) {
+      if (modalIsVisible(modalElement(kind))) modalScrollLockOwners.add(kind);
+      else modalScrollLockOwners.delete(kind);
+    }
+    document.body.classList.toggle('modal-open', modalScrollLockOwners.size > 0);
+  };
+  const rememberModalOpener = (kind = 'auth', candidate = document.activeElement) => {
+    const dialog = modalElement(kind);
+    const opener = candidate || document.activeElement;
+    if (!opener || opener === document.body || dialog?.contains(opener)) return;
+    if (typeof opener.focus === 'function') modalOpeners[kind] = opener;
+  };
+  const restoreModalOpener = (kind = 'auth') => {
+    const opener = modalOpeners[kind];
+    modalOpeners[kind] = null;
+    requestAnimationFrame(() => {
+      if (opener && document.contains(opener) && opener.getClientRects().length && !opener.disabled) {
+        opener.focus?.();
+        return;
+      }
+      const visible = topmostModal();
+      if (visible) { focusModal(visible); return; }
+    });
+  };
+  const trapModalTab = event => {
+    const dialog = topmostModal();
+    if (!dialog) return;
+    const items = modalFocusables(dialog);
+    if (!items.length) { event.preventDefault(); return; }
+    const first = items[0];
+    const last = items[items.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !dialog.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+  window.PlaceAIModalState = {sync: syncModalState, focusAuth: () => focusModal($('#auth-overlay')), rememberOpener: rememberModalOpener, restore: restoreModalOpener};
+
   function showAuth(view = 'login') {
+    rememberModalOpener('auth');
+    $('#auth-overlay').setAttribute('aria-labelledby', view === 'signup' ? 'auth-create-title' : view === 'reset' ? 'auth-reset-title' : 'auth-title');
     $('#auth-overlay').classList.remove('hidden');
-    document.body.classList.add('modal-open');
-    ['login-view','signup-view','reset-view'].forEach(id => $(`#${id}`).classList.add('hidden'));
-    $(`#${view === 'signup' ? 'signup-view' : view === 'reset' ? 'reset-view' : 'login-view'}`).classList.remove('hidden');
+    ['login-view','signup-view','reset-view'].forEach(id => $("#" + id).classList.add('hidden'));
+    $("#" + (view === 'signup' ? 'signup-view' : view === 'reset' ? 'reset-view' : 'login-view')).classList.remove('hidden');
+    syncModalState();
+    focusModal($('#auth-overlay'));
   }
-  function closeAuth() { $('#auth-overlay').classList.add('hidden'); document.body.classList.remove('modal-open'); }
+  function closeAuth() {
+    $('#auth-overlay').classList.add('hidden');
+    syncModalState();
+    restoreModalOpener('auth');
+  }
   function openModal(html) {
+    rememberModalOpener('generic');
     const modal=$('#generic-modal');
     $('#generic-modal-content').innerHTML = html;
+    const title = modal.querySelector('.generic-modal-content h1, .generic-modal-content h2, .generic-modal-content h3, .generic-modal-content h4, .generic-modal-content h5, .generic-modal-content h6');
+    if (title) {
+      title.id = 'generic-modal-title';
+      modal.setAttribute('aria-labelledby', title.id);
+      modal.removeAttribute('aria-label');
+    } else {
+      modal.removeAttribute('aria-labelledby');
+      modal.setAttribute('aria-label', 'Dialog');
+    }
     const cancel=$('#generic-modal-cancel');
     if(cancel) cancel.textContent = /<form\b/i.test(html) ? 'Cancel' : 'Close';
     modal.classList.remove('hidden');
-    document.body.classList.add('modal-open');
+    syncModalState();
+    focusModal(modal);
   }
-  function closeModal() { $('#generic-modal').classList.add('hidden'); $('#generic-modal-content').innerHTML = ''; document.body.classList.remove('modal-open'); }
+  function closeModal() {
+    const modal = $('#generic-modal');
+    modal.classList.add('hidden');
+    $('#generic-modal-content').innerHTML = '';
+    modal.removeAttribute('aria-labelledby');
+    modal.setAttribute('aria-label', 'Dialog');
+    syncModalState();
+    restoreModalOpener('generic');
+  }
 
   const navByRole = {
     student: [
@@ -200,7 +291,13 @@
     await updateNotificationBadge();
   }
 
-  async function bootWorkspace() {
+  let bootWorkspaceCompleted = false;
+  let bootWorkspaceInFlight = null;
+
+  function bootWorkspace() {
+    if (bootWorkspaceCompleted) return Promise.resolve(true);
+    if (bootWorkspaceInFlight) return bootWorkspaceInFlight;
+    const run = (async () => {
     try {
       state.me = await api('/auth/me');
     } catch {
@@ -225,6 +322,16 @@
     }
     await navigate('dashboard');
     return true;
+    })();
+    bootWorkspaceInFlight = run;
+    run.then(
+      result => {
+        if (bootWorkspaceInFlight === run) bootWorkspaceInFlight = null;
+        if (result) bootWorkspaceCompleted = true;
+      },
+      () => { if (bootWorkspaceInFlight === run) bootWorkspaceInFlight = null; }
+    );
+    return run;
   }
 
   async function navigate(view) {
@@ -760,6 +867,7 @@
   function closeCommandPalette(){ $('#command-palette')?.classList.add('hidden'); }
   document.addEventListener('keydown',e=>{
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette();}
+    if(e.key==='Tab') trapModalTab(e);
     if(e.key==='Escape'){
       if(!$('#command-palette')?.classList.contains('hidden')) closeCommandPalette();
       else if(!$('#generic-modal')?.classList.contains('hidden')) closeModal();

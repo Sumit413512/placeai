@@ -1,5 +1,7 @@
 (() => {
   'use strict';
+  if (window.__PLACEAI_UI_STATE_SHIM_LOADED__) return;
+  window.__PLACEAI_UI_STATE_SHIM_LOADED__ = true;
 
   const STORAGE_KEY = 'placeai.workspace.view.v1';
   const SESSION_HINT_KEY = 'placeai.session.active.v1';
@@ -269,6 +271,8 @@
 // refresh cannot destroy an otherwise valid recovery attempt.
 (() => {
   'use strict';
+  if (window.__PLACEAI_RECOVERY_SHIM_LOADED__) return;
+  window.__PLACEAI_RECOVERY_SHIM_LOADED__ = true;
 
   const RESET_TOKEN_KEY = 'placeai.password.reset.v1';
   const TOKEN_MIN = 20;
@@ -432,13 +436,15 @@
         sessionClear();
         window.__placeaiPasswordRecoveryActive = false;
         overlay.querySelector('.password-recovery-card').innerHTML = `
-          <div class="password-recovery-success">
+          <div class="password-recovery-success" tabindex="-1">
             <div class="password-recovery-success-icon">✓</div>
             <span class="password-recovery-kicker">Password updated</span>
-            <h1>Password reset successful</h1>
+            <h1 id="password-recovery-success-title">Password reset successful</h1>
             <p class="password-recovery-copy">Your previous sessions have been revoked. Sign in again using your new password.</p>
             <button id="password-recovery-continue" class="password-recovery-submit password-recovery-continue" type="button">Continue to sign in</button>
           </div>`;
+        overlay.setAttribute('aria-labelledby', 'password-recovery-success-title');
+        requestAnimationFrame(() => overlay.querySelector('.password-recovery-success')?.focus({preventScroll: true}));
         overlay.querySelector('#password-recovery-continue').addEventListener('click', () => location.assign(location.pathname || '/'));
       } catch (err) {
         error.textContent = err instanceof Error ? err.message : 'Password reset failed. Please try again.';

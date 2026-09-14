@@ -75,3 +75,68 @@ def test_primary_workspace_boot_keeps_server_session_refresh_path() -> None:
     assert "async function refreshSession()" in js
     assert "await api('/auth/me')" in js
     assert "credentials:'include'" in js or "credentials: 'include'" in js
+
+
+def test_production_loader_deduplicates_scripts_and_exposes_sentinels() -> None:
+    loader = (ROOT / "public/static/app.js").read_text(encoding="utf-8")
+
+    assert "if (window.__PLACEAI_PRODUCTION_BOOTSTRAP__) return;" in loader
+    assert "const candidateSrc = new URL(scripts[index], document.baseURI).href;" in loader
+    assert "const existing = [...document.scripts].find(script => script.src === candidateSrc);" in loader
+    assert "script.dataset.placeaiLoaderState = 'loading';" in loader
+    assert "script.dataset.placeaiLoaderState = 'loaded';" in loader
+    assert "script.dataset.placeaiLoaderState = 'error';" in loader
+    assert "existing.addEventListener('load', settle, {once: true});" in loader
+    assert "existing.addEventListener('error', settle, {once: true});" in loader
+
+
+def test_workspace_boot_reuses_inflight_and_completed_result() -> None:
+    core = (ROOT / "app/static/app.js").read_text(encoding="utf-8")
+    public_core = (ROOT / "public/static/app-core.js").read_text(encoding="utf-8")
+
+    assert core == public_core
+    assert "let bootWorkspaceCompleted = false;" in core
+    assert "if (bootWorkspaceCompleted) return Promise.resolve(true);" in core
+    assert "if (bootWorkspaceInFlight) return bootWorkspaceInFlight;" in core
+    assert "if (result) bootWorkspaceCompleted = true;" in core
+
+
+def test_modal_lock_ownership_and_escape_priority_are_coordinated() -> None:
+    core = (ROOT / "app/static/app.js").read_text(encoding="utf-8")
+    html = (ROOT / "app/templates/index.html").read_text(encoding="utf-8")
+
+    assert "const modalScrollLockOwners = new Set();" in core
+    assert "modalScrollLockOwners.add(kind)" in core
+    assert "modalScrollLockOwners.delete(kind)" in core
+    assert "document.body.classList.toggle('modal-open', modalScrollLockOwners.size > 0);" in core
+    assert "if(e.key==='Tab') trapModalTab(e);" in core
+    escape = core.split("if(e.key==='Escape')", 1)[1]
+    assert escape.index("closeCommandPalette()") < escape.index("closeModal()") < escape.index("closeAuth()")
+    assert "restoreModalOpener('auth')" in core
+    assert "restoreModalOpener('generic')" in core
+    assert 'id="auth-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="auth-title" tabindex="-1"' in html
+    assert 'id="generic-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Dialog" tabindex="-1"' in html
+
+
+def test_auth_role_focus_contract_and_mirror_equivalence() -> None:
+    portal = (ROOT / "app/static/access-portal.js").read_text(encoding="utf-8")
+    public_portal = (ROOT / "public/static/access-portal.js").read_text(encoding="utf-8")
+    ui_state = (ROOT / "app/static/ui-state-fixes.js").read_text(encoding="utf-8")
+    public_ui_state = (ROOT / "public/static/ui-state-fixes.js").read_text(encoding="utf-8")
+    html = (ROOT / "app/templates/index.html").read_text(encoding="utf-8")
+    public_html = (ROOT / "public/index.html").read_text(encoding="utf-8")
+    embedded = (ROOT / "app/embedded_pages.py").read_text(encoding="utf-8")
+
+    assert portal == public_portal
+    assert ui_state == public_ui_state
+    assert html == public_html
+    assert portal.count('<h2 id="auth-create-title">') == 1
+    assert "name === 'create' ? 'auth-create-title'" in portal
+    assert "function focusAccessForm(formId)" in portal
+    assert "if (panel) panel.scrollTop = 0;" in portal
+    assert "const formTop = formRect.top - panelRect.top + panel.scrollTop;" in portal
+    assert "firstInput.focus({preventScroll: true});" in portal
+    assert "const roleOrder = ['student', 'recruiter', 'institution_admin', 'platform_admin'];" in portal
+    assert 'id="auth-create-title"' in embedded
+    assert 'id="auth-reset-title"' in embedded
+    assert 'aria-label="Dialog"' in embedded
