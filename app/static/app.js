@@ -124,11 +124,11 @@
     }
     document.body.classList.toggle('modal-open', modalScrollLockOwners.size > 0);
   };
-  const rememberModalOpener = (kind = 'auth') => {
+  const rememberModalOpener = (kind = 'auth', candidate = document.activeElement) => {
     const dialog = modalElement(kind);
-    const active = document.activeElement;
-    if (!active || active === document.body || dialog?.contains(active)) return;
-    if (typeof active.focus === 'function') modalOpeners[kind] = active;
+    const opener = candidate || document.activeElement;
+    if (!opener || opener === document.body || dialog?.contains(opener)) return;
+    if (typeof opener.focus === 'function') modalOpeners[kind] = opener;
   };
   const restoreModalOpener = (kind = 'auth') => {
     const opener = modalOpeners[kind];
