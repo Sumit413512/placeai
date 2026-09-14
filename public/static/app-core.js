@@ -3,7 +3,8 @@
         opener.focus?.();
         return;
       }
-    $('#auth-overlay').setAttribute('aria-labelledby', view === 'signup' ? 'auth-create-title' : view === 'reset' ? 'auth-reset-title' : 'auth-title');
+      const visible = topmostModal();rememberModalOpener('auth');
+    $('#auth-overlay').setAttribute('aria-labelledby', view === 'signup' ? 'auth-create-title' : view === 'reset' ? 'auth-reset-title' : 'auth-title');$('#generic-modal-content').innerHTML = html;
     const title = modal.querySelector('.generic-modal-content h1, .generic-modal-content h2, .generic-modal-content h3, .generic-modal-content h4, .generic-modal-content h5, .generic-modal-content h6');
     if (title) {
       title.id = 'generic-modal-title';
@@ -12,10 +13,10 @@
     } else {
       modal.removeAttribute('aria-labelledby');
       modal.setAttribute('aria-label', 'Dialog');
-    }
+    }function closeModal() {
+    const modal = $('#generic-modal');modal.classList.add('hidden');$('#generic-modal-content').innerHTML = '';
     modal.removeAttribute('aria-labelledby');
-    modal.setAttribute('aria-label', 'Dialog');
-  'use strict';
+    modal.setAttribute('aria-label', 'Dialog');  'use strict';
   if (window.__PLACEAI_APP_CORE_LOADED__) return;
   window.__PLACEAI_APP_CORE_LOADED__ = true;
 
