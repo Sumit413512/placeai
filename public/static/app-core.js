@@ -1,4 +1,20 @@
 (() => {
+      if (opener && document.contains(opener) && opener.getClientRects().length && !opener.disabled) {
+        opener.focus?.();
+        return;
+      }
+    $('#auth-overlay').setAttribute('aria-labelledby', view === 'signup' ? 'auth-create-title' : view === 'reset' ? 'auth-reset-title' : 'auth-title');
+    const title = modal.querySelector('.generic-modal-content h1, .generic-modal-content h2, .generic-modal-content h3, .generic-modal-content h4, .generic-modal-content h5, .generic-modal-content h6');
+    if (title) {
+      title.id = 'generic-modal-title';
+      modal.setAttribute('aria-labelledby', title.id);
+      modal.removeAttribute('aria-label');
+    } else {
+      modal.removeAttribute('aria-labelledby');
+      modal.setAttribute('aria-label', 'Dialog');
+    }
+    modal.removeAttribute('aria-labelledby');
+    modal.setAttribute('aria-label', 'Dialog');
   'use strict';
   if (window.__PLACEAI_APP_CORE_LOADED__) return;
   window.__PLACEAI_APP_CORE_LOADED__ = true;
