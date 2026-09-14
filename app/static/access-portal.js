@@ -1,5 +1,7 @@
 (() => {
   'use strict';
+  if (window.__PLACEAI_ACCESS_PORTAL_LOADED__) return;
+  window.__PLACEAI_ACCESS_PORTAL_LOADED__ = true;
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const esc = (value = '') => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
