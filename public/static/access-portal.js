@@ -86,10 +86,10 @@
     });
   }
 
-  function showView(name) {
+  function showView(name, opener = null) {
     const overlay = $('#auth-overlay');
     if (!overlay) return;
-    window.PlaceAIModalState?.rememberOpener?.('auth');
+    window.PlaceAIModalState?.rememberOpener?.('auth', opener || document.activeElement);
     overlay.classList.remove('hidden');
     overlay.setAttribute('aria-labelledby', name === 'create' ? 'auth-create-title' : 'auth-title');
     ['login-view', 'signup-view', 'reset-view'].forEach(id => $("#" + id)?.classList.add('hidden'));
@@ -207,7 +207,7 @@
     if (loginOpen) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      showView('login');
+      showView('login', loginOpen);
       return;
     }
     const requestOpen = event.target.closest('[data-open-access="request"]');
@@ -215,14 +215,14 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       createRole = 'institution_admin';
-      showView('create');
+      showView('create', requestOpen);
       return;
     }
     const switcher = event.target.closest('[data-access-switch]');
     if (switcher) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      showView(switcher.dataset.accessSwitch === 'create' ? 'create' : 'login');
+      showView(switcher.dataset.accessSwitch === 'create' ? 'create' : 'login', switcher);
       return;
     }
     const roleButton = event.target.closest('[data-access-role]');
