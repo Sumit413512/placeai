@@ -68,15 +68,29 @@
   function renderCreate() {
     const view = $('#signup-view');
     if (!view) return;
-    view.innerHTML = `${modeTabs('create')}<span class="section-kicker">Account access</span><h2>Create or request the right workspace</h2><p class="form-intro">Choose the role you need. Student registration is self-service; privileged roles follow controlled provisioning.</p>${roleCards(createRole, 'create')}${createRole === 'student' ? studentSignupForm() : controlledAccessForm(createRole)}`;
+    view.innerHTML = `${modeTabs('create')}<span class="section-kicker">Account access</span><h2 id="auth-create-title">Create or request the right workspace</h2><p class="form-intro">Choose the role you need. Student registration is self-service; privileged roles follow controlled provisioning.</p>${roleCards(createRole, 'create')}${createRole === 'student' ? studentSignupForm() : controlledAccessForm(createRole)}`;
+  }
+
+  function focusAccessForm(formId) {
+    requestAnimationFrame(() => {
+      const form = document.getElementById(formId);
+      const panel = $('.auth-form-panel');
+      if (!form || !panel) return;
+      const formRect = form.getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
+      panel.scrollTop = Math.max(0, panel.scrollTop + formRect.top - panelRect.top - 12);
+      const firstInput = [...form.querySelectorAll('input:not([type="hidden"]):not([disabled])')].find(input => input.getClientRects().length);
+      if (firstInput) firstInput.focus({preventScroll: true});
+    });
   }
 
   function showView(name) {
     const overlay = $('#auth-overlay');
     if (!overlay) return;
+    window.PlaceAIModalState?.rememberOpener?.('auth');
     overlay.classList.remove('hidden');
-    document.body.classList.add('modal-open');
-    ['login-view', 'signup-view', 'reset-view'].forEach(id => $(`#${id}`)?.classList.add('hidden'));
+    overlay.setAttribute('aria-labelledby', name === 'create' ? 'auth-create-title' : 'auth-title');
+    ['login-view', 'signup-view', 'reset-view'].forEach(id => $("#" + id)?.classList.add('hidden'));
     if (name === 'create') {
       renderCreate();
       $('#signup-view')?.classList.remove('hidden');
@@ -86,6 +100,14 @@
       renderLogin();
       $('#login-view')?.classList.remove('hidden');
     }
+    if (name === 'create' || name === 'login') {
+      const panel = $('.auth-form-panel');
+      if (panel) panel.scrollTop = 0;
+    }
+    const modalState = window.PlaceAIModalState;
+    if (modalState?.sync) modalState.sync();
+    else document.body.classList.add('modal-open');
+    modalState?.focusAuth?.();
   }
 
   const apiErrors = window.PlaceAIApiErrors;
@@ -159,7 +181,13 @@
       const body = Object.fromEntries(new FormData(form).entries());
       const result = await requestJson('/public/access-requests', {method: 'POST', body: JSON.stringify(body)});
       const view = $('#signup-view');
-      if (view) view.innerHTML = `${modeTabs('create')}<div class="access-request-success"><div class="success-mark">✓</div><span class="section-kicker">Request received</span><h2>Your ${roles[body.requested_role]?.label || 'account'} access request is recorded.</h2><p>${esc(result.message || 'An authorized administrator will review the request before any account is provisioned.')}</p><button type="button" class="button button-primary button-full" data-access-switch="login">Return to sign in</button></div>`;
+      if (view) {
+        view.innerHTML = `${modeTabs('create')}<div class="access-request-success" tabindex="-1"><div class="success-mark">✓</div><span class="section-kicker">Request received</span><h2 id="auth-access-success-title">Your ${roles[body.requested_role]?.label || 'account'} access request is recorded.</h2><p>${esc(result.message || 'An authorized administrator will review the request before any account is provisioned.')}</p><button type="button" class="button button-primary button-full" data-access-switch="login">Return to sign in</button></div>`;
+        $('#auth-overlay')?.setAttribute('aria-labelledby', 'auth-access-success-title');
+        const panel = $('.auth-form-panel');
+        if (panel) panel.scrollTop = 0;
+        requestAnimationFrame(() => view.querySelector('.access-request-success')?.focus({preventScroll: true}));
+      }
     } catch (error) {
       apiErrors.applyToForm(form, error, $('#role-create-error'));
       setBusy(form, false);
@@ -202,9 +230,11 @@
       if (roleButton.dataset.accessRoleMode === 'login') {
         loginRole = roleButton.dataset.accessRole;
         renderLogin();
+        focusAccessForm('role-login-form');
       } else {
         createRole = roleButton.dataset.accessRole;
         renderCreate();
+        focusAccessForm(createRole === 'student' ? 'role-student-signup-form' : 'role-access-request-form');
       }
       return;
     }
