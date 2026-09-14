@@ -33,6 +33,11 @@
 
   const loadNext = (index) => {
     if (index >= scripts.length) return;
+    const candidateSrc = new URL(scripts[index], document.baseURI).href;
+    if ([...document.scripts].some(existing => existing.src === candidateSrc)) {
+      loadNext(index + 1);
+      return;
+    }
     const script = document.createElement('script');
     script.src = scripts[index];
     script.async = false;
