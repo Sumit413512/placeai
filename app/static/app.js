@@ -128,9 +128,12 @@
     const opener = modalOpeners[kind];
     modalOpeners[kind] = null;
     requestAnimationFrame(() => {
+      if (opener && document.contains(opener) && opener.getClientRects().length && !opener.disabled) {
+        opener.focus?.();
+        return;
+      }
       const visible = topmostModal();
       if (visible) { focusModal(visible); return; }
-      if (opener && document.contains(opener) && opener.getClientRects().length) opener.focus?.();
     });
   };
   const trapModalTab = event => {
@@ -153,6 +156,7 @@
 
   function showAuth(view = 'login') {
     rememberModalOpener('auth');
+    $('#auth-overlay').setAttribute('aria-labelledby', view === 'signup' ? 'auth-create-title' : view === 'reset' ? 'auth-reset-title' : 'auth-title');
     $('#auth-overlay').classList.remove('hidden');
     ['login-view','signup-view','reset-view'].forEach(id => $("#" + id).classList.add('hidden'));
     $("#" + (view === 'signup' ? 'signup-view' : view === 'reset' ? 'reset-view' : 'login-view')).classList.remove('hidden');
@@ -168,6 +172,15 @@
     rememberModalOpener('generic');
     const modal=$('#generic-modal');
     $('#generic-modal-content').innerHTML = html;
+    const title = modal.querySelector('.generic-modal-content h1, .generic-modal-content h2, .generic-modal-content h3, .generic-modal-content h4, .generic-modal-content h5, .generic-modal-content h6');
+    if (title) {
+      title.id = 'generic-modal-title';
+      modal.setAttribute('aria-labelledby', title.id);
+      modal.removeAttribute('aria-label');
+    } else {
+      modal.removeAttribute('aria-labelledby');
+      modal.setAttribute('aria-label', 'Dialog');
+    }
     const cancel=$('#generic-modal-cancel');
     if(cancel) cancel.textContent = /<form\b/i.test(html) ? 'Cancel' : 'Close';
     modal.classList.remove('hidden');
@@ -175,8 +188,11 @@
     focusModal(modal);
   }
   function closeModal() {
-    $('#generic-modal').classList.add('hidden');
+    const modal = $('#generic-modal');
+    modal.classList.add('hidden');
     $('#generic-modal-content').innerHTML = '';
+    modal.removeAttribute('aria-labelledby');
+    modal.setAttribute('aria-label', 'Dialog');
     syncModalState();
     restoreModalOpener('generic');
   }
