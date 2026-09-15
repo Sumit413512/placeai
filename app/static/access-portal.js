@@ -55,6 +55,29 @@
     view.innerHTML = `${modeTabs('login')}<span class="section-kicker">Secure workspace access</span><h2 id="auth-title">Choose your role and sign in</h2><p class="form-intro">Select the workspace assigned to your account. The backend verifies that the selected role matches your actual account permissions.</p>${roleCards(loginRole, 'login')}<div class="access-selection-summary"><span class="access-role-dot"></span><div><b>${role.label}</b><span>${role.short}</span></div></div><form id="role-login-form" class="form-stack"><input type="hidden" name="role" value="${loginRole}"><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@organization.com"></label><label>Password<div class="password-wrap"><input type="password" name="password" autocomplete="current-password" required maxlength="128" placeholder="Enter your password"><button type="button" data-access-toggle-password>Show</button></div></label><div id="role-login-error" class="access-form-error" role="alert"></div><div class="form-row-between"><span></span><button type="button" class="text-button" data-action="forgot-password">Forgot password?</button></div><button class="button button-primary button-full" type="submit">Continue to ${role.label}</button></form><div class="access-security-note"><strong>Account security:</strong> Recruiter, Institution Admin and Platform Admin accounts cannot be created publicly. They must be provisioned or approved by an authorized administrator.</div>`;
   }
 
+  function updateLoginRole(roleKey) {
+    const role = roles[roleKey];
+    const view = $('#login-view');
+    if (!role || !view) return;
+    loginRole = roleKey;
+    view.querySelectorAll('[data-access-role-mode="login"]').forEach(button => {
+      const selected = button.dataset.accessRole === roleKey;
+      button.classList.toggle('is-selected', selected);
+      button.setAttribute('aria-selected', selected ? 'true' : 'false');
+    });
+    const form = $('#role-login-form', view);
+    const hiddenRole = form?.querySelector('input[name="role"]');
+    if (hiddenRole) hiddenRole.value = roleKey;
+    const summary = view.querySelector('.access-selection-summary');
+    const summaryLabel = summary?.querySelector('b');
+    const summaryShort = summary?.querySelector('div > span');
+    if (summaryLabel) summaryLabel.textContent = role.label;
+    if (summaryShort) summaryShort.textContent = role.short;
+    const submit = form?.querySelector('button[type="submit"]');
+    if (submit) submit.textContent = `Continue to ${role.label}`;
+    focusAccessForm('role-login-form');
+  }
+
   function studentSignupForm() {
     return `<div class="access-selection-summary"><span class="access-role-dot"></span><div><b>Student</b><span>Self-service registration</span></div></div><form id="role-student-signup-form" class="form-stack"><div class="form-two"><label>Full name<input name="full_name" required minlength="2" maxlength="200" placeholder="Your full name"></label><label>Username<input name="username" required minlength="3" maxlength="80" placeholder="e.g. student.name"></label></div><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@example.com"></label><label>Institution code <span class="optional">optional</span><input name="organization_slug" maxlength="120" placeholder="Provided by your placement office"></label><label>Password<input type="password" name="password" autocomplete="new-password" minlength="12" maxlength="128" required aria-describedby="student-password-help" placeholder="12+ chars, upper/lowercase, number and symbol"><small id="student-password-help">Use 12+ characters with uppercase, lowercase, a number and a symbol.</small></label><div id="role-create-error" class="access-form-error" role="alert"></div><button class="button button-primary button-full" type="submit">Create student account</button></form>`;
   }
@@ -71,6 +94,20 @@
     view.innerHTML = `${modeTabs('create')}<span class="section-kicker">Account access</span><h2 id="auth-create-title">Create or request the right workspace</h2><p class="form-intro">Choose the role you need. Student registration is self-service; privileged roles follow controlled provisioning.</p>${roleCards(createRole, 'create')}${createRole === 'student' ? studentSignupForm() : controlledAccessForm(createRole)}`;
   }
 
+  function normalizeAndFocusFirstInput(form) {
+    const firstInput = [...form.querySelectorAll('input:not([type="hidden"]):not([disabled])')].find(input => input.getClientRects().length);
+    if (!firstInput) return;
+    if (firstInput.getAttribute('tabindex') === '-1') firstInput.removeAttribute('tabindex');
+    firstInput.focus({preventScroll: true});
+  }
+
+  function focusVisibleForm(formId) {
+    requestAnimationFrame(() => {
+      const form = document.getElementById(formId);
+      if (form) normalizeAndFocusFirstInput(form);
+    });
+  }
+
   function focusAccessForm(formId) {
     const panel = $('.auth-form-panel');
     if (panel) panel.scrollTop = 0;
@@ -81,8 +118,7 @@
       const panelRect = panel.getBoundingClientRect();
       const formTop = formRect.top - panelRect.top + panel.scrollTop;
       panel.scrollTop = Math.max(0, formTop - 12);
-      const firstInput = [...form.querySelectorAll('input:not([type="hidden"]):not([disabled])')].find(input => input.getClientRects().length);
-      if (firstInput) firstInput.focus({preventScroll: true});
+      normalizeAndFocusFirstInput(form);
     });
   }
 
@@ -110,6 +146,8 @@
     if (modalState?.sync) modalState.sync();
     else document.body.classList.add('modal-open');
     modalState?.focusAuth?.();
+    if (name === 'login') focusVisibleForm('role-login-form');
+    else if (name === 'create') focusVisibleForm(createRole === 'student' ? 'role-student-signup-form' : 'role-access-request-form');
   }
 
   const apiErrors = window.PlaceAIApiErrors;
@@ -230,9 +268,7 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       if (roleButton.dataset.accessRoleMode === 'login') {
-        loginRole = roleButton.dataset.accessRole;
-        renderLogin();
-        focusAccessForm('role-login-form');
+        updateLoginRole(roleButton.dataset.accessRole);
       } else {
         createRole = roleButton.dataset.accessRole;
         renderCreate();
