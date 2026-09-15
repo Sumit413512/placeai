@@ -10,6 +10,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.access_models import AccessRequest
+from app.access_request_guards import ACTIVE_ACCESS_STATUSES, ensure_manual_access_status, normalize_access_request_name
 from app.config import get_settings
 from app.database import SessionLocal, get_db
 from app.dependencies import require_platform_admin
@@ -60,7 +61,7 @@ class AccessRequestCreate(BaseModel):
     @field_validator("full_name")
     @classmethod
     def normalize_name(cls, value: str) -> str:
-        return value.strip()
+        return normalize_access_request_name(value)
 
 
 class AccessRequestReview(BaseModel):
@@ -183,8 +184,8 @@ def _deliver_access_status(payload: dict[str, str | None]) -> None:
         )
     elif status_value == "provisioned":
         next_step = (
-            "Your privileged PlaceAI account has been marked provisioned. Use the secure credential "
-            "handoff provided by the administrator; temporary credentials must be changed at first sign-in."
+            "Your privileged PlaceAI account has been provisioned. Complete the one-time password setup "
+            "from the secure setup email before signing in."
         )
     elif status_value == "rejected":
         next_step = "No privileged account will be created from this request unless it is reviewed again."
@@ -332,7 +333,7 @@ def create_access_request(
         .filter(
             AccessRequest.work_email == email,
             AccessRequest.requested_role == body.requested_role,
-            AccessRequest.status.in_(["new", "under_review", "approved"]),
+            AccessRequest.status.in_(ACTIVE_ACCESS_STATUSES),
         )
         .order_by(AccessRequest.created_at.desc())
         .first()
@@ -342,7 +343,7 @@ def create_access_request(
 
     item = AccessRequest(
         requested_role=body.requested_role,
-        full_name=body.full_name.strip(),
+        full_name=body.full_name,
         work_email=email,
         organization_name=organization_name,
         phone=(body.phone or "").strip() or None,
@@ -432,11 +433,22 @@ def review_access_request(
     if not item:
         raise HTTPException(status_code=404, detail="Access request not found")
 
+    next_status = ensure_manual_access_status(body.status)
     previous_status = item.status
-    item.status = body.status
+    previous_note = item.review_note
+    item.status = next_status
     item.review_note = (body.review_note or "").strip() or None
     item.reviewed_by_user_id = current_user.id
     item.updated_at = _utcnow()
+    if item.status != previous_status or item.review_note != previous_note:
+        record_audit(
+            db,
+            current_user,
+            "platform.access_request.reviewed",
+            entity_type="access_request",
+            entity_id=item.id,
+            metadata={"previous_status": previous_status, "status": item.status},
+        )
     db.commit()
     db.refresh(item)
 
