@@ -73,8 +73,12 @@
     const form = root.querySelector?.('#role-login-form');
     if (!form) return;
     const role = form.querySelector('input[name="role"]')?.value;
-    form.parentElement?.querySelector('.placeai-recruiter-login-help')?.remove();
-    if (role !== 'recruiter') return;
+    const existing = form.parentElement?.querySelector('.placeai-recruiter-login-help');
+    if (role !== 'recruiter') {
+      existing?.remove();
+      return;
+    }
+    if (existing) return;
     const note = document.createElement('div');
     note.className = 'access-security-note placeai-recruiter-login-help';
     note.innerHTML = '<strong>New recruiter account?</strong> After Platform Admin approval, use the one-time password setup link sent to your work email. You choose your own password there; an administrator does not need to create your permanent password.';
