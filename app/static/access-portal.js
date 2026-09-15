@@ -252,7 +252,7 @@
     if (requestOpen) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      createRole = 'institution_admin';
+      createRole = 'student';
       showView('create', requestOpen);
       return;
     }
