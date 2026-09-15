@@ -1,0 +1,45 @@
+name: PlaceAI Recovery Compatibility CI
+
+on:
+  push:
+    branches:
+      - fix/recovery-access-compat-20260915
+  pull_request:
+    branches:
+      - recovery/render-proxy-20260912
+
+permissions:
+  contents: read
+
+jobs:
+  recovery-access:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install focused test dependency
+        run: python -m pip install pytest
+
+      - name: Validate recovery Python and JavaScript
+        run: |
+          python -m py_compile render_proxy.py
+          node --check app/static/recovery-access-compat.js
+
+      - name: Run recovery compatibility regression tests
+        run: pytest -q tests/test_recovery_access_compat.py
+
+      - name: Reject obsolete partial-provisioning calls in compatibility shim
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -q '/platform/recruiters' app/static/recovery-access-compat.js
+          ! grep -q '/auth/forgot-password' app/static/recovery-access-compat.js
+          ! grep -q "method: 'PATCH'" app/static/recovery-access-compat.js
+          grep -q '/provision-recruiter' app/static/recovery-access-compat.js
+          grep -q '/static/recovery-access-compat.js' render_proxy.py
