@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from app.access_models import AccessRequest
 from app.app import app
 from app.database import Base, SessionLocal, engine
-from app.models import RefreshSession, User, UserRole
+from app.models import AuditEvent, RefreshSession, User, UserRole
 from app.utils import get_hashed_password
 
 client = TestClient(app)
@@ -14,6 +14,9 @@ STUDENT_EMAIL = "role.student@placeai.example.com"
 RECRUITER_EMAIL = "role.recruiter@placeai.example.com"
 PLATFORM_EMAIL = "role.platform@placeai.example.com"
 REQUEST_EMAIL = "request.recruiter@placeai.example.com"
+PLATFORM_REQUEST_EMAIL = "request.platform@placeai.example.com"
+PROVISIONED_REQUEST_EMAIL = "request.provisioned@placeai.example.com"
+WHITESPACE_REQUEST_EMAIL = "request.whitespace@placeai.example.com"
 PASSWORD = "RoleAccessPass123!"
 
 
@@ -36,6 +39,15 @@ def _ensure_user(email: str, username: str, role: UserRole) -> None:
         db.close()
 
 
+def _platform_headers() -> dict[str, str]:
+    login = client.post(
+        "/auth/login-role",
+        json={"email": PLATFORM_EMAIL, "password": PASSWORD, "role": "platform_admin"},
+    )
+    assert login.status_code == 200, login.text
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+
 def setup_module() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_user(STUDENT_EMAIL, "role_student", UserRole.student)
@@ -54,7 +66,12 @@ def teardown_module() -> None:
         ]
         if user_ids:
             db.query(RefreshSession).filter(RefreshSession.user_id.in_(user_ids)).delete(synchronize_session=False)
-        db.query(AccessRequest).filter(AccessRequest.work_email == REQUEST_EMAIL).delete(synchronize_session=False)
+            db.query(AuditEvent).filter(AuditEvent.actor_user_id.in_(user_ids)).delete(synchronize_session=False)
+        db.query(AccessRequest).filter(
+            AccessRequest.work_email.in_(
+                [REQUEST_EMAIL, PLATFORM_REQUEST_EMAIL, PROVISIONED_REQUEST_EMAIL, WHITESPACE_REQUEST_EMAIL]
+            )
+        ).delete(synchronize_session=False)
         db.query(User).filter(User.email.in_([STUDENT_EMAIL, RECRUITER_EMAIL, PLATFORM_EMAIL])).delete(synchronize_session=False)
         db.commit()
     finally:
@@ -91,6 +108,46 @@ def test_public_privileged_signup_remains_blocked() -> None:
     assert response.status_code == 403, response.text
 
 
+def test_whitespace_only_access_request_name_is_rejected() -> None:
+    response = client.post(
+        "/public/access-requests",
+        json={
+            "requested_role": "platform_admin",
+            "full_name": "   ",
+            "work_email": WHITESPACE_REQUEST_EMAIL,
+            "organization_name": "",
+        },
+    )
+    assert response.status_code == 422, response.text
+
+    db = SessionLocal()
+    try:
+        assert db.query(AccessRequest).filter(AccessRequest.work_email == WHITESPACE_REQUEST_EMAIL).count() == 0
+    finally:
+        db.close()
+
+
+def test_platform_admin_request_allows_missing_organization() -> None:
+    response = client.post(
+        "/public/access-requests",
+        json={
+            "requested_role": "platform_admin",
+            "full_name": "Platform Access Test",
+            "work_email": PLATFORM_REQUEST_EMAIL,
+            "organization_name": "",
+        },
+    )
+    assert response.status_code == 202, response.text
+
+    db = SessionLocal()
+    try:
+        row = db.query(AccessRequest).filter(AccessRequest.work_email == PLATFORM_REQUEST_EMAIL).one()
+        assert row.requested_role == "platform_admin"
+        assert row.organization_name is None
+    finally:
+        db.close()
+
+
 def test_access_request_is_non_enumerating_and_platform_admin_can_review() -> None:
     payload = {
         "requested_role": "recruiter",
@@ -119,13 +176,7 @@ def test_access_request_is_non_enumerating_and_platform_admin_can_review() -> No
     finally:
         db.close()
 
-    login = client.post(
-        "/auth/login-role",
-        json={"email": PLATFORM_EMAIL, "password": PASSWORD, "role": "platform_admin"},
-    )
-    assert login.status_code == 200, login.text
-    token = login.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = _platform_headers()
 
     listing = client.get("/platform/access-requests", headers=headers)
     assert listing.status_code == 200, listing.text
@@ -138,3 +189,78 @@ def test_access_request_is_non_enumerating_and_platform_admin_can_review() -> No
     )
     assert review.status_code == 200, review.text
     assert review.json()["status"] == "under_review"
+
+    db = SessionLocal()
+    try:
+        event = (
+            db.query(AuditEvent)
+            .filter(
+                AuditEvent.action == "platform.access_request.reviewed",
+                AuditEvent.entity_id == request_id,
+            )
+            .order_by(AuditEvent.created_at.desc())
+            .first()
+        )
+        assert event is not None
+        assert event.details["previous_status"] == "new"
+        assert event.details["status"] == "under_review"
+    finally:
+        db.close()
+
+
+def test_manual_provisioned_status_is_rejected() -> None:
+    db = SessionLocal()
+    try:
+        row = db.query(AccessRequest).filter(AccessRequest.work_email == REQUEST_EMAIL).one()
+        request_id = row.id
+        previous_status = row.status
+    finally:
+        db.close()
+
+    response = client.patch(
+        f"/platform/access-requests/{request_id}",
+        headers=_platform_headers(),
+        json={"status": "provisioned", "review_note": "This must require provisioning"},
+    )
+    assert response.status_code == 422, response.text
+    assert "system-managed" in response.json()["detail"]
+
+    db = SessionLocal()
+    try:
+        row = db.query(AccessRequest).filter(AccessRequest.id == request_id).one()
+        assert row.status == previous_status
+    finally:
+        db.close()
+
+
+def test_provisioned_request_is_still_an_active_duplicate() -> None:
+    db = SessionLocal()
+    try:
+        row = AccessRequest(
+            requested_role="recruiter",
+            full_name="Provisioned Recruiter",
+            work_email=PROVISIONED_REQUEST_EMAIL,
+            organization_name="Provisioned Company",
+            status="provisioned",
+        )
+        db.add(row)
+        db.commit()
+    finally:
+        db.close()
+
+    payload = {
+        "requested_role": "recruiter",
+        "full_name": "Provisioned Recruiter",
+        "work_email": PROVISIONED_REQUEST_EMAIL,
+        "organization_name": "Provisioned Company",
+    }
+    response = client.post("/public/access-requests", json=payload)
+    assert response.status_code == 202, response.text
+
+    db = SessionLocal()
+    try:
+        rows = db.query(AccessRequest).filter(AccessRequest.work_email == PROVISIONED_REQUEST_EMAIL).all()
+        assert len(rows) == 1
+        assert rows[0].status == "provisioned"
+    finally:
+        db.close()
