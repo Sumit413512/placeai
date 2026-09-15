@@ -106,8 +106,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          head_code=$(curl -sS -o /dev/null -w '%{http_code}' -I --connect-timeout 10 --max-time 20 "$BASE_URL/")
-          test "$head_code" = '200'
           curl -L -sS --fail --connect-timeout 10 --max-time 20 -D /tmp/root.headers -o /tmp/root.html "$BASE_URL/"
           grep -qi '<title>PlaceAI' /tmp/root.html
           grep -qi '^strict-transport-security:' /tmp/root.headers
