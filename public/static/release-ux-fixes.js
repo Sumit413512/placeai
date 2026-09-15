@@ -43,14 +43,36 @@
     node.style.color = kind === 'error' ? '#9d2c2c' : '#526070';
   }
 
+  function syncManagedProvisionedStatus(select) {
+    const currentStatus = select.dataset.currentStatus || select.value;
+    let option = select.querySelector('option[value="provisioned"]');
+    if (currentStatus === 'provisioned') {
+      if (!option) {
+        option = document.createElement('option');
+        option.value = 'provisioned';
+        option.textContent = 'provisioned';
+        select.appendChild(option);
+      }
+      select.value = 'provisioned';
+      select.disabled = true;
+      select.title = 'Provisioned is system-managed. Use the explicit recruiter setup action to resend a password setup link.';
+      return;
+    }
+    option?.remove();
+    select.disabled = false;
+    select.removeAttribute('title');
+  }
+
   function decorateAccessRows(root = document) {
     root.querySelectorAll?.('select[data-access-request-status]').forEach(select => {
       const row = select.closest('tr');
       const cell = select.closest('td');
       if (!row || !cell) return;
+      syncManagedProvisionedStatus(select);
       const roleText = (row.children[1]?.textContent || '').trim().toLowerCase();
       const isRecruiter = roleText === 'recruiter';
-      const eligible = isRecruiter && ['approved', 'provisioned'].includes(select.value);
+      const currentStatus = select.dataset.currentStatus || select.value;
+      const eligible = isRecruiter && ['approved', 'provisioned'].includes(currentStatus);
       let button = cell.querySelector('[data-provision-recruiter-request]');
       if (!eligible) {
         button?.remove();
@@ -64,7 +86,7 @@
         button.style.marginTop = '8px';
         cell.appendChild(button);
       }
-      button.textContent = select.value === 'provisioned' ? 'Resend password setup link' : 'Provision recruiter';
+      button.textContent = currentStatus === 'provisioned' ? 'Resend password setup link' : 'Provision recruiter';
       button.title = 'Atomically creates or updates the approved Recruiter account, then emails a one-time password setup link. No administrator chooses the permanent password.';
     });
   }
@@ -117,7 +139,7 @@
     const email = emailText.split(' · ')[0].trim();
     if (!requestId || !cell || !email) return;
 
-    const resend = select?.value === 'provisioned';
+    const resend = (select?.dataset.currentStatus || select?.value) === 'provisioned';
     const prompt = resend
       ? `Send a new one-time password setup link to ${email}?`
       : `Provision this Recruiter account and send a one-time password setup link to ${email}?`;
@@ -134,8 +156,7 @@
         headers: {Authorization: `Bearer ${token}`},
       });
       if (select) {
-        select.value = result.status || 'provisioned';
-        select.dataset.currentStatus = select.value;
+        select.dataset.currentStatus = result.status || 'provisioned';
       }
       const message = result.setup_email_sent
         ? 'Recruiter account ready. A one-time password setup link was sent to the approved work email.'
@@ -154,7 +175,7 @@
   async function updateAccessRequestStatus(select) {
     const requestId = select.dataset.id;
     const previousStatus = select.dataset.currentStatus || select.value;
-    if (!requestId || select.value === previousStatus) return;
+    if (!requestId || previousStatus === 'provisioned' || select.value === previousStatus) return;
     select.disabled = true;
     try {
       const token = await platformToken();
@@ -171,7 +192,7 @@
       const cell = select.closest('td');
       if (cell) statusMessage(cell, error?.message || 'Could not update the access request.', 'error');
     } finally {
-      select.disabled = false;
+      if ((select.dataset.currentStatus || select.value) !== 'provisioned') select.disabled = false;
     }
   }
 
