@@ -12,6 +12,8 @@ def test_canonical_production_application_is_monitored() -> None:
     assert '"$BASE_URL/health"' in workflow
     assert "FORM_CONTRACTS" in workflow
     assert "integration-readiness.js" in workflow
+    assert "data-access-request-status" in workflow
+    assert "/provision-recruiter" in workflow
 
 
 def test_vercel_main_is_the_authoritative_production_release_branch() -> None:

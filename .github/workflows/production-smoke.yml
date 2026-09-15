@@ -115,9 +115,11 @@ jobs:
           grep -qi '^x-content-type-options: *nosniff' /tmp/root.headers
           grep -qi '^x-frame-options: *DENY' /tmp/root.headers
           grep -qi '^referrer-policy: *strict-origin-when-cross-origin' /tmp/root.headers
-          grep -q 'provisioning-password-fix.js' /tmp/root.html
-          grep -q 'ai-readiness.js' /tmp/root.html
-          grep -q 'legal-links.js' /tmp/root.html
+          grep -q '/static/app.js' /tmp/root.html
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/app.js" -o /tmp/app-bootstrap.js
+          grep -q 'provisioning-password-fix.js' /tmp/app-bootstrap.js
+          grep -q 'ai-readiness.js' /tmp/app-bootstrap.js
+          grep -q 'legal-links.js' /tmp/app-bootstrap.js
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/favicon.ico" -o /tmp/favicon.svg
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/api-errors.js" -o /tmp/api-errors.js
           grep -q 'PASSWORD_POLICY_HELP' /tmp/api-errors.js
@@ -129,6 +131,12 @@ jobs:
           grep -q 'AUTO_TEMP_PASSWORD_FIX_V1' /tmp/provisioning-password-fix.js
           grep -q 'secureTemporaryPassword' /tmp/provisioning-password-fix.js
           grep -q 'data-temp-password-regenerate' /tmp/provisioning-password-fix.js
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/app-core.js" -o /tmp/app-core.js
+          grep -q 'data-access-request-status' /tmp/app-core.js
+          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/release-ux-fixes.js" -o /tmp/release-ux-fixes.js
+          grep -q '/provision-recruiter' /tmp/release-ux-fixes.js
+          ! grep -q "'/platform/recruiters'" /tmp/release-ux-fixes.js
+          ! grep -q "'/auth/forgot-password'" /tmp/release-ux-fixes.js
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/integration-readiness.js" -o /tmp/integration-readiness.js
           grep -q 'Transactional email' /tmp/integration-readiness.js
           grep -q 'Brevo HTTPS API' /tmp/integration-readiness.js
