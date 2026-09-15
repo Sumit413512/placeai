@@ -6,10 +6,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_render_gateway_remains_monitored_as_fallback() -> None:
+def test_canonical_production_application_is_monitored() -> None:
     workflow = (ROOT / ".github" / "workflows" / "production-smoke.yml").read_text(encoding="utf-8")
-    assert "BASE_URL: https://placeai-recovery.onrender.com" in workflow
-    assert "/_recovery/health" in workflow
+    assert "BASE_URL: https://www.placeai.in" in workflow
+    assert '"$BASE_URL/health"' in workflow
     assert "FORM_CONTRACTS" in workflow
     assert "integration-readiness.js" in workflow
 

@@ -98,11 +98,11 @@ class Settings:
         default_backend_url = vercel_default_url or "http://localhost:8000"
         self.backend_base_url = os.getenv("BASE_URL", default_backend_url).rstrip("/")
 
-        # External links sent to users must point at the stable public frontend, not
-        # at a serverless backend hostname whose root may not serve the UI. Operators
-        # can override this with PUBLIC_APP_URL (preferred) or PASSWORD_RESET_BASE_URL.
+        # External links sent to users must point at the stable public application.
+        # Operators can override this with PUBLIC_APP_URL (preferred) or
+        # PASSWORD_RESET_BASE_URL.
         if self.is_production and self.running_on_vercel:
-            default_public_app_url = "https://placeai-recovery.onrender.com"
+            default_public_app_url = "https://www.placeai.in"
         else:
             default_public_app_url = self.backend_base_url
         self.base_url = (
@@ -110,12 +110,13 @@ class Settings:
             or default_public_app_url
         ).rstrip("/")
 
-        default_allowed_origins = vercel_default_url or "http://localhost:8000"
-        self.allowed_origins = [
+        default_allowed_origins = self.base_url if self.is_production else (vercel_default_url or "http://localhost:8000")
+        configured_origins = [
             x.strip()
             for x in os.getenv("ALLOWED_ORIGINS", default_allowed_origins).split(",")
             if x.strip()
         ]
+        self.allowed_origins = list(dict.fromkeys(configured_origins + ([self.base_url] if self.is_production else [])))
 
         self.upload_dir = Path(os.getenv("UPLOAD_DIR", "uploads/resumes"))
         self.max_resume_mb = _bounded_env_int("MAX_RESUME_MB", 5, 1, 50)

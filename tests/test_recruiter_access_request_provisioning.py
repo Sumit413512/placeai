@@ -135,10 +135,14 @@ def test_provisioning_action_is_idempotent_for_same_recruiter(monkeypatch) -> No
 def test_rendered_release_fix_uses_current_production_credential_path() -> None:
     root = Path(__file__).resolve().parents[1]
     script = (root / "app" / "static" / "release-ux-fixes.js").read_text(encoding="utf-8")
+    app_script = (root / "app" / "static" / "app.js").read_text(encoding="utf-8")
     proxy = (root / "render_proxy.py").read_text(encoding="utf-8")
-    assert "/platform/recruiters" in script
-    assert "/auth/forgot-password" in script
-    assert "secureTemporaryPassword" in script
+    assert "data-access-request-status" in app_script
+    assert "data-current-status" in app_script
+    assert "/platform/access-requests/${encodeURIComponent(requestId)}/provision-recruiter" in script
+    assert "/platform/recruiters" not in script
+    assert "/auth/forgot-password" not in script
+    assert "secureTemporaryPassword" not in script
     assert "Resend password setup link" in script
     assert "PARSED RÉSUMÉ DATA" in script and "PARSED RESUME DATA" in script
     assert "Résumé uploaded" in script and "Resume uploaded" in script

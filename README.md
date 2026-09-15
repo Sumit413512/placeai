@@ -1,19 +1,20 @@
-# PlaceAI Commercial V3.1.3
+# PlaceAI Commercial V3.1.4
 
 PlaceAI is a multi-tenant campus placement operating system for institutions, recruiters and students. It connects student records, controlled recruiter access, campus opportunities, placement drives, eligibility, applications, interviews, offers, attendance, reporting and human-reviewed AI assistance in one role-aware platform.
 
 ## Production architecture
 
-The current verified release topology is intentionally Render-first:
+The current verified release topology is Vercel-first:
 
-- **Public production application:** `https://placeai-recovery.onrender.com`
-- **Release authority:** Render production gateway and the Render-targeted production smoke workflow.
-- **Backend API runtime:** Vercel FastAPI runtime remains an upstream dependency behind the Render gateway. Automatic Vercel Git deployments are frozen to avoid build/function quota churn.
+- **Public production application:** `https://www.placeai.in`
+- **Release authority:** the `main` branch, Vercel production deployment, and canonical-domain production smoke workflow.
+- **Backend API runtime:** Vercel serves the FastAPI API and complete web UI from the same origin.
+- **Fallback runtime:** Render may be configured as a recovery target, but it is not the canonical public application.
 - **Database:** Supabase PostgreSQL in `ap-southeast-1`.
 - **Persistence:** production application/file state is durable and database backed; local development may use SQLite/filesystem fallbacks.
 - **Email:** transactional delivery supports Brevo HTTPS API and SMTP transport. Production password recovery fails closed when no delivery transport is configured.
 
-Do not treat the Vercel root URL as the user-facing production application.
+The generated `*.vercel.app` hostname and any Render service URL are operational endpoints, not user-facing canonical URLs.
 
 ## Core workspaces
 
@@ -72,7 +73,7 @@ See `SECURITY.md` for the vulnerability-reporting policy.
 
 ## Temporary account provisioning
 
-Institution/TPO, student and recruiter provisioning no longer requires an administrator to invent a compliant temporary password. PlaceAI generates a strong one-time credential in the browser using `crypto.getRandomValues`, provides Copy/Regenerate controls, and requires the new account to replace it at first sign-in.
+Institution/TPO and student provisioning no longer requires an administrator to invent a compliant temporary password. PlaceAI generates a strong one-time credential in the browser using `crypto.getRandomValues`, provides Copy/Regenerate controls, and requires the new account to replace it at first sign-in. Approved recruiter requests instead use an idempotent server-side provisioning workflow that emails a one-time password-setup link to the approved work address; the administrator never sees a recruiter credential.
 
 The temporary credential remains present after a failed form submission so validation or unrelated field errors cannot silently turn it into an empty password. Successful account creation closes the provisioning dialog; PlaceAI does not expose the credential again afterward.
 

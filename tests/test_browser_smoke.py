@@ -50,9 +50,10 @@ def local_server(tmp_path_factory):
         [sys.executable, "-m", "uvicorn", "app.app:app", "--host", HOST, "--port", str(PORT)],
         cwd=ROOT,
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
+        # Browser pages generate enough access-log output to fill an unread PIPE on
+        # Windows, which blocks uvicorn and turns later navigations into timeouts.
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     try:
         _wait_until_ready()

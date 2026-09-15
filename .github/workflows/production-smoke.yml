@@ -19,39 +19,39 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      BASE_URL: https://placeai-recovery.onrender.com
-      BACKEND_URL: https://placeai-rxpp.vercel.app
+      BASE_URL: https://www.placeai.in
+      BACKEND_URL: https://www.placeai.in
     steps:
-      - name: Wait for Render production gateway
+      - name: Wait for canonical production application
         shell: bash
         run: |
           set -euo pipefail
           for attempt in $(seq 1 24); do
-            code=$(curl -L -sS -o /tmp/health.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/_recovery/health" || true)
+            code=$(curl -L -sS -o /tmp/health.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/health" || true)
             if [ "$code" = "200" ]; then
               python - <<'PY'
           import json
           from pathlib import Path
           payload = json.loads(Path('/tmp/health.json').read_text(encoding='utf-8'))
           required = {
-              'status': 'healthy', 'gateway': 'ok', 'upstream': 'healthy',
-              'database': 'ok', 'configuration': 'ok', 'transactional_email': 'ok',
+              'status': 'healthy', 'database': 'ok', 'configuration': 'ok',
+              'transactional_email': 'ok',
           }
           bad = {key: (payload.get(key), expected) for key, expected in required.items() if payload.get(key) != expected}
           if bad:
               raise SystemExit(f'Production health contract failed: {bad}; payload={payload}')
-          print('Render production health contract passed.')
+          print('Canonical production health contract passed.')
           PY
               exit 0
             fi
-            echo "Render production gateway not ready yet (attempt $attempt/24, HTTP $code)."
+            echo "Canonical production application not ready yet (attempt $attempt/24, HTTP $code)."
             sleep 10
           done
-          echo 'Render production gateway health endpoint did not become healthy in time.' >&2
+          echo 'Canonical production health endpoint did not become healthy in time.' >&2
           cat /tmp/health.json 2>/dev/null || true
           exit 1
 
-      - name: Verify frozen Vercel backend directly
+      - name: Verify production API directly
         shell: bash
         run: |
           set -euo pipefail
@@ -206,7 +206,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "Production smoke passed for gateway $BASE_URL and backend $BACKEND_URL"
+          echo "Production smoke passed for canonical application $BASE_URL"
           python - <<'PY'
           import json
           from pathlib import Path

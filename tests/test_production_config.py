@@ -57,8 +57,8 @@ def test_vercel_production_uses_stable_public_url_and_system_backend_url(monkeyp
     settings = Settings()
 
     assert settings.backend_base_url == "https://placeai-rxpp.vercel.app"
-    assert settings.base_url == "https://placeai-recovery.onrender.com"
-    assert settings.allowed_origins == ["https://placeai-rxpp.vercel.app"]
+    assert settings.base_url == "https://www.placeai.in"
+    assert settings.allowed_origins == ["https://www.placeai.in"]
     settings.validate_for_startup()
 
 
@@ -79,6 +79,27 @@ def test_public_app_url_override_wins_for_production_links(monkeypatch):
     settings = Settings()
 
     assert settings.base_url == "https://app.placeai.example"
+    assert settings.allowed_origins == ["https://app.placeai.example"]
+    settings.validate_for_startup()
+
+
+def test_production_cors_always_includes_public_app_url(monkeypatch):
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("VERCEL_ENV", "production")
+    monkeypatch.setenv("VERCEL_PROJECT_PRODUCTION_URL", "placeai-rxpp.vercel.app")
+    monkeypatch.setenv("PUBLIC_APP_URL", "https://www.placeai.in")
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://placeai-rxpp.vercel.app")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://postgres.example:placeholder@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres",
+    )
+    monkeypatch.setenv("JWT_SECRET_KEY", "A" * 40)
+    monkeypatch.setenv("JWT_REFRESH_SECRET_KEY", "B" * 40)
+    monkeypatch.setenv("AUTO_CREATE_SCHEMA", "false")
+
+    settings = Settings()
+
+    assert settings.allowed_origins == ["https://placeai-rxpp.vercel.app", "https://www.placeai.in"]
     settings.validate_for_startup()
 
 

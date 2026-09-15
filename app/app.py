@@ -31,11 +31,6 @@ from app.embedded_pages import (
 
 logger = logging.getLogger("placeai")
 settings = get_settings()
-# Vercel now serves the complete production application directly. Ensure links emitted
-# by backend workflows (notably password reset) use the stable production Vercel host
-# rather than the legacy Render gateway when no explicit public URL override is set.
-if settings.is_production and settings.running_on_vercel:
-    settings.base_url = settings.backend_base_url
 runtime_readiness_errors = settings.configuration_error_codes()
 _router_import_failures: dict[str, str] = {}
 if engine_initialization_error_code and engine_initialization_error_code not in runtime_readiness_errors:
