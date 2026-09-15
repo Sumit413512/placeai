@@ -135,10 +135,12 @@ def test_provisioning_action_is_idempotent_for_same_recruiter(monkeypatch) -> No
 def test_rendered_release_fix_uses_current_production_credential_path() -> None:
     root = Path(__file__).resolve().parents[1]
     script = (root / "app" / "static" / "release-ux-fixes.js").read_text(encoding="utf-8")
+    public_script = (root / "public" / "static" / "release-ux-fixes.js").read_text(encoding="utf-8")
     app_script = (root / "app" / "static" / "app.js").read_text(encoding="utf-8")
     proxy = (root / "render_proxy.py").read_text(encoding="utf-8")
     assert "data-access-request-status" in app_script
     assert "data-current-status" in app_script
+    assert script == public_script
     assert "/platform/access-requests/${encodeURIComponent(requestId)}/provision-recruiter" in script
     assert "/platform/recruiters" not in script
     assert "/auth/forgot-password" not in script
