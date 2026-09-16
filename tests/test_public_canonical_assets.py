@@ -54,6 +54,7 @@ def _set_vercel_production(monkeypatch) -> None:
 
 def test_vercel_platform_url_detection_is_hostname_based():
     assert _is_vercel_platform_url("https://placeai-rxpp.vercel.app")
+    assert _is_vercel_platform_url("placeai-rxpp.vercel.app")
     assert _is_vercel_platform_url("https://preview-abc.vercel.app/path")
     assert not _is_vercel_platform_url("https://www.placeai.in")
     assert not _is_vercel_platform_url("https://vercel.app.example.com")
@@ -67,6 +68,15 @@ def test_stale_vercel_public_app_override_cannot_replace_placeai_domain(monkeypa
 
     assert settings.base_url == "https://www.placeai.in"
     assert "https://www.placeai.in" in settings.allowed_origins
+
+
+def test_schemeless_vercel_public_app_override_is_also_rejected(monkeypatch):
+    _set_vercel_production(monkeypatch)
+    monkeypatch.setenv("PUBLIC_APP_URL", "placeai-rxpp.vercel.app")
+
+    settings = Settings()
+
+    assert settings.base_url == "https://www.placeai.in"
 
 
 def test_custom_public_app_override_remains_supported(monkeypatch):
