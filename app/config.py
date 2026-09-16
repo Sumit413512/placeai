@@ -4,6 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 import os
 import tempfile
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -18,6 +19,18 @@ def _https_url_from_vercel_host(value: str | None) -> str:
     if host.startswith("https://") or host.startswith("http://"):
         return host
     return f"https://{host}"
+
+
+def _is_vercel_platform_url(value: str | None) -> bool:
+    """Return True for Vercel-owned deployment hostnames, not custom domains."""
+    raw = (value or "").strip()
+    if not raw:
+        return False
+    try:
+        host = (urlparse(raw).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False
+    return host == "vercel.app" or host.endswith(".vercel.app")
 
 
 def _bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -99,20 +112,24 @@ class Settings:
         self.backend_base_url = os.getenv("BASE_URL", default_backend_url).rstrip("/")
 
         # External links sent to users must point at the stable public application.
-        # PLACEAI_CANONICAL_PUBLIC_URL is deployment-controlled and intentionally
-        # takes precedence over older project-level URL aliases that may be stale.
+        # PLACEAI_CANONICAL_PUBLIC_URL is the explicit canonical override. Historical
+        # PUBLIC_APP_URL / PASSWORD_RESET_BASE_URL values remain compatible, except
+        # that a Vercel-owned *.vercel.app hostname must never replace the production
+        # PlaceAI custom domain in crawler metadata or user-facing reset links.
         if self.is_production and self.running_on_vercel:
             default_public_app_url = "https://www.placeai.in"
         else:
             default_public_app_url = self.backend_base_url
-        self.base_url = (
-            _first_env(
-                "PLACEAI_CANONICAL_PUBLIC_URL",
-                "PUBLIC_APP_URL",
-                "PASSWORD_RESET_BASE_URL",
-            )
-            or default_public_app_url
-        ).rstrip("/")
+        canonical_public_url = _first_env("PLACEAI_CANONICAL_PUBLIC_URL").rstrip("/")
+        legacy_public_url = _first_env("PUBLIC_APP_URL", "PASSWORD_RESET_BASE_URL").rstrip("/")
+        if (
+            self.is_production
+            and self.running_on_vercel
+            and legacy_public_url
+            and _is_vercel_platform_url(legacy_public_url)
+        ):
+            legacy_public_url = ""
+        self.base_url = (canonical_public_url or legacy_public_url or default_public_app_url).rstrip("/")
 
         default_allowed_origins = self.base_url if self.is_production else (vercel_default_url or "http://localhost:8000")
         configured_origins = [
