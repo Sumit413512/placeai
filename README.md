@@ -7,12 +7,15 @@ PlaceAI is a multi-tenant campus placement operating system for institutions, re
 The current verified release topology is Vercel-first:
 
 - **Public production application:** `https://www.placeai.in`
-- **Release authority:** the `main` branch, Vercel production deployment, and canonical-domain production smoke workflow.
-- **Backend API runtime:** Vercel serves the FastAPI API and complete web UI from the same origin.
+- **Release authority:** the verified `main` source revision plus an explicitly promoted Vercel production deployment.
+- **Backend API runtime:** Vercel serves the FastAPI API and complete web UI from the same application runtime.
+- **Direct Vercel origin:** `https://placeai-rxpp.vercel.app` is an operational origin used for independent release verification, not the preferred user-facing URL.
 - **Fallback runtime:** Render may be configured as a recovery target, but it is not the canonical public application.
 - **Database:** Supabase PostgreSQL in `ap-southeast-1`.
 - **Persistence:** production application/file state is durable and database backed; local development may use SQLite/filesystem fallbacks.
 - **Email:** transactional delivery supports Brevo HTTPS API and SMTP transport. Production password recovery fails closed when no delivery transport is configured.
+
+Automatic Vercel Git deployment is intentionally frozen for controlled releases. A green smoke workflow after a source commit validates the currently deployed application but does not, by itself, prove that the new commit was promoted to Vercel production.
 
 The generated `*.vercel.app` hostname and any Render service URL are operational endpoints, not user-facing canonical URLs.
 
@@ -156,9 +159,11 @@ The GitHub release gates are:
 
 1. **PlaceAI CI** — Python compilation, JS syntax checks, browser/regression tests, static analysis, release hygiene and integrity evidence.
 2. **PlaceAI Security Audit** — tracked-secret hygiene, Bandit and production dependency audit.
-3. **PlaceAI Production Smoke** — live Render health, release assets, security headers, auth boundaries, password-reset failure behavior and AI readiness contract.
+3. **PlaceAI Production Smoke** — canonical `https://www.placeai.in` health, release assets, security headers, auth boundaries, password-reset failure behavior and AI readiness contract.
+4. **PlaceAI Vercel Production Smoke** — direct `https://placeai-rxpp.vercel.app` health, public shell, security headers, AI readiness and hardened unauthenticated boundaries.
+5. **PlaceAI Platform Access Production Smoke** — production access-request and platform-boundary checks.
 
-A release should not be called production-ready until the exact revision is deployed to Render and all three gates are green.
+A source revision should not be called the current production release until that exact revision is explicitly promoted to the frozen Vercel production project and the post-deployment checks pass on both the canonical custom domain and the direct Vercel origin.
 
 ## Database and migrations
 
@@ -168,8 +173,10 @@ Supabase browser Data API access is not the application authorization layer; Pla
 
 ## Operational notes
 
-The active Render service currently runs one Singapore instance. Recent measurements during release verification were well below its CPU and memory limits and recent log inspection showed no 5xx or 422/502/503 responses in the queried window. The current service is still on Render's free tier; move to a paid production tier before relying on paid-tier availability characteristics or meaningful client traffic.
+The canonical public application is `https://www.placeai.in`. HTTPS is enforced and the bare host redirects to the preferred `www` host. Render remains an optional recovery target rather than the primary production runtime.
 
-The GitHub repository is currently public and `main` is currently unprotected. `CODEOWNERS`, a production PR checklist, `SECURITY.md`, CI/security gates and secret scanning are committed as compensating controls, but repository visibility and an enforced GitHub ruleset still require repository-administration changes in GitHub Settings.
+Vercel automatic Git deployment is intentionally frozen. Production promotion therefore requires an explicit controlled Vercel deployment of the verified source revision, followed by canonical-domain and direct-origin verification.
+
+The GitHub repository is currently public and `main` is currently unprotected. `CODEOWNERS`, a production PR checklist, `SECURITY.md`, CI/security gates and secret scanning are committed as compensating controls, but an enforced GitHub ruleset still requires repository-administration changes in GitHub Settings.
 
 See `DEPLOYMENT_PREP_STATUS.md` for the current launch checklist and external owner actions.
