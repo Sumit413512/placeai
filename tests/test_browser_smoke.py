@@ -281,3 +281,45 @@ def test_privileged_role_rerender_focuses_visible_form_on_mobile(browser) -> Non
         assert state["scrollTop"] >= 0
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
     page.close()
+
+
+def test_auth_modal_reflows_at_extreme_narrow_widths(browser) -> None:
+    """Protect the user-reported one-character-per-line auth regression."""
+    for width in (180, 240, 320, 390):
+        page = browser.new_page(viewport={"width": width, "height": 844})
+        page.goto(BASE_URL, wait_until="domcontentloaded")
+        page.locator('.hero button[data-open-auth="login"]').click()
+        page.locator("#auth-overlay").wait_for(state="visible")
+        page.wait_for_timeout(50)
+
+        geometry = page.evaluate(
+            """() => {
+                const rect = selector => document.querySelector(selector).getBoundingClientRect();
+                const modal = rect('#auth-overlay .auth-modal');
+                const panel = rect('#auth-overlay .auth-form-panel');
+                const form = rect('#role-login-form');
+                const label = rect('#role-login-form label');
+                const email = rect('#role-login-form input[name="email"]');
+                const submit = rect('#role-login-form button[type="submit"]');
+                const note = rect('#login-view .access-security-note');
+                return {
+                    viewport: window.innerWidth,
+                    scrollWidth: document.documentElement.scrollWidth,
+                    modal,
+                    panel,
+                    form,
+                    label,
+                    email,
+                    submit,
+                    note,
+                };
+            }"""
+        )
+
+        assert geometry["scrollWidth"] <= geometry["viewport"] + 1, (width, geometry)
+        for key in ("modal", "panel", "form", "label", "email", "submit", "note"):
+            box = geometry[key]
+            assert box["left"] >= -1, (width, key, box)
+            assert box["right"] <= geometry["viewport"] + 1, (width, key, box)
+            assert box["width"] >= 120, (width, key, box)
+        page.close()
