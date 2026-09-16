@@ -95,6 +95,7 @@ def test_public_shell_auth_modal_and_mobile_layout(browser) -> None:
     assert box["x"] >= -1
     assert box["x"] + box["width"] <= 391
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+    assert page.locator("#login-view .access-mode-row").evaluate("el => getComputedStyle(el).position") == "static"
     page.close()
 
 
@@ -103,15 +104,17 @@ def test_login_role_cards_switch_without_a_mutation_loop(browser) -> None:
     page.goto(BASE_URL, wait_until="domcontentloaded")
     page.locator('.hero button[data-open-auth="login"]').click()
 
-    for role, label in (
-        ("recruiter", "Recruiter"),
-        ("institution_admin", "Institution Admin"),
-        ("platform_admin", "Platform Admin"),
-        ("student", "Student"),
+    for role, label, short in (
+        ("recruiter", "Recruiter", "Recruiter workspace"),
+        ("institution_admin", "Institution Admin", "Placement office"),
+        ("platform_admin", "Platform Admin", "Platform control"),
+        ("student", "Student", "Student workspace"),
     ):
         page.locator(f'#login-view [data-access-role="{role}"]').click(timeout=5000)
         assert page.locator('#role-login-form input[name="role"]').input_value() == role
         assert page.locator('#login-view .access-role-card.is-selected').get_attribute("data-access-role") == role
+        assert page.locator('#login-view .access-selection-summary b').inner_text() == label
+        assert page.locator('#login-view .access-selection-summary div > span').inner_text() == short
         assert page.locator('#role-login-form button[type="submit"]').inner_text() == f"Continue to {label}"
         assert page.locator('.placeai-recruiter-login-help').count() == (1 if role == "recruiter" else 0)
 

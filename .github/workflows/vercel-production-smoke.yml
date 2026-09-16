@@ -21,8 +21,9 @@ jobs:
     env:
       BASE_URL: https://placeai-rxpp.vercel.app
       PUBLIC_URL: https://www.placeai.in
+      EXPECTED_RELEASE: placeai-release-20260917-responsive-certification-v1
     steps:
-      - name: Wait for current responsive Vercel release
+      - name: Wait for exact responsive Vercel release
         shell: bash
         run: |
           set -euo pipefail
@@ -31,11 +32,13 @@ jobs:
             root_code=$(curl -sS -o /tmp/root.html -D /tmp/root.headers -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/" || true)
             bootstrap_code=$(curl -sS -o /tmp/bootstrap.js -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/static/app.js" || true)
             responsive_code=$(curl -sS -o /tmp/ui-fixes.css -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/static/ui-fixes.css" || true)
-            robots_code=$(curl -sS -o /tmp/robots.txt -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/robots.txt" || true)
+            release_code=$(curl -sS -o /tmp/release-id.txt -D /tmp/release.headers -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/static/release-id.txt" || true)
+            robots_code=$(curl -sS -o /tmp/robots.txt -D /tmp/robots.headers -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/robots.txt" || true)
             if [ "$health_code" = "200" ] && [ "$root_code" = "200" ] && [ "$bootstrap_code" = "200" ] \
-              && [ "$responsive_code" = "200" ] && [ "$robots_code" = "200" ] \
+              && [ "$responsive_code" = "200" ] && [ "$release_code" = "200" ] && [ "$robots_code" = "200" ] \
               && grep -q '__PLACEAI_PRODUCTION_BOOTSTRAP__' /tmp/bootstrap.js \
               && grep -q 'Extreme zoom/narrow reflow safety' /tmp/ui-fixes.css \
+              && grep -Fxq "$EXPECTED_RELEASE" /tmp/release-id.txt \
               && grep -q "Sitemap: $PUBLIC_URL/sitemap.xml" /tmp/robots.txt; then
               python - <<'PY'
           import json
@@ -50,17 +53,19 @@ jobs:
           bad = {k: (payload.get(k), v) for k, v in required.items() if payload.get(k) != v}
           if bad:
               raise SystemExit(f'Production health contract failed: {bad}; payload={payload}')
-          print('Current responsive Vercel release is healthy; version=', payload.get('version'))
+          print('Exact responsive Vercel release is healthy; version=', payload.get('version'))
           PY
               exit 0
             fi
-            echo "Vercel production not on the expected responsive release yet (attempt $attempt/30; health=$health_code root=$root_code bootstrap=$bootstrap_code responsive=$responsive_code robots=$robots_code)."
+            echo "Vercel production not on exact release yet (attempt $attempt/30; health=$health_code root=$root_code bootstrap=$bootstrap_code responsive=$responsive_code release=$release_code robots=$robots_code)."
             sleep 10
           done
-          echo 'Vercel production did not converge to the expected responsive release.' >&2
-          cat /tmp/health.json 2>/dev/null || true
+          echo 'Vercel production did not converge to the expected exact release.' >&2
+          echo 'Release marker:' >&2
+          cat /tmp/release-id.txt 2>/dev/null || true
           echo 'Robots response:' >&2
           cat /tmp/robots.txt 2>/dev/null || true
+          cat /tmp/health.json 2>/dev/null || true
           exit 1
 
       - name: Verify public shell and security headers
@@ -84,6 +89,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          grep -Fxq "$EXPECTED_RELEASE" /tmp/release-id.txt
+          grep -qi '^cache-control: *no-store' /tmp/release.headers
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/app-core.js" -o /tmp/app-core.js
           test -s /tmp/app-core.js
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/api-errors.js" -o /tmp/api-errors.js
@@ -108,6 +115,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          grep -qi '^cache-control: *no-store' /tmp/robots.headers
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/privacy" -o /tmp/privacy.html
           grep -qi '<title>Privacy Policy — PlaceAI</title>' /tmp/privacy.html
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/terms" -o /tmp/terms.html
@@ -115,7 +123,8 @@ jobs:
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/acceptable-use" -o /tmp/aup.html
           grep -qi '<title>Acceptable Use — PlaceAI</title>' /tmp/aup.html
           grep -q "Sitemap: $PUBLIC_URL/sitemap.xml" /tmp/robots.txt
-          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/sitemap.xml" -o /tmp/sitemap.xml
+          curl -fsS -D /tmp/sitemap.headers --connect-timeout 10 --max-time 20 "$BASE_URL/sitemap.xml" -o /tmp/sitemap.xml
+          grep -qi '^cache-control: *no-store' /tmp/sitemap.headers
           grep -q "$PUBLIC_URL/privacy" /tmp/sitemap.xml
           grep -q "$PUBLIC_URL/terms" /tmp/sitemap.xml
           grep -q "$PUBLIC_URL/acceptable-use" /tmp/sitemap.xml
@@ -184,8 +193,10 @@ jobs:
           from pathlib import Path
           payload = json.loads(Path('/tmp/health.json').read_text(encoding='utf-8'))
           ai = json.loads(Path('/tmp/ai-status.json').read_text(encoding='utf-8'))
+          release = Path('/tmp/release-id.txt').read_text(encoding='utf-8').strip()
           safe = {k: payload.get(k) for k in ('status','service','version','database','configuration','transactional_email')}
           print('production=', json.dumps(safe, sort_keys=True))
+          print('release=', release)
           print('ai_configured=', ai.get('configured'), 'sdk_available=', ai.get('sdk_available'), 'model=', ai.get('model'))
           print('origin=https://placeai-rxpp.vercel.app')
           print('canonical=https://www.placeai.in')

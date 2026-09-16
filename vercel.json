@@ -43,6 +43,13 @@
         { "key": "Cache-Control", "value": "no-store" },
         { "key": "Pragma", "value": "no-cache" }
       ]
+    },
+    {
+      "source": "/(robots.txt|sitemap.xml|static/release-id.txt)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "Pragma", "value": "no-cache" }
+      ]
     }
   ],
   "functions": {
