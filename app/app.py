@@ -290,6 +290,8 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 def _public_base(request: Request) -> str:
+    if settings.is_production and settings.base_url:
+        return settings.base_url.rstrip("/")
     return str(request.base_url).rstrip("/")
 
 
@@ -328,8 +330,13 @@ def root():
 
 
 @app.get("/favicon.ico", include_in_schema=False)
-def favicon() -> FileResponse:
-    return FileResponse(STATIC_DIR / "placeai-icon.svg", media_type="image/svg+xml")
+def favicon() -> Response:
+    svg = (STATIC_DIR / "placeai-icon.svg").read_text(encoding="utf-8")
+    return Response(
+        content=svg,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @app.get("/mock-interview", include_in_schema=False)
