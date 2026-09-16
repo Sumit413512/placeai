@@ -26,8 +26,10 @@ def _is_vercel_platform_url(value: str | None) -> bool:
     raw = (value or "").strip()
     if not raw:
         return False
+    # urlparse treats a schemeless hostname as a path, so normalize it first.
+    candidate = raw if "://" in raw else f"https://{raw.lstrip('/')}"
     try:
-        host = (urlparse(raw).hostname or "").lower().rstrip(".")
+        host = (urlparse(candidate).hostname or "").lower().rstrip(".")
     except ValueError:
         return False
     return host == "vercel.app" or host.endswith(".vercel.app")
