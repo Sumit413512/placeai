@@ -148,7 +148,36 @@ body.sidebar-open {
 .candidate-row,
 .candidate-row > *,
 .access-requests-head,
-.access-requests-head > * {
+.access-requests-head > *,
+#marketing-site,
+#marketing-site main,
+.site-header,
+.site-header > *,
+.section-shell,
+.hero,
+.hero > *,
+.hero-copy,
+.hero-product,
+.production-surface-card,
+.production-surface-grid,
+.production-surface-grid > *,
+.proof-content,
+.proof-content > *,
+.section-heading,
+.section-heading > *,
+.feature-bento,
+.bento-card,
+.dark-grid,
+.dark-grid > *,
+.role-production,
+.role-production > *,
+.security-card,
+.security-grid,
+.security-grid > *,
+.cta-inner,
+.cta-inner > *,
+.site-footer,
+.site-footer > * {
   min-width: 0;
 }
 
@@ -176,7 +205,15 @@ body.sidebar-open {
 .ai-box,
 .workflow-card,
 .candidate-row,
-.toast {
+.toast,
+#marketing-site h1,
+#marketing-site h2,
+#marketing-site h3,
+#marketing-site p,
+#marketing-site li,
+#marketing-site .eyebrow,
+#marketing-site .proof-content,
+#marketing-site .site-footer {
   overflow-wrap: anywhere;
   word-break: normal;
 }
@@ -399,6 +436,17 @@ html.placeai-session-restoring #app-shell:not(.hidden) ~ * {
   .button-full {
     width: 100%;
   }
+
+  .hero h1 {
+    font-size: 34px;
+  }
+
+  .section-heading h2,
+  .dark-copy h2,
+  .security-card h2,
+  .cta-inner h2 {
+    font-size: 30px;
+  }
 }
 
 /* Extreme zoom/narrow reflow safety. This intentionally preserves a usable single
@@ -439,5 +487,113 @@ html.placeai-session-restoring #app-shell:not(.hidden) ~ * {
   .modal-close {
     top: 6px;
     right: 6px;
+  }
+
+  .site-header {
+    width: calc(100% - 16px);
+    gap: 8px;
+  }
+
+  .site-header .brand {
+    min-width: 0;
+    font-size: 18px;
+    gap: 7px;
+  }
+
+  .site-header .brand-mark {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+  }
+
+  .mobile-menu {
+    min-width: 0;
+    padding: 4px;
+  }
+
+  .section-shell {
+    width: calc(100% - 16px);
+  }
+
+  .hero {
+    padding: 36px 0 48px;
+    gap: 24px;
+  }
+
+  .hero h1 {
+    font-size: 30px;
+    line-height: 1.06;
+    letter-spacing: -.04em;
+  }
+
+  .hero-lead {
+    font-size: 14px;
+  }
+
+  .eyebrow {
+    display: flex;
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .hero-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hero-actions .button,
+  .cta-inner .button,
+  .dark-copy .button {
+    width: 100%;
+  }
+
+  .production-surface-card {
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  .production-surface-card h3 {
+    font-size: 22px;
+  }
+
+  .production-surface-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .proof-content {
+    justify-content: flex-start;
+    gap: 8px 10px;
+  }
+
+  .proof-content i {
+    display: none;
+  }
+
+  .value-section,
+  .role-section {
+    padding: 54px 0;
+  }
+
+  .bento-card {
+    padding: 18px;
+  }
+
+  .section-heading h2,
+  .dark-copy h2,
+  .security-card h2,
+  .cta-inner h2 {
+    font-size: 27px;
+    line-height: 1.08;
+  }
+
+  .security-card {
+    padding: 20px 16px;
+  }
+
+  .security-orbit {
+    display: none;
+  }
+
+  .site-footer {
+    gap: 12px;
   }
 }
