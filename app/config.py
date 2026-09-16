@@ -114,16 +114,13 @@ class Settings:
         self.backend_base_url = os.getenv("BASE_URL", default_backend_url).rstrip("/")
 
         # External links sent to users must point at the stable public application.
-        # Vercel platform hostnames are deployment origins, never PlaceAI's canonical
-        # production URL. Reject them regardless of which public-URL alias supplied
-        # them so crawler metadata and password-reset links stay on the custom domain.
-        if self.is_production and self.running_on_vercel:
-            default_public_app_url = "https://www.placeai.in"
-        else:
-            default_public_app_url = self.backend_base_url
+        # PlaceAI's production canonical domain is provider-independent. A Vercel
+        # platform hostname is a deployment origin, never a public canonical URL,
+        # even if runtime provider flags are absent or stale.
+        default_public_app_url = "https://www.placeai.in" if self.is_production else self.backend_base_url
         canonical_public_url = _first_env("PLACEAI_CANONICAL_PUBLIC_URL").rstrip("/")
         legacy_public_url = _first_env("PUBLIC_APP_URL", "PASSWORD_RESET_BASE_URL").rstrip("/")
-        if self.is_production and self.running_on_vercel:
+        if self.is_production:
             if canonical_public_url and _is_vercel_platform_url(canonical_public_url):
                 canonical_public_url = ""
             if legacy_public_url and _is_vercel_platform_url(legacy_public_url):

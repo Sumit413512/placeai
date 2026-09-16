@@ -43,13 +43,32 @@ def test_favicon_is_served_as_svg_mime():
     assert response.text.lstrip().startswith("<svg")
 
 
+def _clear_public_url_env(monkeypatch) -> None:
+    for name in (
+        "PLACEAI_CANONICAL_PUBLIC_URL",
+        "PUBLIC_APP_URL",
+        "PASSWORD_RESET_BASE_URL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
 def _set_vercel_production(monkeypatch) -> None:
     monkeypatch.setenv("VERCEL", "1")
     monkeypatch.setenv("VERCEL_ENV", "production")
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("VERCEL_PROJECT_PRODUCTION_URL", "placeai-rxpp.vercel.app")
-    monkeypatch.delenv("PLACEAI_CANONICAL_PUBLIC_URL", raising=False)
-    monkeypatch.delenv("PASSWORD_RESET_BASE_URL", raising=False)
+    _clear_public_url_env(monkeypatch)
+
+
+def _set_provider_agnostic_production(monkeypatch) -> None:
+    monkeypatch.delenv("VERCEL", raising=False)
+    monkeypatch.delenv("VERCEL_ENV", raising=False)
+    monkeypatch.delenv("VERCEL_PROJECT_PRODUCTION_URL", raising=False)
+    monkeypatch.delenv("VERCEL_BRANCH_URL", raising=False)
+    monkeypatch.delenv("VERCEL_URL", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("BASE_URL", "https://placeai-rxpp.vercel.app")
+    _clear_public_url_env(monkeypatch)
 
 
 def test_vercel_platform_url_detection_is_hostname_based():
@@ -92,6 +111,35 @@ def test_explicit_vercel_canonical_override_is_rejected(monkeypatch):
 def test_schemeless_explicit_vercel_canonical_override_is_rejected(monkeypatch):
     _set_vercel_production(monkeypatch)
     monkeypatch.setenv("PLACEAI_CANONICAL_PUBLIC_URL", "placeai-rxpp.vercel.app")
+
+    settings = Settings()
+
+    assert settings.base_url == "https://www.placeai.in"
+
+
+def test_production_without_vercel_flag_defaults_to_placeai_domain(monkeypatch):
+    _set_provider_agnostic_production(monkeypatch)
+
+    settings = Settings()
+
+    assert not settings.running_on_vercel
+    assert settings.backend_base_url == "https://placeai-rxpp.vercel.app"
+    assert settings.base_url == "https://www.placeai.in"
+    assert "https://www.placeai.in" in settings.allowed_origins
+
+
+def test_production_without_vercel_flag_rejects_explicit_vercel_canonical(monkeypatch):
+    _set_provider_agnostic_production(monkeypatch)
+    monkeypatch.setenv("PLACEAI_CANONICAL_PUBLIC_URL", "https://placeai-rxpp.vercel.app")
+
+    settings = Settings()
+
+    assert settings.base_url == "https://www.placeai.in"
+
+
+def test_production_without_vercel_flag_rejects_legacy_vercel_public_url(monkeypatch):
+    _set_provider_agnostic_production(monkeypatch)
+    monkeypatch.setenv("PUBLIC_APP_URL", "https://placeai-rxpp.vercel.app")
 
     settings = Settings()
 
