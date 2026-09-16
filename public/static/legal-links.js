@@ -1,5 +1,17 @@
 (() => {
   'use strict';
+
+  function loadProductionPolish() {
+    if (window.__PLACEAI_PRODUCTION_POLISH_LOADED__ || document.querySelector('script[data-placeai-production-polish]')) return;
+    const script = document.createElement('script');
+    script.src = '/static/production-polish.js';
+    script.defer = true;
+    script.dataset.placeaiProductionPolish = '';
+    document.head.appendChild(script);
+  }
+
+  loadProductionPolish();
+
   const footer = document.querySelector('.site-footer');
   if (!footer || footer.querySelector('[data-placeai-legal-links]')) return;
   const nav = document.createElement('nav');
