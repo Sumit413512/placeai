@@ -1,3 +1,3 @@
 User-agent: *
 Allow: /
-Sitemap: https://placeai-rxpp.vercel.app/sitemap.xml
+Sitemap: https://www.placeai.in/sitemap.xml
