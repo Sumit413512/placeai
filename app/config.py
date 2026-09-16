@@ -99,14 +99,18 @@ class Settings:
         self.backend_base_url = os.getenv("BASE_URL", default_backend_url).rstrip("/")
 
         # External links sent to users must point at the stable public application.
-        # Operators can override this with PUBLIC_APP_URL (preferred) or
-        # PASSWORD_RESET_BASE_URL.
+        # PLACEAI_CANONICAL_PUBLIC_URL is deployment-controlled and intentionally
+        # takes precedence over older project-level URL aliases that may be stale.
         if self.is_production and self.running_on_vercel:
             default_public_app_url = "https://www.placeai.in"
         else:
             default_public_app_url = self.backend_base_url
         self.base_url = (
-            _first_env("PUBLIC_APP_URL", "PASSWORD_RESET_BASE_URL")
+            _first_env(
+                "PLACEAI_CANONICAL_PUBLIC_URL",
+                "PUBLIC_APP_URL",
+                "PASSWORD_RESET_BASE_URL",
+            )
             or default_public_app_url
         ).rstrip("/")
 

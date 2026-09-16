@@ -98,6 +98,109 @@ body.sidebar-open {
   flex: 0 0 auto;
 }
 
+/* Intrinsic-size containment. Grid and flex items default to min-width:auto,
+   which allows long placeholders, labels and status text to push cards/forms
+   wider than the viewport. Keep every user-facing surface shrinkable instead. */
+.auth-modal,
+.auth-brand-panel,
+.auth-form-panel,
+.auth-form-panel > *,
+.form-stack,
+.form-stack > *,
+.form-two,
+.form-two > *,
+.password-wrap,
+.access-role-grid,
+.access-role-card,
+.access-selection-summary,
+.access-selection-summary > *,
+.access-mode-row,
+.access-mode-row > *,
+.access-security-note,
+.generic-modal-card,
+.generic-modal-content,
+.generic-modal-actions,
+.app-content-wrap,
+.app-content,
+.page-head,
+.page-head > *,
+.panel,
+.panel-head,
+.panel-head > *,
+.metric-grid,
+.metric-card,
+.dashboard-grid,
+.data-panel,
+.data-toolbar,
+.data-toolbar > *,
+.profile-grid,
+.resume-card,
+.resume-card > *,
+.ai-box,
+.ai-box-head,
+.ai-box-head > *,
+.detail-head,
+.detail-head > *,
+.activity-item,
+.activity-item > *,
+.workflow-card,
+.workflow-card > *,
+.candidate-row,
+.candidate-row > *,
+.access-requests-head,
+.access-requests-head > * {
+  min-width: 0;
+}
+
+.form-stack input,
+.form-stack textarea,
+.form-stack select,
+.field-input,
+.search-box,
+.filter-select,
+.button,
+.button-full {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.auth-form-panel h2,
+.auth-form-panel p,
+.form-stack label,
+.access-selection-summary b,
+.access-selection-summary span,
+.access-security-note,
+.panel-head,
+.page-head,
+.resume-card,
+.ai-box,
+.workflow-card,
+.candidate-row,
+.toast {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.access-mode-row button,
+.form-footer .button,
+.detail-actions .button,
+.hero-actions .button {
+  white-space: normal;
+}
+
+.table-wrap,
+.access-table-wrap {
+  max-width: 100%;
+  overscroll-behavior-inline: contain;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
 /* If a known signed-in session is being restored, do not flash the public/sign-in
    surface before the HttpOnly refresh-cookie bootstrap finishes. */
 html.placeai-session-restoring #marketing-site {
@@ -140,6 +243,7 @@ html.placeai-session-restoring #app-shell:not(.hidden) ~ * {
 
 @media (max-width: 760px) {
   .auth-modal {
+    width: 100%;
     height: calc(100dvh - 24px);
     min-height: 0;
     max-height: calc(100dvh - 24px);
@@ -147,20 +251,193 @@ html.placeai-session-restoring #app-shell:not(.hidden) ~ * {
   }
 
   .auth-form-panel {
+    width: 100%;
     padding: 54px 25px 28px;
     overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .generic-modal-card {
+    width: 100%;
     max-height: calc(100dvh - 24px);
   }
 
+  .page-head,
+  .panel-head,
+  .detail-head,
+  .access-requests-head,
+  .ai-box-head,
+  .resume-card {
+    flex-wrap: wrap;
+  }
 
+  .form-footer,
+  .detail-actions,
+  .row-actions {
+    flex-wrap: wrap;
+  }
 }
 
 @media (max-width: 430px) {
+  .modal-overlay {
+    padding:
+      max(8px, env(safe-area-inset-top))
+      max(8px, env(safe-area-inset-right))
+      max(8px, env(safe-area-inset-bottom))
+      max(8px, env(safe-area-inset-left));
+  }
+
+  .auth-modal {
+    height: calc(100dvh - 16px);
+    max-height: calc(100dvh - 16px);
+    border-radius: 16px;
+  }
+
   .auth-form-panel {
-    padding-left: 20px;
-    padding-right: 20px;
+    padding: 50px 16px 24px;
+  }
+
+  .access-mode-row {
+    gap: 5px;
+    padding: 3px;
+  }
+
+  .access-mode-row button {
+    padding: 9px 7px;
+    font-size: 12px;
+  }
+
+  .access-selection-summary {
+    align-items: flex-start;
+  }
+
+  .page-head,
+  .panel-head,
+  .detail-head,
+  .access-requests-head,
+  .ai-box-head,
+  .resume-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .form-footer .button,
+  .detail-actions .button {
+    flex: 1 1 140px;
+  }
+
+  .activity-item {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .activity-item > span:last-child {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .workflow-card {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .workflow-card > em {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .candidate-row {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+  }
+}
+
+@media (max-width: 320px) {
+  .modal-overlay {
+    padding: 4px;
+  }
+
+  .auth-modal {
+    height: calc(100dvh - 8px);
+    max-height: calc(100dvh - 8px);
+    border-radius: 12px;
+  }
+
+  .auth-form-panel {
+    padding: 46px 12px 18px;
+  }
+
+  .modal-close {
+    top: 7px;
+    right: 7px;
+    width: 32px;
+    height: 32px;
+  }
+
+  .form-stack {
+    gap: 12px;
+  }
+
+  .form-stack input,
+  .form-stack textarea,
+  .form-stack select,
+  .field-input {
+    width: 100%;
+    min-width: 0;
+    font-size: 16px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .access-selection-summary,
+  .access-security-note {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .access-role-card {
+    padding: 13px;
+  }
+
+  .button-full {
+    width: 100%;
+  }
+}
+
+/* Extreme zoom/narrow reflow safety. This intentionally preserves a usable single
+   column instead of allowing intrinsic controls to escape the viewport. */
+@media (max-width: 240px) {
+  .modal-overlay {
+    padding: 0;
+  }
+
+  .auth-modal {
+    width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .auth-form-panel {
+    padding: 44px 10px 16px;
+  }
+
+  .access-mode-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    position: static;
+  }
+
+  .access-selection-summary {
+    padding: 9px;
+    gap: 8px;
+  }
+
+  .form-row-between {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .modal-close {
+    top: 6px;
+    right: 6px;
   }
 }
