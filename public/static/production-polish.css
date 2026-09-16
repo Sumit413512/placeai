@@ -1,0 +1,64 @@
+/* Focused production UX corrections loaded after the core styles. */
+
+.access-selection-summary > div {
+  min-width: 0;
+}
+
+.access-selection-summary b,
+.access-selection-summary [data-access-summary-label] {
+  display: block;
+}
+
+.access-selection-summary > div > span,
+.access-selection-summary [data-access-summary-detail] {
+  display: block;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.access-role-card strong,
+.access-role-card span,
+.access-role-card em {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  #marketing-site .site-header.mobile-open {
+    height: auto;
+    min-height: 66px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding-bottom: 14px;
+    background: #fff;
+  }
+
+  #marketing-site .site-header.mobile-open .marketing-nav {
+    display: flex !important;
+    order: 4;
+    width: 100%;
+    margin-left: 0;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  #marketing-site .site-header.mobile-open .marketing-nav a {
+    display: block;
+    width: 100%;
+    padding: 10px 2px;
+  }
+
+  #marketing-site .site-header.mobile-open .header-actions {
+    display: flex !important;
+    order: 5;
+    width: 100%;
+    gap: 8px;
+    padding-top: 4px;
+  }
+
+  #marketing-site .site-header.mobile-open .header-actions .button {
+    flex: 1 1 0;
+  }
+}
