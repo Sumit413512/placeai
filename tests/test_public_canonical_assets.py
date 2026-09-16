@@ -79,9 +79,38 @@ def test_schemeless_vercel_public_app_override_is_also_rejected(monkeypatch):
     assert settings.base_url == "https://www.placeai.in"
 
 
+def test_explicit_vercel_canonical_override_is_rejected(monkeypatch):
+    _set_vercel_production(monkeypatch)
+    monkeypatch.setenv("PLACEAI_CANONICAL_PUBLIC_URL", "https://placeai-rxpp.vercel.app")
+
+    settings = Settings()
+
+    assert settings.base_url == "https://www.placeai.in"
+    assert "https://www.placeai.in" in settings.allowed_origins
+
+
+def test_schemeless_explicit_vercel_canonical_override_is_rejected(monkeypatch):
+    _set_vercel_production(monkeypatch)
+    monkeypatch.setenv("PLACEAI_CANONICAL_PUBLIC_URL", "placeai-rxpp.vercel.app")
+
+    settings = Settings()
+
+    assert settings.base_url == "https://www.placeai.in"
+
+
 def test_custom_public_app_override_remains_supported(monkeypatch):
     _set_vercel_production(monkeypatch)
     monkeypatch.setenv("PUBLIC_APP_URL", "https://campus.placeai.in")
+
+    settings = Settings()
+
+    assert settings.base_url == "https://campus.placeai.in"
+
+
+def test_explicit_custom_canonical_override_remains_supported(monkeypatch):
+    _set_vercel_production(monkeypatch)
+    monkeypatch.setenv("PLACEAI_CANONICAL_PUBLIC_URL", "https://campus.placeai.in")
+    monkeypatch.setenv("PUBLIC_APP_URL", "https://placeai-rxpp.vercel.app")
 
     settings = Settings()
 
