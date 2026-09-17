@@ -42,8 +42,14 @@
     const role = ROLE_SUMMARY[selected.dataset.accessRole];
     if (!role) return;
 
-    const label = summary.querySelector('[data-access-summary-label], b');
-    const detail = summary.querySelector('[data-access-summary-detail], div > span');
+    const dot = summary.querySelector(':scope > .access-role-dot');
+    const label = summary.querySelector('[data-access-summary-label]') || summary.querySelector(':scope > div > b');
+    const detail = summary.querySelector('[data-access-summary-short]') || summary.querySelector('[data-access-summary-detail]') || summary.querySelector(':scope > div > span');
+
+    if (dot) {
+      if (dot.textContent) dot.textContent = '';
+      dot.setAttribute('aria-hidden', 'true');
+    }
     if (label) {
       label.dataset.accessSummaryLabel = '';
       if (label.textContent !== role.label) label.textContent = role.label;
