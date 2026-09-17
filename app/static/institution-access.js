@@ -6,6 +6,7 @@
   const $ = (selector, root = document) => root.querySelector(selector);
   const esc = (value = '') => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
   const MANUAL_STATUSES = ['new', 'under_review', 'approved', 'rejected'];
+  const VIEW_ID = 'institution-access-requests';
   let customOpen = false;
   let rendering = false;
 
@@ -69,6 +70,7 @@
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.institutionAccessRequests = '';
+    button.dataset.view = VIEW_ID;
     button.innerHTML = `${navIcon()}<span class="nav-label">Access requests</span>`;
     button.setAttribute('aria-label', 'Access requests');
 
