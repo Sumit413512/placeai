@@ -293,11 +293,3 @@ def institution_applications(
         Application.student_id.in_(student_ids)
     ).order_by(Application.applied_at.desc()).limit(3000).all()
     return [application_out(application) for application in applications]
-
-
-# Register the isolated Institution Admin access-request extension as a child
-# of the canonical /institutions router. This keeps app bootstrap ownership
-# unchanged while making route registration deterministic.
-from app.routers import institution_access as _institution_access  # noqa: E402
-
-router.include_router(_institution_access.router)
