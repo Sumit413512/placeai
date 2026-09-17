@@ -13,7 +13,7 @@ from app.routers.auth import _utcnow
 from app.routers.institution_secure import _org
 from app.services import record_audit
 
-router = APIRouter(tags=["Institution / TPO"])
+router = APIRouter(prefix="/institutions", tags=["Institution / TPO"])
 
 
 def _institution_request_scope(query, org):
