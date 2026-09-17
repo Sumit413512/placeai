@@ -295,7 +295,9 @@ def institution_applications(
     return [application_out(application) for application in applications]
 
 
-# Load the access-request extension only after the canonical institution router
-# and helper functions above are fully defined. The extension decorates this
-# same router before app.app includes it, avoiding import-order side effects.
-from app.routers import institution_access as _institution_access  # noqa: E402,F401
+# Register the isolated Institution Admin access-request extension as a child
+# of the canonical /institutions router. This keeps app bootstrap ownership
+# unchanged while making route registration deterministic.
+from app.routers import institution_access as _institution_access  # noqa: E402
+
+router.include_router(_institution_access.router)
