@@ -42,7 +42,7 @@
     const parts = requestParts(input, init);
     const key = keyFor(parts);
 
-    if (parts.pathname === '/auth/refresh' || parts.url.pathname === '/auth/refresh') {
+    if (parts.url.pathname === '/auth/refresh') {
       if (refreshPromise) return (await refreshPromise).clone();
       refreshPromise = originalFetch(input, init)
         .then(response => response)
@@ -92,6 +92,22 @@
     container.dataset.allSkills = 'true';
   }
 
+  function loadHomepageEnhancements() {
+    if (!document.querySelector('link[data-placeai-homepage-enhancements]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = '/static/homepage-enhancements.css';
+      link.dataset.placeaiHomepageEnhancements = '';
+      document.head.appendChild(link);
+    }
+    if (document.querySelector('script[data-placeai-homepage-enhancements]')) return;
+    const script = document.createElement('script');
+    script.src = '/static/homepage-enhancements.js';
+    script.async = false;
+    script.dataset.placeaiHomepageEnhancements = '';
+    document.head.appendChild(script);
+  }
+
   function loadInstitutionAccessWorkspace() {
     if (document.querySelector('script[data-placeai-institution-access]')) return;
     const script = document.createElement('script');
@@ -104,5 +120,6 @@
   const observer = new MutationObserver(() => enhanceResumeSkills());
   observer.observe(document.documentElement, { childList: true, subtree: true });
   document.addEventListener('DOMContentLoaded', enhanceResumeSkills, { once: true });
+  loadHomepageEnhancements();
   loadInstitutionAccessWorkspace();
 })();

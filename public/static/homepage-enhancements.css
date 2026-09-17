@@ -1,0 +1,30 @@
+.placeai-prep-lab{padding-top:92px;padding-bottom:92px}
+.placeai-prep-shell{position:relative;overflow:hidden;border:1px solid #dce5f3;border-radius:28px;background:linear-gradient(135deg,#f7fbff 0%,#fff 48%,#eef6ff 100%);padding:44px;box-shadow:0 24px 70px rgba(7,31,69,.08)}
+.placeai-prep-shell:after{content:"";position:absolute;width:330px;height:330px;border-radius:50%;right:-130px;top:-150px;background:radial-gradient(circle,rgba(0,119,255,.18),rgba(0,119,255,0) 68%);pointer-events:none}
+.placeai-prep-intro{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(260px,.75fr);gap:34px;align-items:end;position:relative;z-index:1}
+.placeai-prep-kicker{display:inline-flex;align-items:center;gap:8px;color:#0877ff;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-bottom:12px}
+.placeai-prep-kicker:before{content:"";width:9px;height:9px;border-radius:3px;background:#0877ff}
+.placeai-prep-intro h2{margin:0;color:#071f45;font-family:Manrope,system-ui,sans-serif;font-size:clamp(30px,4vw,48px);line-height:1.08;letter-spacing:-.035em}
+.placeai-prep-intro p{margin:0;color:#5a687a;font-size:16px;line-height:1.7}
+.placeai-prep-modules{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:32px 0 22px;position:relative;z-index:1}
+.placeai-prep-module{background:#071f45;color:#fff;border-radius:18px;padding:20px;min-height:154px;display:flex;flex-direction:column;justify-content:space-between}
+.placeai-prep-module span{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#86c7ff}
+.placeai-prep-module strong{font-size:19px;line-height:1.25}
+.placeai-prep-module small{color:#c8d6e8;line-height:1.45}
+.placeai-role-paths{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;position:relative;z-index:1}
+.placeai-role-card{border:1px solid #d9e5f4;border-radius:20px;background:#fff;padding:24px;display:flex;flex-direction:column;min-height:305px}
+.placeai-role-card .role-tag{display:inline-flex;align-self:flex-start;padding:6px 10px;border-radius:999px;background:#eaf4ff;color:#076fdc;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.placeai-role-card h3{margin:18px 0 8px;color:#071f45;font-family:Manrope,system-ui,sans-serif;font-size:23px}
+.placeai-role-card p{margin:0 0 15px;color:#657386;line-height:1.55}
+.placeai-role-card ul{margin:0 0 22px;padding-left:18px;color:#39485a;display:grid;gap:7px;font-size:14px;line-height:1.4}
+.placeai-role-card button{margin-top:auto;align-self:flex-start}
+.placeai-prep-footnote{margin:18px 0 0;color:#68778a;font-size:13px;line-height:1.5;position:relative;z-index:1}
+.placeai-footer-connect{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto}
+.placeai-footer-connect a{display:inline-flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid #d6deeb;border-radius:10px;text-decoration:none;color:#263649;background:#fff;font-size:13px;font-weight:700;transition:.18s ease}
+.placeai-footer-connect a:hover,.placeai-footer-connect a:focus{border-color:#0877ff;color:#075fc2;transform:translateY(-1px)}
+.placeai-footer-connect svg{width:17px;height:17px;fill:currentColor;flex:0 0 auto}
+.site-footer.placeai-footer-upgraded{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding-top:28px;padding-bottom:28px}
+.site-footer.placeai-footer-upgraded>p{max-width:360px}
+.placeai-nav-prep{font-weight:700;color:#075fc2!important}
+@media(max-width:980px){.placeai-prep-intro{grid-template-columns:1fr}.placeai-prep-modules{grid-template-columns:repeat(2,minmax(0,1fr))}.placeai-role-paths{grid-template-columns:1fr}.placeai-role-card{min-height:0}.placeai-footer-connect{width:100%;margin-left:0}}
+@media(max-width:640px){.placeai-prep-lab{padding-top:58px;padding-bottom:58px}.placeai-prep-shell{padding:26px 18px;border-radius:22px}.placeai-prep-modules{grid-template-columns:1fr}.placeai-prep-module{min-height:128px}.placeai-footer-connect{display:grid;grid-template-columns:1fr}.placeai-footer-connect a{justify-content:center}.site-footer.placeai-footer-upgraded{align-items:flex-start}}
