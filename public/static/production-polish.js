@@ -90,18 +90,16 @@
     try { stored = sessionStorage.getItem(WORKSPACE_VIEW_KEY) || ''; } catch {}
 
     const stale = [requested, stored].filter(Boolean).find(view => !allowed.has(view));
-    if (!stale) return;
-
-    clearWorkspaceViewState();
     const content = document.querySelector('#app-content');
     const dashboard = nav.querySelector('button[data-view="dashboard"]');
     const active = nav.querySelector('button.active[data-view]');
     const activeValid = Boolean(active?.dataset.view && allowed.has(active.dataset.view));
     const loading = Boolean(content?.querySelector('.loading-state'));
+    const invalidActiveView = loading && !activeValid;
 
-    if (dashboard && (!activeValid || loading)) {
-      dashboard.click();
-    }
+    if (!stale && !invalidActiveView) return;
+    if (stale) clearWorkspaceViewState();
+    if (dashboard && invalidActiveView) dashboard.click();
   }
 
   function scheduleWorkspaceGuard() {
