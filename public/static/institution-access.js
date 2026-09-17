@@ -7,8 +7,10 @@
   const esc = (value = '') => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
   const MANUAL_STATUSES = ['new', 'under_review', 'approved', 'rejected'];
   const VIEW_ID = 'institution-access-requests';
+  const REQUEST_TIMEOUT_MS = 15000;
   let customOpen = false;
   let rendering = false;
+  let renderGeneration = 0;
 
   function institutionAdminVisible() {
     const shell = $('#app-shell');
@@ -26,31 +28,33 @@
     setTimeout(() => node.remove(), 3800);
   }
 
-  async function accessToken() {
-    const response = await fetch('/auth/refresh', {
-      method: 'POST',
-      credentials: 'include',
-      headers: {'Content-Type': 'application/json'},
-      body: '{}',
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.access_token) {
-      throw new Error(payload.detail || 'Your Institution Admin session expired. Sign in again.');
-    }
-    return payload.access_token;
-  }
-
   async function requestJson(path, options = {}) {
-    const token = await accessToken();
-    const headers = new Headers(options.headers || {});
-    headers.set('Authorization', `Bearer ${token}`);
-    if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
-      headers.set('Content-Type', 'application/json');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const headers = new Headers(options.headers || {});
+      if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json');
+      }
+      // Do not create a separate token path here. PlaceAI's shared session fetch layer
+      // attaches the in-memory token and performs one refresh/retry on 401.
+      const response = await fetch(path, {...options, headers, credentials: 'include', signal: controller.signal});
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = payload.detail || (response.status === 401
+          ? 'Your Institution Admin session expired. Sign in again.'
+          : response.status === 403
+            ? 'This Institution Admin account is not linked to an active institution.'
+            : `Request failed (${response.status}).`);
+        throw new Error(message);
+      }
+      return payload;
+    } catch (error) {
+      if (error?.name === 'AbortError') throw new Error('Access requests took too long to load. Please try again.');
+      throw error;
+    } finally {
+      clearTimeout(timeout);
     }
-    const response = await fetch(path, {...options, headers, credentials: 'include'});
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.detail || 'Request failed.');
-    return payload;
   }
 
   function navIcon() {
@@ -60,40 +64,47 @@
   function ensureNavigation() {
     if (!institutionAdminVisible()) return;
     const nav = $('#app-nav');
-    if (!nav || nav.querySelector('[data-institution-access-requests]')) return;
+    if (!nav) return;
+    let button = nav.querySelector(`[data-view="${VIEW_ID}"]`);
+    if (!button) {
+      const group = document.createElement('div');
+      group.className = 'nav-group-label';
+      group.dataset.institutionAccessGroup = '';
+      group.textContent = 'Access';
 
-    const group = document.createElement('div');
-    group.className = 'nav-group-label';
-    group.dataset.institutionAccessGroup = '';
-    group.textContent = 'Access';
+      button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.institutionAccessRequests = '';
+      button.dataset.view = VIEW_ID;
+      button.innerHTML = `${navIcon()}<span class="nav-label">Access requests</span>`;
+      button.setAttribute('aria-label', 'Access requests');
 
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.dataset.institutionAccessRequests = '';
-    button.dataset.view = VIEW_ID;
-    button.innerHTML = `${navIcon()}<span class="nav-label">Access requests</span>`;
-    button.setAttribute('aria-label', 'Access requests');
-
-    const trustGroup = [...nav.querySelectorAll('.nav-group-label')]
-      .find(node => (node.textContent || '').trim().toLowerCase() === 'trust');
-    if (trustGroup) {
-      nav.insertBefore(group, trustGroup);
-      nav.insertBefore(button, trustGroup);
-    } else {
-      nav.append(group, button);
+      const trustGroup = [...nav.querySelectorAll('.nav-group-label')]
+        .find(node => (node.textContent || '').trim().toLowerCase() === 'trust');
+      if (trustGroup) {
+        nav.insertBefore(group, trustGroup);
+        nav.insertBefore(button, trustGroup);
+      } else {
+        nav.append(group, button);
+      }
+    } else if (!button.hasAttribute('data-institution-access-requests')) {
+      button.dataset.institutionAccessRequests = '';
     }
     if (customOpen) markActive(button);
   }
 
-  function markActive(button = $('[data-institution-access-requests]')) {
+  function markActive(button = $(`[data-view="${VIEW_ID}"]`)) {
     const nav = $('#app-nav');
-    nav?.querySelectorAll('button.active').forEach(item => item.classList.remove('active'));
+    nav?.querySelectorAll('button.active').forEach(item => {
+      item.classList.remove('active');
+      item.removeAttribute('aria-current');
+    });
     button?.classList.add('active');
     button?.setAttribute('aria-current', 'page');
   }
 
   function clearCustomActive() {
-    const button = $('[data-institution-access-requests]');
+    const button = $(`[data-view="${VIEW_ID}"]`);
     button?.classList.remove('active');
     button?.removeAttribute('aria-current');
   }
@@ -121,6 +132,7 @@
 
   async function renderAccessRequests() {
     if (!institutionAdminVisible() || rendering) return;
+    const generation = ++renderGeneration;
     rendering = true;
     customOpen = true;
     ensureNavigation();
@@ -137,15 +149,17 @@
 
     try {
       const rows = await requestJson('/institutions/access-requests');
-      if (!customOpen || !content) return;
-      content.innerHTML = `<div class="page-head"><div><h1>Recruiter access requests</h1><p>Review recruiter workspace requests linked only to your institution. Platform and Institution Admin requests remain under Platform Admin control.</p></div></div>${renderRows(rows)}`;
+      if (generation !== renderGeneration || !customOpen || !content) return;
+      content.innerHTML = `<div class="page-head"><div><h1>Recruiter access requests</h1><p>Review recruiter workspace requests linked only to your institution. Platform and Institution Admin requests remain under Platform Admin control.</p></div></div>${renderRows(Array.isArray(rows) ? rows : [])}`;
       markActive();
     } catch (error) {
-      if (content && customOpen) {
-        content.innerHTML = `<div class="page-head"><div><h1>Access requests</h1><p>${esc(error.message || 'Unable to load this view.')}</p></div></div><div class="empty-state"><div class="empty-icon">!</div><h3>Unable to load access requests</h3><p>${esc(error.message || 'Try again.')}</p><button class="button button-secondary" type="button" data-institution-access-retry>Try again</button></div>`;
+      if (generation === renderGeneration && content && customOpen) {
+        const message = error?.message || 'Unable to load this view.';
+        content.innerHTML = `<div class="page-head"><div><h1>Access requests</h1><p>${esc(message)}</p></div></div><div class="empty-state"><div class="empty-icon">!</div><h3>Unable to load access requests</h3><p>${esc(message)}</p><button class="button button-secondary" type="button" data-institution-access-retry>Try again</button></div>`;
+        markActive();
       }
     } finally {
-      rendering = false;
+      if (generation === renderGeneration) rendering = false;
     }
   }
 
@@ -177,8 +191,8 @@
     observer.observe(document.documentElement, {childList:true, subtree:true, attributes:true, attributeFilter:['class']});
 
     document.addEventListener('click', event => {
-      const custom = event.target.closest?.('[data-institution-access-requests]');
-      if (custom) {
+      const custom = event.target.closest?.(`[data-view="${VIEW_ID}"]`);
+      if (custom && institutionAdminVisible()) {
         event.preventDefault();
         event.stopImmediatePropagation();
         renderAccessRequests();
@@ -186,11 +200,15 @@
       }
       if (event.target.closest?.('[data-institution-access-retry]')) {
         event.preventDefault();
+        rendering = false;
         renderAccessRequests();
         return;
       }
-      if (event.target.closest?.('#app-nav button[data-view]')) {
+      const standard = event.target.closest?.('#app-nav button[data-view]');
+      if (standard && standard.dataset.view !== VIEW_ID) {
         customOpen = false;
+        renderGeneration += 1;
+        rendering = false;
         clearCustomActive();
       }
     }, true);
