@@ -16,6 +16,7 @@ class AccessRequest(Base):
     full_name = Column(String(200), nullable=False)
     work_email = Column(String(320), nullable=False, index=True)
     organization_name = Column(String(250), nullable=True)
+    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
     phone = Column(String(40), nullable=True)
     message = Column(Text, nullable=True)
     status = Column(String(40), nullable=False, default="new", index=True)
