@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.access_models import AccessRequest
+from app.access_request_guards import ensure_manual_access_status
 from app.database import get_db
 from app.dependencies import require_institution_admin
 from app.models import (
@@ -22,6 +26,7 @@ from app.models import (
     UserRole,
 )
 from app.placement_access import deadline_has_passed, job_is_available
+from app.routers.access import _access_request_payload, _deliver_access_status
 from app.schemas import (
     ApplicationOut,
     InstitutionDashboardOut,
@@ -36,6 +41,11 @@ from app.services import application_out, create_notification, drive_out, job_ou
 router = APIRouter(prefix="/institutions", tags=["Institution / TPO"])
 
 
+class InstitutionAccessRequestReview(BaseModel):
+    status: Literal["new", "under_review", "approved", "rejected"]
+    review_note: str | None = Field(default=None, max_length=3000)
+
+
 def _org(current_user: User, db: Session) -> Organization:
     org = db.query(Organization).filter(
         Organization.id == current_user.organization_id,
@@ -44,6 +54,22 @@ def _org(current_user: User, db: Session) -> Organization:
     if not org:
         raise HTTPException(status_code=403, detail="Your account is not linked to an active institution")
     return org
+
+
+def _institution_access_aliases(org: Organization) -> list[str]:
+    return sorted({
+        str(value).strip().lower()
+        for value in (org.name, org.slug, org.domain)
+        if value and str(value).strip()
+    })
+
+
+def _institution_access_query(org: Organization, db: Session):
+    aliases = _institution_access_aliases(org)
+    return db.query(AccessRequest).filter(
+        AccessRequest.requested_role == "recruiter",
+        func.lower(func.trim(AccessRequest.organization_name)).in_(aliases),
+    )
 
 
 def _campus_job_for_org(job_id: str, org: Organization, db: Session) -> Job:
@@ -108,6 +134,79 @@ def dashboard(current_user: User = Depends(require_institution_admin), db: Sessi
         hires=len(hired_student_ids),
         placement_rate=round(len(hired_student_ids) / eligible_base * 100, 1),
     )
+
+
+@router.get("/access-requests")
+def institution_access_requests(
+    current_user: User = Depends(require_institution_admin),
+    db: Session = Depends(get_db),
+):
+    org = _org(current_user, db)
+    rows = _institution_access_query(org, db).order_by(AccessRequest.created_at.desc()).limit(500).all()
+    return [
+        {
+            "id": row.id,
+            "requested_role": row.requested_role,
+            "full_name": row.full_name,
+            "work_email": row.work_email,
+            "organization_name": row.organization_name,
+            "phone": row.phone,
+            "message": row.message,
+            "status": row.status,
+            "review_note": row.review_note,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
+        for row in rows
+    ]
+
+
+@router.patch("/access-requests/{request_id}")
+def review_institution_access_request(
+    request_id: str,
+    body: InstitutionAccessRequestReview,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(require_institution_admin),
+    db: Session = Depends(get_db),
+):
+    org = _org(current_user, db)
+    item = _institution_access_query(org, db).filter(AccessRequest.id == request_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Access request not found for this institution")
+
+    next_status = ensure_manual_access_status(body.status)
+    if next_status == "provisioned":
+        raise HTTPException(status_code=422, detail="Provisioning must be completed from Recruiters")
+
+    previous_status = item.status
+    previous_note = item.review_note
+    item.status = next_status
+    item.review_note = (body.review_note or "").strip() or None
+    item.reviewed_by_user_id = current_user.id
+    item.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    if item.status != previous_status or item.review_note != previous_note:
+        record_audit(
+            db,
+            current_user,
+            "institution.access_request.reviewed",
+            organization_id=org.id,
+            entity_type="access_request",
+            entity_id=item.id,
+            metadata={"previous_status": previous_status, "status": item.status},
+        )
+    db.commit()
+    db.refresh(item)
+
+    if item.status != previous_status:
+        background_tasks.add_task(_deliver_access_status, _access_request_payload(item))
+
+    return {
+        "id": item.id,
+        "status": item.status,
+        "review_note": item.review_note,
+        "updated_at": item.updated_at,
+    }
 
 
 @router.patch("/jobs/{job_id}/approval", response_model=JobOut)
