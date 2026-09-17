@@ -293,8 +293,3 @@ def institution_applications(
         Application.student_id.in_(student_ids)
     ).order_by(Application.applied_at.desc()).limit(3000).all()
     return [application_out(application) for application in applications]
-
-
-from app.routers.institution_access import router as institution_access_router  # noqa: E402
-
-router.include_router(institution_access_router)
