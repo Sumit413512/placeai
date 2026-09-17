@@ -12,10 +12,20 @@ def test_production_polish_recovers_stale_cross_role_workspace_views() -> None:
     assert "function repairInvalidWorkspaceView()" in app_js
     assert "const allowed = new Set(buttons.map(button => button.dataset.view).filter(Boolean));" in app_js
     assert "const stale = [requested, stored].filter(Boolean).find(view => !allowed.has(view));" in app_js
+    assert "if (stale) clearWorkspaceViewState();" in app_js
     assert "sessionStorage.removeItem(WORKSPACE_VIEW_KEY)" in app_js
     assert "url.searchParams.delete('view')" in app_js
     assert "button[data-view=\"dashboard\"]" in app_js
     assert "dashboard.click();" in app_js
+
+
+def test_workspace_guard_recovers_unsupported_loading_view_without_persisted_state() -> None:
+    app_js = (ROOT / "app/static/production-polish.js").read_text(encoding="utf-8")
+
+    assert "const activeValid = Boolean(active?.dataset.view && allowed.has(active.dataset.view));" in app_js
+    assert "const loading = Boolean(content?.querySelector('.loading-state'));" in app_js
+    assert "const unsupportedLoadingView = loading && !activeValid;" in app_js
+    assert "if (!stale && !unsupportedLoadingView) return;" in app_js
 
 
 def test_institution_admin_does_not_expose_platform_access_requests_view() -> None:
