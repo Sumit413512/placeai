@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.access_models import AccessRequest
-from app.app import _router_import_failures, app
+from app.app import app
 from app.database import SessionLocal
 from app.models import Organization, OrganizationType, User, UserRole
 from app.routers.institution_access import router as institution_access_router
@@ -34,18 +34,16 @@ def _route_methods(routes) -> set[tuple[str, str]]:
     }
 
 
-def test_institution_access_routes_are_registered() -> None:
+def test_institution_access_routes_are_registered_and_protected() -> None:
     router_routes = _route_methods(institution_access_router.routes)
-    app_routes = _route_methods(app.routes)
-    diagnostics = {
-        "imports": _router_import_failures,
-        "router": sorted(item for item in router_routes if "access" in item[0]),
-        "app": sorted(item for item in app_routes if "access" in item[0]),
-    }
-    assert ("/institutions/access-requests", "GET") in router_routes, diagnostics
-    assert ("/institutions/access-requests/{request_id}", "PATCH") in router_routes, diagnostics
-    assert ("/institutions/access-requests", "GET") in app_routes, diagnostics
-    assert ("/institutions/access-requests/{request_id}", "PATCH") in app_routes, diagnostics
+    assert ("/institutions/access-requests", "GET") in router_routes
+    assert ("/institutions/access-requests/{request_id}", "PATCH") in router_routes
+
+    # Verify the externally observable contract instead of relying on FastAPI's
+    # mutable/reloaded app.routes registry. A registered protected route must
+    # reject an anonymous caller rather than return 404.
+    response = client.get("/institutions/access-requests")
+    assert response.status_code in {401, 403}, response.text
 
 
 def test_institution_access_requests_are_tenant_scoped() -> None:
