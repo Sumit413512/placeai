@@ -293,3 +293,9 @@ def institution_applications(
         Application.student_id.in_(student_ids)
     ).order_by(Application.applied_at.desc()).limit(3000).all()
     return [application_out(application) for application in applications]
+
+
+# Load the access-request extension only after the canonical institution router
+# and helper functions above are fully defined. The extension decorates this
+# same router before app.app includes it, avoiding import-order side effects.
+from app.routers import institution_access as _institution_access  # noqa: E402,F401
