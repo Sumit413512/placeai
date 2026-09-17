@@ -10,6 +10,7 @@
     platform_admin: {label: 'Platform Admin', detail: 'Platform control'},
   };
   const WORKSPACE_VIEW_KEY = 'placeai.workspace.view.v1';
+  const INSTITUTION_ACCESS_VIEW = 'institution-access-requests';
   let workspaceGuardScheduled = false;
 
   function ensureStyles() {
@@ -83,6 +84,9 @@
     const buttons = [...nav.querySelectorAll('button[data-view]')];
     if (!buttons.length) return;
     const allowed = new Set(buttons.map(button => button.dataset.view).filter(Boolean));
+    const role = (document.querySelector('#sidebar-user-role')?.textContent || '')
+      .trim().toLowerCase().replaceAll('_', ' ');
+    if (role === 'institution admin') allowed.add(INSTITUTION_ACCESS_VIEW);
 
     let requested = '';
     try { requested = new URL(location.href).searchParams.get('view') || ''; } catch {}
