@@ -1,6 +1,6 @@
-/* Official PlaceAI identity — source artwork supplied by the product owner. */
+/* Official PlaceAI identity — product-owner supplied horizontal artwork. */
 .brand{
-  min-height:72px;
+  min-height:56px;
   display:inline-flex;
   align-items:center;
   gap:0!important;
@@ -10,12 +10,12 @@
 .brand .brand-mark{
   display:block!important;
   flex:0 0 auto;
-  width:94px!important;
-  height:86px!important;
+  width:154px!important;
+  height:54px!important;
   padding:0!important;
   border:0!important;
-  border-radius:10px!important;
-  background:#fff url("./placeai-logo.svg") center/contain no-repeat!important;
+  border-radius:0!important;
+  background:transparent url("/static/placeai-logo.webp") center/contain no-repeat!important;
   box-shadow:none!important;
   overflow:hidden;
 }
@@ -41,47 +41,49 @@
   color:inherit;
 }
 .brand-light .brand-mark{
-  background:#fff url("./placeai-logo.svg") center/contain no-repeat!important;
-  box-shadow:0 0 0 1px rgba(255,255,255,.08)!important;
+  background:transparent url("/static/placeai-logo.webp") center/contain no-repeat!important;
+  box-shadow:none!important;
 }
 .site-header{
-  min-height:88px;
+  min-height:78px;
   height:auto!important;
 }
 .site-footer{
-  min-height:116px;
+  min-height:112px;
   height:auto!important;
 }
 .sidebar-brand{
-  min-height:92px;
+  min-height:76px;
   padding-top:2px!important;
 }
 .sidebar-brand .brand{
-  min-height:82px;
+  min-height:60px;
 }
 .sidebar-brand .brand-mark{
-  width:92px!important;
-  height:84px!important;
+  width:150px!important;
+  height:52px!important;
 }
 .auth-brand-panel > .brand,
 .auth-brand-panel .brand:first-child{
   align-self:flex-start;
-  min-height:110px;
+  min-height:74px;
   position:relative;
   z-index:2;
 }
 .auth-brand-panel .brand-mark{
-  width:118px!important;
-  height:110px!important;
+  width:186px!important;
+  height:64px!important;
 }
 .topbar .brand-mark{
-  width:88px!important;
-  height:80px!important;
+  width:148px!important;
+  height:52px!important;
 }
 @media (max-width:760px){
-  .brand{min-height:64px}
-  .site-header{min-height:76px}
-  .site-header .brand-mark{width:78px!important;height:72px!important}
-  .site-footer .brand-mark{width:88px!important;height:80px!important}
-  .topbar .brand-mark{width:78px!important;height:72px!important}
+  .brand{min-height:50px}
+  .site-header{min-height:70px}
+  .site-header .brand-mark{width:138px!important;height:48px!important}
+  .site-footer .brand-mark{width:146px!important;height:51px!important}
+  .sidebar-brand .brand-mark{width:136px!important;height:48px!important}
+  .auth-brand-panel .brand-mark{width:156px!important;height:54px!important}
+  .topbar .brand-mark{width:132px!important;height:46px!important}
 }

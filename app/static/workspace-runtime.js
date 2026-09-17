@@ -42,7 +42,7 @@
     const parts = requestParts(input, init);
     const key = keyFor(parts);
 
-    if (parts.pathname === '/auth/refresh' || parts.url.pathname === '/auth/refresh') {
+    if (parts.url.pathname === '/auth/refresh') {
       if (refreshPromise) return (await refreshPromise).clone();
       refreshPromise = originalFetch(input, init)
         .then(response => response)
@@ -92,17 +92,26 @@
     container.dataset.allSkills = 'true';
   }
 
-  function loadInstitutionAccessWorkspace() {
-    if (document.querySelector('script[data-placeai-institution-access]')) return;
+  function loadScriptOnce(src, datasetKey) {
+    if ([...document.scripts].some(script => script.src === new URL(src, document.baseURI).href)) return;
     const script = document.createElement('script');
-    script.src = '/static/institution-access.js';
+    script.src = src;
     script.async = false;
-    script.dataset.placeaiInstitutionAccess = '';
+    script.dataset[datasetKey] = '';
     document.head.appendChild(script);
+  }
+
+  function loadInstitutionAccessWorkspace() {
+    loadScriptOnce('/static/institution-access.js', 'placeaiInstitutionAccess');
+  }
+
+  function loadSiteRefresh() {
+    loadScriptOnce('/static/site-refresh.js', 'placeaiSiteRefresh');
   }
 
   const observer = new MutationObserver(() => enhanceResumeSkills());
   observer.observe(document.documentElement, { childList: true, subtree: true });
   document.addEventListener('DOMContentLoaded', enhanceResumeSkills, { once: true });
   loadInstitutionAccessWorkspace();
+  loadSiteRefresh();
 })();

@@ -11,10 +11,13 @@ def _read(path: str) -> str:
 def test_official_brand_assets_are_local_and_script_free():
     logo = _read("app/static/placeai-logo.svg")
     icon = _read("app/static/placeai-icon.svg")
+    supplied = (ROOT / "app/static/placeai-logo.webp").read_bytes()
 
     assert "PlaceAI — Skills to Opportunities" in logo
     assert "data:image/webp;base64," in logo
     assert "data:image/webp;base64," in icon
+    assert supplied[:4] == b"RIFF"
+    assert supplied[8:12] == b"WEBP"
     assert "<script" not in logo.lower()
     assert "<script" not in icon.lower()
     assert "javascript:" not in logo.lower()
@@ -37,7 +40,8 @@ def test_every_public_html_surface_loads_the_official_brand_assets():
 def test_brand_override_uses_supplied_lockup_and_keeps_accessible_name():
     css = _read("app/static/brand.css")
 
-    assert 'url("./placeai-logo.svg")' in css
+    assert 'url("/static/placeai-logo.webp")' in css
+    assert "placeai-logo.svg" not in css
     assert ".brand .brand-mark span" in css
     assert ".brand .brand-mark i" in css
     assert ".brand > span:last-child" in css
