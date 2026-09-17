@@ -90,15 +90,16 @@
     try { stored = sessionStorage.getItem(WORKSPACE_VIEW_KEY) || ''; } catch {}
 
     const stale = [requested, stored].filter(Boolean).find(view => !allowed.has(view));
-    if (!stale) return;
+    if (stale) clearWorkspaceViewState();
 
-    clearWorkspaceViewState();
     const content = document.querySelector('#app-content');
     const dashboard = nav.querySelector('button[data-view="dashboard"]');
     const active = nav.querySelector('button.active[data-view]');
     const activeValid = Boolean(active?.dataset.view && allowed.has(active.dataset.view));
     const loading = Boolean(content?.querySelector('.loading-state'));
+    const unsupportedLoadingView = loading && !activeValid;
 
+    if (!stale && !unsupportedLoadingView) return;
     if (dashboard && (!activeValid || loading)) {
       dashboard.click();
     }
