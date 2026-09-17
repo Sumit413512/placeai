@@ -9,6 +9,8 @@
     institution_admin: {label: 'Institution Admin', detail: 'Placement office'},
     platform_admin: {label: 'Platform Admin', detail: 'Platform control'},
   };
+  const WORKSPACE_VIEW_KEY = 'placeai.workspace.view.v1';
+  let workspaceGuardScheduled = false;
 
   function ensureStyles() {
     if (document.querySelector('link[data-placeai-production-polish]')) return;
@@ -61,6 +63,53 @@
     summary.setAttribute('aria-live', 'polite');
   }
 
+  function clearWorkspaceViewState() {
+    try { sessionStorage.removeItem(WORKSPACE_VIEW_KEY); } catch {}
+    try {
+      const url = new URL(location.href);
+      if (url.searchParams.has('view')) {
+        url.searchParams.delete('view');
+        history.replaceState(history.state || {}, '', `${url.pathname}${url.search}${url.hash}`);
+      }
+    } catch {}
+  }
+
+  function repairInvalidWorkspaceView() {
+    workspaceGuardScheduled = false;
+    const shell = document.querySelector('#app-shell');
+    const nav = document.querySelector('#app-nav');
+    if (!shell || shell.classList.contains('hidden') || !nav) return;
+
+    const buttons = [...nav.querySelectorAll('button[data-view]')];
+    if (!buttons.length) return;
+    const allowed = new Set(buttons.map(button => button.dataset.view).filter(Boolean));
+
+    let requested = '';
+    try { requested = new URL(location.href).searchParams.get('view') || ''; } catch {}
+    let stored = '';
+    try { stored = sessionStorage.getItem(WORKSPACE_VIEW_KEY) || ''; } catch {}
+
+    const stale = [requested, stored].filter(Boolean).find(view => !allowed.has(view));
+    if (!stale) return;
+
+    clearWorkspaceViewState();
+    const content = document.querySelector('#app-content');
+    const dashboard = nav.querySelector('button[data-view="dashboard"]');
+    const active = nav.querySelector('button.active[data-view]');
+    const activeValid = Boolean(active?.dataset.view && allowed.has(active.dataset.view));
+    const loading = Boolean(content?.querySelector('.loading-state'));
+
+    if (dashboard && (!activeValid || loading)) {
+      dashboard.click();
+    }
+  }
+
+  function scheduleWorkspaceGuard() {
+    if (workspaceGuardScheduled) return;
+    workspaceGuardScheduled = true;
+    requestAnimationFrame(repairInvalidWorkspaceView);
+  }
+
   function scheduleSummarySync() {
     requestAnimationFrame(syncLoginRoleSummary);
   }
@@ -69,6 +118,7 @@
     ensureStyles();
     setMobileNavigation(false);
     scheduleSummarySync();
+    scheduleWorkspaceGuard();
 
     const loginView = document.querySelector('#login-view');
     if (loginView) {
@@ -80,6 +130,14 @@
         attributeFilter: ['class', 'aria-selected'],
       });
     }
+
+    const nav = document.querySelector('#app-nav');
+    const shell = document.querySelector('#app-shell');
+    const content = document.querySelector('#app-content');
+    const workspaceObserver = new MutationObserver(scheduleWorkspaceGuard);
+    if (nav) workspaceObserver.observe(nav, {childList: true, subtree: true, attributes: true, attributeFilter: ['class']});
+    if (shell) workspaceObserver.observe(shell, {attributes: true, attributeFilter: ['class']});
+    if (content) workspaceObserver.observe(content, {childList: true, subtree: true});
 
     document.addEventListener('click', event => {
       const mobileToggle = event.target.closest?.('.mobile-menu[data-action="toggle-mobile-menu"]');
@@ -97,6 +155,10 @@
 
       if (event.target.closest?.('[data-access-role-mode="login"]')) {
         scheduleSummarySync();
+      }
+
+      if (event.target.closest?.('#app-nav button[data-view]')) {
+        scheduleWorkspaceGuard();
       }
     }, true);
 
