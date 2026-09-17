@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.access_models import AccessRequest
-from app.app import app
+from app.app import _router_import_failures, app
 from app.database import SessionLocal
 from app.models import Organization, OrganizationType, User, UserRole
 from app.utils import get_hashed_password
@@ -31,8 +31,8 @@ def test_institution_access_routes_are_registered() -> None:
         for route in app.routes
         for method in (getattr(route, "methods", None) or set())
     }
-    assert ("/institutions/access-requests", "GET") in route_methods
-    assert ("/institutions/access-requests/{request_id}", "PATCH") in route_methods
+    assert ("/institutions/access-requests", "GET") in route_methods, _router_import_failures
+    assert ("/institutions/access-requests/{request_id}", "PATCH") in route_methods, _router_import_failures
 
 
 def test_institution_access_requests_are_tenant_scoped() -> None:
