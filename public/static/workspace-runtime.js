@@ -92,7 +92,17 @@
     container.dataset.allSkills = 'true';
   }
 
+  function loadInstitutionAccessWorkspace() {
+    if (document.querySelector('script[data-placeai-institution-access]')) return;
+    const script = document.createElement('script');
+    script.src = '/static/institution-access.js';
+    script.async = false;
+    script.dataset.placeaiInstitutionAccess = '';
+    document.head.appendChild(script);
+  }
+
   const observer = new MutationObserver(() => enhanceResumeSkills());
   observer.observe(document.documentElement, { childList: true, subtree: true });
   document.addEventListener('DOMContentLoaded', enhanceResumeSkills, { once: true });
+  loadInstitutionAccessWorkspace();
 })();
