@@ -10,7 +10,6 @@ from app.app import _router_import_failures, app
 from app.database import SessionLocal
 from app.models import Organization, OrganizationType, User, UserRole
 from app.routers.institution_access import router as institution_access_router
-from app.routers.institution_secure import router as institution_secure_router
 from app.utils import get_hashed_password
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,17 +35,15 @@ def _route_methods(routes) -> set[tuple[str, str]]:
 
 
 def test_institution_access_routes_are_registered() -> None:
-    child_routes = _route_methods(institution_access_router.routes)
-    parent_routes = _route_methods(institution_secure_router.routes)
+    router_routes = _route_methods(institution_access_router.routes)
     app_routes = _route_methods(app.routes)
     diagnostics = {
         "imports": _router_import_failures,
-        "child": sorted(item for item in child_routes if "access" in item[0]),
-        "parent": sorted(item for item in parent_routes if "access" in item[0]),
+        "router": sorted(item for item in router_routes if "access" in item[0]),
         "app": sorted(item for item in app_routes if "access" in item[0]),
     }
-    assert ("/access-requests", "GET") in child_routes, diagnostics
-    assert ("/institutions/access-requests", "GET") in parent_routes, diagnostics
+    assert ("/institutions/access-requests", "GET") in router_routes, diagnostics
+    assert ("/institutions/access-requests/{request_id}", "PATCH") in router_routes, diagnostics
     assert ("/institutions/access-requests", "GET") in app_routes, diagnostics
     assert ("/institutions/access-requests/{request_id}", "PATCH") in app_routes, diagnostics
 
