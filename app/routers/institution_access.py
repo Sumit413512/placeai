@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
@@ -10,8 +10,10 @@ from app.database import get_db
 from app.dependencies import require_institution_admin
 from app.models import User
 from app.routers.auth import _utcnow
-from app.routers.institution_secure import _org, router
+from app.routers.institution_secure import _org
 from app.services import record_audit
+
+router = APIRouter(prefix="/institutions", tags=["Institution / TPO"])
 
 
 def _institution_request_scope(query, org):
@@ -73,11 +75,9 @@ def institution_access_requests(
 def review_institution_access_request(
     request_id: str,
     body: dict,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_institution_admin),
     db: Session = Depends(get_db),
 ):
-    del background_tasks
     org = _org(current_user, db)
     item = _institution_request_scope(
         db.query(AccessRequest).filter(AccessRequest.id == request_id),
