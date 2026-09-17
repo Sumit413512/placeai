@@ -13,7 +13,7 @@ from app.dependencies import require_institution_admin
 from app.models import Organization, User
 from app.services import record_audit
 
-router = APIRouter(prefix="/institutions", tags=["Institution / TPO"])
+router = APIRouter(tags=["Institution / TPO"])
 
 
 def _organization_for_admin(current_user: User, db: Session) -> Organization:
