@@ -20,10 +20,9 @@ def test_production_polish_recovers_stale_cross_role_workspace_views() -> None:
 
 def test_institution_admin_does_not_expose_platform_access_requests_view() -> None:
     core = (ROOT / "app/static/app.js").read_text(encoding="utf-8")
-    institution_nav = core.split("institution_admin: [", 1)[1].split("],\n    platform_admin:", 1)[0]
-    platform_nav = core.split("platform_admin: [", 1)[1].split("]", 1)[0]
+    institution_nav = core.split("institution_admin: [", 1)[1].split("platform_admin: [", 1)[0]
 
     assert "'leads','Access requests'" not in institution_nav
-    assert "'leads','Access requests'" in platform_nav
+    assert "['Access','leads','Access requests']" in core
     assert "async function renderInstitution(view)" in core
     assert "async function renderPlatform(view)" in core
