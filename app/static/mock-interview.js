@@ -80,7 +80,18 @@
     state.session = data;
     $('#interview-title').textContent = `${data.job_title} mock interview`;
     const avoided = Number(data.previous_questions_avoided || 0);
-    $('#interview-context').textContent = `${data.company_name || 'Opportunity'} · ${data.focus} · ${data.difficulty || 'mixed'} difficulty · ${data.questions.length} fresh questions${avoided ? ` · avoided ${avoided} prior questions` : ''}`;
+    const mode = data.generation_mode === 'ai'
+      ? `Live AI${data.model ? ` · ${data.model}` : ''}`
+      : data.generation_mode === 'ai_plus_fallback'
+        ? 'Live AI + resilient grounding'
+        : 'Resilient role-grounded practice';
+    const latency = Number(data.generation_ms || 0);
+    $('#interview-context').textContent = `${data.company_name || 'Opportunity'} · ${data.focus} · ${data.difficulty || 'mixed'} difficulty · ${data.questions.length} fresh questions · ${mode}${latency ? ` · ${(latency / 1000).toFixed(1)}s` : ''}${avoided ? ` · avoided ${avoided} prior questions` : ''}`;
+    if (data.generation_mode === 'resilient_fallback') {
+      toast('Live AI was temporarily unavailable. PlaceAI generated a role-grounded practice set so your session can continue.');
+    } else if (data.generation_mode === 'ai_plus_fallback') {
+      toast('PlaceAI completed the AI set with grounded fallback questions for reliability.');
+    }
     $('#question-list').innerHTML = data.questions.map((q, index) => `<article class="question-card"><div class="question-meta"><span class="question-number">${index + 1}</span><span class="category">${esc(q.category || 'interview')}</span><span class="category">${esc(q.difficulty || 'medium')}</span></div><h3>${esc(q.question)}</h3><label>Your answer<textarea name="answer-${q.question_id}" data-question-id="${q.question_id}" required maxlength="8000" placeholder="Answer as you would in the interview. Use concrete examples and explain your reasoning."></textarea></label></article>`).join('');
     $('#setup-panel').classList.add('hidden');
     $('#result-panel').classList.add('hidden');
@@ -167,11 +178,12 @@
         authState.textContent = 'Mock Interview Coach is available to student accounts only.';
         return;
       }
-      if (!(await aiReady())) {
-        authState.textContent = 'Mock Interview Coach is temporarily unavailable because the AI provider is not configured. Core PlaceAI placement workflows remain available.';
-        return;
+      const liveAIReady = await aiReady();
+      if (liveAIReady) {
+        authState.classList.add('hidden');
+      } else {
+        authState.textContent = "Live AI is temporarily degraded. The Mock Interview Coach remains available and will automatically use PlaceAI's role-grounded resilient practice mode if needed.";
       }
-      authState.classList.add('hidden');
       $('#setup-panel').classList.remove('hidden');
       await Promise.all([loadJobs(), loadHistory()]);
     } catch (error) {
