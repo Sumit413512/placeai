@@ -150,14 +150,31 @@ def _call_openai(
     raise RuntimeError("OpenAI request did not complete")
 
 
-def _call_gemini(api_key: str, prompt: str, *, retry_count: int = 1) -> str:
+def _call_gemini(
+    api_key: str,
+    prompt: str,
+    *,
+    retry_count: int = 1,
+    timeout_seconds: float | None = None,
+) -> str:
     if genai is None:
         raise RuntimeError("Gemini SDK unavailable")
     last_error: Exception | None = None
     retries = max(0, min(int(retry_count), 2))
+    timeout = float(
+        timeout_seconds
+        if timeout_seconds is not None
+        else getattr(settings, "ai_request_timeout_seconds", 45) or 45
+    )
+    timeout_ms = int(max(5.0, min(timeout, 55.0)) * 1000)
     for attempt in range(retries + 1):
         try:
-            client = genai.Client(api_key=api_key)
+            # google-genai has its own retry layer. Disable it here because PlaceAI
+            # already controls retry/failover explicitly at the provider-chain level.
+            client = genai.Client(
+                api_key=api_key,
+                http_options={"timeout": timeout_ms, "retry_options": {"attempts": 1}},
+            )
             response = client.models.generate_content(model=settings.gemini_model, contents=prompt)
             text = getattr(response, "text", None)
             if not isinstance(text, str) or not text.strip():
@@ -263,10 +280,12 @@ def call_ai_text(
     if gemini_api_key:
         attempted = True
         try:
-            if retry_count_per_provider is None:
-                result = _call_gemini(gemini_api_key, prompt)
-            else:
-                result = _call_gemini(gemini_api_key, prompt, retry_count=retry_count_per_provider)
+            gemini_kwargs: dict[str, object] = {}
+            if retry_count_per_provider is not None:
+                gemini_kwargs["retry_count"] = retry_count_per_provider
+            if timeout_seconds is not None:
+                gemini_kwargs["timeout_seconds"] = timeout_seconds
+            result = _call_gemini(gemini_api_key, prompt, **gemini_kwargs)
             LOGGER.warning("AI fallback succeeded provider=gemini")
             return result
         except Exception as exc:
