@@ -467,6 +467,128 @@ def start_mock_interview_v2(
     }
 
 
+
+_BASELINE_STOPWORDS = {
+    "the", "a", "an", "and", "or", "to", "of", "in", "for", "on", "with", "how",
+    "what", "why", "would", "you", "your", "this", "that", "is", "are", "be", "as",
+    "from", "role", "task", "work", "tell", "describe", "explain", "about",
+}
+
+
+def _evidence_terms(value: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-z0-9+#.-]{2,}", (value or "").casefold())
+        if token not in _BASELINE_STOPWORDS
+    }
+
+
+def _resilient_baseline_evaluation(
+    *,
+    issued: list[dict[str, Any]],
+    submitted_by_id: dict[int, MockInterviewAnswerV2],
+    job: Job,
+) -> dict[str, Any]:
+    """Return a conservative continuity score when the live evaluator is unavailable.
+
+    This deliberately does NOT claim technical correctness. Scores only reflect observable
+    answer completeness, structure, and lexical relevance to the issued question/role.
+    """
+    role_terms = _evidence_terms(
+        " ".join([
+            job.title or "",
+            job.description or "",
+            " ".join(str(x) for x in (job.required_skills or [])),
+        ])
+    )
+    evaluations: list[dict[str, Any]] = []
+    all_scores: list[int] = []
+    relevance_scores: list[int] = []
+    structure_scores: list[int] = []
+
+    for item in issued:
+        qid = item["question_id"]
+        answer = submitted_by_id[qid].answer.strip()
+        words = re.findall(r"\b[\w+#.-]+\b", answer)
+        answer_terms = _evidence_terms(answer)
+        question_terms = _evidence_terms(item["question"])
+        role_hits = len(answer_terms & role_terms)
+        question_hits = len(answer_terms & question_terms)
+        sentence_count = len([part for part in re.split(r"[.!?]+", answer) if part.strip()])
+
+        completeness = min(28, int(len(words) / 3.5))
+        relevance = min(22, role_hits * 5 + question_hits * 3)
+        structure = min(14, max(0, sentence_count - 1) * 4)
+        baseline = min(72, 24 + completeness + relevance + structure)
+        if len(words) < 12:
+            baseline = min(baseline, 42)
+
+        all_scores.append(baseline)
+        relevance_scores.append(min(72, 32 + relevance + min(18, completeness)))
+        structure_scores.append(min(72, 30 + structure + min(20, completeness)))
+
+        missing_points: list[str] = []
+        if len(words) < 40:
+            missing_points.append("Add a more complete explanation with concrete steps or an example.")
+        if role_hits == 0:
+            missing_points.append("Connect the answer explicitly to the role or one of its stated required skills.")
+        if question_hits == 0:
+            missing_points.append("Address the specific wording of the question more directly.")
+        missing_points.append("Technical correctness was not scored because the live AI evaluator was temporarily unavailable.")
+
+        feedback = (
+            "Continuity-mode feedback: the answer was checked for completeness, structure and relevance to the "
+            "issued question and approved role context. Technical correctness requires live AI evaluation."
+        )
+        evaluations.append({
+            "question_id": qid,
+            "question": item["question"],
+            "answer": answer,
+            "score": baseline,
+            "feedback": feedback,
+            "missing_points": missing_points,
+            "key_points": [
+                "Answer the exact question first.",
+                "Use a concrete example or step-by-step approach.",
+                "Tie claims to the role requirements that are actually provided.",
+            ],
+            "better_answer_outline": "Direct answer → concrete example or method → validation/result → role relevance.",
+            "ideal_answer": "",
+        })
+
+    overall = round(sum(all_scores) / len(all_scores)) if all_scores else 0
+    relevance = round(sum(relevance_scores) / len(relevance_scores)) if relevance_scores else 0
+    structure = round(sum(structure_scores) / len(structure_scores)) if structure_scores else 0
+    return {
+        "overall_score": overall,
+        "overall_feedback": (
+            "Live AI evaluation was temporarily unavailable. This continuity score measures only observable "
+            "completeness, structure and role/question relevance; it does not validate technical correctness."
+        ),
+        "dimensions": {
+            "relevance": relevance,
+            "clarity": structure,
+            "structure": structure,
+            "language_precision": structure,
+            "role_knowledge": overall,
+            "problem_solving": overall,
+            "professionalism": structure,
+        },
+        "strengths": ["The session was preserved instead of failing when the external AI evaluator was unavailable."],
+        "improvements": ["Re-run live AI analysis later for technical-correctness feedback and richer coaching."],
+        "weak_topics": [],
+        "next_practice_plan": [
+            "Strengthen each answer with a concrete example, explicit reasoning and a validation step.",
+            "Use live AI analysis when available for technical-correctness and concept-level feedback.",
+        ],
+        "evaluations": evaluations,
+        "disclaimer": (
+            "Resilient baseline only: completeness/relevance signal, not a technical-correctness score, "
+            "spoken-communication assessment, personality measure, or employability judgment."
+        ),
+    }
+
+
 @router.post("/evaluate", dependencies=[Depends(student_ai_guard)])
 def evaluate_mock_interview_v2(
     body: MockInterviewEvaluationV2,
@@ -550,10 +672,39 @@ CANDIDATE CONTEXT
 QUESTIONS AND ANSWERS
 {json.dumps(answers_payload, ensure_ascii=False, indent=2)[:42_000]}
 """
-    raw = _call_interview_ai(prompt, max_output_tokens=5200, fast=False)
-    data = extract_json_from_response(raw)
-    if not isinstance(data, dict):
-        raise HTTPException(status_code=502, detail="AI service returned an invalid interview evaluation")
+    evaluation_started = time.perf_counter()
+    evaluation_mode = "ai"
+    evaluation_provider = "local"
+    evaluation_model = "resilient-baseline-v1"
+    try:
+        raw = _call_interview_ai(prompt, max_output_tokens=5200, fast=False)
+        data = extract_json_from_response(raw)
+        if not isinstance(data, dict):
+            raise ValueError("AI service returned an invalid interview evaluation")
+        evaluation_provider = current_ai_provider()
+        evaluation_model = current_ai_model()
+    except Exception as exc:
+        LOGGER.warning("Mock interview live AI evaluation failed; using resilient baseline error_type=%s", type(exc).__name__)
+        baseline = _resilient_baseline_evaluation(
+            issued=issued,
+            submitted_by_id=submitted_by_id,
+            job=job,
+        )
+        interview.answers_json = json.dumps(answers_payload)
+        interview.evaluation_json = json.dumps(baseline)
+        interview.overall_score = baseline["overall_score"]
+        interview.overall_feedback = baseline["overall_feedback"]
+        db.commit()
+        db.refresh(interview)
+        return {
+            "interview_id": interview.id,
+            "job_title": job.title,
+            **baseline,
+            "evaluation_mode": "resilient_baseline",
+            "provider": "local",
+            "model": "resilient-baseline-v1",
+            "evaluation_ms": int((time.perf_counter() - evaluation_started) * 1000),
+        }
 
     dimensions_raw = data.get("dimensions") if isinstance(data.get("dimensions"), dict) else {}
     dimension_keys = ["relevance", "clarity", "structure", "language_precision", "role_knowledge", "problem_solving", "professionalism"]
@@ -596,4 +747,20 @@ QUESTIONS AND ANSWERS
     interview.overall_feedback = result["overall_feedback"]
     db.commit()
     db.refresh(interview)
-    return {"interview_id": interview.id, "job_title": job.title, **result}
+    evaluation_ms = int((time.perf_counter() - evaluation_started) * 1000)
+    LOGGER.info(
+        "Mock interview evaluated mode=%s provider=%s model=%s latency_ms=%s",
+        evaluation_mode,
+        evaluation_provider,
+        evaluation_model,
+        evaluation_ms,
+    )
+    return {
+        "interview_id": interview.id,
+        "job_title": job.title,
+        **result,
+        "evaluation_mode": evaluation_mode,
+        "provider": evaluation_provider,
+        "model": evaluation_model,
+        "evaluation_ms": evaluation_ms,
+    }
