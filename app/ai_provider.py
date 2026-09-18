@@ -150,11 +150,12 @@ def _call_openai(
     raise RuntimeError("OpenAI request did not complete")
 
 
-def _call_gemini(api_key: str, prompt: str) -> str:
+def _call_gemini(api_key: str, prompt: str, *, retry_count: int = 1) -> str:
     if genai is None:
         raise RuntimeError("Gemini SDK unavailable")
     last_error: Exception | None = None
-    for attempt in range(2):
+    retries = max(0, min(int(retry_count), 2))
+    for attempt in range(retries + 1):
         try:
             client = genai.Client(api_key=api_key)
             response = client.models.generate_content(model=settings.gemini_model, contents=prompt)
@@ -166,7 +167,7 @@ def _call_gemini(api_key: str, prompt: str) -> str:
             return text.strip()
         except Exception as exc:
             last_error = exc
-            if attempt == 0:
+            if attempt < retries:
                 LOGGER.warning("AI provider retry provider=gemini error_type=%s", type(exc).__name__)
                 time.sleep(0.35)
                 continue
@@ -262,7 +263,10 @@ def call_ai_text(
     if gemini_api_key:
         attempted = True
         try:
-            result = _call_gemini(gemini_api_key, prompt)
+            if retry_count_per_provider is None:
+                result = _call_gemini(gemini_api_key, prompt)
+            else:
+                result = _call_gemini(gemini_api_key, prompt, retry_count=retry_count_per_provider)
             LOGGER.warning("AI fallback succeeded provider=gemini")
             return result
         except Exception as exc:
