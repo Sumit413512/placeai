@@ -771,7 +771,7 @@ def test_auth_input_bounds_pdf_limits_and_frontend_token_hygiene():
 
 def test_mock_interview_server_issued_session_integrity(monkeypatch):
     import json
-    import app.routers.mock_interview as mock_router
+    import app.routers.mock_interview_v2 as mock_router
     from app.models import Job, MockInterview, StudentProfile
 
     student = login("student@northstar.example.com", "StudentPass123!")
@@ -786,7 +786,7 @@ def test_mock_interview_server_issued_session_integrity(monkeypatch):
     finally:
         db.close()
 
-    def fake_ai(_client, prompt):
+    def fake_ai(prompt, *, max_output_tokens, fast=False):
         if "Generate exactly" in prompt:
             return json.dumps({"questions": [
                 {"question_id": 1, "question": "Explain a production API decision you made.", "category": "technical"},
@@ -809,7 +809,7 @@ def test_mock_interview_server_issued_session_integrity(monkeypatch):
             ],
         })
 
-    monkeypatch.setattr(mock_router, "call_gemini", fake_ai)
+    monkeypatch.setattr(mock_router, "_call_interview_ai", fake_ai)
 
     started = client.post("/mock-interview/start", headers=auth(student), json={
         "job_id": job_id, "focus": "balanced", "question_count": 3
