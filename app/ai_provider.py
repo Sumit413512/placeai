@@ -71,9 +71,11 @@ def _extract_openai_text(payload: dict) -> str:
     return "\n".join(parts).strip()
 
 
-def _request_timeout() -> httpx.Timeout:
-    total = max(10.0, min(float(getattr(settings, "ai_request_timeout_seconds", 45) or 45), 55.0))
-    return httpx.Timeout(total, connect=min(7.0, total), read=total, write=min(10.0, total), pool=min(7.0, total))
+def _request_timeout(total_seconds: float | None = None) -> httpx.Timeout:
+    configured = float(getattr(settings, "ai_request_timeout_seconds", 45) or 45)
+    requested = configured if total_seconds is None else float(total_seconds)
+    total = max(5.0, min(requested, 55.0))
+    return httpx.Timeout(total, connect=min(5.0, total), read=total, write=min(8.0, total), pool=min(5.0, total))
 
 
 def _retry_delay(response: httpx.Response | None, attempt: int) -> float:
@@ -92,8 +94,11 @@ def _call_openai(
     *,
     reasoning_effort: str | None = None,
     max_output_tokens: int | None = None,
+    model_override: str | None = None,
+    timeout_seconds: float | None = None,
+    retry_count: int = 1,
 ) -> str:
-    model = getattr(settings, "openai_model", "gpt-5.6-terra")
+    model = (model_override or getattr(settings, "openai_model", "gpt-5.6-terra")).strip()
     output_limit = int(max_output_tokens or getattr(settings, "ai_max_output_tokens", 5000) or 5000)
     output_limit = max(256, min(output_limit, 8000))
     payload: dict[str, object] = {
@@ -106,16 +111,17 @@ def _call_openai(
         payload["reasoning"] = {"effort": reasoning_effort}
 
     last_error: Exception | None = None
-    for attempt in range(2):
+    retries = max(0, min(int(retry_count), 2))
+    for attempt in range(retries + 1):
         response: httpx.Response | None = None
         try:
             response = httpx.post(
                 "https://api.openai.com/v1/responses",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json=payload,
-                timeout=_request_timeout(),
+                timeout=_request_timeout(timeout_seconds),
             )
-            if response.status_code in _RETRYABLE_HTTP_STATUS and attempt == 0:
+            if response.status_code in _RETRYABLE_HTTP_STATUS and attempt < retries:
                 LOGGER.warning(
                     "AI provider transient response provider=openai status_code=%s retry=1",
                     response.status_code,
@@ -131,7 +137,7 @@ def _call_openai(
             return text
         except _RETRYABLE_HTTP_ERRORS as exc:
             last_error = exc
-            if attempt == 0:
+            if attempt < retries:
                 LOGGER.warning("AI provider network retry provider=openai error_type=%s", type(exc).__name__)
                 time.sleep(_retry_delay(response, attempt))
                 continue
@@ -208,15 +214,29 @@ def call_ai_text(
     *,
     reasoning_effort: str | None = None,
     max_output_tokens: int | None = None,
+    model_override: str | None = None,
+    timeout_seconds: float | None = None,
+    retry_count_per_provider: int | None = None,
 ) -> str:
-    """OpenAI primary -> OpenAI backup -> Gemini fallback with bounded transient retries."""
+    """OpenAI primary -> OpenAI backup -> Gemini fallback with bounded transient retries.
+
+    Interactive callers can supply a task-specific model, timeout, and retry count so a
+    temporary provider problem cannot stall a user-facing workflow for tens of seconds.
+    """
     attempted = False
     for slot, api_key in enumerate(_openai_keys(), start=1):
         attempted = True
         try:
             # Preserve the original two-argument private-call contract for legacy tests/callers
             # when no task-specific controls are requested.
-            if reasoning_effort is None and max_output_tokens is None:
+            no_controls = (
+                reasoning_effort is None
+                and max_output_tokens is None
+                and model_override is None
+                and timeout_seconds is None
+                and retry_count_per_provider is None
+            )
+            if no_controls:
                 result = _call_openai(api_key, prompt)
             else:
                 result = _call_openai(
@@ -224,6 +244,9 @@ def call_ai_text(
                     prompt,
                     reasoning_effort=reasoning_effort,
                     max_output_tokens=max_output_tokens,
+                    model_override=model_override,
+                    timeout_seconds=timeout_seconds,
+                    retry_count=1 if retry_count_per_provider is None else retry_count_per_provider,
                 )
             if slot > 1:
                 LOGGER.warning("AI fallback succeeded provider=openai slot=%s", slot)
