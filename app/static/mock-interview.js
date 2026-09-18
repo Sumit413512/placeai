@@ -102,6 +102,9 @@
   const listHtml = (values, fallback) => (values || []).map(x => `<li>${esc(x)}</li>`).join('') || `<li>${esc(fallback)}</li>`;
 
   function renderResult(result) {
+    if (result.evaluation_mode === 'resilient_baseline') {
+      toast('Live AI analysis was unavailable. PlaceAI preserved the session with a clearly labelled completeness/relevance baseline.');
+    }
     $('#overall-score').textContent = result.overall_score;
     $('#overall-feedback').textContent = result.overall_feedback || 'Evaluation complete.';
     $('#dimension-grid').innerHTML = Object.entries(result.dimensions || {}).map(([key, score]) => `<article class="dimension"><small>${esc(key.replaceAll('_',' '))}</small><strong>${score}</strong><div class="meter"><i style="width:${Math.max(0,Math.min(100,Number(score)||0))}%"></i></div></article>`).join('');
