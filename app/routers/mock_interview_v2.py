@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import re
+import time
 from difflib import SequenceMatcher
 from typing import Any
 
@@ -10,15 +12,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.ai_provider import call_ai_text, current_ai_model, current_ai_provider
 from app.ai_rate_limit import student_ai_guard
 from app.database import get_db
 from app.dependencies import require_student
 from app.models import ApprovalStatus, Job, MockInterview, StudentProfile, User
 from app.placement_access import job_is_visible_to_student
-from app.routers import mock_interview as legacy_mock_interview
 from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
 
 router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])
+LOGGER = logging.getLogger("placeai.mock_interview")
 
 
 class MockInterviewStartV2(BaseModel):
@@ -47,15 +50,21 @@ class MockInterviewEvaluationV2(BaseModel):
     answers: list[MockInterviewAnswerV2] = Field(min_length=1, max_length=15)
 
 
-def _call_interview_ai(prompt: str, *, max_output_tokens: int) -> str:
-    """Use the canonical provider chain through the long-standing interview call seam.
+def _call_interview_ai(prompt: str, *, max_output_tokens: int, fast: bool = False) -> str:
+    """Call the canonical provider chain with an explicit interactive latency budget.
 
-    Production still resolves OpenAI primary -> OpenAI backup -> Gemini fallback through
-    `call_gemini`; retaining this seam also keeps older API integrations and regression
-    harnesses compatible while the v2 route owns the richer interview contract.
+    Question generation uses the lower-latency GPT-5.6 Luna model. Evaluation keeps the
+    configured production model, but disables extra reasoning because the rubric and
+    evidence are already supplied in the prompt.
     """
-    del max_output_tokens
-    return legacy_mock_interview.call_gemini(legacy_mock_interview.get_gemini_client(), prompt)
+    return call_ai_text(
+        prompt,
+        reasoning_effort="none",
+        max_output_tokens=max_output_tokens,
+        model_override="gpt-5.6-luna" if fast else None,
+        timeout_seconds=10 if fast else 24,
+        retry_count_per_provider=0,
+    )
 
 
 def _clamp_score(value: Any) -> int:
@@ -192,6 +201,9 @@ Difficulty: {difficulty}. If difficulty is mixed, deliberately progress from fou
 At least half of the questions must directly test the role description, required skills or candidate's relevant experience.
 For technical questions, prefer applied reasoning, debugging, design, code/SQL/API/cloud scenarios or trade-offs over trivia.
 Questions must be concise, non-discriminatory and answerable in a written practice session.
+Use ONLY facts present in ROLE and CANDIDATE CONTEXT. Do not invent company processes, technologies, projects,
+metrics, responsibilities, achievements or candidate experience. If a fact is not provided, ask a generic
+role-grounded question instead of assuming it.
 Do NOT repeat, lightly reword, paraphrase or reuse the concept framing of any prior question in AVOID QUESTIONS.
 Do not ask multiple questions that are substantially the same within this new set.
 
@@ -213,6 +225,119 @@ AVOID QUESTIONS FROM PREVIOUS PRACTICE
 """
 
 
+def _difficulty_for(index: int, total: int, requested: str) -> str:
+    if requested != "mixed":
+        return requested
+    ratio = index / max(total, 1)
+    if ratio <= 0.34:
+        return "easy"
+    if ratio <= 0.68:
+        return "medium"
+    return "hard"
+
+
+def _fallback_questions(
+    *,
+    profile: StudentProfile,
+    job: Job,
+    focus: str,
+    difficulty: str,
+    count: int,
+    previous: list[str],
+    already: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Build a deterministic, role-grounded safety net without inventing facts.
+
+    This is deliberately a contingency path, not a replacement for live AI. It uses only
+    the approved opportunity and student profile fields already available to PlaceAI.
+    """
+    existing = [*previous, *(item["question"] for item in (already or []))]
+    skills = [str(x).strip() for x in (job.required_skills or []) if str(x).strip()]
+    if not skills:
+        skills = [str(x).strip() for x in (profile.skills or []) if str(x).strip()]
+    skills = skills[:10] or ["the core skills required for this role"]
+
+    technical: list[tuple[str, str]] = []
+    for skill in skills:
+        technical.extend([
+            (
+                f"For the {job.title} role, describe a practical task where you would use {skill}. "
+                "How would you verify that your solution works correctly?",
+                "technical",
+            ),
+            (
+                f"Suppose a task involving {skill} is failing in a project relevant to {job.title}. "
+                "Walk through how you would diagnose the problem, choose a fix, and check for regressions.",
+                "technical",
+            ),
+        ])
+
+    situational = [
+        (f"You are given an unfamiliar task in the {job.title} role with incomplete requirements. How would you clarify the problem and plan your first steps?", "situational"),
+        (f"A teammate proposes a different implementation approach for a {job.title} task. How would you compare the options and reach a decision?", "situational"),
+        (f"A deadline is close and you discover a defect in work related to the {job.title} role. What would you do, and how would you communicate the risk?", "situational"),
+        (f"You finish a feature for the {job.title} role. What checks would you perform before calling the work complete?", "situational"),
+    ]
+    behavioral = [
+        ("Tell me about a time you had to learn a technical concept quickly. What did you do and what was the outcome?", "behavioral"),
+        ("Describe a time you received critical feedback on your work. How did you respond and what changed afterward?", "behavioral"),
+        ("Give an example of a team disagreement you were involved in. How did you help move the work forward?", "behavioral"),
+        ("Describe a time you made a mistake in a project or assignment. How did you detect it, correct it and prevent a repeat?", "behavioral"),
+    ]
+    hr = [
+        (f"Why are you interested in the {job.title} opportunity, based only on the responsibilities and skills you know about it?", "hr"),
+        (f"What strengths from your current background are most relevant to the {job.title} role, and what is one area you still need to improve?", "hr"),
+        (f"What would you want to learn during your first three months in the {job.title} role?", "hr"),
+        ("How do you organize your work when you have multiple deadlines at the same time?", "communication"),
+    ]
+
+    if focus == "technical":
+        pool = technical + situational + behavioral + hr
+    elif focus == "behavioral":
+        pool = behavioral + situational + hr + technical
+    elif focus == "hr":
+        pool = hr + behavioral + situational + technical
+    else:
+        pool = []
+        groups = [technical, behavioral, situational, hr]
+        max_len = max(len(group) for group in groups)
+        for idx in range(max_len):
+            for group in groups:
+                if idx < len(group):
+                    pool.append(group[idx])
+
+    chosen: list[dict[str, Any]] = []
+    for question, category in pool:
+        if _too_similar(question, [*existing, *(item["question"] for item in chosen)]):
+            continue
+        chosen.append({
+            "question": question[:2000],
+            "category": category,
+            "difficulty": _difficulty_for(len(chosen) + 1, count, difficulty),
+        })
+        if len(chosen) >= count:
+            break
+
+    # The fixed pools above are intentionally generous, but keep an invariant that every
+    # requested round remains usable even after a long history of prior attempts.
+    suffix = 1
+    while len(chosen) < count:
+        skill = skills[(suffix - 1) % len(skills)]
+        question = (
+            f"Practice scenario {suffix}: for a {job.title} task involving {skill}, explain your approach, "
+            "the main risk you would watch for, and how you would validate the result."
+        )
+        suffix += 1
+        if _too_similar(question, [*existing, *(item["question"] for item in chosen)]):
+            continue
+        chosen.append({
+            "question": question,
+            "category": "technical",
+            "difficulty": _difficulty_for(len(chosen) + 1, count, difficulty),
+        })
+    return chosen[:count]
+
+
 def _generate_unique_questions(
     *,
     profile: StudentProfile,
@@ -221,49 +346,82 @@ def _generate_unique_questions(
     difficulty: str,
     count: int,
     previous: list[str],
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Generate one fast AI batch, then fill any gap with a grounded local safety net."""
+    started = time.perf_counter()
     accepted: list[dict[str, Any]] = []
-    avoid = list(previous)
-    for round_index in range(2):
-        needed = count - len(accepted)
-        if needed <= 0:
-            break
+    generation_mode = "resilient_fallback"
+    provider = "local"
+    model = "role-grounded-v1"
+
+    try:
         prompt = _question_prompt(
             profile=profile,
             job=job,
             focus=focus,
             difficulty=difficulty,
-            count=needed + (2 if round_index == 0 and needed >= 5 else 0),
-            avoid=avoid,
+            count=count + (2 if count >= 5 else 1),
+            avoid=previous,
         )
-        raw = _call_interview_ai(prompt, max_output_tokens=3200)
+        raw = _call_interview_ai(prompt, max_output_tokens=1800, fast=True)
         data = extract_json_from_response(raw)
         source = data.get("questions", []) if isinstance(data, dict) else []
-        if not isinstance(source, list):
-            source = []
-        for item in source:
-            if not isinstance(item, dict):
-                continue
-            question = str(item.get("question", "")).strip()
-            if not question or _too_similar(question, [*avoid, *(x["question"] for x in accepted)]):
-                continue
-            category = str(item.get("category", "interview")).strip().lower()
-            q_difficulty = str(item.get("difficulty", difficulty if difficulty != "mixed" else "medium")).strip().lower()
-            if category not in {"technical", "behavioral", "hr", "situational", "communication"}:
-                category = "interview"
-            if q_difficulty not in {"easy", "medium", "hard"}:
-                q_difficulty = "medium"
-            accepted.append({"question": question[:2000], "category": category, "difficulty": q_difficulty})
-            if len(accepted) >= count:
-                break
-        avoid.extend(item["question"] for item in accepted)
-    minimum_viable = count if count < 5 else max(5, count - 1)
-    if len(accepted) < minimum_viable:
-        raise HTTPException(status_code=502, detail="AI service could not generate a sufficiently unique interview set. Please try again.")
-    return [
+        if isinstance(source, list):
+            for item in source:
+                if not isinstance(item, dict):
+                    continue
+                question = str(item.get("question", "")).strip()
+                if not question or _too_similar(question, [*previous, *(x["question"] for x in accepted)]):
+                    continue
+                category = str(item.get("category", "interview")).strip().lower()
+                q_difficulty = str(item.get("difficulty", difficulty if difficulty != "mixed" else "medium")).strip().lower()
+                if category not in {"technical", "behavioral", "hr", "situational", "communication"}:
+                    category = "interview"
+                if q_difficulty not in {"easy", "medium", "hard"}:
+                    q_difficulty = _difficulty_for(len(accepted) + 1, count, difficulty)
+                accepted.append({"question": question[:2000], "category": category, "difficulty": q_difficulty})
+                if len(accepted) >= count:
+                    break
+        if accepted:
+            generation_mode = "ai"
+            provider = current_ai_provider()
+            model = current_ai_model()
+    except Exception as exc:
+        LOGGER.warning("Mock interview live AI generation failed; using grounded fallback error_type=%s", type(exc).__name__)
+
+    if len(accepted) < count:
+        needed = count - len(accepted)
+        accepted.extend(_fallback_questions(
+            profile=profile,
+            job=job,
+            focus=focus,
+            difficulty=difficulty,
+            count=needed,
+            previous=previous,
+            already=accepted,
+        ))
+        generation_mode = "ai_plus_fallback" if provider != "local" else "resilient_fallback"
+
+    questions = [
         {"question_id": index, **item}
         for index, item in enumerate(accepted[:count], start=1)
     ]
+    metadata = {
+        "generation_mode": generation_mode,
+        "provider": provider,
+        "model": model,
+        "generation_ms": int((time.perf_counter() - started) * 1000),
+        "grounding": "approved opportunity + authorized student profile",
+    }
+    LOGGER.info(
+        "Mock interview generated mode=%s provider=%s model=%s questions=%s latency_ms=%s",
+        generation_mode,
+        provider,
+        model,
+        len(questions),
+        metadata["generation_ms"],
+    )
+    return questions, metadata
 
 
 @router.post("/start", dependencies=[Depends(student_ai_guard)])
@@ -275,7 +433,7 @@ def start_mock_interview_v2(
     profile = _profile(current_user, db)
     job = _accessible_job(profile, body.job_id, db)
     previous = _previous_questions(profile, job, db)
-    questions = _generate_unique_questions(
+    questions, generation = _generate_unique_questions(
         profile=profile,
         job=job,
         focus=body.focus,
@@ -305,6 +463,7 @@ def start_mock_interview_v2(
         "mode": body.mode,
         "questions": questions,
         "previous_questions_avoided": len(previous),
+        **generation,
     }
 
 
@@ -350,6 +509,8 @@ def evaluate_mock_interview_v2(
 
 You are a rigorous role-specific campus interview coach. Evaluate every written answer below against the exact role.
 Do not infer accent, spoken fluency, appearance, personality, protected traits or anything not evidenced by the text.
+Use only ROLE, CANDIDATE CONTEXT, QUESTIONS AND ANSWERS as evidence. Never invent company facts, candidate projects,
+metrics, technologies or experience. If a fact needed for evaluation is absent, explicitly say it is not provided.
 Be diagnostic, practical and specific. For every question explain what was good, what was missing and provide a strong
 example answer/solution grounded in the role. The example answer is a learning reference, not something to memorize.
 
@@ -389,7 +550,7 @@ CANDIDATE CONTEXT
 QUESTIONS AND ANSWERS
 {json.dumps(answers_payload, ensure_ascii=False, indent=2)[:42_000]}
 """
-    raw = _call_interview_ai(prompt, max_output_tokens=7600)
+    raw = _call_interview_ai(prompt, max_output_tokens=5200, fast=False)
     data = extract_json_from_response(raw)
     if not isinstance(data, dict):
         raise HTTPException(status_code=502, detail="AI service returned an invalid interview evaluation")
