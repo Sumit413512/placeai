@@ -119,3 +119,31 @@ def test_mock_interview_generation_prefers_single_fast_ai_batch(monkeypatch):
     assert meta["generation_mode"] == "ai"
     assert meta["provider"] == "openai"
     assert meta["model"] == "gpt-5.6-luna"
+
+
+def test_resilient_baseline_evaluation_is_conservative_and_explicit():
+    job = _demo_job()
+    issued = [
+        {"question_id": 1, "question": "How would you debug a failing Python API?", "category": "technical", "difficulty": "medium"},
+        {"question_id": 2, "question": "Describe how you would validate a SQL change.", "category": "technical", "difficulty": "medium"},
+    ]
+    submitted = {
+        1: mock_interview_v2.MockInterviewAnswerV2(
+            question_id=1,
+            answer="I would reproduce the Python API issue, inspect logs, isolate the failing input, fix the cause, add tests, and verify the API response and regression cases.",
+        ),
+        2: mock_interview_v2.MockInterviewAnswerV2(
+            question_id=2,
+            answer="I would run the SQL in a safe environment, compare expected and actual rows, inspect the query plan if needed, and verify edge cases before release.",
+        ),
+    }
+    result = mock_interview_v2._resilient_baseline_evaluation(
+        issued=issued,
+        submitted_by_id=submitted,
+        job=job,
+    )
+    assert 0 < result["overall_score"] <= 72
+    assert len(result["evaluations"]) == 2
+    assert "does not validate technical correctness" in result["overall_feedback"]
+    assert "Resilient baseline only" in result["disclaimer"]
+    assert all(item["ideal_answer"] == "" for item in result["evaluations"])
