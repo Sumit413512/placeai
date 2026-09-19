@@ -47,6 +47,7 @@ from app.models import (
     UserRole,
     utcnow,
 )
+from app.placement_access import job_is_visible_to_student
 from app.schemas import (
     AnnouncementCreate,
     AttendanceSessionCreate,
@@ -76,6 +77,7 @@ from app.services import (
     record_audit,
 )
 from app.storage import delete_file, file_download_response, save_file, safe_upload_filename, validate_upload_signature
+from app.student_access import premium_student_guard
 
 settings = get_settings()
 router = APIRouter(prefix="/enterprise", tags=["Enterprise Placement Operations"])
@@ -618,7 +620,7 @@ def update_notification_preferences(data: NotificationPreferenceUpdate, current_
 # -----------------------------------------------------------------------------
 # Priority 5: Placement Readiness
 # -----------------------------------------------------------------------------
-@router.get("/readiness")
+@router.get("/readiness", dependencies=[Depends(premium_student_guard)])
 def student_readiness(current_user: User = Depends(require_student), db: Session = Depends(get_db)):
     return placement_readiness(_student(current_user, db), db)
 
@@ -812,7 +814,7 @@ def list_documents(current_user: User = Depends(get_current_user), student_id: s
     return [{"id": d.id, "document_type": d.document_type, "filename": d.original_filename, "visibility": d.visibility, "is_verified": d.is_verified, "uploaded_at": d.uploaded_at.isoformat() if d.uploaded_at else None} for d in rows]
 
 
-@router.post("/documents", status_code=status.HTTP_201_CREATED)
+@router.post("/documents", status_code=status.HTTP_201_CREATED, dependencies=[Depends(premium_student_guard)])
 async def upload_document(document_type: str, visibility: str = "institution_only", file: UploadFile = File(...), current_user: User = Depends(require_student), db: Session = Depends(get_db)):
     s = _student(current_user, db)
     raw = await file.read(10 * 1024 * 1024 + 1)
@@ -1252,8 +1254,10 @@ def list_incidents(current_user:User=Depends(get_current_user),db:Session=Depend
         s=_student(current_user,db);rows=db.query(IncidentReport).filter(IncidentReport.student_id==s.id).order_by(IncidentReport.created_at.desc()).all()
     elif current_user.role==UserRole.institution_admin:
         rows=db.query(IncidentReport).filter(IncidentReport.organization_id==current_user.organization_id).order_by(IncidentReport.created_at.desc()).all()
-    else: raise HTTPException(status_code=403,detail="Incident reports are limited to students and institution teams")
-    return [{"id":x.id,"category":x.category,"description":x.description,"status":x.status,"confidential":x.confidential,"recruiter_id":x.recruiter_id,"job_id":x.job_id,"resolution_notes":x.resolution_notes,"created_at":x.created_at.isoformat()} for x in rows]
+    elif current_user.role==UserRole.platform_admin:
+        rows=db.query(IncidentReport).order_by(IncidentReport.created_at.desc()).limit(1000).all()
+    else: raise HTTPException(status_code=403,detail="Incident reports are limited to students and authorized administrators")
+    return [{"id":x.id,"category":x.category,"description":x.description,"status":x.status,"confidential":x.confidential,"organization_id":x.organization_id,"recruiter_id":x.recruiter_id,"job_id":x.job_id,"resolution_notes":x.resolution_notes,"created_at":x.created_at.isoformat()} for x in rows]
 
 
 @router.post("/incidents",status_code=status.HTTP_201_CREATED)
@@ -1263,22 +1267,31 @@ def create_incident(data:IncidentReportCreate,current_user:User=Depends(require_
     if data.job_id:
         job = db.query(Job).filter(Job.id == data.job_id).first()
         applied = db.query(Application).filter(Application.student_id == s.id, Application.job_id == data.job_id).first()
-        if not job or not (job.target_organization_id == s.organization_id or applied):
-            raise HTTPException(status_code=404, detail="Job is not linked to this student's placement activity")
+        if not job or not (job_is_visible_to_student(s, job, db) or applied):
+            raise HTTPException(status_code=404, detail="Job is not linked to this student's authorized placement activity")
     if data.recruiter_id:
         recruiter = db.query(RecruiterProfile).filter(RecruiterProfile.id == data.recruiter_id).first()
-        linked = bool(recruiter and (
-            recruiter.provisioned_by_organization_id == s.organization_id or
-            db.query(Job).filter(Job.recruiter_id == recruiter.id, Job.target_organization_id == s.organization_id).first() or
-            db.query(Application).join(Job, Application.job_id == Job.id).filter(Application.student_id == s.id, Job.recruiter_id == recruiter.id).first()
-        ))
+        applied_recruiter = bool(
+            recruiter and db.query(Application).join(Job, Application.job_id == Job.id).filter(
+                Application.student_id == s.id,
+                Job.recruiter_id == recruiter.id,
+            ).first()
+        )
+        visible_recruiter = bool(
+            recruiter and any(job_is_visible_to_student(s, candidate, db) for candidate in recruiter.jobs)
+        )
+        linked = bool(recruiter and (applied_recruiter or visible_recruiter))
         if not linked:
-            raise HTTPException(status_code=404, detail="Recruiter is not linked to this student's placement activity")
+            raise HTTPException(status_code=404, detail="Recruiter is not linked to this student's authorized placement activity")
         if job and job.recruiter_id != recruiter.id:
             raise HTTPException(status_code=400, detail="Recruiter and job do not match")
     x=IncidentReport(organization_id=s.organization_id,student_id=s.id,recruiter_id=data.recruiter_id,job_id=data.job_id,category=data.category,description=data.description,confidential=data.confidential);db.add(x)
-    admins=db.query(User).filter(User.organization_id==s.organization_id,User.role==UserRole.institution_admin).all()
-    for u in admins:create_notification(db,u.id,"Confidential student incident reported",f"A student submitted a {data.category} report for placement-office review.",organization_id=s.organization_id,category="incident",priority="high",link="incidents")
+    if s.organization_id:
+        admins=db.query(User).filter(User.organization_id==s.organization_id,User.role==UserRole.institution_admin).all()
+        for u in admins:create_notification(db,u.id,"Confidential student incident reported",f"A student submitted a {data.category} report for placement-office review.",organization_id=s.organization_id,category="incident",priority="high",link="incidents")
+    else:
+        admins=db.query(User).filter(User.role==UserRole.platform_admin,User.is_active.is_(True)).all()
+        for u in admins:create_notification(db,u.id,"Independent student issue reported",f"An independent student submitted a {data.category} report for platform review.",category="incident",priority="high",link="incidents")
     db.commit();db.refresh(x);return {"id":x.id,"status":x.status}
 
 
