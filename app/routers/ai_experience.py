@@ -20,6 +20,7 @@ from app.database import get_db
 from app.dependencies import require_student
 from app.models import StudentProfile, User
 from app.schemas import AIResumeParseResult, AISummaryResult
+from app.student_entitlements import require_student_premium_access
 from app.storage import read_file_bytes
 from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
 
@@ -148,7 +149,7 @@ def _merge_profile_skills(existing: list[str] | None, parsed: list[str]) -> list
     response_model=AIResumeParseResult,
 )
 def parse_resume_v2(
-    current_user: User = Depends(require_student),
+    current_user: User = Depends(require_student_premium_access),
     db: Session = Depends(get_db),
 ):
     profile = db.query(StudentProfile).filter(StudentProfile.user_id == current_user.id).first()
