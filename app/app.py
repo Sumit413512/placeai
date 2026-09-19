@@ -226,6 +226,7 @@ enterprise = _import_router("enterprise")
 enterprise_secure = _import_router("enterprise_secure")
 student_workspace_v2 = _import_router("student_workspace_v2")
 telemetry = _import_router("telemetry")
+billing = _import_router("billing")
 
 ACCOUNT_SECURITY_REPLACEMENTS = {
     ("/auth/change-password", "POST"),
@@ -287,6 +288,7 @@ _include_router(enterprise, ENTERPRISE_REPLACEMENTS)
 _include_router(enterprise_secure, ENTERPRISE_SECURE_EXCLUSIONS)
 _include_router(student_workspace_v2)
 _include_router(telemetry)
+_include_router(billing)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
