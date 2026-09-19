@@ -49,6 +49,8 @@
   };
   navIcons['mock-interview'] = navIcons.interviews;
   navIcons.integrations = navIcons.verification;
+  navIcons.registrations = navIcons.students;
+  navIcons.engagement = navIcons.analytics;
   const navIcon = id => `<span class="nav-icon">${navIcons[id] || navIcons.dashboard}</span>`;
 
   const state = {
@@ -59,6 +61,41 @@
     contextAction: null,
     profile: null,
   };
+
+  function telemetryId(storage, key) {
+    try {
+      let value = storage.getItem(key);
+      if (!value || value.length < 16 || value.length > 128) {
+        value = globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
+        storage.setItem(key, value);
+      }
+      return value;
+    } catch {
+      return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
+    }
+  }
+
+  const placeAIVisitorId = telemetryId(localStorage, 'placeai_visitor_id');
+  const placeAISessionId = telemetryId(sessionStorage, 'placeai_session_id');
+
+  function trackPageView(path) {
+    let referrerHost = '';
+    try { referrerHost = document.referrer ? new URL(document.referrer).hostname : ''; } catch {}
+    const headers = {'Content-Type':'application/json'};
+    if (state.token) headers.Authorization = `Bearer ${state.token}`;
+    fetch('/telemetry/page-view', {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+      keepalive: true,
+      body: JSON.stringify({
+        visitor_id: placeAIVisitorId,
+        session_id: placeAISessionId,
+        path: String(path || location.pathname || '/').split('?')[0].split('#')[0],
+        referrer_host: referrerHost || null,
+      }),
+    }).catch(() => {});
+  }
 
   function toast(title, message = '', type = 'success') {
     const node = document.createElement('div');
@@ -214,7 +251,7 @@
       ['Command centre','dashboard','Overview'],['Command centre','attention','Attention centre'],['Command centre','analytics2','Placement analytics'],['People','students','Students'],['People','approvals','Profile approvals'],['People','recruiters','Recruiters'],['Trust','verification','Company verification'],['Placements','jobs','Campus jobs'],['Placements','drives','Placement drives'],['Placements','pipeline','Drive pipelines'],['Placements','applications','Applications'],['Placements','interviews','Interviews'],['Placements','offers','Offer management'],['Operations','attendance','QR attendance'],['Operations','calendar','Placement calendar'],['Operations','announcements','Announcements'],['Operations','communications','Recruiter communication'],['Governance','policies','Placement policies'],['Governance','custom-fields','Custom fields'],['Governance','incidents','Incident reports'],['Governance','reports','Reports'],['Updates','notifications','Notifications'],['Governance','audit','Audit log']
     ],
     platform_admin: [
-      ['Platform','dashboard','Overview'],['Platform','organizations','Institutions'],['Platform','integrations','Integrations'],['Access','leads','Access requests'],['Updates','notifications','Notifications']
+      ['Platform','dashboard','Overview'],['Platform','organizations','Institutions'],['People','registrations','Registrations'],['Insights','engagement','Engagement'],['Platform','integrations','Integrations'],['Access','leads','Access requests'],['Updates','notifications','Notifications']
     ]
   };
 
@@ -337,6 +374,7 @@
   async function navigate(view) {
     if (view === 'mock-interview') { window.location.assign('/mock-interview'); return; }
     state.view = view;
+    if (state.me) trackPageView(`/workspace/${state.me.role}/${view}`);
     mountNav();
     $('#app-content').innerHTML = `<div class="loading-state"><span class="loader"></span><p>Loading workspace…</p></div>`;
     try {
@@ -501,6 +539,47 @@
 
   function institutionStudentRow(s){return `<tr><td><span class="table-primary">${esc(s.full_name || 'Unnamed student')}</span><span class="table-secondary">${esc(s.college || '')}</span></td><td>${esc(s.degree || '—')}<span class="table-secondary">${esc(s.branch || '')}</span></td><td>${s.graduation_year || '—'}</td><td>${s.cgpa ?? '—'}</td><td>${tags(s.skills)}</td><td>${s.is_verified ? statusBadge('approved') : statusBadge('pending')}</td><td><button class="row-button ${s.is_verified ? '' : 'primary'}" data-action="toggle-student-verify" data-id="${s.id}" data-value="${s.is_verified ? 'false':'true'}">${s.is_verified ? 'Unverify':'Verify'}</button></td></tr>`}
 
+
+  function platformRegistrationDetailHtml(d) {
+    const p=d.profile||{}, a=d.activity||{};
+    const value=v=>v===null||v===undefined||v===''?'—':Array.isArray(v)?(v.length?v.map(esc).join(', '):'—'):typeof v==='boolean'?(v?'Yes':'No'):esc(v);
+    const row=(label,v)=>`<tr><th>${esc(label)}</th><td>${value(v)}</td></tr>`;
+    let profileRows='';
+    if(p.profile_type==='student'){
+      profileRows=[
+        ['College',p.college],['Phone',p.phone],['Degree',p.degree],['Branch',p.branch],['Graduation year',p.graduation_year],['CGPA',p.cgpa],
+        ['Skills',p.skills],['Desired roles',p.desired_roles],['Placement status',p.placement_status],['Placement opt-in',p.placement_opt_in],
+        ['Profile verified',p.is_verified],['10th %',p.tenth_percentage],['12th %',p.twelfth_percentage],['Active backlogs',p.active_backlogs],
+        ['Historical backlogs',p.historical_backlogs],['LinkedIn',p.linkedin_url],['GitHub',p.github_url],['Portfolio',p.portfolio_url]
+      ].map(([k,v])=>row(k,v)).join('');
+    }else if(p.profile_type==='recruiter'){
+      profileRows=[
+        ['Company',p.company_name],['Designation',p.designation],['Phone',p.phone],['Industry',p.industry],['Website',p.company_website],
+        ['LinkedIn',p.linkedin_url],['Verified',p.is_verified],['Verification status',p.verification_status],
+        ['Verification confidence',p.verification_confidence!=null?`${p.verification_confidence}%`:null],['Official email domain',p.official_email_domain]
+      ].map(([k,v])=>row(k,v)).join('');
+    }else{
+      profileRows=[
+        ['Institution',p.organization_name],['Institution code',p.organization_slug],['Domain',p.domain],['Website',p.website],
+        ['City',p.city],['State',p.state],['Country',p.country],['Institution active',p.organization_active]
+      ].map(([k,v])=>row(k,v)).join('');
+    }
+    const activityRows=[
+      ['Active sessions',a.active_sessions],['Mock interview attempts',a.mock_interview_attempts],['Mock interviews evaluated',a.mock_interviews_evaluated],
+      ['Last mock interview',a.last_mock_interview_at?fmtDateTime(a.last_mock_interview_at):null],['Last mock score',a.last_mock_score],
+      ['Applications',a.applications],['Resume uploaded',a.resume_uploaded],['Resume AI parsed',a.resume_parsed],
+      ['Resume uploaded at',a.resume_uploaded_at?fmtDateTime(a.resume_uploaded_at):null],['Jobs created',a.jobs_created]
+    ].map(([k,v])=>row(k,v)).join('');
+    return `<span class="section-kicker">Platform registration</span><h2>${esc(d.name||d.email)}</h2><p class="form-intro">${esc(d.role.replaceAll('_',' '))} · ${esc(d.email)}</p>
+      <div class="data-panel"><div class="table-wrap"><table class="data-table"><tbody>
+      ${row('Username',d.username)}${row('Organization / company',d.organization)}${row('Registered',fmtDateTime(d.registered_at))}
+      ${row('Last login',d.last_login_at?fmtDateTime(d.last_login_at):'Never')}${row('Account active',d.is_active)}${row('Email verified',d.email_verified)}
+      </tbody></table></div></div>
+      <div class="data-panel"><div class="data-toolbar"><div><span class="table-primary">Profile details</span><span class="table-secondary">Role-specific account information stored by PlaceAI.</span></div></div><div class="table-wrap"><table class="data-table"><tbody>${profileRows||row('Profile','No additional profile record')}</tbody></table></div></div>
+      <div class="data-panel"><div class="data-toolbar"><div><span class="table-primary">Activity</span><span class="table-secondary">Operational usage linked to this account.</span></div></div><div class="table-wrap"><table class="data-table"><tbody>${activityRows}</tbody></table></div></div>
+      <div class="ai-box"><div class="ai-box-head"><span>SECURITY BOUNDARY</span></div><p>${esc(d.security_note||'Authentication secrets are not exposed.')}</p></div>`;
+  }
+
   async function renderPlatform(view) {
     if (view === 'dashboard') {
       setPage('Overview','Platform control'); setContextAction('Add institution','open-org-form');
@@ -515,6 +594,41 @@
       const rows = await api('/platform/access-requests');
       const accessStatuses = ['new', 'under_review', 'approved', 'rejected', 'provisioned'];
       $('#app-content').innerHTML = `${pageHead('Access requests','Privileged workspace access requests stored in the production database.')}${rows.length ? `<div class="data-panel"><div class="data-toolbar"><span class="table-secondary">${rows.length} requests</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Requester</th><th>Role</th><th>Organization</th><th>Received</th><th>Status / action</th></tr></thead><tbody>${rows.map(r => `<tr><td><span class="table-primary">${esc(r.full_name)}</span><span class="table-secondary">${esc(r.work_email)}</span></td><td>${esc(r.requested_role.replaceAll('_',' '))}</td><td>${esc(r.organization_name || '—')}</td><td>${fmtDate(r.created_at)}</td><td><select class="form-control" data-access-request-status data-id="${esc(r.id)}" data-current-status="${esc(r.status)}" aria-label="Access request status for ${esc(r.full_name)}">${accessStatuses.map(status => `<option value="${status}" ${status === r.status ? 'selected' : ''}>${status.replaceAll('_',' ')}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div></div>` : emptyState('AR','No access requests','Privileged workspace requests will appear here when submitted.')}`;
+    } else if (view === 'registrations') {
+      setPage('Registrations','Platform control'); setContextAction();
+      const role=state.platformRegistrationRole||'';
+      const data=await api(`/platform/registrations?limit=200${role?`&role=${encodeURIComponent(role)}`:''}`);
+      const s=data.summary||{};
+      const roleOptions=[['','All roles'],['student','Students'],['recruiter','Recruiters'],['institution_admin','Institution admins'],['platform_admin','Platform admins']];
+      $('#app-content').innerHTML=`${pageHead('Registrations & accounts','Platform-admin-only directory of registered PlaceAI accounts, login status and role-specific activity.')}
+        <div class="metric-grid">
+          <article class="metric-card"><small>All accounts</small><strong>${s.all_accounts||0}</strong><span>Registered PlaceAI users</span></article>
+          <article class="metric-card"><small>Students</small><strong>${s.students||0}</strong><span>Student accounts</span></article>
+          <article class="metric-card"><small>Recruiters</small><strong>${s.recruiters||0}</strong><span>Recruiter accounts</span></article>
+          <article class="metric-card"><small>Institution admins</small><strong>${s.institution_admins||0}</strong><span>Placement-office administrators</span></article>
+        </div>
+        <div class="data-panel"><div class="data-toolbar"><div><span class="table-primary">Registered users</span><span class="table-secondary">Showing ${data.items.length} of ${data.total} records. Passwords and authentication secrets are never exposed.</span></div><label class="table-secondary">Role <select class="form-control" id="platform-registration-role">${roleOptions.map(([v,l])=>`<option value="${v}" ${v===role?'selected':''}>${l}</option>`).join('')}</select></label></div>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Person / account</th><th>Role</th><th>Organization</th><th>Registered</th><th>Last login</th><th>Usage</th><th>Status</th><th></th></tr></thead><tbody>
+        ${data.items.map(r=>{const a=r.activity||{};const usage=r.role==='student'?`${a.mock_interview_attempts||0} mock · ${a.applications||0} applications · ${a.resume_uploaded?'resume uploaded':'no resume'}`:r.role==='recruiter'?`${a.jobs_created||0} jobs · ${a.active_sessions||0} active sessions`:`${a.active_sessions||0} active sessions`;return `<tr><td><span class="table-primary">${esc(r.name||r.username||r.email)}</span><span class="table-secondary">${esc(r.email)} · @${esc(r.username)}</span></td><td>${esc(r.role.replaceAll('_',' '))}</td><td>${esc(r.organization||'—')}</td><td>${fmtDate(r.registered_at)}</td><td>${r.last_login_at?fmtDateTime(r.last_login_at):'Never'}</td><td>${esc(usage)}</td><td>${r.is_active?statusBadge('approved'):statusBadge('rejected')}</td><td><button class="row-button primary" data-action="view-platform-registration" data-id="${esc(r.id)}">View details</button></td></tr>`;}).join('')}
+        </tbody></table></div></div>`;
+    } else if (view === 'engagement') {
+      setPage('Engagement','Platform control'); setContextAction();
+      const days=Number(state.platformEngagementDays||30);
+      const e=await api(`/platform/engagement?days=${days}`), s=e.summary||{};
+      const periods=[7,30,90];
+      $('#app-content').innerHTML=`${pageHead('Visitors & engagement','Privacy-safe first-party usage analytics for PlaceAI. No IP addresses, fingerprints, passwords or full referrer URLs are collected.')}
+        <div class="data-panel"><div class="data-toolbar"><div><span class="table-primary">Period</span><span class="table-secondary">Tracking started ${e.tracking_since?fmtDateTime(e.tracking_since):'with this release'}.</span></div><div>${periods.map(n=>`<button class="row-button ${days===n?'primary':''}" data-action="platform-engagement-period" data-id="${n}">${n} days</button>`).join(' ')}</div></div></div>
+        <div class="metric-grid">
+          <article class="metric-card"><small>Page views</small><strong>${s.page_views||0}</strong><span>Recorded page views</span></article>
+          <article class="metric-card"><small>Unique visitors</small><strong>${s.unique_visitors||0}</strong><span>Anonymous random visitor IDs, hashed server-side</span></article>
+          <article class="metric-card"><small>Signed-in users seen</small><strong>${s.signed_in_users_seen||0}</strong><span>Authenticated users with tracked views</span></article>
+          <article class="metric-card"><small>New registrations</small><strong>${s.registrations||0}</strong><span>Accounts created in this period</span></article>
+          <article class="metric-card"><small>Mock interviews</small><strong>${s.mock_interviews||0}</strong><span>Student practice sessions created</span></article>
+          <article class="metric-card"><small>Applications</small><strong>${s.applications||0}</strong><span>Applications submitted</span></article>
+        </div>
+        <div class="data-panel"><div class="data-toolbar"><div><span class="table-primary">Most visited pages</span><span class="table-secondary">${esc(e.note||'')}</span></div></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Page / workspace view</th><th>Views</th><th>Unique visitors</th></tr></thead><tbody>${e.top_pages.length?e.top_pages.map(x=>`<tr><td><span class="table-primary">${esc(x.path)}</span></td><td>${x.views}</td><td>${x.visitors}</td></tr>`).join(''):'<tr><td colspan="3">No page-view telemetry recorded yet.</td></tr>'}</tbody></table></div></div>
+        <div class="data-panel"><div class="data-toolbar"><div><span class="table-primary">Daily traffic</span><span class="table-secondary">Views and unique visitors by day.</span></div></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Date</th><th>Views</th><th>Visitors</th></tr></thead><tbody>${e.daily.length?e.daily.map(x=>`<tr><td>${esc(x.date)}</td><td>${x.views}</td><td>${x.visitors}</td></tr>`).join(''):'<tr><td colspan="3">No traffic recorded in this period.</td></tr>'}</tbody></table></div></div>
+        <div class="data-panel"><div class="data-toolbar"><div><span class="table-primary">Active registered users</span><span class="table-secondary">Accounts whose latest successful login falls inside this period.</span></div></div><div class="table-wrap"><table class="data-table"><tbody><tr><th>Students</th><td>${s.students_active||0}</td><th>Recruiters</th><td>${s.recruiters_active||0}</td></tr><tr><th>Institution admins</th><td>${s.institution_admins_active||0}</td><th>Resumes uploaded</th><td>${s.resumes_uploaded||0}</td></tr></tbody></table></div></div>`;
     } else if (view === 'integrations') {
       setPage('Integrations','Platform control'); setContextAction();
       const [summary, reset] = await Promise.all([api('/platform/integrations/status'), api('/platform/integrations/password-reset-email')]);
@@ -569,6 +683,8 @@
       else if(a==='open-drive-form')openDriveForm(id);
       else if(a==='open-org-form')openOrgForm();
       else if(a==='open-admin-form')openAdminForm(id);
+      else if(a==='view-platform-registration'){const d=await api(`/platform/registrations/${encodeURIComponent(id)}`);openModal(platformRegistrationDetailHtml(d));}
+      else if(a==='platform-engagement-period'){state.platformEngagementDays=Number(id)||30;await navigate('engagement');}
       else if(a==='view-applicants')await viewApplicants(id);
       else if(a==='view-candidate')await viewCandidate(id);
       else if(a==='apply-job'){openModal(`<span class="section-kicker">Application</span><h2>Submit application</h2><p class="form-intro">Add a concise cover note or submit without one.</p><form id="apply-form" class="form-stack"><input type="hidden" name="job_id" value="${id}"><label>Cover note <span class="optional">optional</span><textarea name="cover_note" rows="5" placeholder="Why are you interested in this role?"></textarea></label><button class="button button-primary button-full">Submit application</button></form>`);}
@@ -591,6 +707,7 @@
   document.addEventListener('change',async e=>{
     try{
       if(e.target.id==='job-type-filter'){filterStudentJobs();return;}
+      if(e.target.id==='platform-registration-role'){state.platformRegistrationRole=e.target.value||'';await navigate('registrations');return;}
       if(e.target.id==='resume-file'&&e.target.files[0]){const form=new FormData();form.append('file',e.target.files[0]);await api('/students/resume',{method:'POST',body:form});toast('Resume uploaded');navigate('resume');}
       if(e.target.id==='student-csv-file'&&e.target.files[0]){const form=new FormData();form.append('file',e.target.files[0]);const result=await api('/institutions/import/students.csv',{method:'POST',body:form});toast('CSV import complete',`${result.created} created · ${result.failed} failed`);if(result.errors?.length){openModal(`<span class="section-kicker">CSV import report</span><h2>${result.created} students created</h2><p class="form-intro">${result.failed} rows could not be imported.</p><div class="ai-box"><div class="ai-box-head"><span>ROW ERRORS</span></div><p>${result.errors.map(x=>`Row ${x.row}: ${esc(x.error)}`).join('<br>')}</p></div><button class="button button-primary button-full" data-action="close-generic-modal">Done</button>`);}await navigate('students');}
       if(e.target.classList.contains('application-status-select')&&e.target.value){await api(`/jobs/${e.target.dataset.job}/applicants/${e.target.dataset.id}/status`,{method:'PATCH',body:JSON.stringify({status:e.target.value})});toast('Application stage updated');await viewApplicants(e.target.dataset.job);}
@@ -881,5 +998,5 @@
 
   async function handleResetToken(){const params=new URLSearchParams(location.search);const token=params.get('reset_token');if(!token)return false;const cleanUrl=new URL(location.href);cleanUrl.searchParams.delete('reset_token');history.replaceState({},'',cleanUrl.pathname+cleanUrl.search);showAuth('login');openModal(`<span class="section-kicker">Account recovery</span><h2>Set a new password</h2><form id="reset-password-form" class="form-stack"><input type="hidden" name="token" value="${esc(token)}"><label>New password<input type="password" name="new_password" minlength="12" required></label><button class="button button-primary button-full">Reset password</button></form>`);const form=$('#reset-password-form');form.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(form);try{await api('/auth/reset-password',{method:'POST',body:JSON.stringify(Object.fromEntries(fd.entries()))},false);closeModal();history.replaceState({},'',location.pathname);toast('Password reset','You can now sign in with the new password.');showAuth('login');}catch(err){apiErrors.applyToForm(form,err);toast('Reset failed',err.message,'error')}});return true;}
 
-  (async()=>{await handleResetToken();await bootWorkspace();})();
+  (async()=>{trackPageView(location.pathname);await handleResetToken();await bootWorkspace();})();
 })();
