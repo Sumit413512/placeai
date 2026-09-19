@@ -13,6 +13,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    op.alter_column("incident_reports", "organization_id", existing_type=sa.String(), nullable=True)
     op.create_table(
         "individual_student_access",
         sa.Column("id", sa.String(), nullable=False),
@@ -90,6 +91,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.alter_column("incident_reports", "organization_id", existing_type=sa.String(), nullable=False)
     op.drop_index("ix_payment_transactions_status", table_name="payment_transactions")
     op.drop_index("ix_payment_transactions_provider_payment_id", table_name="payment_transactions")
     op.drop_index("ix_payment_transactions_provider_order_id", table_name="payment_transactions")
