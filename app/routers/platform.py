@@ -13,7 +13,20 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies import require_platform_admin
 from app.email_delivery import send_transactional_email
-from app.models import (\n    Application, ApprovalStatus, Job, MockInterview, Organization, OrganizationType,\n    RecruiterProfile, RefreshSession, Resume, StudentProfile, User, UserRole,\n)
+from app.models import (
+    Application,
+    ApprovalStatus,
+    Job,
+    MockInterview,
+    Organization,
+    OrganizationType,
+    RecruiterProfile,
+    RefreshSession,
+    Resume,
+    StudentProfile,
+    User,
+    UserRole,
+)
 from app.placement_access import utcnow_naive
 from app.schemas import AdminUserProvision, OrganizationCreate, OrganizationOut, PlatformOverviewOut, UserOut
 from app.services import record_audit
