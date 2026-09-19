@@ -17,9 +17,9 @@
 
   function normalizeIndianEnglishResumeCopy() {
     const replacements = new Map([
-      ['Scattered résumés', 'Scattered resumes'],
-      ['résumé parsing', 'resume parsing'],
-      ['Résumé parsing', 'Resume parsing'],
+      ['Scattered resumes', 'Scattered resumes'],
+      ['resume parsing', 'resume parsing'],
+      ['Resume parsing', 'Resume parsing'],
     ]);
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const nodes = [];
