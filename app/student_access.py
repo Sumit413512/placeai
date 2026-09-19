@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from fastapi import HTTPException
+from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.database import get_db
+from app.dependencies import require_student
 from app.models import IndividualStudentAccess, Organization, StudentProfile, User, UserRole
 from app.placement_access import utcnow_naive
 
@@ -188,3 +190,12 @@ def student_access_payload(user: User, db: Session) -> dict:
             else "Your individual preparation trial has ended. Upgrade to restore premium preparation tools."
         ),
     }
+
+
+def premium_student_guard(
+    current_user: User = Depends(require_student),
+    db: Session = Depends(get_db),
+) -> User:
+    """FastAPI dependency for preparation features included by university or individual entitlement."""
+    require_premium_student_access(current_user, db)
+    return current_user
