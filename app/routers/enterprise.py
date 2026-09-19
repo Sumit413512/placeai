@@ -75,6 +75,7 @@ from app.services import (
     placement_readiness,
     record_audit,
 )
+from app.student_entitlements import ensure_student_premium_access, require_student_premium_access
 from app.storage import delete_file, file_download_response, save_file, safe_upload_filename, validate_upload_signature
 
 settings = get_settings()
@@ -364,6 +365,7 @@ async def upload_authorization_letter(
 @router.get("/drives")
 def enterprise_drives(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role == UserRole.student:
+        ensure_student_premium_access(current_user, db)
         s = _student(current_user, db)
         rows = db.query(PlacementDrive).filter(PlacementDrive.organization_id == s.organization_id).order_by(PlacementDrive.created_at.desc()).all()
     elif current_user.role == UserRole.institution_admin:
@@ -619,7 +621,7 @@ def update_notification_preferences(data: NotificationPreferenceUpdate, current_
 # Priority 5: Placement Readiness
 # -----------------------------------------------------------------------------
 @router.get("/readiness")
-def student_readiness(current_user: User = Depends(require_student), db: Session = Depends(get_db)):
+def student_readiness(current_user: User = Depends(require_student_premium_access), db: Session = Depends(get_db)):
     return placement_readiness(_student(current_user, db), db)
 
 
@@ -813,7 +815,7 @@ def list_documents(current_user: User = Depends(get_current_user), student_id: s
 
 
 @router.post("/documents", status_code=status.HTTP_201_CREATED)
-async def upload_document(document_type: str, visibility: str = "institution_only", file: UploadFile = File(...), current_user: User = Depends(require_student), db: Session = Depends(get_db)):
+async def upload_document(document_type: str, visibility: str = "institution_only", file: UploadFile = File(...), current_user: User = Depends(require_student_premium_access), db: Session = Depends(get_db)):
     s = _student(current_user, db)
     raw = await file.read(10 * 1024 * 1024 + 1)
     if len(raw) > 10 * 1024 * 1024: raise HTTPException(status_code=413, detail="Document must be 10 MB or smaller")
@@ -835,7 +837,9 @@ def download_document(document_id: str, current_user: User = Depends(get_current
     d = db.query(StudentDocument).filter(StudentDocument.id == document_id).first()
     if not d: raise HTTPException(status_code=404, detail="Document not found")
     s = db.query(StudentProfile).filter(StudentProfile.id == d.student_id).first()
-    if current_user.role == UserRole.student and (not s or s.user_id != current_user.id): raise HTTPException(status_code=404, detail="Document not found")
+    if current_user.role == UserRole.student:
+        ensure_student_premium_access(current_user, db)
+        if not s or s.user_id != current_user.id: raise HTTPException(status_code=404, detail="Document not found")
     if current_user.role == UserRole.institution_admin and (not s or s.organization_id != current_user.organization_id): raise HTTPException(status_code=404, detail="Document not found")
     if current_user.role not in {UserRole.student, UserRole.institution_admin, UserRole.platform_admin}: raise HTTPException(status_code=403, detail="Not permitted")
     return file_download_response(db, d.filepath, filename=d.original_filename)

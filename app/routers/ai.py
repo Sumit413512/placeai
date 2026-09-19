@@ -36,6 +36,7 @@ from app.schemas import (
     MockInterviewHistoryOut, MockInterviewDetailOut,
 )
 from app.dependencies import get_current_user, require_recruiter, require_student
+from app.student_entitlements import ensure_student_premium_access
 from app.storage import read_file_bytes
 from app.ai_provider import ai_status_payload, call_ai_text, current_ai_model, current_ai_provider
 
@@ -602,6 +603,7 @@ def placement_assistant(
     context = {"role": current_user.role.value, "user": current_user.username}
 
     if current_user.role == UserRole.student:
+        ensure_student_premium_access(current_user, db)
         profile = db.query(StudentProfile).filter(StudentProfile.user_id == current_user.id).first()
         if not profile:
             raise HTTPException(status_code=404, detail="Student profile not found")

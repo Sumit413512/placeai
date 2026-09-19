@@ -51,6 +51,7 @@
   navIcons.integrations = navIcons.verification;
   navIcons.registrations = navIcons.students;
   navIcons.engagement = navIcons.analytics;
+  navIcons.billing = navIcons.offers;
   const navIcon = id => `<span class="nav-icon">${navIcons[id] || navIcons.dashboard}</span>`;
 
   const state = {
@@ -60,6 +61,7 @@
     nav: [],
     contextAction: null,
     profile: null,
+    studentAccess: null,
   };
 
   function telemetryId(storage, key) {
@@ -256,7 +258,12 @@
   };
 
   function mountNav() {
-    const items = navByRole[state.me.role] || [];
+    let items = navByRole[state.me.role] || [];
+    if (state.me.role === 'student' && state.studentAccess?.student_kind === 'independent') {
+      const allowed = new Set(['dashboard','opportunities','applications','interviews','offers','readiness','mock-interview','resume','documents','assistant','notifications','incidents','approvals','profile']);
+      items = items.filter(([,id]) => allowed.has(id));
+      items = [...items, ['Account','billing','Plan & billing']];
+    }
     state.nav = items;
     let group = '';
     $('#app-nav').innerHTML = items.map(([g,id,label]) => {
@@ -350,6 +357,9 @@
     $('#workspace-kind').textContent = state.me.role === 'institution_admin' ? 'Institution workspace' : state.me.role === 'recruiter' ? 'Recruiter workspace' : state.me.role === 'platform_admin' ? 'Platform control' : 'Student workspace';
     $('#workspace-name').textContent = state.me.role === 'institution_admin' ? 'Placement Office' : display;
     $('#workspace-name').title = $('#workspace-name').textContent;
+    if (state.me.role === 'student') {
+      try { state.studentAccess = await api('/billing/status'); } catch { state.studentAccess = null; }
+    }
     mountNav();
     await updateNotificationBadge();
     const attendanceToken=new URLSearchParams(location.search).get('attendance_token');
@@ -372,6 +382,10 @@
   }
 
   async function navigate(view) {
+    const premiumViews = new Set(['readiness','mock-interview','resume','documents','assistant']);
+    if (state.me?.role === 'student' && state.studentAccess?.student_kind === 'independent' && premiumViews.has(view) && !state.studentAccess.premium_access) {
+      view = 'billing';
+    }
     if (view === 'mock-interview') { window.location.assign('/mock-interview'); return; }
     state.view = view;
     if (state.me) trackPageView(`/workspace/${state.me.role}/${view}`);
@@ -390,6 +404,22 @@
   }
 
   async function renderStudent(view) {
+    if (view === 'billing') {
+      setPage('Plan & billing','Independent student'); setContextAction();
+      const access = state.studentAccess || await api('/billing/status');
+      const plans = await api('/billing/plans');
+      const trialHours = access.trial_remaining_seconds ? Math.ceil(access.trial_remaining_seconds / 3600) : 0;
+      const plan = plans.plans?.[0];
+      $('#app-content').innerHTML = `${pageHead('Independent student access','University-linked students are institution-sponsored. Independent students receive a 3-day preparation trial, then need a paid plan for premium preparation tools.')}
+        <div class="metric-grid">
+          <article class="metric-card"><small>Account type</small><strong>${access.student_kind === 'university' ? 'University' : 'Independent'}</strong><span>${access.student_kind === 'university' ? 'Institution-sponsored access' : 'Public opportunities only; no campus opportunities'}</span></article>
+          <article class="metric-card"><small>Access</small><strong>${esc(access.access_mode.replaceAll('_',' '))}</strong><span>${access.access_mode === 'trial' ? `${trialHours} trial hours remaining` : access.premium_access ? 'Preparation tools unlocked' : 'Premium preparation tools locked'}</span></article>
+          <article class="metric-card"><small>Plan</small><strong>${plan ? `₹${plan.price_inr}/month` : 'Sponsored'}</strong><span>${plan ? '3-day free trial for independent students' : 'No student payment required'}</span></article>
+        </div>
+        ${plan ? `<div class="data-panel"><div class="data-toolbar"><div><span class="table-primary">PlaceAI Independent Student</span><span class="table-secondary">Public recruiter opportunities + premium preparation tools. Campus/university opportunities remain unavailable without a valid institution code.</span></div></div><div class="ai-box"><div class="ai-box-head"><span>PREMIUM PREPARATION</span></div><p>${plan.includes.map(esc).join(' · ')}</p></div><p class="form-intro">Live payment checkout is intentionally not activated until the merchant/payment provider is selected and verified. The entitlement layer is already enforced server-side.</p></div>` : ''}
+      `;
+      return;
+    }
     if (['interviews','offers','readiness','documents','assistant','calendar','announcements','incidents','approvals'].includes(view)) return renderStudentEnterprise(view);
     if (view === 'dashboard') {
       setPage('Dashboard','Student workspace'); setContextAction();

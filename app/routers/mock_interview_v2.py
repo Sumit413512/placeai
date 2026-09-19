@@ -19,6 +19,7 @@ from app.dependencies import require_student
 from app.models import ApprovalStatus, Job, MockInterview, StudentProfile, User
 from app.placement_access import job_is_visible_to_student
 from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
+from app.student_entitlements import require_student_premium_access
 
 router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])
 LOGGER = logging.getLogger("placeai.mock_interview")
@@ -427,7 +428,7 @@ def _generate_unique_questions(
 @router.post("/start", dependencies=[Depends(student_ai_guard)])
 def start_mock_interview_v2(
     body: MockInterviewStartV2,
-    current_user: User = Depends(require_student),
+    current_user: User = Depends(require_student_premium_access),
     db: Session = Depends(get_db),
 ):
     profile = _profile(current_user, db)

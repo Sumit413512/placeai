@@ -21,6 +21,7 @@ from app.placement_access import (
 )
 from app.schemas import ApplicationCreate, ApplicationOut, JobOut, PlacementDriveOut, ResumeOut, StudentProfileCreate, StudentProfileOut
 from app.services import application_out, create_notification, drive_out, evaluate_drive_eligibility, evaluate_placement_policies, job_out, student_out
+from app.student_entitlements import require_student_premium_access
 from app.storage import delete_file, file_download_response, save_file, safe_upload_filename, validate_upload_signature
 
 settings = get_settings()
@@ -97,7 +98,7 @@ def update_my_profile(data: StudentProfileCreate, current_user: User = Depends(r
 
 
 @router.post("/resume", response_model=ResumeOut, status_code=status.HTTP_201_CREATED)
-async def upload_resume(file: UploadFile = File(...), current_user: User = Depends(require_student), db: Session = Depends(get_db)):
+async def upload_resume(file: UploadFile = File(...), current_user: User = Depends(require_student_premium_access), db: Session = Depends(get_db)):
     filename = safe_upload_filename(file.filename, "resume.pdf")
     if not filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
@@ -126,7 +127,7 @@ async def upload_resume(file: UploadFile = File(...), current_user: User = Depen
 
 
 @router.get("/resume", response_model=ResumeOut)
-def get_my_resume(current_user: User = Depends(require_student), db: Session = Depends(get_db)):
+def get_my_resume(current_user: User = Depends(require_student_premium_access), db: Session = Depends(get_db)):
     profile = get_or_create_profile(current_user, db)
     if not profile.resume:
         raise HTTPException(status_code=404, detail="No resume uploaded yet")
@@ -136,7 +137,7 @@ def get_my_resume(current_user: User = Depends(require_student), db: Session = D
 
 
 @router.get("/resume/download")
-def download_my_resume(current_user: User = Depends(require_student), db: Session = Depends(get_db)):
+def download_my_resume(current_user: User = Depends(require_student_premium_access), db: Session = Depends(get_db)):
     profile = get_or_create_profile(current_user, db)
     if not profile.resume:
         raise HTTPException(status_code=404, detail="Resume file not found")
