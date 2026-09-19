@@ -112,6 +112,39 @@ class RefreshSession(Base):
     created_at = Column(DateTime, nullable=False, default=utcnow)
 
 
+class IndividualStudentAccess(Base):
+    __tablename__ = "individual_student_access"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    status = Column(String(32), nullable=False, default="trialing", index=True)
+    trial_started_at = Column(DateTime, nullable=False, default=utcnow)
+    trial_ends_at = Column(DateTime, nullable=False)
+    paid_access_until = Column(DateTime, nullable=True, index=True)
+    plan_code = Column(String(80), nullable=False, default="individual_pro_monthly")
+    payment_provider = Column(String(40), nullable=True)
+    provider_customer_id = Column(String(160), nullable=True)
+    provider_subscription_id = Column(String(160), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class PaymentTransaction(Base):
+    __tablename__ = "payment_transactions"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    individual_access_id = Column(String, ForeignKey("individual_student_access.id"), nullable=True, index=True)
+    provider = Column(String(40), nullable=False)
+    provider_order_id = Column(String(160), nullable=True, unique=True, index=True)
+    provider_payment_id = Column(String(160), nullable=True, unique=True, index=True)
+    amount_paise = Column(Integer, nullable=False)
+    currency = Column(String(8), nullable=False, default="INR")
+    status = Column(String(40), nullable=False, default="created", index=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
 class StoredFile(Base):
     __tablename__ = "stored_files"
 
