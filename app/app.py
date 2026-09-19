@@ -118,9 +118,9 @@ async def security_headers(request: Request, call_next):
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     razorpay_checkout_allowed = (
-        settings.student_payment_provider == "razorpay"
-        and bool(settings.razorpay_key_id)
-        and bool(settings.razorpay_key_secret)
+        getattr(settings, "student_payment_provider", "pending") == "razorpay"
+        and bool(getattr(settings, "razorpay_key_id", ""))
+        and bool(getattr(settings, "razorpay_key_secret", ""))
     )
     checkout_script = " https://checkout.razorpay.com" if razorpay_checkout_allowed else ""
     checkout_connect = " https://api.razorpay.com https://checkout.razorpay.com" if razorpay_checkout_allowed else ""
