@@ -3,7 +3,7 @@
   const $ = (s, root = document) => root.querySelector(s);
   const esc = (value = '') => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   const apiErrors = window.PlaceAIApiErrors;
-  const state = { token:'', jobs:[], session:null };
+  const state = { token:'', jobs:[], session:null, access:null };
 
   function toast(message, type='') {
     const node = $('#toast');
@@ -179,6 +179,12 @@
       const me = await api('/auth/me');
       if (me.role !== 'student') {
         authState.textContent = 'Mock Interview Coach is available to student accounts only.';
+        return;
+      }
+      state.access = await api('/billing/student/status');
+      if (state.access.account_type === 'individual' && !state.access.premium_access) {
+        const price = state.access.plan?.price_inr || state.access.billing?.price_inr || 299;
+        authState.innerHTML = `Your 3-day Individual Pro trial has ended. Mock Interview Coach is a premium preparation feature. <a href="/">Return to PlaceAI</a> to unlock Individual Pro (&#8377;${esc(price)}/30 days). Your public recruiter opportunities, applications, interview schedules and offers remain available.`;
         return;
       }
       const liveAIReady = await aiReady();

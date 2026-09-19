@@ -10,7 +10,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.email_delivery import send_transactional_email
-from app.models import Organization, RecruiterProfile, RefreshSession, StudentProfile, User, UserRole
+from app.models import IndividualStudentAccess, Organization, RecruiterProfile, RefreshSession, StudentProfile, User, UserRole
 from app.telemetry_models import EmailDeliveryEvent
 from app.rate_limit import enforce_rate_limit
 from app.schemas import (
@@ -131,6 +131,17 @@ def signup(data: UserAuth, request: Request, db: Session = Depends(get_db)):
 
     if user.role == UserRole.student:
         db.add(StudentProfile(user_id=user.id, organization_id=org.id if org else None, college=org.name if org else None))
+        if not org:
+            trial_started = _utcnow()
+            db.add(
+                IndividualStudentAccess(
+                    user_id=user.id,
+                    status="trialing",
+                    trial_started_at=trial_started,
+                    trial_ends_at=trial_started + timedelta(days=settings.student_individual_trial_days),
+                    plan_code="individual_pro_monthly",
+                )
+            )
     elif user.role == UserRole.recruiter:
         db.add(RecruiterProfile(user_id=user.id, is_verified=False))
 
@@ -276,6 +287,16 @@ def google_auth(payload: GoogleAuthRequest, request: Request, response: Response
         db.flush()
         if role == UserRole.student:
             db.add(StudentProfile(user_id=user.id, full_name=info.get("name")))
+            trial_started = _utcnow()
+            db.add(
+                IndividualStudentAccess(
+                    user_id=user.id,
+                    status="trialing",
+                    trial_started_at=trial_started,
+                    trial_ends_at=trial_started + timedelta(days=settings.student_individual_trial_days),
+                    plan_code="individual_pro_monthly",
+                )
+            )
         else:
             db.add(RecruiterProfile(user_id=user.id, full_name=info.get("name"), is_verified=False))
         db.commit()

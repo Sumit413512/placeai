@@ -16,6 +16,7 @@ from app.email_delivery import send_transactional_email
 from app.models import (
     Application,
     ApprovalStatus,
+    IndividualStudentAccess,
     Job,
     MockInterview,
     Organization,
@@ -317,6 +318,11 @@ def _platform_registration_item(db: Session, user: User, *, detailed: bool = Fal
 
     profile: dict = {}
     if student:
+        individual_access = db.query(IndividualStudentAccess).filter(IndividualStudentAccess.user_id == user.id).first()
+        activity["access_type"] = "university" if (student.organization_id or user.organization_id) else "individual"
+        activity["individual_access_status"] = individual_access.status if individual_access else None
+        activity["trial_ends_at"] = individual_access.trial_ends_at if individual_access else None
+        activity["paid_access_until"] = individual_access.paid_access_until if individual_access else None
         mock_query = db.query(MockInterview).filter(MockInterview.student_id == student.id)
         latest_mock = mock_query.order_by(MockInterview.created_at.desc()).first()
         resume = db.query(Resume).filter(Resume.student_id == student.id).first()
