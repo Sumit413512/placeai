@@ -21,6 +21,7 @@ from app.dependencies import require_student
 from app.models import StudentProfile, User
 from app.schemas import AIResumeParseResult, AISummaryResult
 from app.storage import read_file_bytes
+from app.student_access import premium_student_guard
 from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
 
 router = APIRouter(prefix="/ai", tags=["AI Features ✨"])
@@ -144,7 +145,7 @@ def _merge_profile_skills(existing: list[str] | None, parsed: list[str]) -> list
 
 @router.post(
     "/parse-resume",
-    dependencies=[Depends(student_ai_guard)],
+    dependencies=[Depends(student_ai_guard), Depends(premium_student_guard)],
     response_model=AIResumeParseResult,
 )
 def parse_resume_v2(
@@ -213,7 +214,7 @@ FULL RESUME TEXT
 
 @router.post(
     "/generate-summary",
-    dependencies=[Depends(student_ai_guard)],
+    dependencies=[Depends(student_ai_guard), Depends(premium_student_guard)],
     response_model=AISummaryResult,
 )
 def generate_summary_v2(
