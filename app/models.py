@@ -714,7 +714,7 @@ class CommunicationMessage(Base):
 class IncidentReport(Base):
     __tablename__ = "incident_reports"
     id = Column(String, primary_key=True, default=generate_uuid)
-    organization_id = Column(String, ForeignKey("organizations.id"), nullable=False, index=True)
+    organization_id = Column(String, ForeignKey("organizations.id"), nullable=True, index=True)
     student_id = Column(String, ForeignKey("student_profiles.id"), nullable=False, index=True)
     recruiter_id = Column(String, ForeignKey("recruiter_profiles.id"), nullable=True, index=True)
     job_id = Column(String, ForeignKey("jobs.id"), nullable=True, index=True)
