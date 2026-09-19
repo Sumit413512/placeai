@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from app.embedded_pages import INDEX_HTML
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -17,6 +19,7 @@ def test_public_landing_preview_is_mirrored_and_keeps_approved_brand():
     public_brand = _text("public/static/brand.css")
 
     assert app_html == public_html
+    assert INDEX_HTML == app_html
     assert app_css == public_css
     assert app_brand == public_brand
 
