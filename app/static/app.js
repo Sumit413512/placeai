@@ -60,6 +60,7 @@
     nav: [],
     contextAction: null,
     profile: null,
+    studentAccess: null,
   };
 
   function telemetryId(storage, key) {
@@ -240,6 +241,137 @@
     restoreModalOpener('generic');
   }
 
+  const individualStudentNav = [
+    ['Workspace','dashboard','Dashboard'],
+    ['Workspace','opportunities','Opportunities'],
+    ['Workspace','applications','Applications'],
+    ['Hiring journey','interviews','Interview & assessments'],
+    ['Hiring journey','offers','Offer centre'],
+    ['Preparation','readiness','Readiness score'],
+    ['Preparation','mock-interview','Mock interview coach'],
+    ['Preparation','resume','Resume & AI Readiness'],
+    ['Preparation','documents','Document vault'],
+    ['Preparation','assistant','AI placement assistant'],
+    ['Updates','notifications','Notifications'],
+    ['Safety','incidents','Report an issue'],
+    ['Account','approvals','Profile approvals'],
+    ['Account','profile','Profile']
+  ];
+
+  const studentPremiumViews = new Set(['readiness','mock-interview','assistant']);
+  const studentCampusOnlyViews = new Set(['drives','calendar','announcements']);
+
+  function isIndividualStudent() {
+    return state.me?.role === 'student' && state.studentAccess?.account_type === 'individual';
+  }
+
+  function studentHasPremium() {
+    if (state.me?.role !== 'student') return true;
+    if (state.studentAccess?.account_type === 'university') return true;
+    return Boolean(state.studentAccess?.premium_access);
+  }
+
+  function studentNavItems() {
+    return isIndividualStudent() ? individualStudentNav : navByRole.student;
+  }
+
+  function studentAccessBanner() {
+    const access=state.studentAccess;
+    if(!access || access.account_type!=='individual') return '';
+    const plan=access.plan || access.billing || {};
+    const price=plan.price_inr || access.billing?.price_inr || 299;
+    if(access.status==='trialing'){
+      const seconds=Math.max(0,Number(access.trial_seconds_remaining||0));
+      const hours=Math.ceil(seconds/3600);
+      const time=hours>24?`${Math.ceil(hours/24)} days`:
+        `${hours} hours`;
+      return `<div class="note-box"><strong>Individual student ÷ 3-day free trial</strong><p>Premium preparation tools are active for about ${esc(time)} more. General recruiter opportunities, applications, interview schedules, offers, notifications and your profile remain separate from university placement content.</p><button class="row-button primary" data-action="start-student-checkout">Unlock Individual Pro · &#8377;${esc(price)}/30 days</button></div>`;
+    }
+    if(access.status==='active'){
+      return `<div class="note-box"><strong>PlaceAI Individual Pro active</strong><p>Premium preparation access is active${access.paid_access_until?` until ${fmtDate(access.paid_access_until)}`:''}. University-only placement drives and campus content remain excluded from this account.</p></div>`;
+    }
+    return `<div class="note-box"><strong>Individual preparation trial ended</strong><p>Your recruiter opportunity pipeline remains available. Upgrade Individual Pro to restore Readiness, Mock Interview Coach, Resume AI analysis, document uploads and the AI placement assistant.</p><button class="row-button primary" data-action="start-student-checkout">Unlock Individual Pro · &#8377;${esc(price)}/30 days</button></div>`;
+  }
+
+  function renderStudentPaywall(feature='Premium preparation') {
+    const access=state.studentAccess||{};
+    const plan=access.plan||access.billing||{};
+    const price=plan.price_inr||299;
+    setPage(feature,'Individual student');
+    setContextAction();
+    $('#app-content').innerHTML=`${pageHead(feature,'This preparation feature is included for university-associated students and Individual Pro subscribers.')}
+      <section class="form-panel"><span class="section-kicker">INDIVIDUAL PRO</span><h2>Your 3-day free trial has ended</h2>
+      <p class="form-intro">You can continue using general recruiter opportunities, applications, interview and assessment schedules, offers, notifications, issue reporting and your profile. Campus/university-only placement content remains unavailable to independent accounts.</p>
+      <div class="metric-grid"><article class="metric-card"><small>Individual Pro</small><strong>&#8377;${esc(price)}</strong><span>30 days of premium preparation access</span></article><article class="metric-card"><small>Trial</small><strong>3 days</strong><span>Started automatically for independent student accounts</span></article></div>
+      <div class="ai-box"><div class="ai-box-head"><span>PREMIUM PREPARATION</span></div><p>Readiness score · Mock Interview Coach · Resume AI analysis · Document vault uploads · AI placement assistant.</p></div>
+      <div class="form-footer"><button class="button button-primary" data-action="start-student-checkout">Unlock Individual Pro</button><button class="button button-secondary" data-view="opportunities">Continue to opportunities</button></div></section>`;
+  }
+
+  function loadRazorpayCheckout() {
+    if(window.Razorpay) return Promise.resolve();
+    return new Promise((resolve,reject)=>{
+      const existing=document.querySelector('script[data-placeai-razorpay]');
+      if(existing){existing.addEventListener('load',resolve,{once:true});existing.addEventListener('error',()=>reject(new Error('Payment checkout could not load.')),{once:true});return;}
+      const script=document.createElement('script');
+      script.src='https://checkout.razorpay.com/v1/checkout.js';
+      script.async=true;
+      script.dataset.placeaiRazorpay='1';
+      script.onload=resolve;
+      script.onerror=()=>reject(new Error('Payment checkout could not load.'));
+      document.head.appendChild(script);
+    });
+  }
+
+  async function refreshStudentAccess() {
+    if(state.me?.role!=='student') return null;
+    state.studentAccess=await api('/billing/student/status');
+    mountNav();
+    return state.studentAccess;
+  }
+
+  async function startStudentCheckout() {
+    if(!isIndividualStudent()) return;
+    let checkout;
+    try{
+      checkout=await api('/billing/student/checkout',{method:'POST'});
+    }catch(err){
+      const msg=err?.message||'Live payment acceptance is not enabled yet.';
+      toast('Payment setup not active',msg,'error');
+      openModal(`<span class="section-kicker">Individual Pro</span><h2>Payment activation is not live yet</h2><p class="form-intro">${esc(msg)}</p><div class="note-box"><strong>Your account is safe</strong><p>No charge has been attempted. PlaceAI will only unlock paid access after a payment provider confirms a captured payment.</p></div><button class="button button-primary button-full" data-action="close-generic-modal">Close</button>`);
+      return;
+    }
+    if(checkout.provider!=='razorpay') throw new Error('Unsupported payment provider');
+    await loadRazorpayCheckout();
+    const options={
+      key: checkout.key_id,
+      amount: checkout.amount_paise,
+      currency: checkout.currency,
+      name: 'PlaceAI',
+      description: checkout.plan?.name||'PlaceAI Individual Pro',
+      order_id: checkout.order_id,
+      prefill: checkout.prefill||{},
+      notes: checkout.notes||{},
+      theme: {color:'#071f45'},
+      handler: async result=>{
+        try{
+          await api('/billing/student/verify',{method:'POST',body:JSON.stringify({
+            razorpay_order_id:result.razorpay_order_id,
+            razorpay_payment_id:result.razorpay_payment_id,
+            razorpay_signature:result.razorpay_signature
+          })});
+          await refreshStudentAccess();
+          closeModal();
+          toast('Individual Pro active','Your premium preparation access has been unlocked.');
+          navigate('dashboard');
+        }catch(err){
+          toast('Payment verification pending',err.message||'Payment could not be verified yet.','error');
+        }
+      }
+    };
+    const instance=new window.Razorpay(options);
+    instance.on?.('payment.failed',()=>toast('Payment not completed','No PlaceAI access change was made.','error'));
+    instance.open();
+  }
   const navByRole = {
     student: [
       ['Workspace','dashboard','Dashboard'],['Workspace','opportunities','Opportunities'],['Workspace','applications','Applications'],['Campus','drives','Placement drives'],['Campus','interviews','Interviews'],['Campus','offers','Offers'],['Career','readiness','Readiness score'],['Career','mock-interview','Mock interview coach'],['Career','resume','Resume & AI'],['Career','documents','Document vault'],['Career','assistant','AI placement assistant'],['Planning','calendar','Placement calendar'],['Updates','announcements','Announcements'],['Updates','notifications','Notifications'],['Safety','incidents','Report an issue'],['Account','approvals','Profile approvals'],['Account','profile','Profile']
@@ -256,7 +388,7 @@
   };
 
   function mountNav() {
-    const items = navByRole[state.me.role] || [];
+    const items = state.me?.role === 'student' ? studentNavItems() : (navByRole[state.me.role] || []);
     state.nav = items;
     let group = '';
     $('#app-nav').innerHTML = items.map(([g,id,label]) => {
@@ -340,6 +472,14 @@
     } catch {
       state.token=''; return false;
     }
+    if(state.me.role==='student'){
+      try{state.studentAccess=await api('/billing/student/status');}
+      catch{
+        state.studentAccess=state.me.organization_id
+          ? {account_type:'university',premium_access:true,payment_required:false,status:'university_full'}
+          : {account_type:'individual',premium_access:false,payment_required:true,status:'unavailable',plan:{price_inr:299,trial_days:3}};
+      }
+    }
     $('#marketing-site').classList.add('hidden');
     $('#app-shell').classList.remove('hidden');
     const display = state.me.username || state.me.email;
@@ -372,6 +512,16 @@
   }
 
   async function navigate(view) {
+    if(state.me?.role==='student' && isIndividualStudent() && studentCampusOnlyViews.has(view)){
+      view='dashboard';
+      toast('University placement content unavailable','Independent student accounts only receive PlaceAI public recruiter opportunities.','error');
+    }
+    if(state.me?.role==='student' && studentPremiumViews.has(view) && !studentHasPremium()){
+      state.view=view;
+      mountNav();
+      renderStudentPaywall(view==='readiness'?'Readiness score':view==='mock-interview'?'Mock Interview Coach':'AI placement assistant');
+      return;
+    }
     if (view === 'mock-interview') { window.location.assign('/mock-interview'); return; }
     state.view = view;
     if (state.me) trackPageView(`/workspace/${state.me.role}/${view}`);
