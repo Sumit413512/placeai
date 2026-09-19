@@ -76,7 +76,7 @@
   }
 
   const placeAIVisitorId = telemetryId(localStorage, 'placeai_visitor_id');
-  const placeAISessionId = telemetryId(sessionStorage, 'placeai_session_id');
+  const placeAISessionId = globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
 
   function trackPageView(path) {
     let referrerHost = '';
