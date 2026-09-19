@@ -148,6 +148,9 @@ class Settings:
         self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
         self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
         self.dev_show_reset_token = os.getenv("DEV_SHOW_RESET_TOKEN", "false").lower() == "true"
+        self.student_individual_trial_days = _bounded_env_int("STUDENT_INDIVIDUAL_TRIAL_DAYS", 3, 1, 30)
+        self.student_individual_monthly_price_inr = _bounded_env_int("STUDENT_INDIVIDUAL_MONTHLY_PRICE_INR", 299, 49, 9999)
+        self.student_payment_provider = os.getenv("STUDENT_PAYMENT_PROVIDER", "pending").strip().lower() or "pending"
 
         brevo_smtp_user = _first_env("BREVO_SMTP_USER", "BREVO_SMTP_LOGIN")
         brevo_smtp_password = _first_env("BREVO_SMTP_PASSWORD", "BREVO_SMTP_KEY")
