@@ -151,6 +151,9 @@ class Settings:
         self.student_individual_trial_days = _bounded_env_int("STUDENT_INDIVIDUAL_TRIAL_DAYS", 3, 1, 30)
         self.student_individual_monthly_price_inr = _bounded_env_int("STUDENT_INDIVIDUAL_MONTHLY_PRICE_INR", 299, 49, 9999)
         self.student_payment_provider = os.getenv("STUDENT_PAYMENT_PROVIDER", "pending").strip().lower() or "pending"
+        self.razorpay_key_id = os.getenv("RAZORPAY_KEY_ID", "").strip()
+        self.razorpay_key_secret = os.getenv("RAZORPAY_KEY_SECRET", "").strip()
+        self.razorpay_webhook_secret = os.getenv("RAZORPAY_WEBHOOK_SECRET", "").strip()
 
         brevo_smtp_user = _first_env("BREVO_SMTP_USER", "BREVO_SMTP_LOGIN")
         brevo_smtp_password = _first_env("BREVO_SMTP_PASSWORD", "BREVO_SMTP_KEY")
