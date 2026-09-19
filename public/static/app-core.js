@@ -60,6 +60,7 @@
     nav: [],
     contextAction: null,
     profile: null,
+    studentAccess: null,
   };
 
   function telemetryId(storage, key) {
@@ -240,6 +241,137 @@
     restoreModalOpener('generic');
   }
 
+  const individualStudentNav = [
+    ['Workspace','dashboard','Dashboard'],
+    ['Workspace','opportunities','Opportunities'],
+    ['Workspace','applications','Applications'],
+    ['Hiring journey','interviews','Interview & assessments'],
+    ['Hiring journey','offers','Offer centre'],
+    ['Preparation','readiness','Readiness score'],
+    ['Preparation','mock-interview','Mock interview coach'],
+    ['Preparation','resume','Resume & AI Readiness'],
+    ['Preparation','documents','Document vault'],
+    ['Preparation','assistant','AI placement assistant'],
+    ['Updates','notifications','Notifications'],
+    ['Safety','incidents','Report an issue'],
+    ['Account','approvals','Profile approvals'],
+    ['Account','profile','Profile']
+  ];
+
+  const studentPremiumViews = new Set(['readiness','mock-interview','assistant']);
+  const studentCampusOnlyViews = new Set(['drives','calendar','announcements']);
+
+  function isIndividualStudent() {
+    return state.me?.role === 'student' && state.studentAccess?.account_type === 'individual';
+  }
+
+  function studentHasPremium() {
+    if (state.me?.role !== 'student') return true;
+    if (state.studentAccess?.account_type === 'university') return true;
+    return Boolean(state.studentAccess?.premium_access);
+  }
+
+  function studentNavItems() {
+    return isIndividualStudent() ? individualStudentNav : navByRole.student;
+  }
+
+  function studentAccessBanner() {
+    const access=state.studentAccess;
+    if(!access || access.account_type!=='individual') return '';
+    const plan=access.plan || access.billing || {};
+    const price=plan.price_inr || access.billing?.price_inr || 299;
+    if(access.status==='trialing'){
+      const seconds=Math.max(0,Number(access.trial_seconds_remaining||0));
+      const hours=Math.ceil(seconds/3600);
+      const time=hours>24?`${Math.ceil(hours/24)} days`:
+        `${hours} hours`;
+      return `<div class="note-box"><strong>Individual student ÷ 3-day free trial</strong><p>Premium preparation tools are active for about ${esc(time)} more. General recruiter opportunities, applications, interview schedules, offers, notifications and your profile remain separate from university placement content.</p><button class="row-button primary" data-action="start-student-checkout">Unlock Individual Pro · &#8377;${esc(price)}/30 days</button></div>`;
+    }
+    if(access.status==='active'){
+      return `<div class="note-box"><strong>PlaceAI Individual Pro active</strong><p>Premium preparation access is active${access.paid_access_until?` until ${fmtDate(access.paid_access_until)}`:''}. University-only placement drives and campus content remain excluded from this account.</p></div>`;
+    }
+    return `<div class="note-box"><strong>Individual preparation trial ended</strong><p>Your recruiter opportunity pipeline remains available. Upgrade Individual Pro to restore Readiness, Mock Interview Coach, Resume AI analysis, document uploads and the AI placement assistant.</p><button class="row-button primary" data-action="start-student-checkout">Unlock Individual Pro · &#8377;${esc(price)}/30 days</button></div>`;
+  }
+
+  function renderStudentPaywall(feature='Premium preparation') {
+    const access=state.studentAccess||{};
+    const plan=access.plan||access.billing||{};
+    const price=plan.price_inr||299;
+    setPage(feature,'Individual student');
+    setContextAction();
+    $('#app-content').innerHTML=`${pageHead(feature,'This preparation feature is included for university-associated students and Individual Pro subscribers.')}
+      <section class="form-panel"><span class="section-kicker">INDIVIDUAL PRO</span><h2>Your 3-day free trial has ended</h2>
+      <p class="form-intro">You can continue using general recruiter opportunities, applications, interview and assessment schedules, offers, notifications, issue reporting and your profile. Campus/university-only placement content remains unavailable to independent accounts.</p>
+      <div class="metric-grid"><article class="metric-card"><small>Individual Pro</small><strong>&#8377;${esc(price)}</strong><span>30 days of premium preparation access</span></article><article class="metric-card"><small>Trial</small><strong>3 days</strong><span>Started automatically for independent student accounts</span></article></div>
+      <div class="ai-box"><div class="ai-box-head"><span>PREMIUM PREPARATION</span></div><p>Readiness score · Mock Interview Coach · Resume AI analysis · Document vault uploads · AI placement assistant.</p></div>
+      <div class="form-footer"><button class="button button-primary" data-action="start-student-checkout">Unlock Individual Pro</button><button class="button button-secondary" data-view="opportunities">Continue to opportunities</button></div></section>`;
+  }
+
+  function loadRazorpayCheckout() {
+    if(window.Razorpay) return Promise.resolve();
+    return new Promise((resolve,reject)=>{
+      const existing=document.querySelector('script[data-placeai-razorpay]');
+      if(existing){existing.addEventListener('load',resolve,{once:true});existing.addEventListener('error',()=>reject(new Error('Payment checkout could not load.')),{once:true});return;}
+      const script=document.createElement('script');
+      script.src='https://checkout.razorpay.com/v1/checkout.js';
+      script.async=true;
+      script.dataset.placeaiRazorpay='1';
+      script.onload=resolve;
+      script.onerror=()=>reject(new Error('Payment checkout could not load.'));
+      document.head.appendChild(script);
+    });
+  }
+
+  async function refreshStudentAccess() {
+    if(state.me?.role!=='student') return null;
+    state.studentAccess=await api('/billing/student/status');
+    mountNav();
+    return state.studentAccess;
+  }
+
+  async function startStudentCheckout() {
+    if(!isIndividualStudent()) return;
+    let checkout;
+    try{
+      checkout=await api('/billing/student/checkout',{method:'POST'});
+    }catch(err){
+      const msg=err?.message||'Live payment acceptance is not enabled yet.';
+      toast('Payment setup not active',msg,'error');
+      openModal(`<span class="section-kicker">Individual Pro</span><h2>Payment activation is not live yet</h2><p class="form-intro">${esc(msg)}</p><div class="note-box"><strong>Your account is safe</strong><p>No charge has been attempted. PlaceAI will only unlock paid access after a payment provider confirms a captured payment.</p></div><button class="button button-primary button-full" data-action="close-generic-modal">Close</button>`);
+      return;
+    }
+    if(checkout.provider!=='razorpay') throw new Error('Unsupported payment provider');
+    await loadRazorpayCheckout();
+    const options={
+      key: checkout.key_id,
+      amount: checkout.amount_paise,
+      currency: checkout.currency,
+      name: 'PlaceAI',
+      description: checkout.plan?.name||'PlaceAI Individual Pro',
+      order_id: checkout.order_id,
+      prefill: checkout.prefill||{},
+      notes: checkout.notes||{},
+      theme: {color:'#071f45'},
+      handler: async result=>{
+        try{
+          await api('/billing/student/verify',{method:'POST',body:JSON.stringify({
+            razorpay_order_id:result.razorpay_order_id,
+            razorpay_payment_id:result.razorpay_payment_id,
+            razorpay_signature:result.razorpay_signature
+          })});
+          await refreshStudentAccess();
+          closeModal();
+          toast('Individual Pro active','Your premium preparation access has been unlocked.');
+          navigate('dashboard');
+        }catch(err){
+          toast('Payment verification pending',err.message||'Payment could not be verified yet.','error');
+        }
+      }
+    };
+    const instance=new window.Razorpay(options);
+    instance.on?.('payment.failed',()=>toast('Payment not completed','No PlaceAI access change was made.','error'));
+    instance.open();
+  }
   const navByRole = {
     student: [
       ['Workspace','dashboard','Dashboard'],['Workspace','opportunities','Opportunities'],['Workspace','applications','Applications'],['Campus','drives','Placement drives'],['Campus','interviews','Interviews'],['Campus','offers','Offers'],['Career','readiness','Readiness score'],['Career','mock-interview','Mock interview coach'],['Career','resume','Resume & AI'],['Career','documents','Document vault'],['Career','assistant','AI placement assistant'],['Planning','calendar','Placement calendar'],['Updates','announcements','Announcements'],['Updates','notifications','Notifications'],['Safety','incidents','Report an issue'],['Account','approvals','Profile approvals'],['Account','profile','Profile']
@@ -256,7 +388,7 @@
   };
 
   function mountNav() {
-    const items = navByRole[state.me.role] || [];
+    const items = state.me?.role === 'student' ? studentNavItems() : (navByRole[state.me.role] || []);
     state.nav = items;
     let group = '';
     $('#app-nav').innerHTML = items.map(([g,id,label]) => {
@@ -340,6 +472,14 @@
     } catch {
       state.token=''; return false;
     }
+    if(state.me.role==='student'){
+      try{state.studentAccess=await api('/billing/student/status');}
+      catch{
+        state.studentAccess=state.me.organization_id
+          ? {account_type:'university',premium_access:true,payment_required:false,status:'university_full'}
+          : {account_type:'individual',premium_access:false,payment_required:true,status:'unavailable',plan:{price_inr:299,trial_days:3}};
+      }
+    }
     $('#marketing-site').classList.add('hidden');
     $('#app-shell').classList.remove('hidden');
     const display = state.me.username || state.me.email;
@@ -372,6 +512,16 @@
   }
 
   async function navigate(view) {
+    if(state.me?.role==='student' && isIndividualStudent() && studentCampusOnlyViews.has(view)){
+      view='dashboard';
+      toast('University placement content unavailable','Independent student accounts only receive PlaceAI public recruiter opportunities.','error');
+    }
+    if(state.me?.role==='student' && studentPremiumViews.has(view) && !studentHasPremium()){
+      state.view=view;
+      mountNav();
+      renderStudentPaywall(view==='readiness'?'Readiness score':view==='mock-interview'?'Mock Interview Coach':'AI placement assistant');
+      return;
+    }
     if (view === 'mock-interview') { window.location.assign('/mock-interview'); return; }
     state.view = view;
     if (state.me) trackPageView(`/workspace/${state.me.role}/${view}`);
@@ -396,15 +546,19 @@
       const [d, apps, jobs] = await Promise.all([api('/students/dashboard'), api('/students/applications'), api('/students/jobs')]);
       const recentApps = apps.slice(0,4);
       const completion = d.profile_completion || 0;
-      $('#app-content').innerHTML = `${pageHead('Your placement readiness','One view of your profile, applications and preparation progress.')}
-        <div class="metric-grid"><article class="metric-card"><small>Profile completion</small><strong>${completion}%</strong><span class="${completion >= 80 ? 'metric-good':''}">${completion >= 80 ? 'Ready for recruiter review' : 'Complete your profile to improve visibility'}</span></article><article class="metric-card"><small>Total applications</small><strong>${d.applications}</strong><span>${d.active_applications} currently active</span></article><article class="metric-card"><small>Mock interviews</small><strong>${d.interviews_completed}</strong><span>${d.average_interview_score ? `${d.average_interview_score}% average score` : 'No scored interviews yet'}</span></article><article class="metric-card"><small>Open opportunities</small><strong>${jobs.length}</strong><span>${d.verified ? 'Institution verified profile' : 'Profile verification pending'}</span></article></div>
+      const individual=isIndividualStudent();
+      const opportunityContext=individual?'Public & PlaceAI recruiter opportunities':(d.verified?'Institution verified profile':'Institution verification pending');
+      const accessProgress=individual?(studentHasPremium()?'Individual Pro / trial active':'Preparation upgrade required'):(d.verified?'100%':'Pending');
+      const accessWidth=individual?(studentHasPremium()?100:20):(d.verified?100:25);
+      $('#app-content').innerHTML = `${pageHead('Your placement readiness','One view of your profile, applications and preparation progress.')}${studentAccessBanner()}
+        <div class="metric-grid"><article class="metric-card"><small>Profile completion</small><strong>${completion}%</strong><span class="${completion >= 80 ? 'metric-good':''}">${completion >= 80 ? 'Ready for recruiter review' : 'Complete your profile to improve visibility'}</span></article><article class="metric-card"><small>Total applications</small><strong>${d.applications}</strong><span>${d.active_applications} currently active</span></article><article class="metric-card"><small>Mock interviews</small><strong>${d.interviews_completed}</strong><span>${d.average_interview_score ? `${d.average_interview_score}% average score` : 'No scored interviews yet'}</span></article><article class="metric-card"><small>Open opportunities</small><strong>${jobs.length}</strong><span>${esc(opportunityContext)}</span></article></div>
         <div class="dashboard-grid"><section class="panel"><div class="panel-head"><div><h2>Recent applications</h2><p>Latest movement in your job pipeline</p></div><button data-view="applications">View all</button></div>${recentApps.length ? `<div class="activity-list">${recentApps.map(a => `<div class="activity-item"><span class="activity-icon">${initials(a.company_name)}</span><div><strong>${esc(a.job_title)}</strong><small>${esc(a.company_name || 'Company')} · Applied ${fmtDate(a.applied_at)}</small></div>${statusBadge(a.status)}</div>`).join('')}</div>` : emptyState('AP','No applications yet','Browse opportunities and start building your placement pipeline.')}</section>
-        <section class="panel"><div class="panel-head"><div><h2>Readiness checklist</h2><p>High-impact completion signals</p></div></div><div class="progress-stack"><div class="progress-item"><span>Profile completeness</span><b>${completion}%</b><div class="progress-bar"><i style="--p:${Math.max(2,completion)}%"></i></div></div><div class="progress-item"><span>Resume uploaded</span><b>${d.has_resume ? '100%' : '0%'}</b><div class="progress-bar"><i style="--p:${d.has_resume ? 100 : 2}%"></i></div></div><div class="progress-item"><span>Institution verification</span><b>${d.verified ? '100%' : 'Pending'}</b><div class="progress-bar"><i style="--p:${d.verified ? 100 : 25}%"></i></div></div></div></section></div>`;
+        <section class="panel"><div class="panel-head"><div><h2>Readiness checklist</h2><p>High-impact completion signals</p></div></div><div class="progress-stack"><div class="progress-item"><span>Profile completeness</span><b>${completion}%</b><div class="progress-bar"><i style="--p:${Math.max(2,completion)}%"></i></div></div><div class="progress-item"><span>Resume uploaded</span><b>${d.has_resume ? '100%' : '0%'}</b><div class="progress-bar"><i style="--p:${d.has_resume ? 100 : 2}%"></i></div></div><div class="progress-item"><span>${individual?'PlaceAI preparation access':'Institution verification'}</span><b>${esc(accessProgress)}</b><div class="progress-bar"><i style="--p:${accessWidth}%"></i></div></div></div></section></div>`;
     } else if (view === 'opportunities') {
       setPage('Opportunities','Student workspace');
       const [jobs,apps] = await Promise.all([api('/students/jobs'),api('/students/applications')]); state.appliedJobIds=new Set(apps.map(a=>a.job_id));
-      $('#app-content').innerHTML = `${pageHead('Open opportunities','Public and institution-approved jobs available to your profile.')}
-      <div class="data-panel opportunities-panel"><div class="data-toolbar opportunities-toolbar"><input id="job-search" class="search-box" type="search" autocomplete="off" aria-label="Search opportunities" placeholder="Search role, company, skill or location"><select id="job-type-filter" class="filter-select" aria-label="Filter opportunities by job type"><option value="">All job types</option><option>Full-time</option><option>Internship</option><option>Part-time</option></select><span class="spacer"></span><span id="job-result-count" class="table-secondary opportunity-count">${jobs.length} ${jobs.length===1?'opportunity':'opportunities'}</span></div><div class="table-wrap">${jobs.length ? `<table class="data-table opportunities-table"><colgroup><col class="col-role"><col class="col-company"><col class="col-skills"><col class="col-type"><col class="col-deadline"><col class="col-action"></colgroup><thead><tr><th>Role</th><th>Company</th><th>Skills</th><th>Type</th><th>Deadline</th><th class="action-heading">Action</th></tr></thead><tbody id="jobs-body">${jobs.map(jobRowStudent).join('')}</tbody></table>` : emptyState('JB','No open opportunities','Your institution or recruiters have not published matching jobs yet.')}</div></div>`;
+      $('#app-content').innerHTML = `${pageHead('Open opportunities',isIndividualStudent()?'Public and PlaceAI recruiter opportunities for independent students. University-only opportunities are excluded.':'Public and institution-approved jobs available to your profile.')}
+      <div class="data-panel opportunities-panel"><div class="data-toolbar opportunities-toolbar"><input id="job-search" class="search-box" type="search" autocomplete="off" aria-label="Search opportunities" placeholder="Search role, company, skill or location"><select id="job-type-filter" class="filter-select" aria-label="Filter opportunities by job type"><option value="">All job types</option><option>Full-time</option><option>Internship</option><option>Part-time</option></select><span class="spacer"></span><span id="job-result-count" class="table-secondary opportunity-count">${jobs.length} ${jobs.length===1?'opportunity':'opportunities'}</span></div><div class="table-wrap">${jobs.length ? `<table class="data-table opportunities-table"><colgroup><col class="col-role"><col class="col-company"><col class="col-skills"><col class="col-type"><col class="col-deadline"><col class="col-action"></colgroup><thead><tr><th>Role</th><th>Company</th><th>Skills</th><th>Type</th><th>Deadline</th><th class="action-heading">Action</th></tr></thead><tbody id="jobs-body">${jobs.map(jobRowStudent).join('')}</tbody></table>` : emptyState('JB','No open opportunities',isIndividualStudent()?'No public recruiter opportunities are open for independent students right now.':'Your institution or recruiters have not published matching jobs yet.')}</div></div>`;
       state.lastJobs = jobs;
     } else if (view === 'applications') {
       setPage('Applications','Student workspace');
@@ -419,8 +573,8 @@
       let resume = null; try { resume = await api('/students/resume'); } catch(e) { if(e.status !== 404) throw e; }
       const profile = await api('/students/profile'); state.profile = profile;
       $('#app-content').innerHTML = `<div class="page-head resume-readiness-head"><div><h1>Resume & AI Readiness</h1><p>Keep the source resume under your control and use AI features explicitly.</p></div></div>
-      <section class="form-panel"><div class="panel-head"><div><h2>Resume</h2><p>PDF only · maximum 5 MB</p></div></div><div class="resume-card"><div><span class="resume-icon">PDF</span><div><strong>${resume ? esc(resume.original_filename) : 'No resume uploaded'}</strong><small>${resume ? `Uploaded ${fmtDate(resume.uploaded_at)} · ${resume.is_parsed ? 'AI parsed' : 'Not parsed'}` : 'Upload a text-based PDF to unlock resume analysis.'}</small></div></div><div class="row-actions"><label class="row-button primary">${resume ? 'Replace' : 'Upload'}<input id="resume-file" type="file" accept="application/pdf" hidden></label>${resume ? `<button class="row-button" data-action="parse-resume">Parse with AI</button>` : ''}</div></div>
-      <div class="ai-box"><div class="ai-box-head"><span>AI PROFILE SUMMARY</span><button class="row-button primary" data-action="generate-summary">Generate / refresh</button></div><p>${profile.ai_summary ? esc(profile.ai_summary) : 'No AI summary yet. Generate one only after your profile contains accurate education and skills.'}</p></div>
+      <section class="form-panel"><div class="panel-head"><div><h2>Resume</h2><p>PDF only · maximum 5 MB</p></div></div><div class="resume-card"><div><span class="resume-icon">PDF</span><div><strong>${resume ? esc(resume.original_filename) : 'No resume uploaded'}</strong><small>${resume ? `Uploaded ${fmtDate(resume.uploaded_at)} · ${resume.is_parsed ? 'AI parsed' : 'Not parsed'}` : 'Upload a text-based PDF to unlock resume analysis.'}</small></div></div><div class="row-actions"><label class="row-button primary">${resume ? 'Replace' : 'Upload'}<input id="resume-file" type="file" accept="application/pdf" hidden></label>${resume ? `<button class="row-button" data-action="parse-resume">${studentHasPremium()?'Parse with AI':'Unlock AI parsing'}</button>` : ''}</div></div>
+      ${isIndividualStudent()?studentAccessBanner():''}<div class="ai-box"><div class="ai-box-head"><span>AI PROFILE SUMMARY</span><button class="row-button primary" data-action="generate-summary">${studentHasPremium()?'Generate / refresh':'Unlock AI summary'}</button></div><p>${profile.ai_summary ? esc(profile.ai_summary) : 'No AI summary yet. Generate one only after your profile contains accurate education and skills.'}</p></div>
       ${resume?.ai_parsed_data ? `<div class="ai-box"><div class="ai-box-head"><span>PARSED RESUME DATA</span><span>${(resume.ai_parsed_data.skills || []).length} skills detected</span></div>${tags(resume.ai_parsed_data.skills || [])}<p>${esc(resume.ai_parsed_data.summary || '')}</p></div>` : ''}</section>`;
     } else if (view === 'profile') {
       setPage('Profile','Student account'); setContextAction();
@@ -428,8 +582,8 @@
       const defs = await api('/enterprise/custom-fields').catch(()=>[]);
       const customValues = p.id ? await api(`/enterprise/custom-fields/values/${p.id}`).catch(()=>({})) : {};
       state.customFieldDefs = defs;
-      $('#app-content').innerHTML = `${pageHead('Student profile','Keep academic, contact and institution-specific information accurate for eligibility checks.')}
-      <form id="student-profile-form" class="form-panel"><div class="profile-section-head"><div><h2>Identity & contact</h2><p>Keep your recruiter-facing information accurate.</p></div>${p.is_verified?statusBadge('approved'):statusBadge('pending')}</div><div class="profile-grid">${inputField('Full name','full_name',p.full_name)}${inputField('College','college',p.college)}${inputField('Degree','degree',p.degree)}${inputField('Branch','branch',p.branch)}${inputField('Graduation year','graduation_year',p.graduation_year,'number')}${inputField('CGPA','cgpa',p.cgpa,'number','0.0','10','0.01')}${inputField('10th percentage','tenth_percentage',p.tenth_percentage,'number','0','100','0.01')}${inputField('12th percentage','twelfth_percentage',p.twelfth_percentage,'number','0','100','0.01')}${inputField('Diploma percentage','diploma_percentage',p.diploma_percentage,'number','0','100','0.01')}${inputField('Active backlogs','active_backlogs',p.active_backlogs,'number','0','100','1')}${inputField('Historical backlogs','historical_backlogs',p.historical_backlogs,'number','0','100','1')}${inputField('Academic gap (months)','academic_gap_months',p.academic_gap_months,'number','0','240','1')}${inputField('Work authorization','work_authorization',p.work_authorization)}<label class="field-label full">Skills <span class="field-help">Comma separated</span><input class="field-input" name="skills" value="${esc((p.skills || []).join(', '))}"></label><label class="field-label full">Certifications <span class="field-help">Comma separated</span><input class="field-input" name="certifications" value="${esc((p.certifications || []).join(', '))}"></label><label class="field-label full">Desired roles<input class="field-input" name="desired_roles" value="${esc((p.desired_roles || []).join(', '))}"></label>${inputField('Phone','phone',p.phone)}${inputField('LinkedIn URL','linkedin_url',p.linkedin_url,'url')}${inputField('GitHub URL','github_url',p.github_url,'url')}${inputField('Portfolio URL','portfolio_url',p.portfolio_url,'url')}<label class="field-label full">Professional bio<textarea class="field-input" rows="4" name="bio">${esc(p.bio || '')}</textarea></label></div>${defs.length?`<div class="custom-profile-section"><div class="profile-section-head"><div><h2>Institution-specific information</h2><p>Fields configured by your placement office.</p></div></div><div class="profile-grid">${defs.filter(d=>d.entity_type==='student').map(d=>customFieldControl(d,customValues[d.field_key]||'')).join('')}</div></div>`:''}<div class="note-box"><strong>Institution-verified academic data</strong><p>Changes to degree, branch, graduation year, CGPA, school percentages, backlogs or academic gaps are submitted to your placement office for approval instead of silently replacing verified records.</p></div><div class="form-footer"><button class="button button-primary" type="submit">Save profile</button></div></form>`;
+      $('#app-content').innerHTML = `${pageHead('Student profile',isIndividualStudent()?'Keep your profile accurate for public recruiter opportunities and preparation tools. No university placement data is attached to this account.':'Keep academic, contact and institution-specific information accurate for eligibility checks.')}
+      <form id="student-profile-form" class="form-panel"><div class="profile-section-head"><div><h2>Identity & contact</h2><p>Keep your recruiter-facing information accurate.</p></div>${p.is_verified?statusBadge('approved'):statusBadge('pending')}</div><div class="profile-grid">${inputField('Full name','full_name',p.full_name)}${inputField('College','college',p.college)}${inputField('Degree','degree',p.degree)}${inputField('Branch','branch',p.branch)}${inputField('Graduation year','graduation_year',p.graduation_year,'number')}${inputField('CGPA','cgpa',p.cgpa,'number','0.0','10','0.01')}${inputField('10th percentage','tenth_percentage',p.tenth_percentage,'number','0','100','0.01')}${inputField('12th percentage','twelfth_percentage',p.twelfth_percentage,'number','0','100','0.01')}${inputField('Diploma percentage','diploma_percentage',p.diploma_percentage,'number','0','100','0.01')}${inputField('Active backlogs','active_backlogs',p.active_backlogs,'number','0','100','1')}${inputField('Historical backlogs','historical_backlogs',p.historical_backlogs,'number','0','100','1')}${inputField('Academic gap (months)','academic_gap_months',p.academic_gap_months,'number','0','240','1')}${inputField('Work authorization','work_authorization',p.work_authorization)}<label class="field-label full">Skills <span class="field-help">Comma separated</span><input class="field-input" name="skills" value="${esc((p.skills || []).join(', '))}"></label><label class="field-label full">Certifications <span class="field-help">Comma separated</span><input class="field-input" name="certifications" value="${esc((p.certifications || []).join(', '))}"></label><label class="field-label full">Desired roles<input class="field-input" name="desired_roles" value="${esc((p.desired_roles || []).join(', '))}"></label>${inputField('Phone','phone',p.phone)}${inputField('LinkedIn URL','linkedin_url',p.linkedin_url,'url')}${inputField('GitHub URL','github_url',p.github_url,'url')}${inputField('Portfolio URL','portfolio_url',p.portfolio_url,'url')}<label class="field-label full">Professional bio<textarea class="field-input" rows="4" name="bio">${esc(p.bio || '')}</textarea></label></div>${defs.length?`<div class="custom-profile-section"><div class="profile-section-head"><div><h2>Institution-specific information</h2><p>Fields configured by your placement office.</p></div></div><div class="profile-grid">${defs.filter(d=>d.entity_type==='student').map(d=>customFieldControl(d,customValues[d.field_key]||'')).join('')}</div></div>`:''}${isIndividualStudent()?'<div class="note-box"><strong>Independent student profile</strong><p>Your profile is not linked to a university tenant. Academic updates are saved to your account and do not grant access to university placement drives or campus-only opportunities.</p></div>':'<div class="note-box"><strong>Institution-verified academic data</strong><p>Changes to degree, branch, graduation year, CGPA, school percentages, backlogs or academic gaps are submitted to your placement office for approval instead of silently replacing verified records.</p></div>'}<div class="form-footer"><button class="button button-primary" type="submit">Save profile</button></div></form>`;
     }
   }
 
@@ -677,6 +831,7 @@
       else if(a==='logout'){await fetch('/auth/logout',{method:'POST',credentials:'include'});state.token='';location.href='/';}
       else if(a==='reload-view')navigate(state.view);
       else if(a==='open-notifications')navigate('notifications');
+      else if(a==='start-student-checkout')await startStudentCheckout();
       else if(a==='open-job-form')openJobForm();
       else if(a==='open-student-form')openStudentForm();
       else if(a==='open-recruiter-form')openRecruiterForm();
@@ -689,8 +844,8 @@
       else if(a==='view-candidate')await viewCandidate(id);
       else if(a==='apply-job'){openModal(`<span class="section-kicker">Application</span><h2>Submit application</h2><p class="form-intro">Add a concise cover note or submit without one.</p><form id="apply-form" class="form-stack"><input type="hidden" name="job_id" value="${id}"><label>Cover note <span class="optional">optional</span><textarea name="cover_note" rows="5" placeholder="Why are you interested in this role?"></textarea></label><button class="button button-primary button-full">Submit application</button></form>`);}
       else if(a==='check-eligibility'){const r=await api(`/students/drives/${id}/eligibility`);openModal(`<span class="section-kicker">Eligibility check</span><h2>${r.eligible?'You are eligible':'Not currently eligible'}</h2><p class="form-intro">${r.eligible?'Your current academic profile satisfies this drive’s configured criteria.':'Your profile does not satisfy every configured criterion.'}</p>${r.reasons?.length?`<div class="ai-box"><div class="ai-box-head"><span>REASONS</span></div><p>${r.reasons.map(esc).join('<br>')}</p></div>`:''}<button class="button button-primary button-full" data-action="close-generic-modal">Done</button>`);}
-      else if(a==='parse-resume'){await api('/ai/parse-resume',{method:'POST'});toast('Resume parsed','Review the extracted data before relying on it.');navigate('resume');}
-      else if(a==='generate-summary'){await api('/ai/generate-summary',{method:'POST'});toast('Summary generated','AI output should be reviewed for accuracy.');navigate('resume');}
+      else if(a==='parse-resume'){if(!studentHasPremium()){renderStudentPaywall('Resume AI analysis');return;}await api('/ai/parse-resume',{method:'POST'});toast('Resume parsed','Review the extracted data before relying on it.');navigate('resume');}
+      else if(a==='generate-summary'){if(!studentHasPremium()){renderStudentPaywall('Resume AI summary');return;}await api('/ai/generate-summary',{method:'POST'});toast('Summary generated','AI output should be reviewed for accuracy.');navigate('resume');}
       else if(a==='delete-job'){if(confirm('Delete this job permanently?')){await api(`/jobs/${id}`,{method:'DELETE'});toast('Job deleted');navigate('jobs');}}
       else if(a==='approve-job'||a==='reject-job'){const val=a==='approve-job'?'approved':'rejected';await api(`/institutions/jobs/${id}/approval`,{method:'PATCH',body:JSON.stringify({approval_status:val})});toast(`Job ${val}`);navigate('jobs');}
       else if(a==='toggle-student-verify'){await api(`/institutions/students/${id}/verification`,{method:'PATCH',body:JSON.stringify({is_verified:action.dataset.value==='true'})});toast('Verification updated');navigate('students');}
@@ -765,8 +920,8 @@
       setPage('Offers','Placement outcomes'); const offers=await api('/enterprise/offers');
       $('#app-content').innerHTML=`${pageHead('Offer centre','Review offer terms and record your acceptance or decline decision.')}${offers.length?`<div class="card-grid">${offers.map(o=>`<article class="operation-card"><div class="operation-card-top">${statusBadge(o.status)}<small>${fmtDate(o.created_at)}</small></div><h3>${esc(o.role)}</h3><p>${esc(o.company_name)} · ${esc(o.location||'Location pending')}</p><div class="offer-number">${o.ctc_lpa!=null?`${o.ctc_lpa} LPA`:'CTC not recorded'}</div><dl><div><dt>Joining</dt><dd>${fmtDate(o.joining_date)}</dd></div><div><dt>PPO</dt><dd>${esc(o.ppo_status||'—')}</dd></div></dl>${o.has_offer_letter?`<div class="row-actions"><button class="row-button" data-action="download-offer-letter" data-id="${o.id}">Download offer letter</button></div>`:''}${o.status==='issued'?`<div class="row-actions"><button class="row-button primary" data-action="student-offer-decision" data-id="${o.id}" data-value="accepted">Accept</button><button class="row-button" data-action="student-offer-decision" data-id="${o.id}" data-value="declined">Decline</button></div>`:''}</article>`).join('')}</div>`:emptyState('OF','No offers yet','Formal offers created through your application pipeline will appear here.')}`;
     } else if(view==='documents'){
-      setPage('Document vault','Student records'); const docs=await api('/enterprise/documents');
-      $('#app-content').innerHTML=`${pageHead('Student document vault','Maintain placement documents with controlled visibility.')}<section class="form-panel compact-form"><form id="document-upload-form" class="inline-form"><label>Document type<select name="document_type"><option value="marksheet">Marksheet</option><option value="certification">Certification</option><option value="transcript">Transcript</option><option value="photo">Photograph</option><option value="identity">Optional identity document</option><option value="internship_letter">Internship letter</option><option value="offer_letter">Offer letter</option></select></label><label>Visibility<select name="visibility"><option value="institution_only">Institution only</option><option value="recruiter_with_permission">Recruiter with permission</option></select></label><label class="file-picker">Choose file<input id="student-document-file" type="file" accept=".pdf,.png,.jpg,.jpeg"></label><button class="button button-primary" type="submit">Upload document</button></form></section>${docs.length?enterpriseTable(['Document','Type','Visibility','Verified','Uploaded',''],docs.map(d=>`<tr><td><span class="table-primary">${esc(d.filename)}</span></td><td>${esc(d.document_type)}</td><td>${esc(d.visibility.replaceAll('_',' '))}</td><td>${d.is_verified?statusBadge('approved'):statusBadge('pending')}</td><td>${fmtDate(d.uploaded_at)}</td><td><button class="row-button" data-action="download-vault-document" data-id="${d.id}">Open</button></td></tr>`).join('')):emptyState('DV','Vault is empty','Upload marksheets, certificates, transcripts or other placement documents.')}`;
+      setPage('Document vault','Student records'); const docs=await api('/enterprise/documents'); const canUpload=studentHasPremium();
+      $('#app-content').innerHTML=`${pageHead('Student document vault','Maintain placement documents with controlled visibility.')}${isIndividualStudent()?studentAccessBanner():''}<section class="form-panel compact-form"><form id="document-upload-form" class="inline-form"><label>Document type<select name="document_type"><option value="marksheet">Marksheet</option><option value="certification">Certification</option><option value="transcript">Transcript</option><option value="photo">Photograph</option><option value="identity">Optional identity document</option><option value="internship_letter">Internship letter</option><option value="offer_letter">Offer letter</option></select></label><label>Visibility<select name="visibility"><option value="institution_only">Institution only</option><option value="recruiter_with_permission">Recruiter with permission</option></select></label><label class="file-picker">Choose file<input id="student-document-file" type="file" accept=".pdf,.png,.jpg,.jpeg"></label><button class="button button-primary" type="submit" ${canUpload?'':'disabled'}>${canUpload?'Upload document':'Individual Pro required'}</button></form>${canUpload?'':'<div class="note-box"><strong>Existing documents remain accessible</strong><p>Your trial has ended. You can still open documents already stored in your vault; Individual Pro is required only to add new preparation documents.</p></div>'}</section>${docs.length?enterpriseTable(['Document','Type','Visibility','Verified','Uploaded',''],docs.map(d=>`<tr><td><span class="table-primary">${esc(d.filename)}</span></td><td>${esc(d.document_type)}</td><td>${esc(d.visibility.replaceAll('_',' '))}</td><td>${d.is_verified?statusBadge('approved'):statusBadge('pending')}</td><td>${fmtDate(d.uploaded_at)}</td><td><button class="row-button" data-action="download-vault-document" data-id="${d.id}">Open</button></td></tr>`).join('')):emptyState('DV','Vault is empty','Upload marksheets, certificates, transcripts or other placement documents.')}`;
     } else if(view==='assistant'){
       setPage('AI placement assistant','Role-aware intelligence');
       $('#app-content').innerHTML=`${pageHead('AI Placement Assistant','Ask questions using only your authorized PlaceAI context.')}<div class="assistant-layout"><section class="assistant-card"><div id="assistant-transcript" class="assistant-transcript"><div class="assistant-message system"><strong>PlaceAI Assistant</strong><p>Ask about eligible drives, application status, upcoming interviews, resume preparation or your next actions.</p></div></div><form id="assistant-form" class="assistant-input"><textarea name="message" rows="3" placeholder="Which drives am I eligible for, and what should I prepare next?" required></textarea><button class="button button-primary">Ask PlaceAI</button></form></section><aside class="panel prompt-library"><h2>Useful questions</h2>${['Which drives am I eligible for?','Why am I not eligible for a drive?','Which roles match my skills?','When is my next interview?','What should I improve before my next application?'].map(q=>`<button data-action="assistant-suggestion" data-value="${esc(q)}">${esc(q)}</button>`).join('')}</aside></div>`;
@@ -775,9 +930,9 @@
     } else if(view==='announcements'){
       setPage('Announcements','Updates'); const rows=await api('/enterprise/announcements'); $('#app-content').innerHTML=`${pageHead('Placement announcements','Official communication from your placement office.')}${rows.length?`<div class="announcement-list">${rows.map(a=>`<article class="announcement-card"><div><span class="priority-label priority-${esc(a.priority)}">${esc(a.priority)}</span><small>${fmtDate(a.created_at)}</small></div><h3>${esc(a.title)}</h3><p>${esc(a.body)}</p></article>`).join('')}</div>`:emptyState('AN','No announcements','Institution announcements targeted to your batch will appear here.')}`;
     } else if(view==='incidents'){
-      setPage('Report an issue','Placement safety'); const rows=await api('/enterprise/incidents'); $('#app-content').innerHTML=`${pageHead('Confidential incident reporting','Report suspicious recruiters, payment demands, misleading job information or offer discrepancies.')}<div class="two-panel"><form id="incident-form" class="form-panel"><h2>New confidential report</h2><label class="field-label">Category<select class="field-input" name="category"><option>suspicious recruiter</option><option>misleading CTC</option><option>payment demand</option><option>inappropriate interview behaviour</option><option>fake job</option><option>offer discrepancy</option></select></label><label class="field-label">Describe what happened<textarea class="field-input" name="description" rows="6" required></textarea></label><label class="check-label"><input type="checkbox" name="confidential" checked> Keep this confidential to authorized placement administrators</label><button class="button button-primary">Submit report</button></form>${featurePanel('Your reports','Status is visible only to you and authorized institution staff.',rows.length?`<div class="activity-list">${rows.map(x=>`<div class="activity-item"><span class="activity-icon">!</span><div><strong>${esc(x.category)}</strong><small>${esc(x.description.slice(0,100))}</small></div>${statusBadge(x.status)}</div>`).join('')}</div>`:emptyState('IR','No reports submitted','Your submitted incident reports will appear here.'))}</div>`;
+      setPage('Report an issue','Placement safety'); const rows=await api('/enterprise/incidents'); $('#app-content').innerHTML=`${pageHead('Confidential incident reporting','Report suspicious recruiters, payment demands, misleading job information or offer discrepancies.')}<div class="two-panel"><form id="incident-form" class="form-panel"><h2>New confidential report</h2><label class="field-label">Category<select class="field-input" name="category"><option>suspicious recruiter</option><option>misleading CTC</option><option>payment demand</option><option>inappropriate interview behaviour</option><option>fake job</option><option>offer discrepancy</option></select></label><label class="field-label">Describe what happened<textarea class="field-input" name="description" rows="6" required></textarea></label><label class="check-label"><input type="checkbox" name="confidential" checked> Keep this confidential to authorized PlaceAI or institution administrators</label><button class="button button-primary">Submit report</button></form>${featurePanel('Your reports','Status is visible only to you and the authorized team responsible for your account.',rows.length?`<div class="activity-list">${rows.map(x=>`<div class="activity-item"><span class="activity-icon">!</span><div><strong>${esc(x.category)}</strong><small>${esc(x.description.slice(0,100))}</small></div>${statusBadge(x.status)}</div>`).join('')}</div>`:emptyState('IR','No reports submitted','Your submitted incident reports will appear here.'))}</div>`;
     } else if(view==='approvals'){
-      setPage('Profile approvals','Account'); const rows=await api('/enterprise/profile-change-requests'); $('#app-content').innerHTML=`${pageHead('Profile approval requests','Academic changes that require institution verification are tracked here.')}${rows.length?enterpriseTable(['Field','Current','Requested','Status','Requested'],rows.map(r=>`<tr><td>${esc(r.field_name.replaceAll('_',' '))}</td><td>${esc(r.old_value||'—')}</td><td>${esc(r.new_value||'—')}</td><td>${statusBadge(r.status)}</td><td>${fmtDate(r.created_at)}</td></tr>`).join('')):emptyState('PA','No profile changes pending','Changes to verified academic fields will appear here for review.')}`;
+      setPage('Profile approvals','Account'); const rows=await api('/enterprise/profile-change-requests'); $('#app-content').innerHTML=`${pageHead('Profile approval requests',isIndividualStudent()?'Independent student profile changes are saved directly; no university approval is required.':'Academic changes that require institution verification are tracked here.')}${rows.length?enterpriseTable(['Field','Current','Requested','Status','Requested'],rows.map(r=>`<tr><td>${esc(r.field_name.replaceAll('_',' '))}</td><td>${esc(r.old_value||'—')}</td><td>${esc(r.new_value||'—')}</td><td>${statusBadge(r.status)}</td><td>${fmtDate(r.created_at)}</td></tr>`).join('')):emptyState('PA',isIndividualStudent()?'No approvals required':'No profile changes pending',isIndividualStudent()?'This account is not linked to a university placement office, so editable profile fields do not enter a campus approval queue.':'Changes to verified academic fields will appear here for review.')}`;
     }
   }
 
@@ -959,7 +1114,7 @@
     e.preventDefault();const fd=new FormData(f);const o=Object.fromEntries(fd.entries());
     try{
       if(f.id==='assistant-form'){const transcript=$('#assistant-transcript');transcript.insertAdjacentHTML('beforeend',`<div class="assistant-message user"><strong>You</strong><p>${esc(o.message)}</p></div><div class="assistant-message system pending"><strong>PlaceAI Assistant</strong><p>Reviewing your authorized placement context…</p></div>`);const r=await api('/ai/assistant',{method:'POST',body:JSON.stringify({message:o.message})});transcript.querySelector('.pending')?.remove();transcript.insertAdjacentHTML('beforeend',`<div class="assistant-message system"><strong>PlaceAI Assistant</strong><p>${esc(r.answer)}</p><small>${esc(r.guardrail)}</small></div>`);f.reset();transcript.scrollTop=transcript.scrollHeight;}
-      else if(f.id==='document-upload-form'){const file=$('#student-document-file')?.files[0];if(!file)throw new Error('Choose a document first');const body=new FormData();body.append('file',file);await api(`/enterprise/documents?document_type=${encodeURIComponent(o.document_type)}&visibility=${encodeURIComponent(o.visibility)}`,{method:'POST',body});toast('Document uploaded');navigate('documents');}
+      else if(f.id==='document-upload-form'){if(!studentHasPremium()){renderStudentPaywall('Document vault uploads');return;}const file=$('#student-document-file')?.files[0];if(!file)throw new Error('Choose a document first');const body=new FormData();body.append('file',file);await api(`/enterprise/documents?document_type=${encodeURIComponent(o.document_type)}&visibility=${encodeURIComponent(o.visibility)}`,{method:'POST',body});toast('Document uploaded');navigate('documents');}
       else if(f.id==='verification-profile-form'){const data={...o,past_college_relationships:String(o.past_college_relationships||'').split(',').map(x=>x.trim()).filter(Boolean),previous_successful_placements:o.previous_successful_placements?Number(o.previous_successful_placements):0};await api('/recruiters/profile',{method:'PUT',body:JSON.stringify(data)});toast('Company evidence saved');navigate('verification');}
       else if(f.id==='authorization-letter-form'){const file=$('#authorization-letter-file')?.files[0];if(!file)throw new Error('Choose the authorization letter PDF');const body=new FormData();body.append('file',file);await api('/enterprise/company-verification/authorization-letter',{method:'POST',body});toast('Authorization evidence uploaded');navigate('verification');}
       else if(f.id==='enterprise-interview-form'){const data={...o,scheduled_at:new Date(o.scheduled_at).toISOString()};await api('/enterprise/interviews',{method:'POST',body:JSON.stringify(data)});closeModal();toast('Interview scheduled');navigate('interviews');}
