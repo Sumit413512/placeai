@@ -2,11 +2,11 @@
   'use strict';
 
   const EXACT_COPY = new Map([
-    ['Scattered résumés', 'Scattered resumes'],
-    ['Profile completion, résumé records, documents, interview preparation and application history are tied to the signed-in student account.', 'Profile completion, resume records, documents, interview preparation and application history are tied to the signed-in student account.'],
-    ['Profiles, document vault, résumé parsing, skills, readiness scoring and interview preparation.', 'Profiles, document vault, resume parsing, skills, readiness scoring and interview preparation.'],
-    ['Résumé uploaded', 'Resume uploaded'],
-    ['PARSED RÉSUMÉ DATA', 'PARSED RESUME DATA'],
+    ['Scattered resumes', 'Scattered resumes'],
+    ['Profile completion, resume records, documents, interview preparation and application history are tied to the signed-in student account.', 'Profile completion, resume records, documents, interview preparation and application history are tied to the signed-in student account.'],
+    ['Profiles, document vault, resume parsing, skills, readiness scoring and interview preparation.', 'Profiles, document vault, resume parsing, skills, readiness scoring and interview preparation.'],
+    ['Resume uploaded', 'Resume uploaded'],
+    ['PARSED RESUME DATA', 'PARSED RESUME DATA'],
   ]);
 
   const apiErrors = window.PlaceAIApiErrors;
