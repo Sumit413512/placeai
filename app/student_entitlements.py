@@ -85,11 +85,8 @@ def student_access_status(user: User, db: Session) -> dict:
     }
 
 
-def require_student_premium_access(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> User:
-    access = student_access_status(current_user, db)
+def ensure_student_premium_access(user: User, db: Session) -> dict:
+    access = student_access_status(user, db)
     if not access["premium_access"]:
         raise HTTPException(
             status_code=402,
@@ -100,4 +97,12 @@ def require_student_premium_access(
                 "plan_code": INDEPENDENT_MONTHLY_PLAN_CODE,
             },
         )
+    return access
+
+
+def require_student_premium_access(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> User:
+    ensure_student_premium_access(current_user, db)
     return current_user
