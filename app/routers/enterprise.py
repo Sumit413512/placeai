@@ -1297,7 +1297,10 @@ def create_incident(data:IncidentReportCreate,current_user:User=Depends(require_
 
 @router.patch("/incidents/{incident_id}")
 def update_incident(incident_id:str,data:IncidentStatusUpdate,current_user:User=Depends(require_institution_admin),db:Session=Depends(get_db)):
-    x=db.query(IncidentReport).filter(IncidentReport.id==incident_id,IncidentReport.organization_id==current_user.organization_id).first();
+    query=db.query(IncidentReport).filter(IncidentReport.id==incident_id)
+    if current_user.role!=UserRole.platform_admin:
+        query=query.filter(IncidentReport.organization_id==current_user.organization_id)
+    x=query.first()
     if not x:raise HTTPException(status_code=404,detail="Incident not found")
     x.status=data.status;x.resolution_notes=data.resolution_notes;db.commit();return {"id":x.id,"status":x.status}
 
