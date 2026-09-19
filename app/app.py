@@ -117,13 +117,29 @@ async def security_headers(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    razorpay_checkout_allowed = (
+        settings.student_payment_provider == "razorpay"
+        and bool(settings.razorpay_key_id)
+        and bool(settings.razorpay_key_secret)
+    )
+    checkout_script = " https://checkout.razorpay.com" if razorpay_checkout_allowed else ""
+    checkout_connect = " https://api.razorpay.com https://checkout.razorpay.com" if razorpay_checkout_allowed else ""
+    checkout_frame = (
+        "frame-src https://api.razorpay.com https://checkout.razorpay.com; "
+        if razorpay_checkout_allowed
+        else ""
+    )
+    checkout_form = " https://api.razorpay.com https://checkout.razorpay.com" if razorpay_checkout_allowed else ""
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self'; "
+        f"script-src 'self'{checkout_script}; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data: https:; "
-        "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+        f"connect-src 'self'{checkout_connect}; "
+        f"{checkout_frame}"
+        "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; "
+        f"form-action 'self'{checkout_form}"
     )
     if path == "/health" or path.startswith("/auth/") or path in {
         "/", "/privacy", "/terms", "/acceptable-use"
@@ -226,6 +242,7 @@ enterprise = _import_router("enterprise")
 enterprise_secure = _import_router("enterprise_secure")
 student_workspace_v2 = _import_router("student_workspace_v2")
 telemetry = _import_router("telemetry")
+billing = _import_router("billing")
 
 ACCOUNT_SECURITY_REPLACEMENTS = {
     ("/auth/change-password", "POST"),
@@ -287,6 +304,7 @@ _include_router(enterprise, ENTERPRISE_REPLACEMENTS)
 _include_router(enterprise_secure, ENTERPRISE_SECURE_EXCLUSIONS)
 _include_router(student_workspace_v2)
 _include_router(telemetry)
+_include_router(billing)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
