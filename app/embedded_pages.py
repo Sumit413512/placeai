@@ -33,6 +33,7 @@ INDEX_HTML = '''<!doctype html>
         <a href="#platform">Platform</a>
         <a href="#institutions">Institutions</a>
         <a href="#recruiters">Recruiters</a>
+        <a href="#preparation-lab">Preparation Lab</a>
         <a href="#security">Security</a>
       </nav>
       <div class="header-actions">
@@ -60,7 +61,11 @@ INDEX_HTML = '''<!doctype html>
         </div>
 
         <div class="hero-product" aria-label="PlaceAI production workspace information">
-          <div class="production-surface-card">
+          <figure class="hero-photo-card">
+            <img src="/static/placeai-hero-approved-hd.webp" alt="Illustrative student collaboration scene for the PlaceAI placement journey" loading="eager" fetchpriority="high">
+            <figcaption><span>From preparation to placement</span><strong>One connected campus journey.</strong></figcaption>
+          </figure>
+          <div class="production-surface-card hero-surface-card">
             <div>
               <span class="surface-kicker">Production workspace</span>
               <h3>Real records appear only after authenticated users create them.</h3>
@@ -79,7 +84,7 @@ INDEX_HTML = '''<!doctype html>
       <section class="proof-strip">
         <div class="section-shell proof-content">
           <span>Designed to replace fragmented placement operations across</span>
-          <strong>Spreadsheets</strong><i></i><strong>Messaging threads</strong><i></i><strong>Scattered résumés</strong><i></i><strong>Manual reports</strong>
+          <strong>Spreadsheets</strong><i></i><strong>Messaging threads</strong><i></i><strong>Scattered resumes</strong><i></i><strong>Manual reports</strong>
         </div>
       </section>
 
@@ -92,7 +97,20 @@ INDEX_HTML = '''<!doctype html>
           <article class="bento-card bento-large"><span class="card-number">01</span><div><h3>Placement command centre</h3><p>Track students, eligibility, active drives, applications, interviews, offers and outcomes from production records instead of manually assembled summaries.</p></div></article>
           <article class="bento-card"><span class="card-number">02</span><h3>Eligibility enforcement</h3><p>Institutions configure academic and batch requirements. Students receive eligibility results from their stored profile and the actual drive criteria.</p></article>
           <article class="bento-card"><span class="card-number">03</span><h3>Recruiter pipeline</h3><p>Recruiters work only with authorized jobs and candidate pipelines, with status movement recorded against real applications.</p></article>
-          <article class="bento-card bento-wide"><span class="card-number">04</span><div><h3>Student readiness</h3><p>Profile completion, résumé records, documents, interview preparation and application history are tied to the signed-in student account.</p></div></article>
+          <article class="bento-card bento-wide"><span class="card-number">04</span><div><h3>Student readiness</h3><p>Profile completion, resume records, documents, interview preparation and application history are tied to the signed-in student account.</p></div></article>
+        </div>
+      </section>
+
+      <section id="preparation-lab" class="section-shell preparation-section">
+        <div class="section-heading compact preparation-heading">
+          <div><span class="section-kicker">Preparation Lab</span><h2>Student preparation, connected to placement.</h2></div>
+          <p>Bring readiness, resume records, interview preparation and application context into the same authenticated student workspace.</p>
+        </div>
+        <div class="preparation-grid">
+          <article><span>01</span><h3>Profile readiness</h3><p>Keep academic details, skills and placement preferences connected to the signed-in student account.</p></article>
+          <article><span>02</span><h3>Resume intelligence</h3><p>Use structured resume records and AI-assisted analysis without replacing authorized human review.</p></article>
+          <article><span>03</span><h3>Interview practice</h3><p>Prepare with role-grounded mock interview workflows linked to the student's placement context.</p></article>
+          <article><span>04</span><h3>Opportunity context</h3><p>Move from preparation into eligible opportunities, applications and placement activity in one platform.</p></article>
         </div>
       </section>
 
@@ -194,7 +212,8 @@ INDEX_HTML = '''<!doctype html>
 
   <script src="/static/app.js" defer></script>
 </body>
-</html>'''
+</html>
+'''
 
 PRIVACY_HTML = '''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="PlaceAI Privacy Policy"><title>Privacy Policy — PlaceAI</title><link rel="icon" type="image/svg+xml" href="/static/placeai-icon.svg"><link rel="stylesheet" href="/static/legal.css"></head><body><div class="legal-shell"><header class="legal-top"><a class="legal-brand" href="/">PlaceAI</a><nav class="legal-nav" aria-label="Legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/acceptable-use">Acceptable Use</a><a href="/">Back to PlaceAI</a></nav></header><section class="legal-hero"><span class="legal-kicker">Legal & privacy</span><h1>Privacy Policy</h1><p>This policy explains how PlaceAI handles personal and institutional information when providing campus placement operations, applicant workflows, recruiter tools and AI-assisted features.</p><div class="legal-meta">Effective: 12 September 2026</div></section><main class="legal-card"><div class="legal-note">PlaceAI is designed for controlled institutional use. Institution-specific contractual or data-processing terms may provide additional protections and take precedence where applicable.</div><h2>1. Information we process</h2><p>Depending on your role and the features your institution enables, PlaceAI may process account and identity information; academic and student profile information; resumes and supporting documents; job applications, eligibility results, interviews, attendance and offers; recruiter and company verification information; communications, audit events and security logs; and technical information necessary to operate and secure the service.</p><h2>2. Why we process information</h2><p>We use information to authenticate users, provide role-based placement workflows, manage institution and recruiter operations, evaluate configured eligibility criteria, support interview and application workflows, send account and security communications, prevent abuse, maintain auditability, diagnose service issues and provide authorized AI-assisted analysis.</p><h2>3. Institutions and authorized users</h2><p>For institution-managed records, the relevant institution may determine why and how student or placement information is used. PlaceAI processes that information to provide the service and according to the institution's authorized configuration, applicable agreements and law. Users must only access information they are authorized to handle.</p><h2>4. AI-assisted features</h2><p>PlaceAI may send the minimum information necessary for a requested AI feature to configured AI service providers. OpenAI is the primary AI provider and Google Gemini may be used as a fallback when configured. AI output is decision support only and is intended for authorized human review. PlaceAI does not represent AI output as a guaranteed hiring, placement or eligibility decision.</p><h2>5. Service providers and international processing</h2><p>PlaceAI uses infrastructure and communications providers to host the application, database, transactional email and AI functionality. These providers may process information in jurisdictions outside the user's location. PlaceAI limits provider access to what is necessary to deliver and secure the service.</p><h2>6. Cookies and session information</h2><p>PlaceAI uses essential authentication and security mechanisms required to sign users in, maintain authorized sessions and protect accounts. PlaceAI does not require advertising cookies to operate the placement workspace.</p><h2>7. Retention</h2><p>Information is retained for as long as required to provide the service, satisfy institutional instructions, preserve legitimate security and audit records, meet contractual obligations or comply with applicable law. Retention requirements may vary by institution and record type.</p><h2>8. Security</h2><p>PlaceAI uses role-based authorization, institution scoping, encrypted HTTPS transport, secure password handling, session controls, audit records, rate limiting, security headers, dependency scanning and production health checks. No online service can guarantee absolute security, so suspected security incidents should be reported promptly through the authorized PlaceAI support channel.</p><h2>9. Your choices and rights</h2><p>Users may request access, correction or other action concerning personal information through their institution where the institution manages that information, or through the PlaceAI support/access channel for platform-managed information. Requests are handled subject to identity verification, institutional responsibilities and applicable law.</p><h2>10. Student and age considerations</h2><p>PlaceAI is intended primarily for higher-education placement operations. Institutions are responsible for ensuring that accounts and student information are collected and used with the appropriate authority, notice or consent required by applicable law.</p><h2>11. Changes to this policy</h2><p>We may update this policy when the service, providers, legal requirements or data practices change. The effective date above will be updated when material revisions are published.</p><h2>12. Contact</h2><p>For privacy or data-handling questions, use the PlaceAI access/support channel or the support contact supplied by your institution. Security vulnerabilities should be reported through the process described in PlaceAI's Security Policy.</p></main><footer class="legal-footer"><span>© 2026 PlaceAI</span><span><a href="/terms">Terms</a> · <a href="/acceptable-use">Acceptable Use</a></span></footer></div></body></html>'''
 
