@@ -569,3 +569,189 @@ body.modal-open{overflow:hidden}
   #marketing-site .preparation-section{padding:70px 0}
   #marketing-site .preparation-grid{grid-template-columns:1fr}
 }
+
+
+/* ==========================================================================
+   PlaceAI public hero refinement — approved minimal direction
+   Keeps all marketing copy/content intact while removing the capsule treatment,
+   preventing image/card overlap, and giving the hero a cleaner editorial layout.
+   ========================================================================== */
+#marketing-site .hero{
+  grid-template-columns:minmax(0,.9fr) minmax(520px,1.1fr);
+  gap:56px;
+  align-items:start;
+  padding-top:64px;
+  padding-bottom:84px;
+}
+#marketing-site .hero-copy{
+  padding-top:18px;
+}
+#marketing-site .eyebrow{
+  display:block;
+  position:relative;
+  width:fit-content;
+  max-width:100%;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  padding:0 0 0 14px;
+  color:#526681;
+  font-size:11px;
+  line-height:1.45;
+  font-weight:800;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+}
+#marketing-site .eyebrow:before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:2px;
+  bottom:2px;
+  width:2px;
+  border-radius:2px;
+  background:#2768d7;
+}
+#marketing-site .eyebrow-dot{
+  display:none;
+}
+#marketing-site .hero h1{
+  max-width:650px;
+  font-size:clamp(46px,4.6vw,62px);
+  line-height:1.02;
+  letter-spacing:-.052em;
+  margin:24px 0 20px;
+}
+#marketing-site .hero-lead{
+  max-width:610px;
+  font-size:16.5px;
+  line-height:1.68;
+}
+#marketing-site .hero-product{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  min-width:0;
+}
+#marketing-site .hero-photo-card{
+  width:100%;
+  min-height:390px;
+  margin:0;
+  border:1px solid #dfe6ef;
+  border-radius:20px;
+  overflow:hidden;
+  background:#f4f7fb;
+  box-shadow:0 18px 48px rgba(13,38,70,.10);
+}
+#marketing-site .hero-photo-card img{
+  display:block;
+  width:100%;
+  height:390px;
+  min-height:390px;
+  object-fit:cover;
+  object-position:center center;
+  background:#f4f7fb;
+}
+#marketing-site .hero-photo-card:after{
+  background:linear-gradient(180deg,transparent 60%,rgba(7,31,69,.58) 100%);
+}
+#marketing-site .hero-photo-card figcaption{
+  left:22px;
+  right:22px;
+  bottom:20px;
+}
+#marketing-site .hero-photo-card figcaption span{
+  font-size:9.5px;
+  letter-spacing:.12em;
+}
+#marketing-site .hero-photo-card figcaption strong{
+  font-size:18px;
+  margin-top:4px;
+}
+#marketing-site .hero-surface-card{
+  position:static;
+  z-index:auto;
+  margin:0;
+  padding:18px 20px;
+  border:1px solid #e2e7ee;
+  border-radius:14px;
+  background:#fff;
+  color:#152033;
+  box-shadow:none;
+}
+#marketing-site .hero-surface-card .surface-kicker{
+  color:#59708f;
+  font-size:9.5px;
+  letter-spacing:.12em;
+  font-weight:800;
+  text-transform:uppercase;
+}
+#marketing-site .hero-surface-card h3{
+  margin:6px 0 5px;
+  color:#152033;
+  font-size:15px;
+  line-height:1.35;
+}
+#marketing-site .hero-surface-card p{
+  margin:0;
+  color:#69788d;
+  font-size:11.5px;
+  line-height:1.55;
+}
+#marketing-site .hero-surface-card .production-surface-grid{
+  margin-top:13px;
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+}
+#marketing-site .hero-surface-card .production-surface-grid>div{
+  padding:10px 11px;
+  border:1px solid #edf0f4;
+  border-radius:9px;
+  background:#fafbfd;
+}
+#marketing-site .hero-surface-card .production-surface-grid strong{
+  display:block;
+  color:#26364b;
+  font-size:10.5px;
+}
+#marketing-site .hero-surface-card .production-surface-grid span{
+  display:block;
+  margin-top:2px;
+  color:#758399;
+  font-size:9.5px;
+  line-height:1.45;
+}
+#marketing-site .hero-trust{
+  margin-top:34px;
+}
+
+@media(max-width:1080px){
+  #marketing-site .hero{
+    grid-template-columns:1fr;
+    gap:34px;
+  }
+  #marketing-site .hero-copy{padding-top:0}
+  #marketing-site .hero-product{max-width:780px}
+}
+@media(max-width:760px){
+  #marketing-site .eyebrow{
+    font-size:10px;
+    letter-spacing:.07em;
+  }
+  #marketing-site .hero h1{
+    font-size:clamp(38px,12vw,50px);
+  }
+  #marketing-site .hero-photo-card,
+  #marketing-site .hero-photo-card img{
+    min-height:280px;
+    height:280px;
+  }
+  #marketing-site .hero-surface-card{
+    margin:0;
+    padding:16px;
+  }
+  #marketing-site .hero-surface-card .production-surface-grid{
+    grid-template-columns:1fr;
+  }
+}
