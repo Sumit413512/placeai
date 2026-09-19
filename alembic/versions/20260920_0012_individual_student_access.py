@@ -89,6 +89,11 @@ def upgrade() -> None:
             """
         )
 
+        # Billing/entitlement records are backend-only. Unlike legacy tables, these
+        # new sensitive tables are not exposed through Supabase anon/authenticated APIs.
+        op.execute("ALTER TABLE public.individual_student_access ENABLE ROW LEVEL SECURITY")
+        op.execute("ALTER TABLE public.payment_transactions ENABLE ROW LEVEL SECURITY")
+
 
 def downgrade() -> None:
     op.alter_column("incident_reports", "organization_id", existing_type=sa.String(), nullable=False)
