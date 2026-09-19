@@ -38,6 +38,7 @@ from app.schemas import (
 from app.dependencies import get_current_user, require_recruiter, require_student
 from app.storage import read_file_bytes
 from app.ai_provider import ai_status_payload, call_ai_text, current_ai_model, current_ai_provider
+from app.student_access import premium_student_guard, require_premium_student_access
 
 load_dotenv()
 
@@ -153,7 +154,7 @@ def extract_pdf_text(data: bytes) -> str:
 # ─────────────────────────────────────────────────────────────
 @router.post(
     "/parse-resume",
-    dependencies=[Depends(student_ai_guard)],
+    dependencies=[Depends(student_ai_guard), Depends(premium_student_guard)],
     summary="🤖 AI: Parse your resume and extract structured data",
     response_model=AIResumeParseResult,
 )
@@ -362,7 +363,7 @@ Candidates:
 # ─────────────────────────────────────────────────────────────
 @router.get(
     "/match-jobs",
-    dependencies=[Depends(student_ai_guard)],
+    dependencies=[Depends(student_ai_guard), Depends(premium_student_guard)],
     summary="🤖 AI: Get AI-recommended jobs based on your profile",
     response_model=AIJobMatchResult,
 )
@@ -461,7 +462,7 @@ Available Jobs:
 # ─────────────────────────────────────────────────────────────
 @router.post(
     "/generate-summary",
-    dependencies=[Depends(student_ai_guard)],
+    dependencies=[Depends(student_ai_guard), Depends(premium_student_guard)],
     summary="🤖 AI: Generate a professional recruiter-facing summary",
     response_model=AISummaryResult,
 )
@@ -517,7 +518,7 @@ Student Details:
 # ─────────────────────────────────────────────────────────────
 @router.get(
     "/skill-gap/{job_id}",
-    dependencies=[Depends(student_ai_guard)],
+    dependencies=[Depends(student_ai_guard), Depends(premium_student_guard)],
     summary="🤖 AI: Identify skill gaps between you and a job requirement",
     response_model=AISkillGapResult,
 )
@@ -602,11 +603,13 @@ def placement_assistant(
     context = {"role": current_user.role.value, "user": current_user.username}
 
     if current_user.role == UserRole.student:
+        require_premium_student_access(current_user, db)
         profile = db.query(StudentProfile).filter(StudentProfile.user_id == current_user.id).first()
         if not profile:
             raise HTTPException(status_code=404, detail="Student profile not found")
         visible_jobs = db.query(Job).filter(Job.is_active.is_(True), Job.approval_status == ApprovalStatus.approved).limit(100).all()
-        visible_jobs = [j for j in visible_jobs if j.visibility == "public" or j.target_organization_id == profile.organization_id]
+        from app.placement_access import job_is_visible_to_student
+        visible_jobs = [j for j in visible_jobs if job_is_visible_to_student(profile, j, db)]
         apps = db.query(Application).filter(Application.student_id == profile.id).all()
         interviews = db.query(InterviewSchedule).filter(InterviewSchedule.application_id.in_([a.id for a in apps])).all() if apps else []
         offers = db.query(Offer).filter(Offer.application_id.in_([a.id for a in apps])).all() if apps else []
