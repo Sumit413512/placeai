@@ -14,6 +14,12 @@ from sqlalchemy.orm import Session
 
 from app.ai_provider import call_ai_text, call_ai_vision_text, current_ai_model, current_ai_provider
 from app.ai_rate_limit import student_ai_guard
+from app.coding_assessment import (
+    SUPPORTED_CODING_LANGUAGES,
+    choose_coding_challenges,
+    execute_test_suite,
+    public_coding_spec,
+)
 from app.database import get_db
 from app.dependencies import require_institution_admin, require_student
 from app.models import ApprovalStatus, AuditEvent, Job, MockInterview, StudentProfile, User
@@ -64,7 +70,21 @@ class MockInterviewAnswerV2(BaseModel):
     model_config = {"extra": "forbid"}
 
     question_id: int
-    answer: str = Field(min_length=1, max_length=8000)
+    answer: str = Field(min_length=1, max_length=20000)
+    language: str | None = Field(
+        default=None,
+        pattern="^(python|java|cpp|javascript)$",
+    )
+
+
+class MockInterviewCodingRunV2(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    interview_id: str
+    question_id: int = Field(ge=1, le=FULL_MOCK_QUESTION_COUNT)
+    language: str = Field(pattern="^(python|java|cpp|javascript)$")
+    source_code: str = Field(min_length=1, max_length=20000)
+    mode: str = Field(default="run", pattern="^(run|submit)$")
 
 
 class MockInterviewIntegrityEventV2(BaseModel):
@@ -117,6 +137,22 @@ def _call_interview_ai(prompt: str, *, max_output_tokens: int, fast: bool = Fals
         model_override="gpt-5.6-luna" if fast else None,
         timeout_seconds=10 if fast else 45,
         retry_count_per_provider=0,
+    )
+
+
+def _call_interview_evaluator(prompt: str, *, max_output_tokens: int) -> str:
+    """Use the flagship reasoning model for high-stakes result analysis.
+
+    Generation stays on the lower-latency model. Result evaluation intentionally uses
+    GPT-5.6 Sol with high reasoning because correctness matters more than latency here.
+    """
+    return call_ai_text(
+        prompt,
+        reasoning_effort="high",
+        max_output_tokens=max_output_tokens,
+        model_override="gpt-5.6-sol",
+        timeout_seconds=60,
+        retry_count_per_provider=1,
     )
 
 
