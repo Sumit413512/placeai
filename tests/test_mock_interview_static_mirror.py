@@ -49,7 +49,8 @@ def test_proctored_assessment_navigation_and_warning_ui_contract():
     assert 'id="integrity-event-list"' in html
     assert 'PROCTORED TEST' in html
     assert 'Save &amp; Next' in html
-    assert "palette-question "+status in js or "palette-question '+status" in js
+    assert "const status=isCurrent?'current':attempted?'attempted':'unattempted';" in js
+    assert "'palette-question '+status+' locked'" in js
     assert "integrityWarningLimit:4" in js
     assert "autoTerminateForIntegrity" in js
     assert "/mock-interview/proctor-frame" in js
