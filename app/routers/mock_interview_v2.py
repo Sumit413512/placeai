@@ -926,6 +926,353 @@ def _objective_evaluation(item: dict[str, Any], answer: str) -> dict[str, Any] |
     }
 
 
+_NON_ANSWER_LITERALS = {
+    "anything", "test", "testing", "random", "asdf", "qwerty", "abc", "xyz",
+    "hello", "nothing", "idk", "i dont know", "i don't know", "no idea", "na", "n/a",
+    "whatever", "something", "answer",
+}
+
+
+def _text_words(value: str) -> list[str]:
+    return re.findall(r"[a-z0-9+#.-]+", (value or "").casefold())
+
+
+def _is_obvious_non_answer(item: dict[str, Any], answer: str) -> bool:
+    clean = re.sub(r"\s+", " ", (answer or "").strip().casefold())
+    if not clean:
+        return True
+    plain = re.sub(r"[^a-z0-9 ]+", " ", clean)
+    plain = re.sub(r"\s+", " ", plain).strip()
+    if plain in _NON_ANSWER_LITERALS:
+        return True
+
+    words = _text_words(clean)
+    if len(words) <= 2:
+        return True
+    unique = set(words)
+    if len(words) >= 4 and len(unique) / max(len(words), 1) < 0.28:
+        return True
+
+    # Only apply lexical irrelevance as a hard gate to very short responses. Longer
+    # answers can use valid synonyms and must be judged semantically by the AI evaluator.
+    if len(words) <= 5:
+        question_terms = _evidence_terms(str(item.get("question", "")))
+        answer_terms = _evidence_terms(answer)
+        if question_terms and not (question_terms & answer_terms):
+            return True
+    return False
+
+
+def _non_answer_evaluation(item: dict[str, Any], answer: str) -> dict[str, Any]:
+    section = item.get("section") or item.get("category") or "interview"
+    behavioral = section in {"resume", "behavioral", "role", "situational"}
+    return {
+        "question_id": item["question_id"],
+        "question": item["question"],
+        "section": section,
+        "category": item.get("category") or section,
+        "difficulty": item.get("difficulty") or "mixed",
+        "answer_type": "text",
+        "answer": answer,
+        "correct_answer": "",
+        "score": 0,
+        "verdict": "weak" if behavioral else "insufficient",
+        "grading_method": "system_relevance_gate",
+        "rubric": {
+            "correctness": 0,
+            "relevance": 0,
+            "reasoning": 0,
+            "completeness": 0,
+            "clarity": 0,
+        },
+        "feedback": "The response does not meaningfully answer the issued question, so no performance credit was awarded.",
+        "strengths": [],
+        "issues": ["The response is empty, placeholder-like, nonsensical, or unrelated to the question."],
+        "missing_points": ["Provide a direct question-specific answer with relevant reasoning or evidence."],
+        "key_points": [],
+        "better_answer_outline": "Direct answer → question-specific reasoning → evidence/example → validation or result.",
+        "ideal_answer": "",
+    }
+
+
+def _score_subjective_rubric(
+    *,
+    item: dict[str, Any],
+    answer: str,
+    rubric: dict[str, int],
+) -> tuple[int, str]:
+    section = str(item.get("section") or item.get("category") or "interview")
+    correctness = _clamp_score(rubric.get("correctness"))
+    relevance = _clamp_score(rubric.get("relevance"))
+    reasoning = _clamp_score(rubric.get("reasoning"))
+    completeness = _clamp_score(rubric.get("completeness"))
+    clarity = _clamp_score(rubric.get("clarity"))
+
+    if section in {"technical", "programming"}:
+        score = round(
+            correctness * 0.50
+            + relevance * 0.25
+            + reasoning * 0.15
+            + completeness * 0.05
+            + clarity * 0.05
+        )
+    elif section in {"resume", "behavioral", "role", "situational"}:
+        score = round(
+            correctness * 0.25
+            + relevance * 0.30
+            + reasoning * 0.20
+            + completeness * 0.15
+            + clarity * 0.10
+        )
+    else:
+        score = round(
+            correctness * 0.35
+            + relevance * 0.30
+            + reasoning * 0.15
+            + completeness * 0.10
+            + clarity * 0.10
+        )
+
+    word_count = len(_text_words(answer))
+    if relevance < 15:
+        score = min(score, 10)
+    if section in {"technical", "programming"} and correctness < 20:
+        score = min(score, 20)
+    if word_count < 6:
+        score = min(score, 15)
+    score = _clamp_score(score)
+
+    if section in {"resume", "behavioral", "role", "situational"}:
+        if score >= 80 and relevance >= 65:
+            verdict = "strong"
+        elif score >= 55 and relevance >= 45:
+            verdict = "acceptable"
+        elif score <= 10:
+            verdict = "insufficient"
+        else:
+            verdict = "weak"
+    else:
+        if score >= 80 and correctness >= 70 and relevance >= 65:
+            verdict = "correct"
+        elif score >= 45 and relevance >= 35:
+            verdict = "partially_correct"
+        elif score <= 10:
+            verdict = "insufficient"
+        else:
+            verdict = "incorrect"
+    return score, verdict
+
+
+def _code_quality_prompt(
+    *,
+    profile: StudentProfile,
+    job: Job,
+    items: list[dict[str, Any]],
+) -> str:
+    payload = []
+    for item in items:
+        execution = item["execution"]
+        payload.append({
+            "question_id": item["question_id"],
+            "question": item["question"],
+            "language": item["language"],
+            "source_code": item["answer"],
+            "test_pass_rate": execution["pass_rate"],
+            "compile_success": execution["compile_success"],
+            "ideal_approach": (item.get("coding_spec") or {}).get("ideal_approach", ""),
+        })
+    return f"""
+{PROMPT_GUARDRAIL}
+
+You are PlaceAI's senior code reviewer. Automated sandbox test cases are the authority for functional correctness.
+Do NOT override or reinterpret the test pass rate. Review only code quality, algorithmic reasoning, efficiency,
+robustness, maintainability and edge-case awareness.
+
+For each answer return a quality_score from 0-100 plus concise coaching. A compiling solution that fails most tests
+may still demonstrate some code quality, but quality feedback must not imply that the solution is functionally correct.
+Do not reward length. Do not invent runtime behavior beyond the supplied test evidence.
+
+Return ONLY valid JSON:
+{{
+  "evaluations": [
+    {{
+      "question_id": 1,
+      "quality_score": 0,
+      "feedback": "...",
+      "strengths": ["..."],
+      "issues": ["..."],
+      "complexity": "...",
+      "better_answer_outline": "..."
+    }}
+  ]
+}}
+
+ROLE
+Title: {job.title}
+Required skills: {json.dumps(job.required_skills, ensure_ascii=False)}
+
+AUTHORIZED CANDIDATE CONTEXT
+{json.dumps(_candidate_context(profile), ensure_ascii=False, indent=2)[:9000]}
+
+CODE SUBMISSIONS
+{json.dumps(payload, ensure_ascii=False, indent=2)[:50000]}
+"""
+
+
+def _public_test_results(execution: dict[str, Any]) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    for row in execution.get("test_results", []):
+        hidden = bool(row.get("hidden"))
+        item = {
+            "index": row.get("index"),
+            "hidden": hidden,
+            "passed": bool(row.get("passed")),
+            "status": str(row.get("status", ""))[:120],
+            "time": row.get("time"),
+            "memory": row.get("memory"),
+        }
+        if not hidden:
+            item["stdout"] = str(row.get("stdout", ""))[:3000]
+            item["stderr"] = str(row.get("stderr", ""))[:3000]
+        output.append(item)
+    return output
+
+
+def _evaluate_coding_answers(
+    *,
+    profile: StudentProfile,
+    job: Job,
+    items: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    if not items:
+        return [], {"provider": "system", "model": "sandbox-tests", "coding_questions": 0}
+
+    executed: list[dict[str, Any]] = []
+    for item in items:
+        spec = item.get("coding_spec") if isinstance(item.get("coding_spec"), dict) else None
+        language = str(item.get("language") or "").strip().lower()
+        if not spec or language not in SUPPORTED_CODING_LANGUAGES:
+            continue
+        try:
+            execution = execute_test_suite(
+                source_code=item["answer"],
+                language=language,
+                test_cases=list(spec.get("test_cases") or []),
+            )
+            executed.append({**item, "execution": execution})
+        except Exception as exc:
+            LOGGER.warning(
+                "Coding execution failed question_id=%s error_type=%s",
+                item.get("question_id"),
+                type(exc).__name__,
+            )
+
+    if not executed:
+        return [], {"provider": "system", "model": "sandbox-tests", "coding_questions": 0}
+
+    ai_by_id: dict[int, dict[str, Any]] = {}
+    ai_provider = "unavailable"
+    ai_model = "unavailable"
+    try:
+        raw = _call_interview_evaluator(
+            _code_quality_prompt(profile=profile, job=job, items=executed),
+            max_output_tokens=3600,
+        )
+        parsed = extract_json_from_response(raw)
+        rows = parsed.get("evaluations", []) if isinstance(parsed, dict) else []
+        if isinstance(rows, list):
+            ai_by_id = {
+                int(row.get("question_id")): row
+                for row in rows
+                if isinstance(row, dict) and str(row.get("question_id", "")).isdigit()
+            }
+        ai_provider = current_ai_provider()
+        ai_model = current_ai_model()
+    except Exception as exc:
+        LOGGER.warning("Coding quality AI analysis failed error_type=%s", type(exc).__name__)
+
+    evaluations: list[dict[str, Any]] = []
+    for item in executed:
+        qid = item["question_id"]
+        execution = item["execution"]
+        pass_rate = _clamp_score(execution.get("pass_rate"))
+        quality_row = ai_by_id.get(qid, {})
+        quality = _clamp_score(quality_row.get("quality_score")) if quality_row else 50
+        compile_success = bool(execution.get("compile_success"))
+        score = 0 if not compile_success else _clamp_score(round(pass_rate * 0.90 + quality * 0.10))
+        if pass_rate == 100 and compile_success:
+            verdict = "correct"
+        elif pass_rate >= 40 and compile_success:
+            verdict = "partially_correct"
+        else:
+            verdict = "incorrect"
+
+        passed = int(execution.get("passed", 0) or 0)
+        total = int(execution.get("total", 0) or 0)
+        feedback_prefix = (
+            f"Compilation successful. {passed}/{total} automated test cases passed."
+            if compile_success
+            else "Compilation failed; no functional credit was awarded."
+        )
+        ai_feedback = str(quality_row.get("feedback", "")).strip()
+        evaluations.append({
+            "question_id": qid,
+            "question": item["question"],
+            "section": "coding",
+            "category": "coding",
+            "difficulty": item.get("difficulty") or "mixed",
+            "answer_type": "code",
+            "answer": item["answer"],
+            "language": item["language"],
+            "correct_answer": "",
+            "score": score,
+            "verdict": verdict,
+            "grading_method": "code_tests+ai",
+            "rubric": {
+                "correctness": pass_rate,
+                "relevance": 100 if item["answer"].strip() else 0,
+                "reasoning": quality,
+                "completeness": pass_rate,
+                "clarity": quality,
+            },
+            "feedback": (feedback_prefix + (" " + ai_feedback if ai_feedback else ""))[:5000],
+            "strengths": [str(x)[:1000] for x in (quality_row.get("strengths") or [])[:8]],
+            "issues": (
+                ([] if compile_success else ["The submitted code did not compile successfully."])
+                + [str(x)[:1000] for x in (quality_row.get("issues") or [])[:8]]
+            ),
+            "missing_points": (
+                [] if pass_rate == 100 else ["Handle the remaining failing or hidden edge cases."]
+            ),
+            "key_points": [
+                f"Automated tests passed: {passed}/{total}.",
+                f"Functional correctness score: {pass_rate}/100.",
+            ],
+            "better_answer_outline": str(quality_row.get("better_answer_outline", ""))[:5000],
+            "ideal_answer": str((item.get("coding_spec") or {}).get("ideal_approach", ""))[:5000],
+            "coding": {
+                "language": execution.get("language"),
+                "language_label": execution.get("language_label"),
+                "compile_success": compile_success,
+                "passed": passed,
+                "total": total,
+                "pass_rate": pass_rate,
+                "compile_output": str(execution.get("compile_output", ""))[:3000],
+                "execution_ms": execution.get("execution_ms"),
+                "test_results": _public_test_results(execution),
+                "quality_score": quality,
+                "complexity": str(quality_row.get("complexity", ""))[:1000],
+            },
+        })
+
+    return evaluations, {
+        "provider": ai_provider,
+        "model": ai_model,
+        "coding_questions": len(evaluations),
+        "coding_correctness": "sandbox test cases",
+    }
+
+
 def _subjective_prompt(
     *,
     profile: StudentProfile,
