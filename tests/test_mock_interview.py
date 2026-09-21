@@ -296,3 +296,42 @@ def test_proctor_frame_requires_student_authentication():
 def test_institution_results_requires_institution_authentication():
     response = client.get("/mock-interview/institution-results")
     assert response.status_code in {401, 403}
+
+
+def test_full_mock_rejects_malformed_objective_ai_items_and_falls_back_to_valid_mcq(monkeypatch):
+    payload = {
+        "questions": [
+            {
+                "question": "Malformed aptitude item with no selectable options",
+                "section": "quantitative",
+                "category": "quantitative",
+                "difficulty": "easy",
+                "answer_type": "mcq",
+                "options": [],
+                "correct_answer": "",
+            }
+        ]
+    }
+
+    def fake_ai(prompt, *, max_output_tokens, fast=False):
+        return json.dumps(payload)
+
+    monkeypatch.setattr(mock_interview_v2, "_call_interview_ai", fake_ai)
+    questions, _ = mock_interview_v2._generate_unique_questions(
+        profile=_demo_profile(),
+        job=_demo_job(),
+        focus="balanced",
+        difficulty="mixed",
+        count=50,
+        previous=[],
+    )
+
+    assert len(questions) == 50
+    objective = [
+        item for item in questions
+        if item["section"] in {"quantitative", "logical", "communication"}
+    ]
+    assert len(objective) == 22
+    assert all(item["answer_type"] == "mcq" for item in objective)
+    assert all(len(item["options"]) == 4 for item in objective)
+    assert all(item["correct_answer"] in item["options"] for item in objective)
