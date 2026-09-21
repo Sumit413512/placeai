@@ -152,27 +152,95 @@
     </div>
   </section>
 
-  <section id="result-panel" class="panel hidden">
-    <div class="panel-head">
-      <div><span class="step">03 · Readiness intelligence</span><h2>Your assessment report</h2><p>Performance and integrity are deliberately reported separately.</p></div>
+  <section id="analysis-panel" class="panel analysis-panel hidden">
+    <div class="analysis-head">
+      <div class="analysis-spinner" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div><span class="step">03 · Deep answer analysis</span><h2>PlaceAI is grading every response</h2><p id="analysis-message">Checking system-graded answers and preparing question-level AI evaluation.</p></div>
+    </div>
+    <div class="analysis-steps">
+      <div class="analysis-step active" data-analysis-step="objective"><span>01</span><div><strong>Objective grading</strong><small>Compare MCQ responses with protected server-side answer keys.</small></div><b>Running</b></div>
+      <div class="analysis-step" data-analysis-step="subjective"><span>02</span><div><strong>AI answer evaluation</strong><small>Score each open-ended response for correctness, relevance, reasoning and completeness.</small></div><b>Queued</b></div>
+      <div class="analysis-step" data-analysis-step="sections"><span>03</span><div><strong>Section analytics</strong><small>Aggregate question scores without hiding weak sections behind a single average.</small></div><b>Queued</b></div>
+      <div class="analysis-step" data-analysis-step="plan"><span>04</span><div><strong>Coaching report</strong><small>Build corrections, ideal approaches, weak-topic diagnosis and next-practice actions.</small></div><b>Queued</b></div>
+    </div>
+    <div class="analysis-note"><strong>No instant guessed score.</strong><span>The report appears only after question-level grading is complete. If AI evaluation fails, PlaceAI withholds the final score instead of fabricating one.</span></div>
+    <div class="form-actions"><button id="retry-analysis" class="button secondary hidden" type="button">Retry AI analysis</button></div>
+  </section>
+
+  <section id="result-panel" class="panel result-panel hidden">
+    <div class="panel-head result-head">
+      <div><span class="step">04 · Assessment intelligence</span><h2>Complete performance report</h2><p>System-graded correctness, AI-evaluated interview answers and integrity signals are shown separately.</p></div>
       <div class="score-badge"><strong id="overall-score">—</strong><span>/100 IRI</span></div>
     </div>
-    <div class="report-grid">
-      <article class="report-card performance"><span>Interview Readiness Index</span><strong id="report-iri">—</strong><p id="overall-feedback">Complete the assessment to generate evidence-based coaching.</p></article>
-      <article class="report-card integrity"><span>Assessment integrity</span><strong id="integrity-status">Review ready</strong><p id="integrity-summary-text">Integrity events are surfaced for human review and are not treated as proof of misconduct.</p></article>
+
+    <div id="analysis-status-banner" class="result-alert hidden"></div>
+
+    <div class="result-hero-grid">
+      <article class="report-card performance">
+        <span>Interview Readiness Index</span>
+        <strong id="report-iri">—</strong>
+        <p id="overall-feedback">Complete the assessment to generate evidence-based coaching.</p>
+        <div class="grading-method"><span>Grading</span><b id="grading-method-label">Answer key + question-level AI</b></div>
+      </article>
+      <article class="report-card integrity">
+        <span>Assessment integrity</span>
+        <strong id="integrity-status">Review ready</strong>
+        <p id="integrity-summary-text">Integrity events are surfaced for human review and are not treated as proof of misconduct.</p>
+      </article>
     </div>
-    <div id="dimension-grid" class="dimension-grid"></div>
-    <div class="two-col">
-      <article class="feedback-box good"><h3>Strengths</h3><ul id="strength-list"></ul></article>
+
+    <div class="score-summary-grid">
+      <article class="score-stat"><span>Total</span><strong id="summary-total">—</strong><small>questions</small></article>
+      <article class="score-stat"><span>Correct / strong</span><strong id="summary-correct">—</strong><small>responses</small></article>
+      <article class="score-stat partial"><span>Partial / acceptable</span><strong id="summary-partial">—</strong><small>responses</small></article>
+      <article class="score-stat wrong"><span>Incorrect / weak</span><strong id="summary-incorrect">—</strong><small>responses</small></article>
+      <article class="score-stat"><span>Objective accuracy</span><strong id="summary-objective">—</strong><small>system graded</small></article>
+      <article class="score-stat"><span>AI answer average</span><strong id="summary-subjective">—</strong><small>open-ended</small></article>
+    </div>
+
+    <section class="result-section">
+      <div class="result-section-head"><div><span class="card-kicker">Section performance</span><h3>Where the score came from</h3></div><p>No section is hidden behind the overall score.</p></div>
+      <div class="section-table-wrap">
+        <table class="section-table">
+          <thead><tr><th>Section</th><th>Score</th><th>Correct/Strong</th><th>Partial</th><th>Wrong/Weak</th><th>Evaluated</th></tr></thead>
+          <tbody id="section-performance"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="result-section">
+      <div class="result-section-head"><div><span class="card-kicker">Competency profile</span><h3>Section score distribution</h3></div></div>
+      <div id="dimension-grid" class="dimension-grid"></div>
+    </section>
+
+    <div class="two-col result-coaching">
+      <article class="feedback-box good"><h3>Strongest areas</h3><ul id="strength-list"></ul></article>
       <article class="feedback-box"><h3>Highest-value improvements</h3><ul id="improvement-list"></ul></article>
     </div>
     <div class="two-col">
       <article class="feedback-box"><h3>Weak topics to revise</h3><ul id="weak-topic-list"></ul></article>
       <article class="feedback-box good"><h3>Next practice plan</h3><ol id="practice-plan-list"></ol></article>
     </div>
-    <details class="answer-details"><summary>Question-level coaching</summary><div id="answer-feedback" class="answer-feedback"></div></details>
+
+    <section class="result-section question-review-section">
+      <div class="result-section-head">
+        <div><span class="card-kicker">Question-level report</span><h3>Review every answer</h3><p>See your response, verdict, score, correct answer or AI reasoning, missing points and a stronger approach.</p></div>
+        <div class="review-filters" id="review-filters">
+          <button class="review-filter active" type="button" data-review-filter="all">All</button>
+          <button class="review-filter" type="button" data-review-filter="correct">Correct / strong</button>
+          <button class="review-filter" type="button" data-review-filter="partial">Partial</button>
+          <button class="review-filter" type="button" data-review-filter="incorrect">Wrong / weak</button>
+          <button class="review-filter" type="button" data-review-filter="insufficient">Insufficient</button>
+        </div>
+      </div>
+      <div id="answer-feedback" class="answer-feedback detailed-feedback"></div>
+    </section>
+
     <p id="result-disclaimer" class="disclaimer"></p>
-    <div class="form-actions"><button class="button primary" id="practice-again" type="button">Return to assessment setup</button></div>
+    <div class="form-actions result-actions">
+      <button id="retry-analysis-result" class="button secondary hidden" type="button">Retry incomplete AI analysis</button>
+      <button class="button primary" id="practice-again" type="button">Return to assessment setup</button>
+    </div>
   </section>
 
   <section id="history-panel" class="panel hidden">
