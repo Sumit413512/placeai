@@ -1305,7 +1305,8 @@ For technical/programming/coding questions use this rubric:
 - concrete evidence / validation / examples: 10%
 - clarity and precision: 5%
 
-For resume/behavioral/role/situational questions use this rubric:
+For resume/behavioral/role/situational questions, interpret rubric.correctness as evidence quality / credibility /
+task satisfaction rather than factual trivia. Evaluate:
 - direct relevance: 20%
 - specific evidence or scenario detail: 25%
 - ownership / credibility / consistency: 20%
