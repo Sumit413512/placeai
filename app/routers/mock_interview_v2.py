@@ -74,7 +74,13 @@ class MockInterviewEvaluationV2(BaseModel):
     answers: list[MockInterviewAnswerV2] = Field(min_length=1, max_length=FULL_MOCK_QUESTION_COUNT)
 
 
-def _call_interview_ai(prompt: str, *, max_output_tokens: int, fast: bool = False) -> str:
+def _call_interview_ai(
+    prompt: str,
+    *,
+    max_output_tokens: int,
+    fast: bool = False,
+    timeout_seconds: int | None = None,
+) -> str:
     """Call the canonical provider chain with an explicit interactive latency budget.
 
     Question generation uses the lower-latency GPT-5.6 Luna model. Evaluation keeps the
@@ -86,7 +92,7 @@ def _call_interview_ai(prompt: str, *, max_output_tokens: int, fast: bool = Fals
         reasoning_effort="none",
         max_output_tokens=max_output_tokens,
         model_override="gpt-5.6-luna" if fast else None,
-        timeout_seconds=10 if fast else 24,
+        timeout_seconds=timeout_seconds if timeout_seconds is not None else (10 if fast else 24),
         retry_count_per_provider=0,
     )
 
@@ -518,15 +524,17 @@ def _generate_unique_questions(
 
     if len(accepted) < count:
         needed = count - len(accepted)
-        accepted.extend(_fallback_questions(
+        fallback_count = count if count == FULL_MOCK_QUESTION_COUNT else needed
+        fallback_items = _fallback_questions(
             profile=profile,
             job=job,
             focus=focus,
             difficulty=difficulty,
-            count=needed,
+            count=fallback_count,
             previous=previous,
             already=accepted,
-        ))
+        )
+        accepted.extend(fallback_items[:needed])
         generation_mode = "ai_plus_fallback" if provider != "local" else "resilient_fallback"
 
     questions = [
@@ -725,6 +733,416 @@ def _resilient_baseline_evaluation(
     }
 
 
+
+SECTION_LABELS = {key: label for key, label, _ in ASSESSMENT_BLUEPRINT}
+SECTION_WEIGHTS = {
+    "quantitative": 10,
+    "logical": 10,
+    "communication": 10,
+    "technical": 20,
+    "programming": 15,
+    "coding": 15,
+    "resume": 7,
+    "behavioral": 5,
+    "role": 5,
+    "situational": 3,
+}
+
+
+def _normalized_choice(value: str) -> str:
+    return re.sub(r"\s+", " ", (value or "").strip().casefold())
+
+
+def _resolve_correct_option(options: list[str], raw_answer: str) -> str:
+    raw = (raw_answer or "").strip()
+    if not raw:
+        return ""
+    normalized = _normalized_choice(raw)
+    for option in options:
+        if _normalized_choice(option) == normalized:
+            return option
+    if len(raw) == 1 and raw.upper() in {"A", "B", "C", "D"}:
+        index = ord(raw.upper()) - ord("A")
+        if 0 <= index < len(options):
+            return options[index]
+    return ""
+
+
+def _objective_evaluation(item: dict[str, Any], answer: str) -> dict[str, Any] | None:
+    options = [str(x) for x in (item.get("options") or [])]
+    correct = _resolve_correct_option(options, str(item.get("correct_answer", "")))
+    if item.get("answer_type") != "mcq" or len(options) != 4 or not correct:
+        return None
+    is_correct = _normalized_choice(answer) == _normalized_choice(correct)
+    return {
+        "question_id": item["question_id"],
+        "question": item["question"],
+        "section": item.get("section") or item.get("category") or "interview",
+        "category": item.get("category") or "interview",
+        "difficulty": item.get("difficulty") or "mixed",
+        "answer_type": "mcq",
+        "answer": answer,
+        "correct_answer": correct,
+        "score": 100 if is_correct else 0,
+        "verdict": "correct" if is_correct else "incorrect",
+        "grading_method": "system",
+        "rubric": {
+            "correctness": 100 if is_correct else 0,
+            "relevance": 100 if is_correct else 0,
+            "reasoning": None,
+            "completeness": 100 if is_correct else 0,
+            "clarity": None,
+        },
+        "feedback": "Correct answer." if is_correct else "Incorrect answer.",
+        "strengths": ["Selected the correct option."] if is_correct else [],
+        "issues": [] if is_correct else ["The selected option does not match the server-side answer key."],
+        "missing_points": [],
+        "key_points": [f"Correct answer: {correct}"],
+        "better_answer_outline": "",
+        "ideal_answer": correct,
+    }
+
+
+def _subjective_prompt(
+    *,
+    profile: StudentProfile,
+    job: Job,
+    items: list[dict[str, Any]],
+) -> str:
+    payload = [
+        {
+            "question_id": item["question_id"],
+            "section": item.get("section"),
+            "category": item.get("category"),
+            "difficulty": item.get("difficulty"),
+            "question": item["question"],
+            "answer": item["answer"],
+        }
+        for item in items
+    ]
+    return f"""
+{PROMPT_GUARDRAIL}
+
+You are PlaceAI's senior assessment evaluator. Grade EACH candidate response independently against the exact question.
+This is a scoring task, not encouragement. A fluent but irrelevant, fabricated, vague, nonsensical, evasive or technically
+wrong answer must receive a low score. Never infer unstated facts. Do not give credit merely for length or vocabulary.
+
+For technical/programming/coding questions use this rubric:
+- factual/technical correctness: 45%
+- direct relevance to the question: 15%
+- reasoning / method / trade-offs: 15%
+- completeness and edge cases: 10%
+- concrete evidence / validation / examples: 10%
+- clarity and precision: 5%
+
+For resume/behavioral/role/situational questions use this rubric:
+- direct relevance: 20%
+- specific evidence or scenario detail: 25%
+- ownership / credibility / consistency: 20%
+- reasoning and decision quality: 15%
+- structure and completeness: 10%
+- role fit / reflection / clarity: 10%
+
+Score 0-100. Use these verdicts only:
+- correct: substantively correct and complete enough for the question
+- partially_correct: meaningful correct content but material gaps/errors remain
+- incorrect: substantively wrong, irrelevant, contradictory or unsupported
+- insufficient: too little meaningful evidence to evaluate
+- strong: high-quality behavioral/resume/role response with specific credible evidence
+- acceptable: adequate behavioral/resume/role response but improvable
+- weak: vague/generic behavioral/resume/role response with limited evidence
+
+IMPORTANT:
+- Random text, repeated words, placeholders such as "anything", gibberish, generic filler, or an answer unrelated to the
+  question should normally score 0-15 and use verdict "incorrect", "insufficient", or "weak".
+- Do not reward claims that are not supported by the candidate context or answer.
+- The score must reflect the response to THIS question, not an overall impression of the candidate.
+- Give actionable feedback and an example strong answer/solution, but never invent the candidate's personal experience.
+  For behavioral/resume questions, provide a reusable structure/example with explicit placeholders rather than fabricated history.
+
+Return ONLY valid JSON:
+{{
+  "evaluations": [
+    {{
+      "question_id": 1,
+      "score": 0,
+      "verdict": "correct|partially_correct|incorrect|insufficient|strong|acceptable|weak",
+      "rubric": {{
+        "correctness": 0,
+        "relevance": 0,
+        "reasoning": 0,
+        "completeness": 0,
+        "clarity": 0
+      }},
+      "feedback": "...",
+      "strengths": ["..."],
+      "issues": ["..."],
+      "missing_points": ["..."],
+      "key_points": ["..."],
+      "better_answer_outline": "...",
+      "ideal_answer": "..."
+    }}
+  ]
+}}
+
+ROLE
+Title: {job.title}
+Description: {job.description[:7000]}
+Required skills: {json.dumps(job.required_skills, ensure_ascii=False)}
+
+AUTHORIZED CANDIDATE CONTEXT
+{json.dumps(_candidate_context(profile), ensure_ascii=False, indent=2)[:12000]}
+
+RESPONSES TO GRADE
+{json.dumps(payload, ensure_ascii=False, indent=2)[:44000]}
+"""
+
+
+def _evaluate_subjective_with_ai(
+    *,
+    profile: StudentProfile,
+    job: Job,
+    items: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    if not items:
+        return [], {"provider": "system", "model": "answer-key", "batches": 0}
+
+    # One complete pass gives the model the strongest cross-question context while every
+    # score remains question-local. If that fails, retry in smaller batches rather than
+    # fabricating a lexical "correctness" score.
+    batches = [items]
+    results: list[dict[str, Any]] = []
+    provider = "unknown"
+    model = "unknown"
+    try:
+        raw = _call_interview_ai(
+            _subjective_prompt(profile=profile, job=job, items=items),
+            max_output_tokens=9000,
+            fast=False,
+            timeout_seconds=45,
+        )
+        data = extract_json_from_response(raw)
+        source = data.get("evaluations", []) if isinstance(data, dict) else []
+        if not isinstance(source, list):
+            raise ValueError("AI evaluator returned no evaluations")
+        results = [item for item in source if isinstance(item, dict)]
+        provider = current_ai_provider()
+        model = current_ai_model()
+    except Exception as first_exc:
+        LOGGER.warning(
+            "Full subjective assessment evaluation failed; retrying in batches error_type=%s",
+            type(first_exc).__name__,
+        )
+        results = []
+        batches = [items[index:index + 8] for index in range(0, len(items), 8)]
+        for batch in batches:
+            try:
+                raw = _call_interview_ai(
+                    _subjective_prompt(profile=profile, job=job, items=batch),
+                    max_output_tokens=5200,
+                    fast=False,
+                    timeout_seconds=40,
+                )
+                data = extract_json_from_response(raw)
+                source = data.get("evaluations", []) if isinstance(data, dict) else []
+                if not isinstance(source, list):
+                    raise ValueError("AI evaluator returned no batch evaluations")
+                results.extend(item for item in source if isinstance(item, dict))
+                provider = current_ai_provider()
+                model = current_ai_model()
+            except Exception as batch_exc:
+                LOGGER.warning(
+                    "Subjective evaluation batch failed error_type=%s question_ids=%s",
+                    type(batch_exc).__name__,
+                    [item["question_id"] for item in batch],
+                )
+
+    normalized: list[dict[str, Any]] = []
+    allowed_verdicts = {
+        "correct", "partially_correct", "incorrect", "insufficient",
+        "strong", "acceptable", "weak",
+    }
+    by_id = {
+        int(item.get("question_id")): item
+        for item in results
+        if str(item.get("question_id", "")).isdigit()
+    }
+    for item in items:
+        qid = item["question_id"]
+        source = by_id.get(qid)
+        if not source:
+            continue
+        verdict = str(source.get("verdict", "insufficient")).strip().lower()
+        if verdict not in allowed_verdicts:
+            verdict = "insufficient"
+        rubric_raw = source.get("rubric") if isinstance(source.get("rubric"), dict) else {}
+        normalized.append({
+            "question_id": qid,
+            "question": item["question"],
+            "section": item.get("section") or item.get("category") or "interview",
+            "category": item.get("category") or "interview",
+            "difficulty": item.get("difficulty") or "mixed",
+            "answer_type": "text",
+            "answer": item["answer"],
+            "correct_answer": "",
+            "score": _clamp_score(source.get("score")),
+            "verdict": verdict,
+            "grading_method": "ai",
+            "rubric": {
+                "correctness": _clamp_score(rubric_raw.get("correctness")),
+                "relevance": _clamp_score(rubric_raw.get("relevance")),
+                "reasoning": _clamp_score(rubric_raw.get("reasoning")),
+                "completeness": _clamp_score(rubric_raw.get("completeness")),
+                "clarity": _clamp_score(rubric_raw.get("clarity")),
+            },
+            "feedback": str(source.get("feedback", ""))[:5000],
+            "strengths": [str(x)[:1000] for x in (source.get("strengths") or [])[:8]],
+            "issues": [str(x)[:1000] for x in (source.get("issues") or [])[:8]],
+            "missing_points": [str(x)[:1000] for x in (source.get("missing_points") or [])[:10]],
+            "key_points": [str(x)[:1000] for x in (source.get("key_points") or [])[:10]],
+            "better_answer_outline": str(source.get("better_answer_outline", ""))[:5000],
+            "ideal_answer": str(source.get("ideal_answer", ""))[:7000],
+        })
+    return normalized, {"provider": provider, "model": model, "batches": len(batches)}
+
+
+def _verdict_bucket(verdict: str) -> str:
+    if verdict in {"correct", "strong"}:
+        return "correct"
+    if verdict in {"partially_correct", "acceptable"}:
+        return "partial"
+    if verdict in {"incorrect", "weak"}:
+        return "incorrect"
+    return "insufficient"
+
+
+def _build_assessment_result(
+    *,
+    evaluations: list[dict[str, Any]],
+    issued: list[dict[str, Any]],
+    ai_meta: dict[str, Any],
+) -> dict[str, Any]:
+    by_id = {item["question_id"]: item for item in evaluations}
+    section_rows = []
+    section_scores: dict[str, int] = {}
+    total_correct = total_partial = total_incorrect = total_insufficient = 0
+    system_graded = ai_graded = 0
+
+    for key, label, _ in ASSESSMENT_BLUEPRINT:
+        section_evals = [item for item in evaluations if item.get("section") == key]
+        if not section_evals:
+            continue
+        score = round(sum(item["score"] for item in section_evals) / len(section_evals))
+        section_scores[key] = score
+        counts = {"correct": 0, "partial": 0, "incorrect": 0, "insufficient": 0}
+        for item in section_evals:
+            counts[_verdict_bucket(item.get("verdict", "insufficient"))] += 1
+            if item.get("grading_method") == "system":
+                system_graded += 1
+            elif item.get("grading_method") == "ai":
+                ai_graded += 1
+        total_correct += counts["correct"]
+        total_partial += counts["partial"]
+        total_incorrect += counts["incorrect"]
+        total_insufficient += counts["insufficient"]
+        section_rows.append({
+            "key": key,
+            "label": label,
+            "score": score,
+            "questions": len(section_evals),
+            **counts,
+        })
+
+    missing_ids = [item["question_id"] for item in issued if item["question_id"] not in by_id]
+    analysis_complete = not missing_ids
+    raw_score = (
+        round(sum(item["score"] for item in evaluations) / len(evaluations))
+        if evaluations else 0
+    )
+
+    weighted_total = 0.0
+    applied_weight = 0
+    for section, score in section_scores.items():
+        weight = SECTION_WEIGHTS.get(section, 0)
+        weighted_total += score * weight
+        applied_weight += weight
+    readiness_index = round(weighted_total / applied_weight) if applied_weight else raw_score
+
+    strongest = sorted(section_rows, key=lambda row: row["score"], reverse=True)[:3]
+    weakest = sorted(section_rows, key=lambda row: row["score"])[:3]
+    strengths = [
+        f'{row["label"]}: {row["score"]}/100 across {row["questions"]} evaluated item(s).'
+        for row in strongest
+    ]
+    improvements = [
+        f'{row["label"]}: {row["score"]}/100 — prioritize this section in the next practice cycle.'
+        for row in weakest
+    ]
+    weak_topics = [row["label"] for row in weakest if row["score"] < 70]
+    next_plan = [
+        f'Review the {row["label"]} question-level feedback, then complete a targeted drill before the next full mock.'
+        for row in weakest
+    ]
+
+    objective_items = [item for item in evaluations if item.get("grading_method") == "system"]
+    subjective_items = [item for item in evaluations if item.get("grading_method") == "ai"]
+    objective_accuracy = (
+        round(100 * sum(item["score"] == 100 for item in objective_items) / len(objective_items))
+        if objective_items else None
+    )
+    subjective_average = (
+        round(sum(item["score"] for item in subjective_items) / len(subjective_items))
+        if subjective_items else None
+    )
+
+    overall_feedback = (
+        f'PlaceAI evaluated {len(evaluations)} of {len(issued)} responses question-by-question. '
+        f'{total_correct} were correct/strong, {total_partial} partial/acceptable, '
+        f'{total_incorrect} incorrect/weak, and {total_insufficient} insufficient.'
+    )
+    if not analysis_complete:
+        overall_feedback += (
+            f' {len(missing_ids)} open-ended response(s) could not be AI-evaluated, so the final overall score is withheld.'
+        )
+
+    return {
+        "analysis_status": "complete" if analysis_complete else "incomplete",
+        "overall_score": readiness_index if analysis_complete else None,
+        "raw_assessment_score": raw_score if analysis_complete else None,
+        "overall_feedback": overall_feedback,
+        "score_summary": {
+            "total_questions": len(issued),
+            "evaluated_questions": len(evaluations),
+            "correct": total_correct,
+            "partial": total_partial,
+            "incorrect": total_incorrect,
+            "insufficient": total_insufficient,
+            "system_graded": system_graded,
+            "ai_graded": ai_graded,
+            "objective_accuracy": objective_accuracy,
+            "subjective_average": subjective_average,
+        },
+        "section_scores": section_rows,
+        "dimensions": {row["key"]: row["score"] for row in section_rows},
+        "strengths": strengths,
+        "improvements": improvements,
+        "weak_topics": weak_topics,
+        "next_practice_plan": next_plan,
+        "evaluations": sorted(evaluations, key=lambda item: item["question_id"]),
+        "missing_evaluation_question_ids": missing_ids,
+        "grading": {
+            "objective": "server-side answer key",
+            "subjective": "AI question-level rubric",
+            **ai_meta,
+        },
+        "disclaimer": (
+            "Assessment scores reflect performance on this PlaceAI simulation. "
+            "Open-ended answers are AI-evaluated against the issued question and rubric; "
+            "integrity signals are reported separately and require human interpretation."
+        ),
+    }
+
+
 @router.post("/evaluate", dependencies=[Depends(student_ai_guard)])
 def evaluate_mock_interview_v2(
     body: MockInterviewEvaluationV2,
@@ -740,6 +1158,7 @@ def evaluate_mock_interview_v2(
         raise HTTPException(status_code=404, detail="Mock interview not found")
     if interview.overall_score is not None:
         raise HTTPException(status_code=409, detail="This mock interview has already been evaluated")
+
     job = db.query(Job).filter(Job.id == interview.job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Interview role is no longer available")
@@ -752,155 +1171,68 @@ def evaluate_mock_interview_v2(
     if set(submitted_by_id) != set(expected_by_id):
         raise HTTPException(status_code=422, detail="Answers must match the server-issued interview question set")
 
-    answers_payload = [
-        {
-            "question_id": item["question_id"],
+    started = time.perf_counter()
+    answers_payload: list[dict[str, Any]] = []
+    evaluations: list[dict[str, Any]] = []
+    subjective_items: list[dict[str, Any]] = []
+
+    for item in issued:
+        qid = item["question_id"]
+        answer = submitted_by_id[qid].answer.strip()
+        answers_payload.append({
+            "question_id": qid,
             "question": item["question"],
             "section": item.get("section"),
             "category": item.get("category"),
             "difficulty": item.get("difficulty"),
             "answer_type": item.get("answer_type"),
-            "options": item.get("options") or [],
-            "correct_answer": item.get("correct_answer") or "",
-            "answer": submitted_by_id[item["question_id"]].answer,
-        }
-        for item in issued
-    ]
-    prompt = f"""
-{PROMPT_GUARDRAIL}
-
-You are a rigorous role-specific campus interview coach. Evaluate every written answer below against the exact role.
-Do not infer accent, spoken fluency, appearance, personality, protected traits or anything not evidenced by the text.
-Use only ROLE, CANDIDATE CONTEXT, QUESTIONS AND ANSWERS as evidence. Never invent company facts, candidate projects,
-metrics, technologies or experience. If a fact needed for evaluation is absent, explicitly say it is not provided.
-Be diagnostic, practical and specific. For every question explain what was good, what was missing and provide a strong
-example answer/solution grounded in the role. The example answer is a learning reference, not something to memorize.
-
-Return ONLY valid JSON with this exact top-level structure:
-{{
-  "overall_score": 0,
-  "overall_feedback": "...",
-  "dimensions": {{"relevance":0,"clarity":0,"structure":0,"language_precision":0,"role_knowledge":0,"problem_solving":0,"professionalism":0}},
-  "strengths": ["..."],
-  "improvements": ["..."],
-  "weak_topics": ["..."],
-  "next_practice_plan": ["..."],
-  "evaluations": [
-    {{
-      "question_id": 1,
-      "score": 0,
-      "feedback": "...",
-      "missing_points": ["..."],
-      "key_points": ["..."],
-      "better_answer_outline": "...",
-      "ideal_answer": "..."
-    }}
-  ]
-}}
-
-All scores are integers 0-100. Reward correctness, concrete examples, structured reasoning, role relevance and honest
-uncertainty. Do not reward verbosity. Technical solutions must be technically sound and mention trade-offs where relevant.
-
-ROLE
-Title: {job.title}
-Description: {job.description[:7000]}
-Required skills: {json.dumps(job.required_skills, ensure_ascii=False)}
-
-CANDIDATE CONTEXT
-{json.dumps(_candidate_context(profile), ensure_ascii=False, indent=2)[:12_000]}
-
-QUESTIONS AND ANSWERS
-{json.dumps(answers_payload, ensure_ascii=False, indent=2)[:42_000]}
-"""
-    evaluation_started = time.perf_counter()
-    evaluation_mode = "ai"
-    evaluation_provider = "local"
-    evaluation_model = "resilient-baseline-v1"
-    try:
-        raw = _call_interview_ai(prompt, max_output_tokens=5200, fast=False)
-        data = extract_json_from_response(raw)
-        if not isinstance(data, dict):
-            raise ValueError("AI service returned an invalid interview evaluation")
-        evaluation_provider = current_ai_provider()
-        evaluation_model = current_ai_model()
-    except Exception as exc:
-        LOGGER.warning("Mock interview live AI evaluation failed; using resilient baseline error_type=%s", type(exc).__name__)
-        baseline = _resilient_baseline_evaluation(
-            issued=issued,
-            submitted_by_id=submitted_by_id,
-            job=job,
-        )
-        interview.answers_json = json.dumps(answers_payload)
-        interview.evaluation_json = json.dumps(baseline)
-        interview.overall_score = baseline["overall_score"]
-        interview.overall_feedback = baseline["overall_feedback"]
-        db.commit()
-        db.refresh(interview)
-        return {
-            "interview_id": interview.id,
-            "job_title": job.title,
-            **baseline,
-            "evaluation_mode": "resilient_baseline",
-            "provider": "local",
-            "model": "resilient-baseline-v1",
-            "evaluation_ms": int((time.perf_counter() - evaluation_started) * 1000),
-        }
-
-    dimensions_raw = data.get("dimensions") if isinstance(data.get("dimensions"), dict) else {}
-    dimension_keys = ["relevance", "clarity", "structure", "language_precision", "role_knowledge", "problem_solving", "professionalism"]
-    dimensions = {key: _clamp_score(dimensions_raw.get(key)) for key in dimension_keys}
-    ai_evaluations = data.get("evaluations") if isinstance(data.get("evaluations"), list) else []
-    evaluations: list[dict[str, Any]] = []
-    for item in issued:
-        qid = item["question_id"]
-        source = next(
-            (candidate for candidate in ai_evaluations if isinstance(candidate, dict) and str(candidate.get("question_id")) == str(qid)),
-            {},
-        )
-        evaluations.append({
-            "question_id": qid,
-            "question": item["question"],
-            "answer": submitted_by_id[qid].answer,
-            "score": _clamp_score(source.get("score")),
-            "feedback": str(source.get("feedback", "No detailed feedback returned."))[:5000],
-            "missing_points": [str(x)[:1000] for x in (source.get("missing_points") or [])[:10]],
-            "key_points": [str(x)[:1000] for x in (source.get("key_points") or [])[:10]],
-            "better_answer_outline": str(source.get("better_answer_outline", ""))[:5000],
-            "ideal_answer": str(source.get("ideal_answer", ""))[:7000],
+            "answer": answer,
         })
+        objective = _objective_evaluation(item, answer)
+        if objective is not None:
+            evaluations.append(objective)
+        else:
+            subjective_items.append({**item, "answer": answer})
 
-    overall_score = _clamp_score(data.get("overall_score"))
-    result = {
-        "overall_score": overall_score,
-        "overall_feedback": str(data.get("overall_feedback", ""))[:7000],
-        "dimensions": dimensions,
-        "strengths": [str(x)[:1200] for x in (data.get("strengths") or [])[:10]],
-        "improvements": [str(x)[:1200] for x in (data.get("improvements") or [])[:10]],
-        "weak_topics": [str(x)[:1000] for x in (data.get("weak_topics") or [])[:10]],
-        "next_practice_plan": [str(x)[:1200] for x in (data.get("next_practice_plan") or [])[:10]],
-        "evaluations": evaluations,
-        "disclaimer": "Text-only coaching signal; not a measure of spoken communication, accent, personality, or employability.",
-    }
+    subjective_evaluations, ai_meta = _evaluate_subjective_with_ai(
+        profile=profile,
+        job=job,
+        items=subjective_items,
+    )
+    evaluations.extend(subjective_evaluations)
+    result = _build_assessment_result(
+        evaluations=evaluations,
+        issued=issued,
+        ai_meta=ai_meta,
+    )
+
     interview.answers_json = json.dumps(answers_payload)
     interview.evaluation_json = json.dumps(result)
-    interview.overall_score = overall_score
-    interview.overall_feedback = result["overall_feedback"]
+    if result["analysis_status"] == "complete":
+        interview.overall_score = result["overall_score"]
+        interview.overall_feedback = result["overall_feedback"]
+    else:
+        # Preserve retryability: an incomplete AI analysis must never be persisted as a
+        # misleading final numeric score.
+        interview.overall_score = None
+        interview.overall_feedback = "AI analysis incomplete; retry evaluation for a final score."
     db.commit()
     db.refresh(interview)
-    evaluation_ms = int((time.perf_counter() - evaluation_started) * 1000)
+
+    evaluation_ms = int((time.perf_counter() - started) * 1000)
     LOGGER.info(
-        "Mock interview evaluated mode=%s provider=%s model=%s latency_ms=%s",
-        evaluation_mode,
-        evaluation_provider,
-        evaluation_model,
+        "Mock interview evaluated status=%s objective=%s subjective=%s latency_ms=%s provider=%s model=%s",
+        result["analysis_status"],
+        result["score_summary"]["system_graded"],
+        result["score_summary"]["ai_graded"],
         evaluation_ms,
+        ai_meta.get("provider"),
+        ai_meta.get("model"),
     )
     return {
         "interview_id": interview.id,
         "job_title": job.title,
         **result,
-        "evaluation_mode": evaluation_mode,
-        "provider": evaluation_provider,
-        "model": evaluation_model,
+        "evaluation_mode": "hybrid_question_level",
         "evaluation_ms": evaluation_ms,
     }
