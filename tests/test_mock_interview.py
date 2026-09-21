@@ -151,16 +151,21 @@ def test_resilient_baseline_evaluation_is_conservative_and_explicit():
 
 
 def test_full_mock_v2_is_server_standardized_at_fifty_items():
-    valid = MockInterviewStartV2(job_id="job-1")
+    legacy = MockInterviewStartV2(job_id="job-1")
+    assert legacy.mode == "practice"
+    assert legacy.question_count == 8
+
+    valid = MockInterviewStartV2(
+        job_id="job-1", question_count=50, mode="assessment",
+        focus="balanced", difficulty="mixed"
+    )
     assert valid.question_count == 50
     assert valid.mode == "assessment"
-    assert valid.focus == "balanced"
-    assert valid.difficulty == "mixed"
 
     with pytest.raises(ValidationError):
-        MockInterviewStartV2(job_id="job-1", question_count=15)
+        MockInterviewStartV2(job_id="job-1", question_count=15, mode="assessment")
     with pytest.raises(ValidationError):
-        MockInterviewStartV2(job_id="job-1", mode="practice")
+        MockInterviewStartV2(job_id="job-1", question_count=50, mode="practice")
 
 
 def test_full_mock_blueprint_totals_fifty_and_has_market_sections():
