@@ -1686,7 +1686,7 @@
     $('#overall-score').textContent=result.overall_score??'—';
     $('#report-iri').textContent=result.overall_score===null||result.overall_score===undefined?'Withheld':result.overall_score+'/100';
     $('#overall-feedback').textContent=result.overall_feedback||'Assessment completed.';
-    $('#grading-method-label').textContent=previewMode?'Answer key + preview scoring (production uses AI)':'Answer key + question-level AI';
+    $('#grading-method-label').textContent=previewMode?'Answer key + coding workspace + preview scoring':'Answer key + sandbox execution + GPT-5.6 Sol';
     renderIntegrityReport(result);
     const banner=$('#analysis-status-banner');
     if(!complete){
@@ -1707,6 +1707,7 @@
     $('#summary-insufficient').textContent=summary.insufficient??'—';
     $('#summary-objective').textContent=summary.objective_accuracy===null||summary.objective_accuracy===undefined?'—':summary.objective_accuracy+'%';
     $('#summary-subjective').textContent=summary.subjective_average===null||summary.subjective_average===undefined?'—':summary.subjective_average+'/100';
+    $('#summary-coding').textContent=summary.coding_tests_total?((summary.coding_tests_passed||0)+' / '+summary.coding_tests_total):'—';
     renderSectionPerformance(result.section_scores||[]);
     $('#dimension-grid').innerHTML=Object.entries(result.dimensions||{}).map(function(entry){
       const score=entry[1];
