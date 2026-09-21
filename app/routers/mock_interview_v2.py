@@ -523,10 +523,19 @@ def _generate_unique_questions(
                 q_difficulty = str(item.get("difficulty", difficulty if difficulty != "mixed" else "medium")).strip().lower()
                 if q_difficulty not in {"easy", "medium", "hard"}:
                     q_difficulty = _difficulty_for(len(accepted) + 1, count, difficulty)
-                options = [str(x)[:1000] for x in (item.get("options") or [])[:4]] if count == FULL_MOCK_QUESTION_COUNT else []
+                options = [str(x).strip()[:1000] for x in (item.get("options") or [])[:4]] if count == FULL_MOCK_QUESTION_COUNT else []
+                options = [option for option in options if option]
                 raw_correct = str(item.get("correct_answer", ""))[:1000]
                 resolved_correct = _resolve_correct_option(options, raw_correct) if len(options) == 4 else ""
-                answer_type = "mcq" if count == FULL_MOCK_QUESTION_COUNT and resolved_correct else "text"
+                objective_section = count == FULL_MOCK_QUESTION_COUNT and section in {"quantitative", "logical", "communication"}
+
+                # Objective sections are contractually MCQ-only. Reject malformed AI items
+                # instead of silently degrading them to a text box; deterministic fallback
+                # will fill the missing quota with four-option, server-keyed questions.
+                if objective_section and (len(options) != 4 or not resolved_correct):
+                    continue
+
+                answer_type = "mcq" if count == FULL_MOCK_QUESTION_COUNT and len(options) == 4 and resolved_correct else "text"
                 correct_answer = resolved_correct if answer_type == "mcq" else ""
                 if answer_type == "text":
                     options = []
