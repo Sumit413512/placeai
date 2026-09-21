@@ -96,3 +96,20 @@ body.integrity-critical .assessment-shell{border-color:#e11d48;box-shadow:inset 
 .option-button{position:relative;min-height:56px;cursor:pointer;overflow:hidden}.option-button:focus-visible{outline:2px solid #1769e0;outline-offset:2px}.option-button.selected:after{content:"✓";position:absolute;right:10px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#1769e0;color:#fff;font-size:12px;font-weight:800;box-shadow:0 0 0 3px #1769e018}
 .option-button.selected .option-canvas{padding-right:34px}.option-canvas{pointer-events:none;min-height:46px}.option-key{pointer-events:none}.answer-options{padding-bottom:4px}
 @media(max-height:760px) and (min-width:761px){.assessment-camera-card{height:96px;min-height:96px}.assessment-brand small{display:none}.compact-timer{margin:6px 0}.palette-section-toggle{padding:6px 7px}.palette-question{height:21px}.question-stage{padding-top:12px}.protected-question{max-height:170px}.secure-textarea{min-height:120px;max-height:150px}}
+
+/* Final one-screen MCQ density + saved/current state */
+.palette-question.attempted.is-current{background:#147a50;border-color:#fff;color:#fff;box-shadow:0 0 0 2px #ffffffaa}
+.palette-question.current.is-current{background:#fff;border-color:#fff;color:#15243a;box-shadow:0 0 0 2px #ffffff30}
+.mcq-answer-area .answer-options{gap:5px}
+.mcq-answer-area .option-button{min-height:44px;padding:4px 8px}
+.mcq-answer-area .option-key{width:24px;height:24px;border-radius:6px;font-size:10px}
+.mcq-answer-area .option-canvas{height:34px;min-height:34px}
+.question-stage{padding:12px 18px 8px}
+.question-badges{margin-bottom:6px}
+.protected-question{min-height:112px;max-height:142px}
+.protected-question #question-canvas{min-height:112px;max-height:142px}
+.question-guidance{margin:5px 0 8px;font-size:9.5px;line-height:1.35}
+.assessment-actionbar{height:64px;min-height:64px;padding:8px 16px}
+.assessment-main{grid-template-rows:58px minmax(0,1fr) 64px}
+.assessment-toolbar{height:58px;min-height:58px}
+@media(max-height:700px) and (min-width:761px){.protected-question{min-height:98px;max-height:118px}.protected-question #question-canvas{min-height:98px;max-height:118px}.mcq-answer-area .option-button{min-height:40px}.mcq-answer-area .option-canvas{height:30px;min-height:30px}.question-stage{padding-top:8px}.question-guidance{margin:4px 0 6px}}
