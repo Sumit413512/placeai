@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from app.app import app
 from app.routers.mock_interview import MockInterviewStart
 from app.routers import mock_interview_v2
+from app.routers.mock_interview_v2 import MockInterviewStartV2
 
 client = TestClient(app)
 
@@ -147,3 +148,26 @@ def test_resilient_baseline_evaluation_is_conservative_and_explicit():
     assert "does not validate technical correctness" in result["overall_feedback"]
     assert "Resilient baseline only" in result["disclaimer"]
     assert all(item["ideal_answer"] == "" for item in result["evaluations"])
+
+
+def test_full_mock_v2_is_server_standardized_at_fifty_items():
+    valid = MockInterviewStartV2(job_id="job-1")
+    assert valid.question_count == 50
+    assert valid.mode == "assessment"
+    assert valid.focus == "balanced"
+    assert valid.difficulty == "mixed"
+
+    with pytest.raises(ValidationError):
+        MockInterviewStartV2(job_id="job-1", question_count=15)
+    with pytest.raises(ValidationError):
+        MockInterviewStartV2(job_id="job-1", mode="practice")
+
+
+def test_full_mock_blueprint_totals_fifty_and_has_market_sections():
+    blueprint = mock_interview_v2.ASSESSMENT_BLUEPRINT
+    assert sum(count for _, _, count in blueprint) == 50
+    keys = {key for key, _, _ in blueprint}
+    assert keys == {
+        "quantitative", "logical", "communication", "technical", "programming",
+        "coding", "resume", "behavioral", "role", "situational"
+    }
