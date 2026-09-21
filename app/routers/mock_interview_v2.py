@@ -24,17 +24,31 @@ from app.student_entitlements import require_student_premium_access
 router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])
 LOGGER = logging.getLogger("placeai.mock_interview")
 
+FULL_MOCK_QUESTION_COUNT = 50
+ASSESSMENT_BLUEPRINT = (
+    ("quantitative", "Quantitative Aptitude", 8),
+    ("logical", "Logical & Analytical Reasoning", 8),
+    ("communication", "Verbal & Communication", 6),
+    ("technical", "Technical Fundamentals", 8),
+    ("programming", "Programming & Debugging", 6),
+    ("coding", "Coding Challenges", 2),
+    ("resume", "Resume & Project Defence", 4),
+    ("behavioral", "Behavioural & HR", 4),
+    ("role", "Role / JD / Company", 2),
+    ("situational", "Situational & Decision", 2),
+)
+
 
 class MockInterviewStartV2(BaseModel):
     model_config = {"extra": "forbid"}
 
     job_id: str
-    focus: str = Field(default="balanced", pattern="^(balanced|technical|behavioral|hr)$")
-    # Existing API clients historically used 3-question rounds. Keep that contract while
-    # the upgraded production UI deliberately offers 5-15 questions for richer practice.
-    question_count: int = Field(default=8, ge=3, le=15)
-    difficulty: str = Field(default="mixed", pattern="^(easy|medium|hard|mixed)$")
-    mode: str = Field(default="practice", pattern="^(practice|assessment)$")
+    focus: str = Field(default="balanced", pattern="^balanced$")
+    # Full Mock is a standardized institutional assessment. The client cannot request
+    # a shorter round; validation rejects any count other than the server-owned minimum.
+    question_count: int = Field(default=FULL_MOCK_QUESTION_COUNT, ge=FULL_MOCK_QUESTION_COUNT, le=FULL_MOCK_QUESTION_COUNT)
+    difficulty: str = Field(default="mixed", pattern="^mixed$")
+    mode: str = Field(default="assessment", pattern="^assessment$")
 
 
 class MockInterviewAnswerV2(BaseModel):
@@ -48,7 +62,7 @@ class MockInterviewEvaluationV2(BaseModel):
     model_config = {"extra": "forbid"}
 
     interview_id: str
-    answers: list[MockInterviewAnswerV2] = Field(min_length=1, max_length=15)
+    answers: list[MockInterviewAnswerV2] = Field(min_length=1, max_length=FULL_MOCK_QUESTION_COUNT)
 
 
 def _call_interview_ai(prompt: str, *, max_output_tokens: int, fast: bool = False) -> str:
@@ -197,11 +211,23 @@ def _question_prompt(
 {PROMPT_GUARDRAIL}
 
 You are a senior interviewer preparing a realistic campus interview for the exact role below.
-Generate exactly {count} NEW questions. {focus_instruction}
-Difficulty: {difficulty}. If difficulty is mixed, deliberately progress from foundational to intermediate and then challenging.
-At least half of the questions must directly test the role description, required skills or candidate's relevant experience.
-For technical questions, prefer applied reasoning, debugging, design, code/SQL/API/cloud scenarios or trade-offs over trivia.
-Questions must be concise, non-discriminatory and answerable in a written practice session.
+Generate exactly {count} NEW primary assessment items for a standardized full campus-placement mock.
+Use this exact section blueprint and do not omit or merge sections:
+- quantitative: 8
+- logical: 8
+- communication: 6
+- technical: 8
+- programming: 6
+- coding: 2
+- resume: 4
+- behavioral: 4
+- role: 2
+- situational: 2
+Difficulty must progress from foundational to intermediate and then challenging within each section.
+At least half of technical/programming/coding/resume/role items must directly test the role description, required skills or candidate's relevant experience.
+For quantitative, logical and communication items, prefer objective multiple-choice questions with exactly four plausible options.
+For technical and programming, mix objective and applied questions. Coding, resume, behavioral, role and situational items should normally be applied-response questions.
+Questions must be concise, non-discriminatory and suitable for a campus placement assessment.
 Use ONLY facts present in ROLE and CANDIDATE CONTEXT. Do not invent company processes, technologies, projects,
 metrics, responsibilities, achievements or candidate experience. If a fact is not provided, ask a generic
 role-grounded question instead of assuming it.
@@ -364,7 +390,7 @@ def _generate_unique_questions(
             count=count + (2 if count >= 5 else 1),
             avoid=previous,
         )
-        raw = _call_interview_ai(prompt, max_output_tokens=1800, fast=True)
+        raw = _call_interview_ai(prompt, max_output_tokens=7600, fast=True)
         data = extract_json_from_response(raw)
         source = data.get("questions", []) if isinstance(data, dict) else []
         if isinstance(source, list):
@@ -374,13 +400,26 @@ def _generate_unique_questions(
                 question = str(item.get("question", "")).strip()
                 if not question or _too_similar(question, [*previous, *(x["question"] for x in accepted)]):
                     continue
-                category = str(item.get("category", "interview")).strip().lower()
+                section = str(item.get("section", item.get("category", "technical"))).strip().lower()
+                allowed_sections = {key for key, _, _ in ASSESSMENT_BLUEPRINT}
+                if section not in allowed_sections:
+                    section = "technical"
+                category = str(item.get("category", section)).strip().lower() or section
                 q_difficulty = str(item.get("difficulty", difficulty if difficulty != "mixed" else "medium")).strip().lower()
-                if category not in {"technical", "behavioral", "hr", "situational", "communication"}:
-                    category = "interview"
                 if q_difficulty not in {"easy", "medium", "hard"}:
                     q_difficulty = _difficulty_for(len(accepted) + 1, count, difficulty)
-                accepted.append({"question": question[:2000], "category": category, "difficulty": q_difficulty})
+                options = [str(x)[:1000] for x in (item.get("options") or [])[:4]]
+                answer_type = "mcq" if len(options) == 4 else "text"
+                correct_answer = str(item.get("correct_answer", ""))[:1000] if answer_type == "mcq" else ""
+                accepted.append({
+                    "question": question[:2000],
+                    "section": section,
+                    "category": category,
+                    "difficulty": q_difficulty,
+                    "answer_type": answer_type,
+                    "options": options,
+                    "correct_answer": correct_answer,
+                })
                 if len(accepted) >= count:
                     break
         if accepted:
@@ -454,6 +493,10 @@ def start_mock_interview_v2(
     db.add(interview)
     db.commit()
     db.refresh(interview)
+    client_questions = [
+        {key: value for key, value in item.items() if key != "correct_answer"}
+        for item in questions
+    ]
     return {
         "interview_id": interview.id,
         "job_id": job.id,
@@ -462,7 +505,12 @@ def start_mock_interview_v2(
         "focus": body.focus,
         "difficulty": body.difficulty,
         "mode": body.mode,
-        "questions": questions,
+        "question_count": FULL_MOCK_QUESTION_COUNT,
+        "assessment_blueprint": [
+            {"key": key, "label": label, "count": count}
+            for key, label, count in ASSESSMENT_BLUEPRINT
+        ],
+        "questions": client_questions,
         "previous_questions_avoided": len(previous),
         **generation,
     }
