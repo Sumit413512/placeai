@@ -9,7 +9,7 @@ from difflib import SequenceMatcher
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.ai_provider import call_ai_text, current_ai_model, current_ai_provider
@@ -43,12 +43,21 @@ class MockInterviewStartV2(BaseModel):
     model_config = {"extra": "forbid"}
 
     job_id: str
-    focus: str = Field(default="balanced", pattern="^balanced$")
-    # Full Mock is a standardized institutional assessment. The client cannot request
-    # a shorter round; validation rejects any count other than the server-owned minimum.
-    question_count: int = Field(default=FULL_MOCK_QUESTION_COUNT, ge=FULL_MOCK_QUESTION_COUNT, le=FULL_MOCK_QUESTION_COUNT)
-    difficulty: str = Field(default="mixed", pattern="^mixed$")
-    mode: str = Field(default="assessment", pattern="^assessment$")
+    focus: str = Field(default="balanced", pattern="^(balanced|technical|behavioral|hr)$")
+    question_count: int = Field(default=8, ge=3, le=FULL_MOCK_QUESTION_COUNT)
+    difficulty: str = Field(default="mixed", pattern="^(easy|medium|hard|mixed)$")
+    mode: str = Field(default="practice", pattern="^(practice|assessment)$")
+
+    @model_validator(mode="after")
+    def validate_standardized_assessment(self):
+        if self.mode == "assessment":
+            if self.question_count != FULL_MOCK_QUESTION_COUNT:
+                raise ValueError("Full assessment mode requires exactly 50 primary items")
+            if self.focus != "balanced" or self.difficulty != "mixed":
+                raise ValueError("Full assessment mode uses the server-standardized balanced/mixed blueprint")
+        elif self.question_count > 15:
+            raise ValueError("Legacy practice rounds support 3-15 questions")
+        return self
 
 
 class MockInterviewAnswerV2(BaseModel):
@@ -215,32 +224,19 @@ def _question_prompt(
 {PROMPT_GUARDRAIL}
 
 You are a senior interviewer preparing a realistic campus interview for the exact role below.
-Generate exactly {count} NEW primary assessment items for a standardized full campus-placement mock.
-Use this exact section blueprint and do not omit or merge sections:
-- quantitative: 8
-- logical: 8
-- communication: 6
-- technical: 8
-- programming: 6
-- coding: 2
-- resume: 4
-- behavioral: 4
-- role: 2
-- situational: 2
-Difficulty must progress from foundational to intermediate and then challenging within each section.
-At least half of technical/programming/coding/resume/role items must directly test the role description, required skills or candidate's relevant experience.
-For quantitative, logical and communication items, prefer objective multiple-choice questions with exactly four plausible options.
-For technical and programming, mix objective and applied questions. Coding, resume, behavioral, role and situational items should normally be applied-response questions.
-Questions must be concise, non-discriminatory and suitable for a campus placement assessment.
+{("Generate exactly 50 NEW primary assessment items for a standardized full campus-placement mock. Use this exact section blueprint and do not omit or merge sections: quantitative 8; logical 8; communication 6; technical 8; programming 6; coding 2; resume 4; behavioral 4; role 2; situational 2. Difficulty must progress from foundational to intermediate and then challenging within each section. At least half of technical/programming/coding/resume/role items must directly test the role description, required skills or candidate's relevant experience. For quantitative, logical and communication items, prefer objective multiple-choice questions with exactly four plausible options. For technical and programming, mix objective and applied questions. Coding, resume, behavioral, role and situational items should normally be applied-response questions." if count == FULL_MOCK_QUESTION_COUNT else f"Generate exactly {count} NEW role-specific practice interview questions. {focus_instruction} Difficulty: {difficulty}. Prefer applied technical reasoning, debugging, design, behavioral evidence, situational judgment and role fit over trivia.")}
+Questions must be concise, non-discriminatory and suitable for campus placement preparation.
 Use ONLY facts present in ROLE and CANDIDATE CONTEXT. Do not invent company processes, technologies, projects,
 metrics, responsibilities, achievements or candidate experience. If a fact is not provided, ask a generic
 role-grounded question instead of assuming it.
 Do NOT repeat, lightly reword, paraphrase or reuse the concept framing of any prior question in AVOID QUESTIONS.
 Do not ask multiple questions that are substantially the same within this new set.
 
-Return ONLY valid JSON:
+Return ONLY valid JSON.
+For a 50-item full assessment use:
 {{"questions":[{{"question":"...","section":"quantitative|logical|communication|technical|programming|coding|resume|behavioral|role|situational","category":"...","difficulty":"easy|medium|hard","answer_type":"mcq|text","options":["A","B","C","D"],"correct_answer":"exact option text or empty for text"}}]}}
-For text-response questions, return options=[] and correct_answer="".
+For legacy practice rounds use:
+{{"questions":[{{"question":"...","category":"technical|behavioral|hr|situational|communication","difficulty":"easy|medium|hard"}}]}}
 
 ROLE
 Title: {job.title}
@@ -279,6 +275,47 @@ def _fallback_questions(
     already: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Fill missing blueprint sections with deterministic, role-grounded items."""
+
+    if count < FULL_MOCK_QUESTION_COUNT:
+        existing = [*previous, *(item["question"] for item in (already or []))]
+        skills = [str(x).strip() for x in (job.required_skills or []) if str(x).strip()]
+        if not skills:
+            skills = [str(x).strip() for x in (profile.skills or []) if str(x).strip()]
+        skills = skills[:10] or ["the core skills required for this role"]
+        pool: list[tuple[str, str]] = []
+        for skill in skills:
+            pool.extend([
+                (f"For the {job.title} role, describe a practical task where you would use {skill}. How would you verify that your solution works correctly?", "technical"),
+                (f"Suppose a task involving {skill} is failing in a project relevant to {job.title}. Walk through how you would diagnose the problem, choose a fix, and check for regressions.", "technical"),
+            ])
+        pool.extend([
+            (f"You are given an unfamiliar task in the {job.title} role with incomplete requirements. How would you clarify the problem and plan your first steps?", "situational"),
+            ("Tell me about a time you had to learn a technical concept quickly. What did you do and what was the outcome?", "behavioral"),
+            (f"Why are you interested in the {job.title} opportunity, based only on the responsibilities and skills you know about it?", "hr"),
+        ])
+        chosen: list[dict[str, Any]] = []
+        suffix = 1
+        while len(chosen) < count:
+            if pool:
+                question, category = pool[(suffix - 1) % len(pool)]
+            else:
+                skill = skills[(suffix - 1) % len(skills)]
+                question = f"Practice scenario {suffix}: for a {job.title} task involving {skill}, explain your approach, risk and validation."
+                category = "technical"
+            suffix += 1
+            if _too_similar(question, [*existing, *(x["question"] for x in chosen)]):
+                continue
+            chosen.append({
+                "question": question[:2000],
+                "section": category if category != "hr" else "behavioral",
+                "category": category,
+                "difficulty": _difficulty_for(len(chosen) + 1, count, difficulty),
+                "answer_type": "text",
+                "options": [],
+                "correct_answer": "",
+            })
+        return chosen[:count]
+
     existing_items = already or []
     existing_text = [*previous, *(item["question"] for item in existing_items)]
     targets = {key: target for key, _, target in ASSESSMENT_BLUEPRINT}
@@ -430,7 +467,7 @@ def _generate_unique_questions(
             count=count + (2 if count >= 5 else 1),
             avoid=previous,
         )
-        raw = _call_interview_ai(prompt, max_output_tokens=7600, fast=True)
+        raw = _call_interview_ai(prompt, max_output_tokens=7600 if count == FULL_MOCK_QUESTION_COUNT else 1800, fast=True)
         data = extract_json_from_response(raw)
         source = data.get("questions", []) if isinstance(data, dict) else []
         target_map = {key: target for key, _, target in ASSESSMENT_BLUEPRINT}
@@ -442,18 +479,22 @@ def _generate_unique_questions(
                 question = str(item.get("question", "")).strip()
                 if not question or _too_similar(question, [*previous, *(x["question"] for x in accepted)]):
                     continue
-                section = str(item.get("section", item.get("category", "technical"))).strip().lower()
-                allowed_sections = {key for key, _, _ in ASSESSMENT_BLUEPRINT}
-                if section not in allowed_sections:
-                    continue
-                if section_counts[section] >= target_map[section]:
-                    continue
-                category = str(item.get("category", section)).strip().lower() or section
+                category = str(item.get("category", "interview")).strip().lower()
+                if count == FULL_MOCK_QUESTION_COUNT:
+                    section = str(item.get("section", item.get("category", "technical"))).strip().lower()
+                    allowed_sections = {key for key, _, _ in ASSESSMENT_BLUEPRINT}
+                    if section not in allowed_sections or section_counts[section] >= target_map[section]:
+                        continue
+                    category = str(item.get("category", section)).strip().lower() or section
+                else:
+                    section = category if category in {"technical", "behavioral", "situational", "communication"} else "technical"
+                    if category not in {"technical", "behavioral", "hr", "situational", "communication"}:
+                        category = "interview"
                 q_difficulty = str(item.get("difficulty", difficulty if difficulty != "mixed" else "medium")).strip().lower()
                 if q_difficulty not in {"easy", "medium", "hard"}:
                     q_difficulty = _difficulty_for(len(accepted) + 1, count, difficulty)
-                options = [str(x)[:1000] for x in (item.get("options") or [])[:4]]
-                answer_type = "mcq" if len(options) == 4 else "text"
+                options = [str(x)[:1000] for x in (item.get("options") or [])[:4]] if count == FULL_MOCK_QUESTION_COUNT else []
+                answer_type = "mcq" if count == FULL_MOCK_QUESTION_COUNT and len(options) == 4 else "text"
                 correct_answer = str(item.get("correct_answer", ""))[:1000] if answer_type == "mcq" else ""
                 accepted.append({
                     "question": question[:2000],
@@ -464,7 +505,8 @@ def _generate_unique_questions(
                     "options": options,
                     "correct_answer": correct_answer,
                 })
-                section_counts[section] += 1
+                if count == FULL_MOCK_QUESTION_COUNT:
+                    section_counts[section] += 1
                 if len(accepted) >= count:
                     break
         if accepted:
@@ -550,11 +592,11 @@ def start_mock_interview_v2(
         "focus": body.focus,
         "difficulty": body.difficulty,
         "mode": body.mode,
-        "question_count": FULL_MOCK_QUESTION_COUNT,
-        "assessment_blueprint": [
-            {"key": key, "label": label, "count": count}
-            for key, label, count in ASSESSMENT_BLUEPRINT
-        ],
+        "question_count": body.question_count,
+        "assessment_blueprint": (
+            [{"key": key, "label": label, "count": count} for key, label, count in ASSESSMENT_BLUEPRINT]
+            if body.mode == "assessment" else []
+        ),
         "questions": client_questions,
         "previous_questions_avoided": len(previous),
         **generation,
