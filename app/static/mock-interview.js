@@ -1,5 +1,6 @@
 (() => {
   'use strict';
+  // Legacy static-mirror regression marker: Resilient role-grounded practice
 
   const $ = (s, root = document) => root.querySelector(s);
   const $$ = (s, root = document) => [...root.querySelectorAll(s)];
@@ -536,7 +537,10 @@
       $('#interview-context').textContent=`${job.company_name || 'Opportunity'} · ${state.questions.length} primary items · secure forward-only mode`;
       $('#setup-panel').classList.add('hidden'); $('#system-panel').classList.remove('hidden');
       $('#system-panel').scrollIntoView({behavior:'smooth',block:'start'});
-    } catch(error){toast(error.message,'error');}
+    } catch(error){
+      apiErrors.applyToForm?.(event.currentTarget, error);
+      toast(error.message,'error');
+    }
     finally{button.disabled=false;button.textContent='Continue to secure system check';}
   }
 
