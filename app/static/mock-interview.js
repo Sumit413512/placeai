@@ -56,7 +56,8 @@
     proctorVisionBusy:false,
     faceMissStreak:0,
     multipleFaceStreak:0,
-    phoneDetectionStreak:0
+    phoneDetectionStreak:0,
+    expandedSections:{}
   };
 
   function toast(message, type='') {
@@ -282,9 +283,14 @@
     const nav=$('#section-nav');
     const attemptedCount=state.answers.filter(isAttemptedAnswer).length;
     if($('#palette-progress')) $('#palette-progress').textContent=attemptedCount+' / '+state.questions.length;
+    const currentQuestion=state.questions[state.current];
+    if(currentQuestion?.section) state.expandedSections[currentQuestion.section]=true;
+
     nav.innerHTML=BLUEPRINT.map(function(section){
       const rows=state.questions.map(function(q,index){return {q:q,index:index};}).filter(function(row){return row.q.section===section.key;});
       if(!rows.length)return '';
+      const isExpanded=Boolean(state.expandedSections[section.key]);
+      const isCurrentSection=Boolean(currentQuestion && currentQuestion.section===section.key);
       const chips=rows.map(function(row){
         const isCurrent=row.index===state.current;
         const attempted=isAttemptedAnswer(state.answers[row.q.question_id-1]);
@@ -293,8 +299,20 @@
         return '<span class="palette-question '+status+' locked" aria-label="'+esc(label)+'" title="'+esc(label)+'">'+row.q.question_id+'</span>';
       }).join('');
       const done=rows.filter(function(row){return isAttemptedAnswer(state.answers[row.q.question_id-1]);}).length;
-      return '<section class="palette-section"><div class="palette-section-title"><strong>'+esc(section.label)+'</strong><span>'+done+'/'+rows.length+'</span></div><div class="palette-question-grid">'+chips+'</div></section>';
+      return '<section class="palette-section '+(isCurrentSection?'active-section':'')+' '+(isExpanded?'expanded':'collapsed')+'">'
+        +'<button class="palette-section-toggle" type="button" data-section-toggle="'+esc(section.key)+'" aria-expanded="'+(isExpanded?'true':'false')+'">'
+        +'<span class="palette-section-copy"><strong>'+esc(section.label)+'</strong><small>'+done+' attempted · '+rows.length+' questions</small></span>'
+        +'<span class="palette-section-meta"><b>'+done+'/'+rows.length+'</b><i class="palette-chevron" aria-hidden="true">⌄</i></span>'
+        +'</button>'
+        +'<div class="palette-question-wrap" '+(isExpanded?'':'hidden')+'><div class="palette-question-grid">'+chips+'</div></div>'
+        +'</section>';
     }).join('');
+  }
+
+  function toggleNavigatorSection(sectionKey) {
+    if(!sectionKey)return;
+    state.expandedSections[sectionKey]=!state.expandedSections[sectionKey];
+    renderSectionNav();
   }
 
   function renderAnswerArea(question) {
@@ -324,6 +342,7 @@
   function renderQuestion() {
     const q=state.questions[state.current];
     if(!q) return;
+    state.expandedSections[q.section]=true;
     const info=currentSectionInfo(q);
     $('#section-label').textContent=info.label;
     $('#question-progress').textContent=`Question ${state.current+1} of ${state.questions.length}`;
@@ -1241,7 +1260,7 @@
 
   function resetAssessment() {
     clearInterval(state.timerId);clearInterval(state.faceTimer);clearInterval(state.proctorVisionTimer);
-    state.assessmentActive=false;state.finishing=false;state.current=0;state.answers=[];state.questions=[];state.session=null;state.livenessPassed=false;state.systemReady=false;state.lastResult=null;state.reviewFilter='all';state.integrityEvents=[];state.integrityWarnings=0;state.lastWarningAt=0;state.autoSubmittedIntegrity=false;state.integrityTerminationReason='';state.faceMissStreak=0;state.multipleFaceStreak=0;state.phoneDetectionStreak=0;clearAnalysisTimers();
+    state.assessmentActive=false;state.finishing=false;state.current=0;state.answers=[];state.questions=[];state.session=null;state.livenessPassed=false;state.systemReady=false;state.lastResult=null;state.reviewFilter='all';state.integrityEvents=[];state.integrityWarnings=0;state.lastWarningAt=0;state.autoSubmittedIntegrity=false;state.integrityTerminationReason='';state.faceMissStreak=0;state.multipleFaceStreak=0;state.phoneDetectionStreak=0;state.expandedSections={};clearAnalysisTimers();
     if(state.mediaStream){state.mediaStream.getTracks().forEach(t=>t.stop());state.mediaStream=null;}
     document.body.classList.remove('secure-assessment');
     $('#result-panel').classList.add('hidden');$('#analysis-panel').classList.add('hidden');$('#system-panel').classList.add('hidden');$('#setup-panel').classList.remove('hidden');
@@ -1263,6 +1282,10 @@
   $('#retry-analysis')?.addEventListener('click',function(){if(state.finishing)return;state.finishing=true;runResultAnalysis(false);});
   $('#retry-analysis-result')?.addEventListener('click',function(){if(state.finishing)return;state.finishing=true;runResultAnalysis(false);});
   $('#review-filters')?.addEventListener('click',function(event){const button=event.target.closest('[data-review-filter]');if(button)renderQuestionReviews(button.dataset.reviewFilter);});
+  $('#section-nav')?.addEventListener('click',function(event){
+    const button=event.target.closest('[data-section-toggle]');
+    if(button) toggleNavigatorSection(button.dataset.sectionToggle);
+  });
 
   (async()=>{
     renderBlueprint();
