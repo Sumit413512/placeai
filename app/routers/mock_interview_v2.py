@@ -210,6 +210,7 @@ def _issued_questions(row: MockInterview) -> list[dict[str, Any]]:
                 "answer_type": str(item.get("answer_type", "text")).strip().lower(),
                 "options": [str(x)[:1000] for x in (item.get("options") or [])[:4]],
                 "correct_answer": str(item.get("correct_answer", ""))[:1000],
+                "coding_spec": item.get("coding_spec") if isinstance(item.get("coding_spec"), dict) else None,
             })
     if not normalized:
         raise HTTPException(status_code=409, detail="Interview question set is unavailable")
@@ -507,6 +508,41 @@ def _fallback_questions(
     return chosen[:count]
 
 
+def _apply_standard_coding_challenges(
+    *,
+    items: list[dict[str, Any]],
+    job: Job,
+    previous_questions: list[str],
+) -> list[dict[str, Any]]:
+    """Replace the two coding-section prompts with executable, server-tested challenges."""
+    coding_positions = [
+        index for index, item in enumerate(items)
+        if str(item.get("section", "")).strip().lower() == "coding"
+    ]
+    if not coding_positions:
+        return items
+
+    seed_value = f"{getattr(job, 'id', '')}:{job.title}"
+    specs = choose_coding_challenges(
+        seed_value=seed_value,
+        previous_questions=previous_questions,
+        count=len(coding_positions),
+    )
+    updated = list(items)
+    for position, spec in zip(coding_positions, specs):
+        updated[position] = {
+            "question": str(spec["question"])[:2000],
+            "section": "coding",
+            "category": "coding",
+            "difficulty": "hard" if position == coding_positions[-1] else "medium",
+            "answer_type": "code",
+            "options": [],
+            "correct_answer": "",
+            "coding_spec": spec,
+        }
+    return updated
+
+
 def _generate_unique_questions(
     *,
     profile: StudentProfile,
@@ -610,9 +646,17 @@ def _generate_unique_questions(
         accepted.extend(fallback_items[:needed])
         generation_mode = "ai_plus_fallback" if provider != "local" else "resilient_fallback"
 
+    selected_items = accepted[:count]
+    if count == FULL_MOCK_QUESTION_COUNT:
+        selected_items = _apply_standard_coding_challenges(
+            items=selected_items,
+            job=job,
+            previous_questions=previous,
+        )
+
     questions = [
         {"question_id": index, **item}
-        for index, item in enumerate(accepted[:count], start=1)
+        for index, item in enumerate(selected_items, start=1)
     ]
     metadata = {
         "generation_mode": generation_mode,
@@ -661,10 +705,16 @@ def start_mock_interview_v2(
     db.add(interview)
     db.commit()
     db.refresh(interview)
-    client_questions = [
-        {key: value for key, value in item.items() if key != "correct_answer"}
-        for item in questions
-    ]
+    client_questions = []
+    for item in questions:
+        public_item = {
+            key: value
+            for key, value in item.items()
+            if key not in {"correct_answer", "coding_spec"}
+        }
+        if item.get("answer_type") == "code" and isinstance(item.get("coding_spec"), dict):
+            public_item["coding_spec"] = public_coding_spec(item["coding_spec"])
+        client_questions.append(public_item)
     return {
         "interview_id": interview.id,
         "job_id": job.id,
