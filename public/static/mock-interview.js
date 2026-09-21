@@ -330,6 +330,89 @@
     renderSectionNav();
   }
 
+
+  function parseStoredCodeAnswer(answer) {
+    try {
+      const data=JSON.parse(answer||'{}');
+      if(data && typeof data==='object' && typeof data.language==='string' && typeof data.source_code==='string') return data;
+    } catch {}
+    return null;
+  }
+
+  function codeDraftBucket(questionId) {
+    state.codeDrafts[questionId]=state.codeDrafts[questionId]||{};
+    return state.codeDrafts[questionId];
+  }
+
+  function renderCodeExecution(data) {
+    const panel=$('#code-execution-panel');
+    if(!panel)return;
+    if(!data){
+      panel.innerHTML='<div class="code-empty-state">Run the sample tests to see compilation and execution results.</div>';
+      return;
+    }
+    const passed=Number(data.passed||0);
+    const total=Number(data.total||0);
+    const compile=Boolean(data.compile_success);
+    const rows=(data.results||[]).map(function(result){
+      const status=result.passed?'passed':'failed';
+      const visibility=result.visibility==='hidden'?'Hidden':'Sample';
+      let detail='';
+      if(result.visibility!=='hidden'){
+        if(result.compile_output) detail='<pre>'+esc(result.compile_output)+'</pre>';
+        else if(result.stderr) detail='<pre>'+esc(result.stderr)+'</pre>';
+        else if(result.stdout) detail='<pre>Output: '+esc(result.stdout)+'</pre>';
+      }
+      return '<article class="code-test-result '+status+'"><div><strong>'+visibility+' test '+result.index+'</strong><span>'+esc(result.status||'')+'</span></div><b>'+(result.passed?'Passed':'Failed')+'</b>'+detail+'</article>';
+    }).join('');
+    panel.innerHTML='<div class="code-run-summary '+(compile?'compile-ok':'compile-fail')+'">'
+      +'<div><span>'+(compile?'Compilation / runtime ready':'Compilation failed')+'</span><strong>'+passed+' / '+total+' tests passed</strong></div>'
+      +'<b>'+Math.round(total?passed/total*100:0)+'%</b></div>'
+      +'<div class="code-test-results">'+rows+'</div>';
+  }
+
+  async function runCurrentCode(mode) {
+    const q=state.questions[state.current];
+    if(!q || q.answer_type!=='code')return;
+    const language=$('#code-language')?.value||'';
+    const source=($('#code-editor')?.value||'').trimEnd();
+    if(!language || !source.trim()){toast('Choose a language and enter code first.','error');return;}
+    const runButton=$('#run-code');
+    const submitButton=$('#submit-code-tests');
+    if(runButton)runButton.disabled=true;
+    if(submitButton)submitButton.disabled=true;
+    $('#code-run-status').textContent=mode==='submit'?'Running all test cases…':'Compiling and running sample tests…';
+    try{
+      if(previewMode){
+        await new Promise(function(resolve){setTimeout(resolve,500);});
+        const samples=q.coding_spec?.sample_tests||[];
+        const data={compile_success:true,passed:0,total:samples.length,sample_count:samples.length,hidden_count:0,results:samples.map(function(_,i){return {index:i+1,visibility:'sample',passed:false,status:'Preview mode — live execution requires a signed-in student session',stdout:'',stderr:'',compile_output:''};})};
+        state.codeExecution[q.question_id]=data;
+        renderCodeExecution(data);
+      }else{
+        const data=await api('/mock-interview/code/run',{method:'POST',body:JSON.stringify({
+          interview_id:state.session.interview_id,
+          question_id:q.question_id,
+          language:language,
+          source_code:source,
+          mode:mode
+        })});
+        state.codeExecution[q.question_id]=data;
+        renderCodeExecution(data);
+        toast(data.compile_success
+          ? data.passed+' of '+data.total+' test cases passed.'
+          : 'Compilation failed. Review the compiler output.\n', data.passed===data.total&&data.total>0?'':'error');
+      }
+    }catch(error){
+      renderCodeExecution({compile_success:false,passed:0,total:0,results:[{index:1,visibility:'sample',passed:false,status:error.message||'Execution unavailable',stdout:'',stderr:'',compile_output:''}]});
+      toast(error.message||'Code execution failed.','error');
+    }finally{
+      if(runButton)runButton.disabled=false;
+      if(submitButton)submitButton.disabled=false;
+      $('#code-run-status').textContent=mode==='submit'?'Submission test run complete':'Sample test run complete';
+    }
+  }
+
   function renderAnswerArea(question) {
     const area=$('#answer-area');
     area.className='answer-area '+(question.answer_type==='mcq'?'mcq-answer-area':'text-answer-area');
