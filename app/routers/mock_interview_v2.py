@@ -186,10 +186,20 @@ def _issued_questions(row: MockInterview) -> list[dict[str, Any]]:
                 "answer_type": str(item.get("answer_type", "text")).strip().lower(),
                 "options": [str(x)[:1000] for x in (item.get("options") or [])[:4]],
                 "correct_answer": str(item.get("correct_answer", ""))[:1000],
+                "coding_spec": item.get("coding_spec") if isinstance(item.get("coding_spec"), dict) else {},
             })
     if not normalized:
         raise HTTPException(status_code=409, detail="Interview question set is unavailable")
     return normalized
+
+
+def _client_question(item: dict[str, Any]) -> dict[str, Any]:
+    payload = {key: value for key, value in item.items() if key not in {"correct_answer", "coding_spec"}}
+    if item.get("answer_type") == "code":
+        payload["coding_spec"] = _public_coding_spec(
+            item.get("coding_spec") if isinstance(item.get("coding_spec"), dict) else {}
+        )
+    return payload
 
 
 def _question_norm(value: str) -> str:
