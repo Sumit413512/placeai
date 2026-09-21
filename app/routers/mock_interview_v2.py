@@ -1570,7 +1570,11 @@ def _build_assessment_result(
     ]
     subjective_items = [
         item for item in evaluations
-        if str(item.get("grading_method") or "").startswith("ai")
+        if item.get("answer_type") == "text"
+    ]
+    coding_items = [
+        item for item in evaluations
+        if item.get("answer_type") == "code"
     ]
     objective_accuracy = (
         round(100 * sum(item["score"] == 100 for item in objective_items) / len(objective_items))
@@ -1579,6 +1583,10 @@ def _build_assessment_result(
     subjective_average = (
         round(sum(item["score"] for item in subjective_items) / len(subjective_items))
         if subjective_items else None
+    )
+    coding_average = (
+        round(sum(item["score"] for item in coding_items) / len(coding_items))
+        if coding_items else None
     )
 
     overall_feedback = (
@@ -1608,6 +1616,7 @@ def _build_assessment_result(
             "coding_graded": coding_graded,
             "objective_accuracy": objective_accuracy,
             "subjective_average": subjective_average,
+            "coding_average": coding_average,
         },
         "section_scores": section_rows,
         "dimensions": {row["key"]: row["score"] for row in section_rows},
