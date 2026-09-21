@@ -6,6 +6,7 @@ import math
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
 from typing import Any
 
@@ -555,8 +556,9 @@ def _run_code_tests(
         tests.extend(spec.get("hidden_tests") or [])
     if not tests:
         raise ValueError("Coding question has no test cases")
-    results = []
-    for index, case in enumerate(tests, start=1):
+    results_by_index: dict[int, dict[str, Any]] = {}
+
+    def run_one(index: int, case: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         result = _judge0_execute_case(
             language=language,
             source_code=source_code,
@@ -565,7 +567,7 @@ def _run_code_tests(
             time_limit_seconds=float(spec.get("time_limit_seconds", 2.0) or 2.0),
             memory_limit_kb=int(spec.get("memory_limit_kb", 128000) or 128000),
         )
-        results.append({
+        return index, {
             "index": index,
             "visibility": "sample" if index <= sample_count else "hidden",
             "passed": bool(result["passed"]),
@@ -575,9 +577,18 @@ def _run_code_tests(
             "compile_output": result["compile_output"] if index <= sample_count else "",
             "time": result["time"],
             "memory": result["memory"],
-        })
-        if result["compile_output"] and index == 1:
-            break
+        }
+
+    with ThreadPoolExecutor(max_workers=min(3, len(tests))) as executor:
+        futures = [
+            executor.submit(run_one, index, case)
+            for index, case in enumerate(tests, start=1)
+        ]
+        for future in as_completed(futures):
+            index, result = future.result()
+            results_by_index[index] = result
+
+    results = [results_by_index[index] for index in sorted(results_by_index)]
     passed = sum(1 for result in results if result["passed"])
     return {
         "language": language,
