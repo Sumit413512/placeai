@@ -14,7 +14,7 @@
     {key:'communication', label:'Verbal & Communication', count:6, minutes:10, kind:'mcq'},
     {key:'technical', label:'Technical Fundamentals', count:8, minutes:14, kind:'mixed'},
     {key:'programming', label:'Programming & Debugging', count:6, minutes:14, kind:'mixed'},
-    {key:'coding', label:'Coding Challenges', count:2, minutes:24, kind:'text'},
+    {key:'coding', label:'Coding Challenges', count:2, minutes:30, kind:'code'},
     {key:'resume', label:'Resume & Project Defence', count:4, minutes:10, kind:'text'},
     {key:'behavioral', label:'Behavioural & HR', count:4, minutes:10, kind:'text'},
     {key:'role', label:'Role / JD / Company', count:2, minutes:5, kind:'text'},
@@ -70,7 +70,10 @@
     faceMissStreak:0,
     multipleFaceStreak:0,
     phoneDetectionStreak:0,
-    expandedSections:{}
+    expandedSections:{},
+    codingDrafts:{},
+    codingRuns:{},
+    codingBusy:false
   };
 
   function toast(message, type='') {
@@ -193,6 +196,53 @@
     ]
   };
 
+  const demoCodingSpecs = [
+    {
+      key:'pair_sum_exists',
+      title:'Pair Sum Exists',
+      problem_statement:'Given n integers and a target T, print YES if two values at different indices sum to T; otherwise print NO.',
+      input_format:'Line 1: n target · Line 2: n integers',
+      output_format:'YES or NO',
+      constraints:['1 <= n <= 100000','-10^9 <= values, target <= 10^9'],
+      allowed_languages:[
+        {key:'python',label:'Python 3'},{key:'java',label:'Java'},{key:'cpp',label:'C++'},{key:'javascript',label:'JavaScript (Node.js)'}
+      ],
+      starter_code:{
+        python:'import sys\n\ndef has_pair(nums, target):\n    # Write your solution here\n    return False\n\ndata=list(map(int,sys.stdin.read().split()))\nn,target=data[0],data[1]\nnums=data[2:2+n]\nprint("YES" if has_pair(nums,target) else "NO")\n',
+        java:'import java.util.*;\npublic class Main {\n  static boolean hasPair(int[] nums,int target){\n    // Write your solution here\n    return false;\n  }\n  public static void main(String[] args){\n    Scanner sc=new Scanner(System.in); int n=sc.nextInt(), target=sc.nextInt(); int[] nums=new int[n];\n    for(int i=0;i<n;i++) nums[i]=sc.nextInt();\n    System.out.println(hasPair(nums,target)?"YES":"NO");\n  }\n}\n',
+        cpp:'#include <bits/stdc++.h>\nusing namespace std;\nbool hasPair(const vector<long long>& nums,long long target){\n  // Write your solution here\n  return false;\n}\nint main(){ios::sync_with_stdio(false);cin.tie(nullptr);int n;long long target;cin>>n>>target;vector<long long> a(n);for(auto &x:a)cin>>x;cout<<(hasPair(a,target)?"YES":"NO")<<"\\n";}\n',
+        javascript:'const fs=require("fs");\nfunction hasPair(nums,target){\n  // Write your solution here\n  return false;\n}\nconst d=fs.readFileSync(0,"utf8").trim().split(/\\s+/).map(Number);\nconst n=d[0], target=d[1], nums=d.slice(2,2+n);\nconsole.log(hasPair(nums,target)?"YES":"NO");\n'
+      },
+      sample_tests:[
+        {index:1,input:'5 9\n2 7 11 15 1\n',expected_output:'YES\n'},
+        {index:2,input:'4 8\n1 2 3 4\n',expected_output:'NO\n'}
+      ],
+      hidden_test_count:6
+    },
+    {
+      key:'balanced_brackets',
+      title:'Balanced Brackets',
+      problem_statement:'Given a string containing (), [] and {}, print YES if the bracket sequence is balanced; otherwise print NO.',
+      input_format:'One line containing bracket characters',
+      output_format:'YES or NO',
+      constraints:['1 <= length <= 200000'],
+      allowed_languages:[
+        {key:'python',label:'Python 3'},{key:'java',label:'Java'},{key:'cpp',label:'C++'},{key:'javascript',label:'JavaScript (Node.js)'}
+      ],
+      starter_code:{
+        python:'import sys\n\ndef is_balanced(text):\n    # Write your solution here\n    return False\n\ntext=sys.stdin.readline().strip()\nprint("YES" if is_balanced(text) else "NO")\n',
+        java:'import java.io.*;\npublic class Main {\n  static boolean isBalanced(String text){\n    // Write your solution here\n    return false;\n  }\n  public static void main(String[] args)throws Exception{String text=new BufferedReader(new InputStreamReader(System.in)).readLine().trim();System.out.println(isBalanced(text)?"YES":"NO");}\n}\n',
+        cpp:'#include <bits/stdc++.h>\nusing namespace std;\nbool isBalanced(const string& s){\n  // Write your solution here\n  return false;\n}\nint main(){string s;cin>>s;cout<<(isBalanced(s)?"YES":"NO")<<"\\n";}\n',
+        javascript:'const fs=require("fs");\nfunction isBalanced(text){\n  // Write your solution here\n  return false;\n}\nconst text=fs.readFileSync(0,"utf8").trim();\nconsole.log(isBalanced(text)?"YES":"NO");\n'
+      },
+      sample_tests:[
+        {index:1,input:'([]{})\n',expected_output:'YES\n'},
+        {index:2,input:'([)]\n',expected_output:'NO\n'}
+      ],
+      hidden_test_count:6
+    }
+  ];
+
   function makeDemoQuestions(job) {
     const questions = [];
     let id = 1;
@@ -208,12 +258,25 @@
         const templates = {
           technical:`For a ${job.title} role, explain how you would apply ${skill} to solve a production-relevant problem and validate the result.`,
           programming:`A ${skill} implementation produces the correct result for normal inputs but fails on edge cases. Describe a disciplined debugging approach.`,
-          coding:`Design an algorithm for a role-relevant data-processing task. Explain the data structure, time complexity, edge cases and how you would test it.`,
+          coding:`Solve the coding challenge in the integrated PlaceAI IDE.`,
           resume:`Defend one project or skill from your resume that is directly relevant to ${job.title}. Explain your personal contribution, a difficult decision and the evidence of the outcome.`,
           behavioral:`Describe a specific situation where you received difficult feedback. What action did you take and what changed as a result?`,
           role:`Based on the known requirements of the ${job.title} opportunity, which capability would you prioritise in your first 30 days and why?`,
           situational:`A deadline is close and you discover a defect that could affect users. What would you do next, and how would you communicate the trade-off?`
         };
+        if(section.key==='coding'){
+          const spec=demoCodingSpecs[i % demoCodingSpecs.length];
+          questions.push({
+            question_id:id++,
+            section:'coding',
+            category:section.label,
+            difficulty:i===0?'Intermediate':'Advanced',
+            question:spec.title+' — '+spec.problem_statement,
+            answer_type:'code',
+            coding_spec:spec
+          });
+          continue;
+        }
         questions.push({question_id:id++,section:section.key,category:section.label,difficulty:i < Math.ceil(section.count*.4)?'Foundation':i < Math.ceil(section.count*.8)?'Intermediate':'Advanced',question:templates[section.key] || `Explain a role-relevant approach for ${skill}.`,answer_type:'text'});
       }
     }
