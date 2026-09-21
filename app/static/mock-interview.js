@@ -475,7 +475,7 @@
   function startTimer() {
     clearInterval(state.timerId);
     state.timerId=setInterval(()=>{
-      if(!state.assessmentActive || !$('#integrity-overlay').classList.contains('hidden')) return;
+      if(!state.assessmentActive || state.finishing || state.autoSubmittedIntegrity) return;
       state.totalRemaining--; state.sectionRemaining--; updateTimers();
       if(state.totalRemaining<=0){
         fillUnansweredResponses('[No response submitted before total assessment time expired]');
