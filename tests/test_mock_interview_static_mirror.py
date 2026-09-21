@@ -166,3 +166,22 @@ def test_integrity_warning_overlay_does_not_pause_assessment_clock():
     assert "if(!state.assessmentActive || state.finishing || state.autoSubmittedIntegrity) return;" in js
     timer_block = js.split("function startTimer()", 1)[1].split("function updateIntegrityWarningUI()", 1)[0]
     assert "integrity-overlay" not in timer_block
+
+
+def test_executable_coding_workspace_is_mirrored_and_cache_busted():
+    html = _text("app/templates/mock-interview.html")
+    js = _text("app/static/mock-interview.js")
+    css = _text("app/static/mock-interview.css")
+
+    assert "mock-interview.css?v=20260921-coding1" in html
+    assert "mock-interview.js?v=20260921-coding1" in html
+    assert "code-workspace" in js
+    assert "code-language" in js
+    assert "run-code" in js
+    assert "submit-code-tests" in js
+    assert "/mock-interview/code/run" in js
+    assert "Run sample tests" in js
+    assert "Submit tests" in js
+    assert ".code-editor" in css
+    assert ".code-test-result" in css
+    assert ".review-code" in css
