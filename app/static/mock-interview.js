@@ -541,7 +541,8 @@
       $('#setup-panel').classList.add('hidden'); $('#system-panel').classList.remove('hidden');
       $('#system-panel').scrollIntoView({behavior:'smooth',block:'start'});
     } catch(error){
-      apiErrors.applyToForm?.(event.currentTarget, error);
+      const form = event.currentTarget;
+      apiErrors.applyToForm(form, error);
       toast(error.message,'error');
     }
     finally{button.disabled=false;button.textContent='Continue to secure system check';}
