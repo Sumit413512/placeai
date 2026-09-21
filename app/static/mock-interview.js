@@ -14,7 +14,7 @@
     {key:'communication', label:'Verbal & Communication', count:6, minutes:10, kind:'mcq'},
     {key:'technical', label:'Technical Fundamentals', count:8, minutes:14, kind:'mixed'},
     {key:'programming', label:'Programming & Debugging', count:6, minutes:14, kind:'mixed'},
-    {key:'coding', label:'Coding Challenges', count:2, minutes:24, kind:'text'},
+    {key:'coding', label:'Coding Challenges', count:2, minutes:30, kind:'code'},
     {key:'resume', label:'Resume & Project Defence', count:4, minutes:10, kind:'text'},
     {key:'behavioral', label:'Behavioural & HR', count:4, minutes:10, kind:'text'},
     {key:'role', label:'Role / JD / Company', count:2, minutes:5, kind:'text'},
@@ -70,7 +70,10 @@
     faceMissStreak:0,
     multipleFaceStreak:0,
     phoneDetectionStreak:0,
-    expandedSections:{}
+    expandedSections:{},
+    codingDrafts:{},
+    codingRuns:{},
+    codingBusy:false
   };
 
   function toast(message, type='') {
@@ -89,7 +92,7 @@
     list.innerHTML = BLUEPRINT.map((item,index)=>`
       <div class="blueprint-row">
         <span class="blueprint-index">${String(index+1).padStart(2,'0')}</span>
-        <div><strong>${esc(item.label)}</strong><small>${item.minutes} min · ${item.kind === 'mcq' ? 'Objective' : item.kind === 'mixed' ? 'Objective + applied' : 'Applied response'}</small></div>
+        <div><strong>${esc(item.label)}</strong><small>${item.minutes} min · ${item.kind === 'mcq' ? 'Objective' : item.kind === 'mixed' ? 'Objective + applied' : item.kind === 'code' ? 'Coding IDE + test cases' : 'Applied response'}</small></div>
         <b>${item.count}</b>
       </div>`).join('');
   }
@@ -193,6 +196,53 @@
     ]
   };
 
+  const demoCodingSpecs = [
+    {
+      key:'pair_sum_exists',
+      title:'Pair Sum Exists',
+      problem_statement:'Given n integers and a target T, print YES if two values at different indices sum to T; otherwise print NO.',
+      input_format:'Line 1: n target · Line 2: n integers',
+      output_format:'YES or NO',
+      constraints:['1 <= n <= 100000','-10^9 <= values, target <= 10^9'],
+      allowed_languages:[
+        {key:'python',label:'Python 3'},{key:'java',label:'Java'},{key:'cpp',label:'C++'},{key:'javascript',label:'JavaScript (Node.js)'}
+      ],
+      starter_code:{
+        python:'import sys\n\ndef has_pair(nums, target):\n    # Write your solution here\n    return False\n\ndata=list(map(int,sys.stdin.read().split()))\nn,target=data[0],data[1]\nnums=data[2:2+n]\nprint("YES" if has_pair(nums,target) else "NO")\n',
+        java:'import java.util.*;\npublic class Main {\n  static boolean hasPair(int[] nums,int target){\n    // Write your solution here\n    return false;\n  }\n  public static void main(String[] args){\n    Scanner sc=new Scanner(System.in); int n=sc.nextInt(), target=sc.nextInt(); int[] nums=new int[n];\n    for(int i=0;i<n;i++) nums[i]=sc.nextInt();\n    System.out.println(hasPair(nums,target)?"YES":"NO");\n  }\n}\n',
+        cpp:'#include <bits/stdc++.h>\nusing namespace std;\nbool hasPair(const vector<long long>& nums,long long target){\n  // Write your solution here\n  return false;\n}\nint main(){ios::sync_with_stdio(false);cin.tie(nullptr);int n;long long target;cin>>n>>target;vector<long long> a(n);for(auto &x:a)cin>>x;cout<<(hasPair(a,target)?"YES":"NO")<<"\\n";}\n',
+        javascript:'const fs=require("fs");\nfunction hasPair(nums,target){\n  // Write your solution here\n  return false;\n}\nconst d=fs.readFileSync(0,"utf8").trim().split(/\\s+/).map(Number);\nconst n=d[0], target=d[1], nums=d.slice(2,2+n);\nconsole.log(hasPair(nums,target)?"YES":"NO");\n'
+      },
+      sample_tests:[
+        {index:1,input:'5 9\n2 7 11 15 1\n',expected_output:'YES\n'},
+        {index:2,input:'4 8\n1 2 3 4\n',expected_output:'NO\n'}
+      ],
+      hidden_test_count:6
+    },
+    {
+      key:'balanced_brackets',
+      title:'Balanced Brackets',
+      problem_statement:'Given a string containing (), [] and {}, print YES if the bracket sequence is balanced; otherwise print NO.',
+      input_format:'One line containing bracket characters',
+      output_format:'YES or NO',
+      constraints:['1 <= length <= 200000'],
+      allowed_languages:[
+        {key:'python',label:'Python 3'},{key:'java',label:'Java'},{key:'cpp',label:'C++'},{key:'javascript',label:'JavaScript (Node.js)'}
+      ],
+      starter_code:{
+        python:'import sys\n\ndef is_balanced(text):\n    # Write your solution here\n    return False\n\ntext=sys.stdin.readline().strip()\nprint("YES" if is_balanced(text) else "NO")\n',
+        java:'import java.io.*;\npublic class Main {\n  static boolean isBalanced(String text){\n    // Write your solution here\n    return false;\n  }\n  public static void main(String[] args)throws Exception{String text=new BufferedReader(new InputStreamReader(System.in)).readLine().trim();System.out.println(isBalanced(text)?"YES":"NO");}\n}\n',
+        cpp:'#include <bits/stdc++.h>\nusing namespace std;\nbool isBalanced(const string& s){\n  // Write your solution here\n  return false;\n}\nint main(){string s;cin>>s;cout<<(isBalanced(s)?"YES":"NO")<<"\\n";}\n',
+        javascript:'const fs=require("fs");\nfunction isBalanced(text){\n  // Write your solution here\n  return false;\n}\nconst text=fs.readFileSync(0,"utf8").trim();\nconsole.log(isBalanced(text)?"YES":"NO");\n'
+      },
+      sample_tests:[
+        {index:1,input:'([]{})\n',expected_output:'YES\n'},
+        {index:2,input:'([)]\n',expected_output:'NO\n'}
+      ],
+      hidden_test_count:6
+    }
+  ];
+
   function makeDemoQuestions(job) {
     const questions = [];
     let id = 1;
@@ -208,12 +258,25 @@
         const templates = {
           technical:`For a ${job.title} role, explain how you would apply ${skill} to solve a production-relevant problem and validate the result.`,
           programming:`A ${skill} implementation produces the correct result for normal inputs but fails on edge cases. Describe a disciplined debugging approach.`,
-          coding:`Design an algorithm for a role-relevant data-processing task. Explain the data structure, time complexity, edge cases and how you would test it.`,
+          coding:`Solve the coding challenge in the integrated PlaceAI IDE.`,
           resume:`Defend one project or skill from your resume that is directly relevant to ${job.title}. Explain your personal contribution, a difficult decision and the evidence of the outcome.`,
           behavioral:`Describe a specific situation where you received difficult feedback. What action did you take and what changed as a result?`,
           role:`Based on the known requirements of the ${job.title} opportunity, which capability would you prioritise in your first 30 days and why?`,
           situational:`A deadline is close and you discover a defect that could affect users. What would you do next, and how would you communicate the trade-off?`
         };
+        if(section.key==='coding'){
+          const spec=demoCodingSpecs[i % demoCodingSpecs.length];
+          questions.push({
+            question_id:id++,
+            section:'coding',
+            category:section.label,
+            difficulty:i===0?'Intermediate':'Advanced',
+            question:spec.title+' — '+spec.problem_statement,
+            answer_type:'code',
+            coding_spec:spec
+          });
+          continue;
+        }
         questions.push({question_id:id++,section:section.key,category:section.label,difficulty:i < Math.ceil(section.count*.4)?'Foundation':i < Math.ceil(section.count*.8)?'Intermediate':'Advanced',question:templates[section.key] || `Explain a role-relevant approach for ${skill}.`,answer_type:'text'});
       }
     }
@@ -328,12 +391,203 @@
     renderSectionNav();
   }
 
+  function codingDraftKey(questionId, language) {
+    return String(questionId)+'::'+String(language || 'python');
+  }
+
+  function selectedCodingLanguage(question) {
+    const spec=question.coding_spec||{};
+    const allowed=Array.isArray(spec.allowed_languages)?spec.allowed_languages:[];
+    const existing=state.answers[question.question_id-1];
+    const preferred=existing?.language || state.codingRuns[question.question_id]?.language || 'python';
+    return allowed.some(function(item){return item.key===preferred;}) ? preferred : (allowed[0]?.key || 'python');
+  }
+
+  function codingDraft(question, language) {
+    const key=codingDraftKey(question.question_id,language);
+    if(Object.prototype.hasOwnProperty.call(state.codingDrafts,key)) return state.codingDrafts[key];
+    const existing=state.answers[question.question_id-1];
+    if(existing?.language===language && existing?.answer) {
+      state.codingDrafts[key]=existing.answer;
+      return existing.answer;
+    }
+    const starter=String(question.coding_spec?.starter_code?.[language] || '');
+    state.codingDrafts[key]=starter;
+    return starter;
+  }
+
+  function renderCodingTestResults(result) {
+    const panel=$('#coding-test-panel');
+    if(!panel)return;
+    if(!result){
+      panel.innerHTML='<div class="coding-empty-state">Run the sample tests to check your code. Hidden tests run only when you submit the coding question.</div>';
+      return;
+    }
+    const compileClass=result.compile_success?'pass':'fail';
+    const summary='<div class="coding-run-summary '+compileClass+'">'
+      +'<div><span>'+(result.compile_success?'Compilation successful':'Compilation failed')+'</span><strong>'+Number(result.passed||0)+' / '+Number(result.total||0)+' tests passed</strong></div>'
+      +'<b>'+Number(result.pass_rate||0)+'%</b></div>';
+    const rows=(result.test_results||[]).map(function(row){
+      const visibility=row.hidden?'Hidden test':'Sample test';
+      let detail='';
+      if(!row.hidden){
+        detail='<div class="test-case-io"><div><span>Input</span><pre>'+esc(row.input||'')+'</pre></div>'
+          +'<div><span>Expected</span><pre>'+esc(row.expected_output||'')+'</pre></div>'
+          +'<div><span>Output</span><pre>'+esc(row.actual_output||'')+'</pre></div></div>';
+      }
+      return '<article class="coding-test-row '+(row.passed?'pass':'fail')+'">'
+        +'<div><strong>'+visibility+' '+row.index+'</strong><small>'+esc(row.status||'')+'</small></div>'
+        +'<b>'+(row.passed?'Passed':'Failed')+'</b>'+detail+'</article>';
+    }).join('');
+    const compile=result.compile_output
+      ? '<div class="compiler-output"><span>Compiler output</span><pre>'+esc(result.compile_output)+'</pre></div>'
+      : '';
+    panel.innerHTML=summary+rows+compile;
+  }
+
+  function renderCodingAnswer(question, area, existing) {
+    const spec=question.coding_spec||{};
+    const allowed=Array.isArray(spec.allowed_languages)?spec.allowed_languages:[];
+    const language=selectedCodingLanguage(question);
+    let currentLanguage=language;
+    const source=codingDraft(question,language);
+    const samples=Array.isArray(spec.sample_tests)?spec.sample_tests:[];
+    area.className='answer-area coding-answer-area';
+    area.innerHTML='<div class="coding-workspace">'
+      +'<section class="coding-problem-card">'
+      +'<div class="coding-problem-head"><div><span>Coding challenge</span><strong>'+esc(spec.title||'Coding Challenge')+'</strong></div><b>'+Number(spec.hidden_test_count||0)+' hidden tests</b></div>'
+      +'<p>'+esc(spec.problem_statement||question.question)+'</p>'
+      +'<div class="coding-spec-grid"><div><span>Input format</span><p>'+esc(spec.input_format||'See question')+'</p></div><div><span>Output format</span><p>'+esc(spec.output_format||'See question')+'</p></div></div>'
+      +(Array.isArray(spec.constraints)&&spec.constraints.length?'<div class="coding-constraints"><span>Constraints</span><ul>'+spec.constraints.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></div>':'')
+      +'<div class="coding-sample-strip">'+samples.map(function(t){return '<article><span>Sample '+t.index+'</span><pre>Input\n'+esc(t.input||'')+'\nExpected\n'+esc(t.expected_output||'')+'</pre></article>';}).join('')+'</div>'
+      +'</section>'
+      +'<section class="coding-editor-card">'
+      +'<div class="coding-editor-toolbar"><div><span>Language</span><select id="coding-language">'+allowed.map(function(item){return '<option value="'+esc(item.key)+'" '+(item.key===language?'selected':'')+'>'+esc(item.label)+'</option>';}).join('')+'</select></div>'
+      +'<div class="coding-editor-actions"><button id="run-code" class="button secondary" type="button">Run sample tests</button><button id="submit-code" class="button primary" type="button">Submit code</button></div></div>'
+      +'<div class="code-editor-shell"><div class="code-line-gutter" id="code-line-gutter"></div><textarea id="coding-editor" class="coding-editor" spellcheck="false" autocomplete="off" autocapitalize="off" maxlength="20000"></textarea></div>'
+      +'<div id="coding-test-panel" class="coding-test-panel"></div>'
+      +'</section></div>';
+
+    const editor=$('#coding-editor');
+    editor.value=source;
+    const refreshGutter=function(){
+      const lines=Math.max(1,editor.value.split('\n').length);
+      $('#code-line-gutter').innerHTML=Array.from({length:lines},function(_,i){return '<span>'+(i+1)+'</span>';}).join('');
+    };
+    refreshGutter();
+    editor.addEventListener('input',function(){
+      state.codingDrafts[codingDraftKey(question.question_id,$('#coding-language').value)]=editor.value;
+      delete state.codingRuns[question.question_id];
+      refreshGutter();
+      $('#autosave-state').textContent='Code changed · not submitted';
+    });
+    editor.addEventListener('keydown',function(event){
+      if(event.key==='Tab'){
+        event.preventDefault();
+        const start=editor.selectionStart,end=editor.selectionEnd;
+        editor.setRangeText('  ',start,end,'end');
+        editor.dispatchEvent(new Event('input',{bubbles:true}));
+      }
+    });
+    editor.addEventListener('scroll',function(){
+      $('#code-line-gutter').scrollTop=editor.scrollTop;
+    });
+    $('#coding-language').addEventListener('change',function(){
+      state.codingDrafts[codingDraftKey(question.question_id,currentLanguage)]=editor.value;
+      const next=this.value;
+      currentLanguage=next;
+      editor.value=codingDraft(question,next);
+      delete state.codingRuns[question.question_id];
+      refreshGutter();
+      $('#autosave-state').textContent='Language changed · not submitted';
+      renderCodingTestResults(null);
+    });
+    $('#run-code').addEventListener('click',function(){runCodingQuestion(question,'run');});
+    $('#submit-code').addEventListener('click',function(){runCodingQuestion(question,'submit');});
+
+    const prior=state.codingRuns[question.question_id];
+    renderCodingTestResults(prior?.result || null);
+  }
+
+  async function runCodingQuestion(question, mode) {
+    if(state.codingBusy)return false;
+    const editor=$('#coding-editor');
+    const language=$('#coding-language')?.value || 'python';
+    const source=(editor?.value || '').trimEnd();
+    if(!source.trim()){toast('Write code before running the challenge.','error');return false;}
+    state.codingDrafts[codingDraftKey(question.question_id,language)]=source;
+    state.codingBusy=true;
+    const runBtn=$('#run-code'), submitBtn=$('#submit-code');
+    if(runBtn)runBtn.disabled=true;
+    if(submitBtn)submitBtn.disabled=true;
+    if(submitBtn&&mode==='submit')submitBtn.textContent='Submitting…';
+    if(runBtn&&mode==='run')runBtn.textContent='Running…';
+    try{
+      let result;
+      if(previewMode){
+        await new Promise(function(resolve){setTimeout(resolve,650);});
+        const unfinished=/write your solution here|return false|return 0;|return '-1'|return "-1"/i.test(source);
+        const sampleTotal=(question.coding_spec?.sample_tests||[]).length||2;
+        const passed=unfinished?0:sampleTotal;
+        result={
+          mode:mode,language:language,language_label:language,compile_success:true,
+          passed:passed,total:sampleTotal,pass_rate:Math.round(100*passed/sampleTotal),
+          hidden_passed:0,hidden_total:mode==='submit'?Number(question.coding_spec?.hidden_test_count||0):0,
+          test_results:(question.coding_spec?.sample_tests||[]).map(function(test){
+            return {index:test.index,hidden:false,passed:!unfinished,status:unfinished?'Wrong Answer':'Accepted',input:test.input,expected_output:test.expected_output,actual_output:unfinished?'Preview starter code output':'Preview simulated pass'};
+          })
+        };
+      }else{
+        result=await api('/mock-interview/coding/run',{
+          method:'POST',
+          body:JSON.stringify({
+            interview_id:state.session.interview_id,
+            question_id:question.question_id,
+            language:language,
+            source_code:source,
+            mode:mode
+          })
+        });
+      }
+      state.codingRuns[question.question_id]={
+        language:language,
+        source:source,
+        submitted:mode==='submit',
+        result:result
+      };
+      renderCodingTestResults(result);
+      $('#autosave-state').textContent=mode==='submit'
+        ? 'Code submitted · '+result.passed+'/'+result.total+' tests passed'
+        : 'Sample run complete · code not submitted yet';
+      toast(mode==='submit'
+        ? 'Code submitted: '+result.passed+'/'+result.total+' tests passed.'
+        : 'Sample tests completed: '+result.passed+'/'+result.total+' passed.',
+        result.compile_success?'':'error'
+      );
+      return true;
+    }catch(error){
+      toast(error.message||'Coding execution failed. Your code is still saved locally.','error');
+      return false;
+    }finally{
+      state.codingBusy=false;
+      if(runBtn){runBtn.disabled=false;runBtn.textContent='Run sample tests';}
+      if(submitBtn){submitBtn.disabled=false;submitBtn.textContent='Submit code';}
+    }
+  }
+
   function renderAnswerArea(question) {
     const area=$('#answer-area');
     area.className='answer-area '+(question.answer_type==='mcq'?'mcq-answer-area':'text-answer-area');
     area.onclick=null;
     state.selectedOption=null;
     const existing=state.answers[question.question_id-1];
+
+    if(question.answer_type==='code'){
+      $('#next-question').disabled=false;
+      $('#save-question').disabled=false;
+      renderCodingAnswer(question,area,existing);
+      return;
+    }
 
     if(question.answer_type==='mcq'){
       const options=Array.isArray(question.options)?question.options.filter(function(option){return typeof option==='string'&&option.trim();}).slice(0,4):[];
@@ -405,7 +659,9 @@
     $('#question-difficulty').textContent=q.difficulty || 'Mixed';
     $('#question-guidance').textContent=q.answer_type==='mcq'
       ? 'Select one option. Use Save answer to keep it on the current question, or Save & Next to lock it and move forward.'
-      : 'Respond using clear reasoning and evidence. After submission this question is permanently closed.';
+      : q.answer_type==='code'
+        ? 'Write and run your solution in the PlaceAI IDE. Sample runs do not affect scoring; Submit Code executes the full test suite.'
+        : 'Respond using clear reasoning and evidence. After submission this question is permanently closed.';
     const stage=$('.question-stage');
     if(stage) stage.scrollTop=0;
     drawTextCanvas($('#question-canvas'),q.question,`${state.candidateLabel} · Q${state.current+1}`);
@@ -424,11 +680,18 @@
     if(q.answer_type==='mcq') {
       if(state.selectedOption===null) { toast('Select an option before continuing.','error'); return false; }
       answer=q.options[state.selectedOption];
+      state.answers[q.question_id-1]={question_id:q.question_id,answer:answer};
+    } else if(q.answer_type==='code') {
+      const language=$('#coding-language')?.value || selectedCodingLanguage(q);
+      answer=($('#coding-editor')?.value || '').trimEnd();
+      if(!answer.trim()) { toast('Write your solution before continuing.','error'); return false; }
+      state.codingDrafts[codingDraftKey(q.question_id,language)]=answer;
+      state.answers[q.question_id-1]={question_id:q.question_id,answer:answer,language:language};
     } else {
       answer=($('#current-answer')?.value || '').trim();
       if(!answer) { toast('Enter your response before continuing.','error'); return false; }
+      state.answers[q.question_id-1]={question_id:q.question_id,answer:answer};
     }
-    state.answers[q.question_id-1]={question_id:q.question_id,answer};
     $('#autosave-state').textContent='Answer saved';
     renderSectionNav();
     return true;
@@ -1050,7 +1313,7 @@
       toast('Full-screen permission is required to start the assessment.','error');
       return;
     }
-    state.assessmentActive=true;state.finishing=false;state.current=0;state.totalRemaining=TOTAL_SECONDS;state.sectionRemaining=0;state.integrityEvents=[];state.integrityWarnings=0;state.lastWarningAt=0;state.autoSubmittedIntegrity=false;state.integrityTerminationReason='';state.proctorVisionBusy=false;state.proctorModelBusy=false;state.faceMissStreak=0;state.multipleFaceStreak=0;state.phoneDetectionStreak=0;state.signalStreaks={candidate:0,multiple:0,phone:0};state.signalLastWarning={candidate:0,multiple:0,phone:0,monitor:0};
+    state.assessmentActive=true;state.finishing=false;state.current=0;state.totalRemaining=TOTAL_SECONDS;state.sectionRemaining=0;state.integrityEvents=[];state.codingDrafts={};state.codingRuns={};state.codingBusy=false;state.integrityWarnings=0;state.lastWarningAt=0;state.autoSubmittedIntegrity=false;state.integrityTerminationReason='';state.proctorVisionBusy=false;state.proctorModelBusy=false;state.faceMissStreak=0;state.multipleFaceStreak=0;state.phoneDetectionStreak=0;state.signalStreaks={candidate:0,multiple:0,phone:0};state.signalLastWarning={candidate:0,multiple:0,phone:0,monitor:0};
     document.body.classList.remove('integrity-critical');
     updateIntegrityWarningUI();
     document.body.classList.add('secure-assessment');
@@ -1192,7 +1455,21 @@
   }
 
   async function submitAndContinue() {
+    const q=state.questions[state.current];
     if(!answerCurrentQuestion()) return;
+    if(q?.answer_type==='code'){
+      const saved=state.answers[q.question_id-1];
+      const prior=state.codingRuns[q.question_id];
+      const currentSubmitted=prior
+        && prior.submitted
+        && prior.language===saved.language
+        && prior.source===saved.answer;
+      if(!currentSubmitted){
+        const ok=await runCodingQuestion(q,'submit');
+        if(!ok)return;
+        answerCurrentQuestion();
+      }
+    }
     if(state.current>=state.questions.length-1){await finishAssessment(false);return;}
     state.current++;
     renderQuestion();
@@ -1297,7 +1574,8 @@
     let weight = 0;
     sectionScores.forEach(function(row){ const w=RESULT_SECTION_WEIGHTS[row.key]||0; weighted += row.score*w; weight += w; });
     const objective = evaluations.filter(function(x){ return x.grading_method === 'system'; });
-    const subjective = evaluations.filter(function(x){ return x.grading_method !== 'system'; });
+    const subjective = evaluations.filter(function(x){ return x.answer_type === 'text'; });
+    const coding = evaluations.filter(function(x){ return x.answer_type === 'code'; });
     const score = Math.round(weighted/(weight||1));
     return {
       analysis_status:'complete',
@@ -1307,7 +1585,8 @@
       score_summary:{
         total_questions:evaluations.length,evaluated_questions:evaluations.length,correct:totals.correct,partial:totals.partial,incorrect:totals.incorrect,insufficient:totals.insufficient,system_graded:totals.system_graded,ai_graded:totals.ai_graded,
         objective_accuracy:objective.length?Math.round(100*objective.filter(function(x){return x.score===100;}).length/objective.length):null,
-        subjective_average:subjective.length?Math.round(subjective.reduce(function(a,b){return a+b.score;},0)/subjective.length):null
+        subjective_average:subjective.length?Math.round(subjective.reduce(function(a,b){return a+b.score;},0)/subjective.length):null,
+        coding_average:coding.length?Math.round(coding.reduce(function(a,b){return a+b.score;},0)/coding.length):null
       },
       section_scores:sectionScores,
       dimensions:Object.fromEntries(sectionScores.map(function(x){return [x.key,x.score];})),
@@ -1459,10 +1738,39 @@
       let html='<article class="answer-review review-'+bucket+'"><header class="answer-review-header"><div><div class="question-meta-line">';
       html+='<span class="review-chip '+bucket+'">'+esc((item.verdict||bucket).replaceAll('_',' '))+'</span>';
       html+='<span class="review-chip">'+esc((item.section||'interview').replaceAll('_',' '))+'</span>';
-      html+='<span class="review-chip">'+esc(item.grading_method==='system'?'System graded':item.grading_method==='ai'?'AI graded':'Preview graded')+'</span>';
+      const gradingLabel=item.grading_method==='system'
+        ?'System graded'
+        :item.grading_method==='system_relevance_gate'
+          ?'Relevance gate'
+          :item.grading_method==='ai_rubric_server_scored'
+            ?'AI rubric · server score'
+            :item.grading_method==='code_tests+ai'
+              ?'Sandbox tests + AI review'
+              :(item.grading_method||'Analysis');
+      html+='<span class="review-chip">'+esc(gradingLabel)+'</span>';
       html+='</div><h4>Q'+item.question_id+'. '+esc(item.question||'')+'</h4></div><div class="answer-score-box"><strong>'+(item.score??'—')+'</strong><small>/100</small></div></header>';
-      html+='<div class="answer-comparison"><div class="answer-pane"><span>Your answer</span><p>'+esc(item.answer||'No answer')+'</p></div>';
-      html+='<div class="answer-pane correct-pane"><span>'+(item.answer_type==='mcq'?'Correct answer':'Strong answer / reference')+'</span><p>'+esc(expected||'See detailed feedback below.')+'</p></div></div>';
+      if(item.answer_type==='code'){
+        const coding=item.coding||{};
+        const testRows=Array.isArray(coding.test_results)?coding.test_results:[];
+        html+='<div class="code-review-block"><div class="code-review-head"><strong>'+esc(coding.language_label||item.language||'Code submission')+'</strong><span>'+(coding.compile_success?'Compilation successful':'Compilation failed')+'</span></div><pre class="code-review-source">'+esc(item.answer||'No code submitted')+'</pre></div>';
+        html+='<div class="code-result-grid">'
+          +'<div class="code-result-stat"><span>Tests passed</span><strong>'+Number(coding.passed||0)+' / '+Number(coding.total||0)+'</strong></div>'
+          +'<div class="code-result-stat"><span>Functional score</span><strong>'+Number(coding.pass_rate||0)+'/100</strong></div>'
+          +'<div class="code-result-stat"><span>AI code quality</span><strong>'+Number(coding.quality_score||0)+'/100</strong></div>'
+          +'<div class="code-result-stat"><span>Execution</span><strong>'+esc(coding.execution_ms?coding.execution_ms+' ms':'—')+'</strong></div>'
+          +'</div>';
+        if(coding.complexity)html+='<div class="ideal-answer-box"><strong>Complexity / approach review</strong><p>'+esc(coding.complexity)+'</p></div>';
+        if(testRows.length){
+          html+='<div class="coding-result-tests">'+testRows.map(function(row){
+            return '<span class="'+(row.passed?'pass':'fail')+'">'+(row.hidden?'Hidden':'Sample')+' '+row.index+' · '+(row.passed?'Passed':'Failed')+'</span>';
+          }).join('')+'</div>';
+        }
+        if(coding.compile_output)html+='<div class="compiler-output"><span>Compiler output</span><pre>'+esc(coding.compile_output)+'</pre></div>';
+        if(expected)html+='<div class="ideal-answer-box"><strong>Reference approach</strong><p>'+esc(expected)+'</p></div>';
+      }else{
+        html+='<div class="answer-comparison"><div class="answer-pane"><span>Your answer</span><p>'+esc(item.answer||'No answer')+'</p></div>';
+        html+='<div class="answer-pane correct-pane"><span>'+(item.answer_type==='mcq'?'Correct answer':'Strong answer / reference')+'</span><p>'+esc(expected||'See detailed feedback below.')+'</p></div></div>';
+      }
       html+='<p class="review-feedback"><strong>Assessment:</strong> '+esc(item.feedback||'No detailed feedback returned.')+'</p>';
       if(rubricEntries.length){
         html+='<div class="rubric-grid">'+rubricEntries.map(function(entry){return '<div class="rubric-item"><span>'+esc(entry[0].replaceAll('_',' '))+'</span><strong>'+entry[1]+'/100</strong></div>';}).join('')+'</div>';
@@ -1524,7 +1832,9 @@
     $('#overall-score').textContent=result.overall_score??'—';
     $('#report-iri').textContent=result.overall_score===null||result.overall_score===undefined?'Withheld':result.overall_score+'/100';
     $('#overall-feedback').textContent=result.overall_feedback||'Assessment completed.';
-    $('#grading-method-label').textContent=previewMode?'Answer key + preview scoring (production uses AI)':'Answer key + question-level AI';
+    $('#grading-method-label').textContent=previewMode
+      ?'Answer key + preview scoring'
+      :'Answer keys + sandbox coding tests + GPT-5.6 Sol rubric analysis';
     renderIntegrityReport(result);
     const banner=$('#analysis-status-banner');
     if(!complete){
@@ -1545,6 +1855,7 @@
     $('#summary-insufficient').textContent=summary.insufficient??'—';
     $('#summary-objective').textContent=summary.objective_accuracy===null||summary.objective_accuracy===undefined?'—':summary.objective_accuracy+'%';
     $('#summary-subjective').textContent=summary.subjective_average===null||summary.subjective_average===undefined?'—':summary.subjective_average+'/100';
+    $('#summary-coding').textContent=summary.coding_average===null||summary.coding_average===undefined?'—':summary.coding_average+'/100';
     renderSectionPerformance(result.section_scores||[]);
     $('#dimension-grid').innerHTML=Object.entries(result.dimensions||{}).map(function(entry){
       const score=entry[1];
@@ -1592,6 +1903,9 @@
     state.signalStreaks={candidate:0,multiple:0,phone:0};
     state.signalLastWarning={candidate:0,multiple:0,phone:0,monitor:0};
     state.expandedSections={};
+    state.codingDrafts={};
+    state.codingRuns={};
+    state.codingBusy=false;
     clearAnalysisTimers();
     if(state.mediaStream){state.mediaStream.getTracks().forEach(function(t){t.stop();});state.mediaStream=null;}
     if(state.screenStream){state.screenStream.getTracks().forEach(function(t){t.stop();});state.screenStream=null;}

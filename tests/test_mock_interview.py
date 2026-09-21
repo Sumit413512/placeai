@@ -430,3 +430,234 @@ def test_integrity_reconciliation_deduplicates_client_copy_and_keeps_client_fall
     assert result["warning_count"] == 2
     assert result["auto_submitted"] is False
     assert result["events"] == [event]
+
+
+def test_full_assessment_contains_two_executable_coding_challenges(monkeypatch):
+    monkeypatch.setattr(mock_interview_v2, "_call_interview_ai", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("offline")))
+    questions, meta = mock_interview_v2._generate_unique_questions(
+        profile=_demo_profile(),
+        job=_demo_job(),
+        focus="balanced",
+        difficulty="mixed",
+        count=50,
+        previous=[],
+    )
+    coding = [item for item in questions if item["section"] == "coding"]
+    assert len(questions) == 50
+    assert len(coding) == 2
+    assert all(item["answer_type"] == "code" for item in coding)
+    assert all(isinstance(item.get("coding_spec"), dict) for item in coding)
+    assert all(len(item["coding_spec"]["test_cases"]) >= 8 for item in coding)
+
+
+def test_public_coding_spec_never_exposes_hidden_test_inputs_or_expected_outputs():
+    from app.coding_assessment import CODING_CHALLENGE_BANK, public_coding_spec
+
+    internal = CODING_CHALLENGE_BANK[0]
+    public = public_coding_spec(internal)
+    assert len(public["sample_tests"]) == 2
+    assert public["hidden_test_count"] >= 6
+    assert "test_cases" not in public
+    serialized = json.dumps(public)
+    for case in internal["test_cases"]:
+        if case["hidden"]:
+            assert case["input"] not in serialized
+    assert "test_cases" not in public
+
+
+def test_anything_is_zero_and_never_sent_to_ai(monkeypatch):
+    called = {"value": False}
+
+    def fail_if_called(*args, **kwargs):
+        called["value"] = True
+        raise AssertionError("AI should not be called for an obvious non-answer")
+
+    monkeypatch.setattr(mock_interview_v2, "_call_interview_evaluator", fail_if_called)
+    rows, meta = mock_interview_v2._evaluate_subjective_with_ai(
+        profile=_demo_profile(),
+        job=_demo_job(),
+        items=[{
+            "question_id": 1,
+            "question": "Explain how you would diagnose a failing Python API and validate the fix.",
+            "section": "technical",
+            "category": "technical",
+            "difficulty": "medium",
+            "answer": "anything",
+        }],
+    )
+    assert called["value"] is False
+    assert rows[0]["score"] == 0
+    assert rows[0]["rubric"]["relevance"] == 0
+    assert rows[0]["verdict"] == "insufficient"
+    assert rows[0]["grading_method"] == "system_relevance_gate"
+    assert meta["model"] == "strict-relevance-gate"
+
+
+def test_descriptive_score_is_derived_from_rubric_not_model_score_or_verdict(monkeypatch):
+    payload = {
+        "evaluations": [{
+            "question_id": 1,
+            "score": 100,
+            "verdict": "correct",
+            "rubric": {
+                "correctness": 5,
+                "relevance": 5,
+                "reasoning": 80,
+                "completeness": 80,
+                "clarity": 100,
+            },
+            "feedback": "Fluent but wrong and irrelevant.",
+            "strengths": ["Readable."],
+            "issues": ["Does not answer the question."],
+            "missing_points": ["Correct technical reasoning."],
+            "key_points": [],
+            "better_answer_outline": "Answer the actual question.",
+            "ideal_answer": "Use logs, reproduction, isolation, tests and validation.",
+        }]
+    }
+    monkeypatch.setattr(
+        mock_interview_v2,
+        "_call_interview_evaluator",
+        lambda *args, **kwargs: json.dumps(payload),
+    )
+    monkeypatch.setattr(mock_interview_v2, "current_ai_provider", lambda: "openai")
+    monkeypatch.setattr(mock_interview_v2, "current_ai_model", lambda: "gpt-5.6-sol")
+    rows, meta = mock_interview_v2._evaluate_subjective_with_ai(
+        profile=_demo_profile(),
+        job=_demo_job(),
+        items=[{
+            "question_id": 1,
+            "question": "Explain how to diagnose and fix a failing Python API.",
+            "section": "technical",
+            "category": "technical",
+            "difficulty": "medium",
+            "answer": "I would write several sentences about communication and presentation, without discussing the API failure itself.",
+        }],
+    )
+    assert rows[0]["score"] <= 10
+    assert rows[0]["verdict"] in {"incorrect", "insufficient"}
+    assert rows[0]["grading_method"] == "ai_rubric_server_scored"
+    assert meta["score_authority"] == "server-derived rubric"
+
+
+def test_flagship_evaluator_uses_sol_with_high_reasoning(monkeypatch):
+    captured = {}
+
+    def fake_call(prompt, **kwargs):
+        captured.update(kwargs)
+        return '{"evaluations": []}'
+
+    monkeypatch.setattr(mock_interview_v2, "call_ai_text", fake_call)
+    mock_interview_v2._call_interview_evaluator("grade", max_output_tokens=1000)
+    assert captured["model_override"] == "gpt-5.6-sol"
+    assert captured["reasoning_effort"] == "high"
+    assert captured["timeout_seconds"] == 60
+
+
+def test_coding_score_is_controlled_by_sandbox_tests_not_ai_quality(monkeypatch):
+    monkeypatch.setattr(
+        mock_interview_v2,
+        "execute_test_suite",
+        lambda **kwargs: {
+            "language": "python",
+            "language_label": "Python 3",
+            "compile_success": True,
+            "passed": 6,
+            "total": 8,
+            "pass_rate": 75,
+            "compile_output": "",
+            "execution_ms": 120,
+            "test_results": [
+                {"index": index + 1, "hidden": index >= 2, "passed": index < 6, "status": "Accepted" if index < 6 else "Wrong Answer"}
+                for index in range(8)
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        mock_interview_v2,
+        "_call_interview_evaluator",
+        lambda *args, **kwargs: json.dumps({
+            "evaluations": [{
+                "question_id": 1,
+                "quality_score": 100,
+                "feedback": "Excellent style.",
+                "strengths": ["Readable."],
+                "issues": [],
+                "complexity": "O(n)",
+                "better_answer_outline": "",
+            }]
+        }),
+    )
+    monkeypatch.setattr(mock_interview_v2, "current_ai_provider", lambda: "openai")
+    monkeypatch.setattr(mock_interview_v2, "current_ai_model", lambda: "gpt-5.6-sol")
+    rows, meta = mock_interview_v2._evaluate_coding_answers(
+        profile=_demo_profile(),
+        job=_demo_job(),
+        items=[{
+            "question_id": 1,
+            "question": "Solve the coding challenge.",
+            "section": "coding",
+            "category": "coding",
+            "difficulty": "medium",
+            "answer": "print('solution')",
+            "language": "python",
+            "coding_spec": {
+                "test_cases": [{"input": "", "expected_output": "", "hidden": False}] * 8,
+                "ideal_approach": "Use an O(n) set-based solution.",
+            },
+        }],
+    )
+    assert rows[0]["score"] == 78
+    assert rows[0]["rubric"]["correctness"] == 75
+    assert rows[0]["verdict"] == "partially_correct"
+    assert rows[0]["grading_method"] == "code_tests+ai"
+    assert meta["coding_correctness"] == "sandbox test cases"
+
+
+def test_open_ended_average_includes_zero_relevance_gate_results():
+    issued = [
+        {"question_id": 1, "section": "technical"},
+        {"question_id": 2, "section": "technical"},
+    ]
+    evaluations = [
+        {
+            "question_id": 1, "section": "technical", "answer_type": "text",
+            "score": 0, "verdict": "insufficient", "grading_method": "system_relevance_gate",
+        },
+        {
+            "question_id": 2, "section": "technical", "answer_type": "text",
+            "score": 80, "verdict": "correct", "grading_method": "ai_rubric_server_scored",
+        },
+    ]
+    result = mock_interview_v2._build_assessment_result(
+        evaluations=evaluations,
+        issued=issued,
+        ai_meta={"provider": "test", "model": "gpt-5.6-sol", "batches": 1},
+    )
+    assert result["score_summary"]["subjective_average"] == 40
+
+
+def test_coding_run_route_exists_and_requires_student_authentication():
+    paths = client.get("/openapi.json").json()["paths"]
+    assert "/mock-interview/coding/run" in paths
+    response = client.post(
+        "/mock-interview/coding/run",
+        json={
+            "interview_id": "missing",
+            "question_id": 1,
+            "language": "python",
+            "source_code": "print(1)",
+            "mode": "run",
+        },
+    )
+    assert response.status_code in {401, 403}
+
+
+def test_answer_model_accepts_coding_language_and_larger_source():
+    answer = mock_interview_v2.MockInterviewAnswerV2(
+        question_id=1,
+        answer="x" * 12000,
+        language="python",
+    )
+    assert answer.language == "python"
+    assert len(answer.answer) == 12000

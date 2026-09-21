@@ -81,8 +81,8 @@ def test_mcq_interaction_and_expandable_navigator_contract():
     css = _text("app/static/mock-interview.css")
     js = _text("app/static/mock-interview.js")
 
-    assert "mock-interview.css?v=20260921-proctor2" in html
-    assert "mock-interview.js?v=20260921-proctor2" in html
+    assert "mock-interview.css?v=20260921-coding1" in html
+    assert "mock-interview.js?v=20260921-coding1" in html
     assert 'role="radiogroup"' in js
     assert 'role="radio"' in js
     assert "option-select-indicator" in js
@@ -166,3 +166,38 @@ def test_integrity_warning_overlay_does_not_pause_assessment_clock():
     assert "if(!state.assessmentActive || state.finishing || state.autoSubmittedIntegrity) return;" in js
     timer_block = js.split("function startTimer()", 1)[1].split("function updateIntegrityWarningUI()", 1)[0]
     assert "integrity-overlay" not in timer_block
+
+
+def test_coding_ide_and_result_evidence_are_mirrored():
+    html = _text("app/templates/mock-interview.html")
+    js = _text("app/static/mock-interview.js")
+    css = _text("app/static/mock-interview.css")
+    assert "mock-interview.css?v=20260921-coding1" in html
+    assert "mock-interview.js?v=20260921-coding1" in html
+    assert "coding-workspace" in js
+    assert 'id="coding-editor"' in js
+    assert 'id="coding-language"' in js
+    assert "Run sample tests" in js
+    assert "Submit code" in js
+    assert "/mock-interview/coding/run" in js
+    assert "hidden tests" in js
+    assert "Sandbox tests + AI review" in js
+    assert ".coding-editor" in css
+    assert ".coding-test-row" in css
+    assert ".coding-result-tests" in css
+
+
+def test_coding_save_next_requires_current_full_submission():
+    js = _text("app/static/mock-interview.js")
+    submit_block = js.split("async function submitAndContinue()", 1)[1].split("const RESULT_SECTION_WEIGHTS", 1)[0]
+    assert "q?.answer_type==='code'" in submit_block
+    assert "prior.submitted" in submit_block
+    assert "prior.language===saved.language" in submit_block
+    assert "prior.source===saved.answer" in submit_block
+    assert "runCodingQuestion(q,'submit')" in submit_block
+
+
+def test_coding_blueprint_uses_dedicated_ide_label():
+    js = _text("app/static/mock-interview.js")
+    assert "{key:'coding', label:'Coding Challenges', count:2, minutes:30, kind:'code'}" in js
+    assert "Coding IDE + test cases" in js
