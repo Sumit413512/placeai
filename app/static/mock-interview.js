@@ -344,15 +344,45 @@
     $('#total-progress').style.width=`${pct}%`;
   }
 
+  function markQuestionUnanswered(index, reason) {
+    const q=state.questions[index];
+    if(!q || state.answers[q.question_id-1]) return;
+    state.answers[q.question_id-1]={question_id:q.question_id,answer:reason||'[No response submitted]'};
+  }
+
+  function expireCurrentSection() {
+    const currentQuestion=state.questions[state.current];
+    if(!currentQuestion){finishAssessment(true);return;}
+    const section=currentQuestion.section;
+    while(state.current<state.questions.length && state.questions[state.current].section===section){
+      markQuestionUnanswered(state.current,'[No response submitted before section time expired]');
+      state.current++;
+    }
+    if(state.current<state.questions.length){
+      state.sectionRemaining=0;
+      renderQuestion();
+    }else{
+      finishAssessment(true);
+    }
+  }
+
+  function fillUnansweredResponses(reason) {
+    state.questions.forEach(function(_,index){markQuestionUnanswered(index,reason||'[No response submitted before assessment ended]');});
+  }
+
   function startTimer() {
     clearInterval(state.timerId);
     state.timerId=setInterval(()=>{
       if(!state.assessmentActive || !$('#integrity-overlay').classList.contains('hidden')) return;
       state.totalRemaining--; state.sectionRemaining--; updateTimers();
-      if(state.totalRemaining<=0){finishAssessment(true);return;}
+      if(state.totalRemaining<=0){
+        fillUnansweredResponses('[No response submitted before total assessment time expired]');
+        finishAssessment(true);
+        return;
+      }
       if(state.sectionRemaining<=0){
-        logIntegrity('section_time_expired','Section time expired; assessment advanced automatically.');
-        if(state.current<state.questions.length-1){state.current++;renderQuestion();}else finishAssessment(true);
+        logIntegrity('section_time_expired','Section time expired; remaining unanswered items in this section were closed automatically.');
+        expireCurrentSection();
       }
     },1000);
   }
@@ -779,6 +809,7 @@
 
   async function finishAssessment(auto) {
     if(state.finishing)return;
+    fillUnansweredResponses(auto?'[No response submitted before assessment time expired]':'[No response submitted]');
     state.finishing=true;
     clearInterval(state.timerId);
     clearInterval(state.faceTimer);
