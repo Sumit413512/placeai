@@ -33,6 +33,18 @@
     current:0,
     selectedOption:null,
     mediaStream:null,
+    screenStream:null,
+    proctorModel:null,
+    proctorModelReady:false,
+    proctorModelLoading:null,
+    proctorModelBusy:false,
+    localProctorTimer:null,
+    mediaWatchTimer:null,
+    proctorBannerTimer:null,
+    signalStreaks:{candidate:0,multiple:0,phone:0},
+    signalLastWarning:{candidate:0,multiple:0,phone:0},
+    singleMonitorReady:true,
+    screenReady:false,
     assessmentActive:false,
     finishing:false,
     livenessPassed:false,
@@ -638,6 +650,140 @@
     if(!state.assessmentActive||state.finishing||state.ignoreFullscreen)return;
     if(!document.fullscreenElement){
       registerIntegrityWarning('fullscreen_exit','Secure full-screen mode was exited.','browser','Full-screen interruption detected',true);
+    }
+  }
+
+  async function ensureProctorModel() {
+    if(state.proctorModelReady && state.proctorModel) return true;
+    if(state.proctorModelLoading) return state.proctorModelLoading;
+    state.proctorModelLoading=(async function(){
+      try{
+        setCheck('proctor',null,'Loading model');
+        if(!window.tf || !window.cocoSsd) throw new Error('On-device proctor runtime did not load');
+        await window.tf.ready();
+        state.proctorModel=await window.cocoSsd.load({base:'lite_mobilenet_v2'});
+        state.proctorModelReady=Boolean(state.proctorModel);
+        setCheck('proctor',state.proctorModelReady?'pass':'fail',state.proctorModelReady?'Ready':'Unavailable');
+        return state.proctorModelReady;
+      }catch(error){
+        state.proctorModel=null;
+        state.proctorModelReady=false;
+        setCheck('proctor','fail','Unavailable');
+        return false;
+      }finally{
+        state.proctorModelLoading=null;
+      }
+    })();
+    return state.proctorModelLoading;
+  }
+
+  async function detectProctorObjects(video) {
+    if(!state.proctorModelReady || !state.proctorModel || !video || video.readyState<2) return [];
+    return state.proctorModel.detect(video,10,0.32);
+  }
+
+  function showProctorWarning(title,detail) {
+    const banner=$('#proctor-warning-banner');
+    if(!banner)return;
+    $('#proctor-warning-title').textContent=title||'Integrity warning';
+    $('#proctor-warning-detail').textContent=detail||'A proctoring event was detected.';
+    $('#proctor-warning-count').textContent=state.integrityWarnings+' / '+state.integrityWarningLimit;
+    banner.classList.remove('hidden');
+    clearTimeout(state.proctorBannerTimer);
+    state.proctorBannerTimer=setTimeout(function(){banner.classList.add('hidden');},6500);
+  }
+
+  function resetSignalStreak(name) {
+    state.signalStreaks[name]=0;
+  }
+
+  function confirmVisualSignal(name,active,threshold,warningType,detail,title) {
+    if(!active){resetSignalStreak(name);return;}
+    state.signalStreaks[name]=(state.signalStreaks[name]||0)+1;
+    if(state.signalStreaks[name]<threshold)return;
+    const now=Date.now();
+    const last=state.signalLastWarning[name]||0;
+    if(now-last<10000)return;
+    state.signalLastWarning[name]=now;
+    state.signalStreaks[name]=0;
+    registerIntegrityWarning(warningType,detail,'on_device_ml',title,false);
+  }
+
+  async function runLocalProctorCheck() {
+    if(!state.assessmentActive||state.finishing||state.autoSubmittedIntegrity||document.hidden||state.proctorModelBusy)return;
+    if(!$('#integrity-overlay').classList.contains('hidden'))return;
+    const video=$('#assessment-camera');
+    if(!video||video.readyState<2)return;
+    state.proctorModelBusy=true;
+    try{
+      const predictions=await detectProctorObjects(video);
+      const persons=predictions.filter(function(item){return item.class==='person'&&Number(item.score||0)>=0.42;});
+      const phones=predictions.filter(function(item){return (item.class==='cell phone'||item.class==='mobile phone')&&Number(item.score||0)>=0.34;});
+      const phoneScore=phones.reduce(function(max,item){return Math.max(max,Number(item.score||0));},0);
+
+      if(phones.length){
+        $('#camera-proctor-status').textContent='Mobile phone detected';
+        logIntegrity('phone_visual_signal','On-device object detection identified a visible mobile phone (confidence '+Math.round(phoneScore*100)+'%).','on_device_ml',null);
+      }else if(persons.length===0){
+        $('#camera-proctor-status').textContent='Candidate not visible';
+      }else if(persons.length>1){
+        $('#camera-proctor-status').textContent='Multiple people detected';
+      }else{
+        $('#camera-proctor-status').textContent='Candidate present · monitoring';
+      }
+
+      confirmVisualSignal(
+        'phone',
+        phones.length>0,
+        2,
+        'mobile_phone_detected',
+        'A mobile phone was detected in consecutive webcam checks.',
+        'Mobile phone detected'
+      );
+      confirmVisualSignal(
+        'candidate',
+        persons.length===0,
+        3,
+        'candidate_not_visible',
+        'The candidate was not visible in consecutive webcam checks.',
+        'Candidate not visible'
+      );
+      confirmVisualSignal(
+        'multiple',
+        persons.length>1,
+        2,
+        'multiple_people',
+        'More than one person was detected in consecutive webcam checks.',
+        'Multiple people detected'
+      );
+    }catch(error){
+      $('#camera-proctor-status').textContent='Proctor model recovering';
+      logIntegrity('local_proctor_error','On-device proctor model check failed and will retry.','system',null);
+    }finally{
+      state.proctorModelBusy=false;
+    }
+  }
+
+  function currentMonitorStatus() {
+    return window.screen && window.screen.isExtended===true ? 'extended' : 'single_or_unreported';
+  }
+
+  function checkLiveMediaIntegrity() {
+    if(!state.assessmentActive||state.finishing||state.autoSubmittedIntegrity)return;
+    const camera=state.mediaStream?.getVideoTracks?.()[0];
+    const screenTrack=state.screenStream?.getVideoTracks?.()[0];
+    if(!camera || camera.readyState==='ended' || !camera.enabled){
+      registerIntegrityWarning('camera_interrupted','Camera feed is no longer available.','camera','Camera interrupted',true);
+    }
+    if(!screenTrack || screenTrack.readyState==='ended'){
+      registerIntegrityWarning('screen_share_stopped','Entire-screen sharing stopped during the assessment.','screen','Screen sharing stopped',true);
+    }
+    if(currentMonitorStatus()==='extended'){
+      const now=Date.now();
+      if(now-(state.signalLastWarning.monitor||0)>=10000){
+        state.signalLastWarning.monitor=now;
+        registerIntegrityWarning('multiple_monitors','An extended or additional display was detected by the browser.','browser','Multiple monitors detected',false);
+      }
     }
   }
 
