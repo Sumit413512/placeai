@@ -113,3 +113,55 @@ body.integrity-critical .assessment-shell{border-color:#e11d48;box-shadow:inset 
 .assessment-main{grid-template-rows:58px minmax(0,1fr) 64px}
 .assessment-toolbar{height:58px;min-height:58px}
 @media(max-height:700px) and (min-width:761px){.protected-question{min-height:98px;max-height:118px}.protected-question #question-canvas{min-height:98px;max-height:118px}.mcq-answer-area .option-button{min-height:40px}.mcq-answer-area .option-canvas{height:30px;min-height:30px}.question-stage{padding-top:8px}.question-guidance{margin:4px 0 6px}}
+
+/* Robust selectable MCQ cards */
+.mcq-answer-area .answer-options{display:grid;gap:8px}
+.mcq-answer-area .option-button{
+  position:relative;
+  display:grid;
+  grid-template-columns:30px minmax(0,1fr) 24px;
+  align-items:center;
+  gap:10px;
+  width:100%;
+  min-height:48px;
+  border:1.5px solid #d5dde7;
+  background:#fff;
+  border-radius:10px;
+  padding:6px 9px;
+  cursor:pointer;
+  overflow:hidden;
+  transition:border-color .14s ease,background .14s ease,box-shadow .14s ease,transform .14s ease
+}
+.mcq-answer-area .option-button:hover{border-color:#87a9dc;background:#f8fbff}
+.mcq-answer-area .option-button:active{transform:scale(.998)}
+.mcq-answer-area .option-button.selected{
+  border-color:#1769e0;
+  background:#eef5ff;
+  box-shadow:0 0 0 3px #1769e014
+}
+.mcq-answer-area .option-key{
+  width:28px;height:28px;border-radius:50%;
+  border:1px solid #c9d4e2;background:#f4f7fa;color:#40516a;
+  display:grid;place-items:center;font-size:10px;font-weight:800
+}
+.mcq-answer-area .option-button.selected .option-key{background:#1769e0;border-color:#1769e0;color:#fff}
+.mcq-answer-area .option-canvas{
+  display:block;width:100%;height:38px;min-height:38px;
+  pointer-events:none;background:transparent
+}
+.option-select-indicator{
+  width:18px;height:18px;border-radius:50%;
+  border:2px solid #a8b5c6;background:#fff;display:block;position:relative
+}
+.option-button.selected .option-select-indicator{border-color:#1769e0;background:#1769e0}
+.option-button.selected .option-select-indicator:after{
+  content:"";position:absolute;inset:4px;border-radius:50%;background:#fff
+}
+.option-button.selected:after{content:none!important}
+.palette-section-toggle{min-height:38px}
+.palette-section-copy strong{font-size:10px}
+.palette-section-copy small{font-size:8px}
+.palette-question-grid{grid-template-columns:repeat(7,minmax(22px,1fr));gap:5px}
+.palette-question{height:25px;font-size:9px}
+@media(max-width:980px) and (min-width:761px){.palette-question-grid{grid-template-columns:repeat(5,minmax(22px,1fr))}}
+body.secure-assessment .toast{top:74px;right:18px;bottom:auto;max-width:340px}
