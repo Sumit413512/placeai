@@ -482,6 +482,7 @@
       if(stored?.source_code) bucket[stored.language]=stored.source_code;
       const starter=(spec.starter_code&&spec.starter_code[initialLanguage])||'';
       const initialCode=bucket[initialLanguage]??starter;
+      let activeLanguage=initialLanguage;
       area.innerHTML='<div class="code-workspace">'
         +'<div class="code-toolbar"><label>Language<select id="code-language">'+languages.map(function(lang){return '<option value="'+esc(lang.key)+'">'+esc(lang.label)+'</option>';}).join('')+'</select></label>'
         +'<div class="code-actions"><button id="run-code" type="button" class="button secondary">Run sample tests</button><button id="submit-code-tests" type="button" class="button primary">Submit tests</button></div></div>'
@@ -494,9 +495,11 @@
       $('#code-editor').addEventListener('input',function(){bucket[$('#code-language').value]=this.value;$('#autosave-state').textContent='Code changed · not saved yet';});
       $('#code-language').addEventListener('change',function(){
         const editor=$('#code-editor');
-        bucket[initialLanguage]=bucket[initialLanguage]??editor.value;
+        bucket[activeLanguage]=editor.value;
         const lang=this.value;
+        activeLanguage=lang;
         editor.value=bucket[lang]??((spec.starter_code&&spec.starter_code[lang])||'');
+        $('#autosave-state').textContent='Language changed · code not saved yet';
       });
       $('#run-code').addEventListener('click',function(){runCurrentCode('run');});
       $('#submit-code-tests').addEventListener('click',function(){runCurrentCode('submit');});
@@ -1718,6 +1721,8 @@
     state.signalStreaks={candidate:0,multiple:0,phone:0};
     state.signalLastWarning={candidate:0,multiple:0,phone:0,monitor:0};
     state.expandedSections={};
+    state.codeDrafts={};
+    state.codeExecution={};
     clearAnalysisTimers();
     if(state.mediaStream){state.mediaStream.getTracks().forEach(function(t){t.stop();});state.mediaStream=null;}
     if(state.screenStream){state.screenStream.getTracks().forEach(function(t){t.stop();});state.screenStream=null;}
