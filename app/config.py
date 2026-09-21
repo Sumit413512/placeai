@@ -147,6 +147,9 @@ class Settings:
         self.ai_max_output_tokens = _bounded_env_int("AI_MAX_OUTPUT_TOKENS", 5000, 512, 12000)
         self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
         self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
+        self.judge0_base_url = os.getenv("JUDGE0_BASE_URL", "https://ce.judge0.com").strip().rstrip("/")
+        self.judge0_auth_token = os.getenv("JUDGE0_AUTH_TOKEN", "").strip()
+        self.coding_execution_enabled = os.getenv("CODING_EXECUTION_ENABLED", "true").lower() == "true"
         self.dev_show_reset_token = os.getenv("DEV_SHOW_RESET_TOKEN", "false").lower() == "true"
 
         brevo_smtp_user = _first_env("BREVO_SMTP_USER", "BREVO_SMTP_LOGIN")
