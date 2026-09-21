@@ -736,6 +736,10 @@ def _fallback_questions(
     chosen = []
     for section, _, target in ASSESSMENT_BLUEPRINT:
         missing = max(0, target - section_counts.get(section, 0))
+        if section == "coding":
+            for item in _coding_question_bank()[:missing]:
+                chosen.append(item)
+            continue
         if section in objective:
             for question, options, correct in objective[section][:missing]:
                 chosen.append({
@@ -812,6 +816,10 @@ def _generate_unique_questions(
                     section = str(item.get("section", item.get("category", "technical"))).strip().lower()
                     allowed_sections = {key for key, _, _ in ASSESSMENT_BLUEPRINT}
                     if section not in allowed_sections or section_counts[section] >= target_map[section]:
+                        continue
+                    # Coding items are generated from a server-owned executable bank so
+                    # hidden tests and correctness criteria cannot be hallucinated by AI.
+                    if section == "coding":
                         continue
                     category = str(item.get("category", section)).strip().lower() or section
                 else:
@@ -923,10 +931,7 @@ def start_mock_interview_v2(
     db.add(interview)
     db.commit()
     db.refresh(interview)
-    client_questions = [
-        {key: value for key, value in item.items() if key != "correct_answer"}
-        for item in questions
-    ]
+    client_questions = [_client_question(item) for item in questions]
     return {
         "interview_id": interview.id,
         "job_id": job.id,
