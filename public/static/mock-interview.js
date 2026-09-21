@@ -722,8 +722,8 @@
     state.proctorModelBusy=true;
     try{
       const predictions=await detectProctorObjects(video);
-      const persons=predictions.filter(function(item){return item.class==='person'&&Number(item.score||0)>=0.42;});
-      const phones=predictions.filter(function(item){return (item.class==='cell phone'||item.class==='mobile phone')&&Number(item.score||0)>=0.34;});
+      const persons=predictions.filter(function(item){return item.class==='person'&&Number(item.score||0)>=0.32;});
+      const phones=predictions.filter(function(item){return (item.class==='cell phone'||item.class==='mobile phone')&&Number(item.score||0)>=0.25;});
       const phoneScore=phones.reduce(function(max,item){return Math.max(max,Number(item.score||0));},0);
 
       let faceCount=null;
@@ -938,7 +938,7 @@
       for(let i=0;i<6;i++){
         motionFrames.push(motionSignature(video));
         const predictions=await detectProctorObjects(video);
-        const persons=predictions.filter(function(item){return item.class==='person'&&Number(item.score||0)>=0.42;});
+        const persons=predictions.filter(function(item){return item.class==='person'&&Number(item.score||0)>=0.32;});
         personCounts.push(persons.length);
 
         if(state.nativeFaceDetector){
@@ -1022,8 +1022,8 @@
         if(state.questions.length<50) throw new Error('Secure full mock requires at least 50 primary assessment items.');
       }
       state.answers=new Array(state.questions.length);
-      $('#interview-title').textContent=`${job.title} placement simulation`;
-      $('#interview-context').textContent=`${job.company_name || 'Opportunity'} · ${state.questions.length} primary items · secure forward-only mode`;
+      $('#interview-title').textContent=`${job.title} placement assessment`;
+      $('#interview-context').textContent=`${job.company_name || 'Opportunity'} · standardized blueprint · proctored forward-only mode`;
       $('#setup-panel').classList.add('hidden'); $('#system-panel').classList.remove('hidden');
       $('#system-panel').scrollIntoView({behavior:'smooth',block:'start'});
     } catch(error){
@@ -1406,14 +1406,21 @@
     state.finishing=true;
     clearInterval(state.timerId);
     clearInterval(state.faceTimer);
+    clearInterval(state.localProctorTimer);
     clearInterval(state.proctorVisionTimer);
+    clearInterval(state.mediaWatchTimer);
+    clearTimeout(state.proctorBannerTimer);
     state.ignoreFullscreen=true;
     try{if(document.fullscreenElement)await document.exitFullscreen();}catch{}
     state.ignoreFullscreen=false;
     state.assessmentActive=false;
+    if(state.mediaStream){state.mediaStream.getTracks().forEach(function(t){t.stop();});state.mediaStream=null;}
+    if(state.screenStream){state.screenStream.getTracks().forEach(function(t){t.stop();});state.screenStream=null;}
+    state.screenReady=false;
     uninstallSecureGuards();
     document.body.classList.remove('secure-assessment','integrity-critical');
     $('#integrity-overlay').classList.add('hidden');
+    $('#proctor-warning-banner')?.classList.add('hidden');
     $('#interview-panel').classList.add('hidden');
     await runResultAnalysis(!!auto);
   }
@@ -1549,14 +1556,50 @@
   }
 
   function resetAssessment() {
-    clearInterval(state.timerId);clearInterval(state.faceTimer);clearInterval(state.proctorVisionTimer);
-    state.assessmentActive=false;state.finishing=false;state.current=0;state.answers=[];state.questions=[];state.session=null;state.livenessPassed=false;state.systemReady=false;state.lastResult=null;state.reviewFilter='all';state.integrityEvents=[];state.integrityWarnings=0;state.lastWarningAt=0;state.autoSubmittedIntegrity=false;state.integrityTerminationReason='';state.faceMissStreak=0;state.multipleFaceStreak=0;state.phoneDetectionStreak=0;state.expandedSections={};clearAnalysisTimers();
-    if(state.mediaStream){state.mediaStream.getTracks().forEach(t=>t.stop());state.mediaStream=null;}
-    document.body.classList.remove('secure-assessment');
-    $('#result-panel').classList.add('hidden');$('#analysis-panel').classList.add('hidden');$('#system-panel').classList.add('hidden');$('#setup-panel').classList.remove('hidden');
-    $('#consent-check').checked=false;$('#start-assessment').disabled=true;$('#run-liveness').disabled=true;
+    clearInterval(state.timerId);
+    clearInterval(state.faceTimer);
+    clearInterval(state.localProctorTimer);
+    clearInterval(state.proctorVisionTimer);
+    clearInterval(state.mediaWatchTimer);
+    clearTimeout(state.proctorBannerTimer);
+    state.assessmentActive=false;
+    state.finishing=false;
+    state.current=0;
+    state.answers=[];
+    state.questions=[];
+    state.session=null;
+    state.livenessPassed=false;
+    state.systemReady=false;
+    state.screenReady=false;
+    state.lastResult=null;
+    state.reviewFilter='all';
+    state.integrityEvents=[];
+    state.integrityWarnings=0;
+    state.lastWarningAt=0;
+    state.autoSubmittedIntegrity=false;
+    state.integrityTerminationReason='';
+    state.faceMissStreak=0;
+    state.multipleFaceStreak=0;
+    state.phoneDetectionStreak=0;
+    state.signalStreaks={candidate:0,multiple:0,phone:0};
+    state.signalLastWarning={candidate:0,multiple:0,phone:0,monitor:0};
+    state.expandedSections={};
+    clearAnalysisTimers();
+    if(state.mediaStream){state.mediaStream.getTracks().forEach(function(t){t.stop();});state.mediaStream=null;}
+    if(state.screenStream){state.screenStream.getTracks().forEach(function(t){t.stop();});state.screenStream=null;}
+    document.body.classList.remove('secure-assessment','integrity-critical');
+    $('#proctor-warning-banner')?.classList.add('hidden');
+    $('#result-panel').classList.add('hidden');
+    $('#analysis-panel').classList.add('hidden');
+    $('#system-panel').classList.add('hidden');
+    $('#setup-panel').classList.remove('hidden');
+    $('#consent-check').checked=false;
+    $('#start-assessment').disabled=true;
+    $('#run-liveness').disabled=true;
     setCheck('liveness',null,'Required');
-    $('#camera-placeholder').classList.remove('hidden');$('#camera-live').classList.add('hidden');
+    setCheck('screen',null,'Required');
+    $('#camera-placeholder').classList.remove('hidden');
+    $('#camera-live').classList.add('hidden');
     $('#setup-panel').scrollIntoView({behavior:'smooth',block:'start'});
   }
 
@@ -1594,13 +1637,13 @@
         state.answers=new Array(state.questions.length);
         state.current=0;
         state.expandedSections={quantitative:true};
-        $('#interview-title').textContent=job.title+' placement simulation';
-        $('#interview-context').textContent=(job.company_name||'Opportunity')+' · '+state.questions.length+' primary items · secure forward-only mode';
+        $('#job-select').value=job.id;
+        $('#interview-title').textContent=job.title+' placement assessment';
+        $('#interview-context').textContent=(job.company_name||'Opportunity')+' · standardized blueprint · proctored forward-only mode';
         $('#setup-panel').classList.add('hidden');
         $('#history-panel').classList.add('hidden');
-        document.body.classList.add('secure-assessment');
-        $('#interview-panel').classList.remove('hidden');
-        renderQuestion();
+        $('#system-panel').classList.remove('hidden');
+        $('#system-panel').scrollIntoView({behavior:'smooth',block:'start'});
         return;
       }
       if(demo==='result'||demo==='integrity'){
