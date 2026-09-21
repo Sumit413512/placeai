@@ -6,7 +6,7 @@
   const $$ = (s, root = document) => [...root.querySelectorAll(s)];
   const esc = (value = '') => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   const apiErrors = window.PlaceAIApiErrors || {createError:()=>new Error('Request failed'),applyToForm:()=>{}};
-  const previewMode = location.hostname.endsWith('.onrender.com') || new URLSearchParams(location.search).get('preview') === '1';
+  const previewMode = location.hostname === 'placeai-interview-intelligence-preview.onrender.com' || new URLSearchParams(location.search).get('preview') === '1';
 
   const BLUEPRINT = [
     {key:'quantitative', label:'Quantitative Aptitude', count:8, minutes:12, kind:'mcq'},
@@ -475,7 +475,7 @@
   function startTimer() {
     clearInterval(state.timerId);
     state.timerId=setInterval(()=>{
-      if(!state.assessmentActive || !$('#integrity-overlay').classList.contains('hidden')) return;
+      if(!state.assessmentActive || state.finishing || state.autoSubmittedIntegrity) return;
       state.totalRemaining--; state.sectionRemaining--; updateTimers();
       if(state.totalRemaining<=0){
         fillUnansweredResponses('[No response submitted before total assessment time expired]');

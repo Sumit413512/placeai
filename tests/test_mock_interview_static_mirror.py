@@ -152,3 +152,17 @@ def test_mock_assessment_copy_is_professional_and_drops_plus_marketing():
     assert "Institution-grade simulation" in html
     assert "50+" not in html
     assert "50-question minimum" not in html
+
+
+def test_preview_mode_does_not_treat_all_render_hosts_as_demo():
+    js = _text("app/static/mock-interview.js")
+    assert "placeai-interview-intelligence-preview.onrender.com" in js
+    assert "location.hostname.endsWith('.onrender.com')" not in js
+    assert "get('preview') === '1'" in js
+
+
+def test_integrity_warning_overlay_does_not_pause_assessment_clock():
+    js = _text("app/static/mock-interview.js")
+    assert "if(!state.assessmentActive || state.finishing || state.autoSubmittedIntegrity) return;" in js
+    timer_block = js.split("function startTimer()", 1)[1].split("function updateIntegrityWarningUI()", 1)[0]
+    assert "integrity-overlay" not in timer_block

@@ -1183,6 +1183,80 @@ def _build_assessment_result(
 
 
 
+def _reconcile_integrity_events(
+    *,
+    server_events: list[dict[str, Any]],
+    client_events: list[dict[str, Any]],
+    client_warning_count: int,
+    client_auto_submitted: bool,
+    client_termination_reason: str | None,
+) -> dict[str, Any]:
+    """Build the final integrity state from server audit evidence plus client fallback data.
+
+    Server-persisted events are the authoritative minimum. Client events are retained as
+    supplemental evidence for transient network failures, but cannot erase server events.
+    """
+    merged: list[dict[str, Any]] = []
+    seen: set[tuple[Any, ...]] = set()
+
+    for raw in [*server_events, *client_events]:
+        if not isinstance(raw, dict):
+            continue
+        event = {
+            "event_type": str(raw.get("event_type", ""))[:80],
+            "detail": str(raw.get("detail", ""))[:1000],
+            "at": str(raw.get("at", ""))[:80],
+            "question": raw.get("question"),
+            "warning_number": raw.get("warning_number"),
+            "source": str(raw.get("source", "system"))[:40],
+        }
+        key = (
+            event["event_type"],
+            event["detail"],
+            event["at"],
+            event["question"],
+            event["warning_number"],
+            event["source"],
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(event)
+
+    # Keep the report bounded while preserving the newest evidence.
+    if len(merged) > 120:
+        merged = merged[-120:]
+
+    warning_numbers = [
+        int(event["warning_number"])
+        for event in merged
+        if isinstance(event.get("warning_number"), int) and int(event["warning_number"]) > 0
+    ]
+    if warning_numbers:
+        warning_count = min(4, max(warning_numbers))
+    elif merged:
+        warning_count = 0
+    else:
+        warning_count = min(4, max(0, int(client_warning_count or 0)))
+
+    auto_event = next(
+        (event for event in reversed(merged) if event.get("event_type") == "integrity_auto_submit"),
+        None,
+    )
+    auto_submitted = bool(client_auto_submitted or warning_count >= 4 or auto_event)
+    termination_reason = (
+        str((auto_event or {}).get("detail", "")).strip()
+        or str(client_termination_reason or "").strip()
+    )
+
+    return {
+        "events": merged,
+        "warning_count": warning_count,
+        "auto_submitted": auto_submitted,
+        "termination_reason": termination_reason,
+    }
+
+
 @router.post("/proctor-frame")
 def analyze_proctor_frame_v2(
     body: MockInterviewProctorFrameV2,
@@ -1399,19 +1473,41 @@ def evaluate_mock_interview_v2(
         ai_meta=ai_meta,
     )
 
-    integrity_events = [event.model_dump() for event in body.integrity_events]
+    server_audits = (
+        db.query(AuditEvent)
+        .filter(
+            AuditEvent.actor_user_id == current_user.id,
+            AuditEvent.action == "mock_interview_integrity_signal",
+            AuditEvent.entity_type == "mock_interview",
+            AuditEvent.entity_id == interview.id,
+        )
+        .order_by(AuditEvent.created_at.asc())
+        .all()
+    )
+    server_integrity_events = [
+        audit.details for audit in server_audits if isinstance(audit.details, dict)
+    ]
+    reconciled_integrity = _reconcile_integrity_events(
+        server_events=server_integrity_events,
+        client_events=[event.model_dump() for event in body.integrity_events],
+        client_warning_count=body.integrity_warning_count,
+        client_auto_submitted=body.integrity_auto_submitted,
+        client_termination_reason=body.integrity_termination_reason,
+    )
+    integrity_events = reconciled_integrity["events"]
     integrity_status = (
         "auto_submitted_review_required"
-        if body.integrity_auto_submitted
+        if reconciled_integrity["auto_submitted"]
         else ("review_required" if integrity_events else "clear")
     )
     integrity_report = {
         "status": integrity_status,
-        "warning_count": body.integrity_warning_count,
+        "warning_count": reconciled_integrity["warning_count"],
         "warning_limit": 4,
-        "auto_submitted": body.integrity_auto_submitted,
-        "termination_reason": body.integrity_termination_reason or "",
+        "auto_submitted": reconciled_integrity["auto_submitted"],
+        "termination_reason": reconciled_integrity["termination_reason"],
         "events": integrity_events,
+        "evidence_basis": "server_reconciled",
         "institution_name": (
             profile.institution.name
             if profile.institution
@@ -1419,7 +1515,7 @@ def evaluate_mock_interview_v2(
         ),
         "note": (
             "Integrity signals identify events for institutional review and are not, by themselves, "
-            "a finding of cheating or misconduct."
+            "a finding of cheating or misconduct. Server audit evidence cannot be removed by client submission."
         ),
     }
     result["integrity_report"] = integrity_report
