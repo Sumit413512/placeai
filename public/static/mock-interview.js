@@ -318,27 +318,52 @@
   function renderAnswerArea(question) {
     const area=$('#answer-area');
     area.className='answer-area '+(question.answer_type==='mcq'?'mcq-answer-area':'text-answer-area');
+    area.onclick=null;
     state.selectedOption=null;
     const existing=state.answers[question.question_id-1];
-    if (question.answer_type==='mcq' && question.options?.length) {
-      if(existing?.answer) {
-        const existingIndex=question.options.findIndex(function(option){return option===existing.answer;});
+
+    if(question.answer_type==='mcq'){
+      const options=Array.isArray(question.options)?question.options.filter(function(option){return typeof option==='string'&&option.trim();}).slice(0,4):[];
+      if(options.length!==4){
+        area.innerHTML='<div class="answer-load-error"><strong>Question options unavailable</strong><span>This objective item did not load correctly. The assessment has been paused to protect scoring integrity.</span></div>';
+        $('#next-question').disabled=true;
+        $('#save-question').disabled=true;
+        logIntegrity('mcq_options_invalid','Objective question did not contain exactly four selectable options.','system',null);
+        return;
+      }
+      $('#next-question').disabled=false;
+      $('#save-question').disabled=false;
+
+      if(existing?.answer){
+        const existingIndex=options.findIndex(function(option){return option===existing.answer;});
         if(existingIndex>=0) state.selectedOption=existingIndex;
       }
-      area.innerHTML=`<div class="answer-options" role="radiogroup" aria-label="Answer options">${question.options.map((option,i)=>`<button class="option-button" type="button" role="radio" aria-checked="false" aria-label="Option ${String.fromCharCode(65+i)}: ${esc(option)}" data-option-index="${i}"><span class="option-key">${String.fromCharCode(65+i)}</span><canvas class="option-canvas" aria-hidden="true"></canvas><span class="option-select-indicator" aria-hidden="true"></span></button>`).join('')}</div>`;
-      $('.option-button',area).forEach((button,i)=>{
-        drawOptionCanvas(button.querySelector('canvas'),question.options[i],state.candidateLabel);
+
+      area.innerHTML='<div class="answer-options" role="radiogroup" aria-label="Answer options">'
+        +options.map(function(option,i){
+          const letter=String.fromCharCode(65+i);
+          return '<button class="option-button" type="button" role="radio" aria-checked="false" aria-label="Option '+letter+': '+esc(option)+'" data-option-index="'+i+'">'
+            +'<span class="option-key">'+letter+'</span>'
+            +'<canvas class="option-canvas" aria-hidden="true"></canvas>'
+            +'<span class="option-select-indicator" aria-hidden="true"></span>'
+            +'</button>';
+        }).join('')
+        +'</div>';
+
+      $$('.option-button',area).forEach(function(button,i){
+        drawOptionCanvas(button.querySelector('canvas'),options[i],state.candidateLabel);
         if(state.selectedOption===i){
           button.classList.add('selected');
           button.setAttribute('aria-checked','true');
         }
       });
-      area.addEventListener('click',function onOptionClick(event){
+
+      area.onclick=function(event){
         const button=event.target.closest('.option-button');
-        if(!button || !area.contains(button)) return;
+        if(!button||!area.contains(button))return;
         const i=Number(button.dataset.optionIndex);
-        if(!Number.isInteger(i) || i<0 || i>=question.options.length) return;
-        $('.option-button',area).forEach(function(x){
+        if(!Number.isInteger(i)||i<0||i>=options.length)return;
+        $$('.option-button',area).forEach(function(x){
           x.classList.remove('selected');
           x.setAttribute('aria-checked','false');
         });
@@ -346,11 +371,14 @@
         button.setAttribute('aria-checked','true');
         state.selectedOption=i;
         $('#autosave-state').textContent='Option '+String.fromCharCode(65+i)+' selected · not saved yet';
-      },{once:false});
-    } else {
-      area.innerHTML='<label class="answer-field">Your response<textarea id="current-answer" class="secure-textarea" maxlength="5000" autocomplete="off" spellcheck="true" placeholder="Write a concise, evidence-based response."></textarea></label>';
-      if(existing?.answer) $('#current-answer').value=existing.answer;
+      };
+      return;
     }
+
+    $('#next-question').disabled=false;
+    $('#save-question').disabled=false;
+    area.innerHTML='<label class="answer-field">Your response<textarea id="current-answer" class="secure-textarea" maxlength="5000" autocomplete="off" spellcheck="true" placeholder="Write a concise, evidence-based response."></textarea></label>';
+    if(existing?.answer) $('#current-answer').value=existing.answer;
   }
 
   function renderQuestion() {
