@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="PlaceAI Interview Intelligence — structured 50+ item campus placement simulation with secure assessment controls and readiness analytics.">
+  <meta name="description" content="PlaceAI Secure Placement Assessment — role-aligned, proctored campus assessment with section controls, integrity monitoring and question-level performance analysis.">
   <meta name="theme-color" content="#071f45">
-  <title>PlaceAI — Interview Intelligence</title>
+  <title>PlaceAI — Secure Placement Assessment</title>
   <link rel="icon" type="image/svg+xml" href="/static/placeai-icon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/api-errors.css">
-  <link rel="stylesheet" href="/static/mock-interview.css?v=20260921-mcqfix3">
+  <link rel="stylesheet" href="/static/mock-interview.css?v=20260921-proctor2">
   <link rel="stylesheet" href="/static/brand.css">
   <link rel="stylesheet" href="/static/ui-fixes.css">
 </head>
@@ -25,30 +25,30 @@
 </header>
 
 <main class="shell">
-  <section class="hero">
+  <section class="hero assessment-hero">
     <div class="hero-copy">
-      <span class="eyebrow">Placement Preparation Lab</span>
-      <h1>Interview Intelligence</h1><span class="hidden" aria-hidden="true">Mock Interview Coach</span>
-      <p>A structured, role-specific campus placement simulation combining aptitude, reasoning, communication, technical depth, programming, coding, resume defence, behavioural assessment and secure interview controls in one measurable readiness workflow.</p>
+      <span class="eyebrow">Secure Placement Assessment</span>
+      <h1>Placement Assessment &amp; Interview Simulation</h1><span class="hidden" aria-hidden="true">Mock Interview Coach</span>
+      <p>A role-aligned assessment environment for campus placement preparation, combining aptitude, reasoning, communication, technical knowledge, coding, resume defence and behavioural evaluation under structured proctoring controls.</p>
       <div class="hero-meta">
-        <span>50+ scored items</span><span>10 assessment sections</span><span>Forward-only</span><span>Secure full-screen</span><span>Camera liveness gate</span>
+        <span>Role-based blueprint</span><span>Section timers</span><span>Forward-only flow</span><span>Secure browser controls</span><span>AI-assisted proctoring</span>
       </div>
     </div>
-    <aside class="hero-score-card">
-      <span class="card-kicker">PlaceAI standard</span>
-      <strong>Full Placement Mock</strong>
-      <p>Question count, coverage, difficulty and section sequence are controlled by the assessment blueprint—not by the student.</p>
-      <div class="mini-stats"><div><b>50+</b><span>Items</span></div><div><b>90–120</b><span>Minutes</span></div><div><b>10</b><span>Sections</span></div></div>
+    <aside class="hero-score-card assessment-standard-card">
+      <span class="card-kicker">Assessment standard</span>
+      <strong>Institution-grade simulation</strong>
+      <p>Coverage, difficulty, timing and integrity controls are defined by the assessment blueprint. Students complete the assigned structure without reducing or bypassing sections.</p>
+      <div class="mini-stats"><div><b>10</b><span>Sections</span></div><div><b>Proctored</b><span>Environment</span></div><div><b>AI + Rules</b><span>Evaluation</span></div></div>
     </aside>
   </section>
 
-  <div id="preview-banner" class="preview-banner hidden"><strong>Design preview</strong><span>This Render preview uses sample assessment data so the secure UI/UX can be reviewed without changing production records. No biometric verification is performed in preview mode.</span></div>
+  <div id="preview-banner" class="preview-banner hidden"><strong>Review environment</strong><span>This Render build uses sample assessment data. Camera, screen-share and on-device proctoring checks run when you grant permission; no biometric identity matching is performed.</span></div>
   <div id="auth-state" class="notice">Checking your student session…</div>
 
   <section id="setup-panel" class="panel hidden">
     <div class="panel-head">
-      <div><span class="step">01 · Assessment blueprint</span><h2>Prepare your full placement simulation</h2><p>PlaceAI automatically builds the mock from the opportunity, role requirements and a standardized campus-placement assessment blueprint.</p></div>
-      <span class="status-pill">50-question minimum</span>
+      <div><span class="step">01 · Assessment setup</span><h2>Prepare your placement assessment</h2><p>PlaceAI builds the assessment from the selected opportunity, role requirements and the institution's standardized placement blueprint.</p></div>
+      <span class="status-pill">Standardized blueprint</span>
     </div>
 
     <div class="setup-layout">
@@ -59,28 +59,28 @@
           </label>
           <div class="locked-setting">
             <span>Assessment configuration</span>
-            <strong>Standardized Full Mock</strong>
-            <small>Students cannot reduce question count, remove sections, lower difficulty or switch to a shorter round.</small>
+            <strong>Standardized placement assessment</strong>
+            <small>Coverage, section sequence, difficulty and timing are controlled by the assigned assessment blueprint.</small>
           </div>
           <button class="button primary button-wide" type="submit">Continue to secure system check</button>
         </form>
 
         <div class="assessment-policy">
-          <strong>Assessment rules</strong>
+          <strong>Secure assessment rules</strong>
           <ul>
-            <li>Questions are delivered one at a time and cannot be revisited after submission.</li>
-            <li>Question and option text is rendered to a protected canvas layer with candidate watermarking.</li>
-            <li>Copy, paste, context-menu and common clipboard shortcuts are blocked during the assessment.</li>
-            <li>Leaving full-screen or switching away pauses the test and creates an integrity event.</li>
-            <li>Integrity events are review signals, not automatic allegations of misconduct.</li>
+            <li>Questions are delivered one at a time and cannot be revisited after moving forward.</li>
+            <li>Question content is protected and candidate-watermarked during the assessment.</li>
+            <li>Copy/paste, tab switching, full-screen exits, screen-share interruption and supported multi-monitor signals are monitored.</li>
+            <li>Camera proctoring checks candidate presence, multiple-person events and visible mobile-phone signals.</li>
+            <li>Repeated confirmed integrity warnings can automatically submit the assessment for institutional review.</li>
           </ul>
         </div>
       </div>
 
       <aside class="blueprint-card">
-        <div class="blueprint-title"><span>Assessment map</span><strong>50 primary items</strong></div>
+        <div class="blueprint-title"><span>Assessment map</span><strong>Section-based structure</strong></div>
         <div id="blueprint-list" class="blueprint-list"></div>
-        <div class="blueprint-total"><span>Adaptive follow-ups can be added in interview stages.</span><b>50+</b></div>
+        <div class="blueprint-total"><span>Coverage is standardized by role and assessment blueprint.</span><b>10 sections</b></div>
       </aside>
     </div>
   </section>
@@ -105,19 +105,23 @@
       </div>
 
       <div class="checks-card">
-        <div class="check-row" data-check="browser"><span class="check-icon">1</span><div><strong>Supported browser</strong><small>Modern secure browser capabilities</small></div><b>Checking</b></div>
-        <div class="check-row" data-check="camera"><span class="check-icon">2</span><div><strong>Camera access</strong><small>Continuous presence signal during secure simulation</small></div><b>Required</b></div>
-        <div class="check-row" data-check="microphone"><span class="check-icon">3</span><div><strong>Microphone access</strong><small>Ready for voice interview stages</small></div><b>Required</b></div>
-        <div class="check-row" data-check="liveness"><span class="check-icon">4</span><div><strong>Liveness verification</strong><small>Active face-presence / motion challenge where supported</small></div><b>Required</b></div>
-        <div class="check-row" data-check="fullscreen"><span class="check-icon">5</span><div><strong>Full-screen mode</strong><small>Exit pauses the assessment until full-screen is restored</small></div><b>Required</b></div>
-        <div class="check-row" data-check="clipboard"><span class="check-icon">6</span><div><strong>Clipboard lockdown</strong><small>Copy, paste and context menu are restricted</small></div><b>Enabled</b></div>
-        <div class="check-row" data-check="visibility"><span class="check-icon">7</span><div><strong>Focus monitoring</strong><small>Tab/window focus changes create review events</small></div><b>Enabled</b></div>
+        <div class="check-row" data-check="browser"><span class="check-icon">1</span><div><strong>Supported browser</strong><small>Required secure-browser capabilities</small></div><b>Checking</b></div>
+        <div class="check-row" data-check="camera"><span class="check-icon">2</span><div><strong>Camera access</strong><small>Continuous candidate and object monitoring</small></div><b>Required</b></div>
+        <div class="check-row" data-check="microphone"><span class="check-icon">3</span><div><strong>Microphone access</strong><small>Required for interview and monitored stages</small></div><b>Required</b></div>
+        <div class="check-row" data-check="screen"><span class="check-icon">4</span><div><strong>Entire-screen sharing</strong><small>Screen-share interruption is an integrity event</small></div><b>Required</b></div>
+        <div class="check-row" data-check="proctor"><span class="check-icon">5</span><div><strong>On-device proctor model</strong><small>Person-count and mobile-phone object detection</small></div><b>Required</b></div>
+        <div class="check-row" data-check="liveness"><span class="check-icon">6</span><div><strong>Active presence check</strong><small>Candidate presence plus live movement challenge</small></div><b>Required</b></div>
+        <div class="check-row" data-check="fullscreen"><span class="check-icon">7</span><div><strong>Full-screen mode</strong><small>Full-screen exits generate warnings</small></div><b>Required</b></div>
+        <div class="check-row" data-check="monitor"><span class="check-icon">8</span><div><strong>Single-monitor check</strong><small>Blocks known extended-display configurations where supported</small></div><b>Checking</b></div>
+        <div class="check-row" data-check="clipboard"><span class="check-icon">9</span><div><strong>Clipboard control</strong><small>Copy, paste and context-menu actions are restricted</small></div><b>Enabled</b></div>
+        <div class="check-row" data-check="visibility"><span class="check-icon">10</span><div><strong>Focus monitoring</strong><small>Tab and window changes are recorded</small></div><b>Enabled</b></div>
+      </div>
       </div>
     </div>
 
     <div class="consent-row">
-      <label class="consent"><input id="consent-check" type="checkbox"><span>I understand that this secure mock can use camera, microphone, full-screen, browser-focus signals and periodic AI analysis of compressed webcam frames for person/phone integrity signals. Integrity events are review evidence, not automatic misconduct findings.</span></label>
-      <div class="system-actions"><button id="run-check" class="button secondary" type="button">Run system check</button><button id="start-assessment" class="button primary" type="button" disabled>Start secure mock</button></div>
+      <label class="consent"><input id="consent-check" type="checkbox"><span>I understand that this proctored assessment uses camera, microphone, entire-screen sharing, full-screen/focus monitoring and on-device object detection for integrity signals. Confirmed warnings are recorded for institutional review.</span></label>
+      <div class="system-actions"><button id="run-check" class="button secondary" type="button">Run system check</button><button id="start-assessment" class="button primary" type="button" disabled>Start proctored assessment</button></div>
     </div>
   </section>
 
@@ -165,6 +169,11 @@
     </aside>
 
     <div class="assessment-main">
+      <div id="proctor-warning-banner" class="proctor-warning-banner hidden" role="alert" aria-live="assertive">
+        <div><span>Integrity warning</span><strong id="proctor-warning-title">Proctoring event detected</strong><small id="proctor-warning-detail"></small></div>
+        <b id="proctor-warning-count">1 / 4</b>
+      </div>
+
       <div class="assessment-toolbar">
         <div><span id="section-label">Section</span><strong id="question-progress">Question 1 of 50</strong></div>
         <div class="toolbar-right">
@@ -316,6 +325,8 @@
 
 <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 <script src="/static/api-errors.js" defer></script>
-<script src="/static/mock-interview.js?v=20260921-mcqfix3" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js" defer></script>
+<script src="/static/mock-interview.js?v=20260921-proctor2" defer></script>
 </body>
 </html>
