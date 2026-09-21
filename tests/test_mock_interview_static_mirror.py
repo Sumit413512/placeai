@@ -81,8 +81,8 @@ def test_mcq_interaction_and_expandable_navigator_contract():
     css = _text("app/static/mock-interview.css")
     js = _text("app/static/mock-interview.js")
 
-    assert "mock-interview.css?v=20260921-mcqfix3" in html
-    assert "mock-interview.js?v=20260921-mcqfix3" in html
+    assert "mock-interview.css?v=20260921-proctor2" in html
+    assert "mock-interview.js?v=20260921-proctor2" in html
     assert 'role="radiogroup"' in js
     assert 'role="radio"' in js
     assert "option-select-indicator" in js
@@ -108,3 +108,45 @@ def test_mcq_fail_safe_blocks_progression_when_options_are_invalid():
     assert "mcq_options_invalid" in js
     assert "Question options unavailable" in js
     assert ".answer-load-error" in css
+
+
+def test_proctor_runtime_is_required_and_active_in_preview_and_production():
+    html = _text("app/templates/mock-interview.html")
+    js = _text("app/static/mock-interview.js")
+    css = _text("app/static/mock-interview.css")
+
+    assert "@tensorflow/tfjs@4.22.0" in html
+    assert "@tensorflow-models/coco-ssd@2.2.3" in html
+    assert 'data-check="screen"' in html
+    assert 'data-check="proctor"' in html
+    assert 'data-check="monitor"' in html
+    assert 'id="proctor-warning-banner"' in html
+    assert "ensureProctorModel" in js
+    assert "runLocalProctorCheck" in js
+    assert "setInterval(runLocalProctorCheck,1500)" in js
+    assert "item.class==='cell phone'" in js
+    assert "candidate_not_visible" in js
+    assert "multiple_people" in js
+    assert "integrityWarningLimit:4" in js
+    assert "getDisplayMedia" in js
+    assert "screen_share_stopped" in js
+    assert "currentMonitorStatus" in js
+    assert ".proctor-warning-banner" in css
+    assert "if(previewMode||!state.assessmentActive" in js  # only secondary cloud vision is preview-disabled
+    assert "Preview workflow passed" not in js
+
+
+def test_render_assessment_demo_requires_real_preflight_instead_of_bypassing_proctoring():
+    js = _text("app/static/mock-interview.js")
+    demo_block = js.split("if(demo==='assessment'){", 1)[1].split("if(demo==='result'||demo==='integrity'){", 1)[0]
+    assert "$('#system-panel').classList.remove('hidden')" in demo_block
+    assert "$('#interview-panel').classList.remove('hidden')" not in demo_block
+    assert "renderQuestion()" not in demo_block
+
+
+def test_mock_assessment_copy_is_professional_and_drops_plus_marketing():
+    html = _text("app/templates/mock-interview.html")
+    assert "Secure Placement Assessment" in html
+    assert "Institution-grade simulation" in html
+    assert "50+" not in html
+    assert "50-question minimum" not in html
