@@ -254,3 +254,45 @@ def test_complete_result_is_derived_from_question_scores_not_ai_overall_impressi
     assert result["score_summary"]["correct"] == 1
     assert result["score_summary"]["incorrect"] == 1
     assert result["overall_score"] != 82
+
+
+def test_integrity_models_accept_warning_timeline_and_auto_submit():
+    event = mock_interview_v2.MockInterviewIntegrityEventV2(
+        event_type="fullscreen_exit",
+        detail="Secure full-screen mode was exited.",
+        at="2026-09-21T10:00:00Z",
+        question=7,
+        warning_number=1,
+        source="browser",
+    )
+    payload = mock_interview_v2.MockInterviewEvaluationV2(
+        interview_id="interview-1",
+        answers=[mock_interview_v2.MockInterviewAnswerV2(question_id=1, answer="Answer")],
+        integrity_events=[event],
+        integrity_warning_count=4,
+        integrity_auto_submitted=True,
+        integrity_termination_reason="Warning limit reached",
+    )
+    assert payload.integrity_warning_count == 4
+    assert payload.integrity_auto_submitted is True
+    assert payload.integrity_events[0].event_type == "fullscreen_exit"
+
+
+def test_proctor_and_institution_routes_are_exposed():
+    paths = client.get("/openapi.json").json()["paths"]
+    assert "/mock-interview/proctor-frame" in paths
+    assert "/mock-interview/integrity-event" in paths
+    assert "/mock-interview/institution-results" in paths
+
+
+def test_proctor_frame_requires_student_authentication():
+    response = client.post(
+        "/mock-interview/proctor-frame",
+        json={"interview_id": "missing", "image_data_url": "data:image/jpeg;base64," + ("A" * 200)},
+    )
+    assert response.status_code in {401, 403}
+
+
+def test_institution_results_requires_institution_authentication():
+    response = client.get("/mock-interview/institution-results")
+    assert response.status_code in {401, 403}
