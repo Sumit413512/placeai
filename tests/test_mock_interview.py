@@ -176,3 +176,81 @@ def test_full_mock_blueprint_totals_fifty_and_has_market_sections():
         "quantitative", "logical", "communication", "technical", "programming",
         "coding", "resume", "behavioral", "role", "situational"
     }
+
+
+def test_objective_question_scoring_is_exact_and_transparent():
+    item = {
+        "question_id": 1,
+        "question": "What is 2 + 2?",
+        "section": "quantitative",
+        "category": "quantitative",
+        "difficulty": "easy",
+        "answer_type": "mcq",
+        "options": ["2", "3", "4", "5"],
+        "correct_answer": "4",
+    }
+    correct = mock_interview_v2._objective_evaluation(item, "4")
+    wrong = mock_interview_v2._objective_evaluation(item, "5")
+    assert correct["score"] == 100
+    assert correct["verdict"] == "correct"
+    assert correct["grading_method"] == "system"
+    assert wrong["score"] == 0
+    assert wrong["verdict"] == "incorrect"
+    assert wrong["correct_answer"] == "4"
+
+
+def test_assessment_result_is_withheld_if_any_question_is_not_evaluated():
+    issued = [
+        {"question_id": 1, "section": "quantitative"},
+        {"question_id": 2, "section": "technical"},
+    ]
+    evaluations = [
+        {
+            "question_id": 1,
+            "section": "quantitative",
+            "score": 100,
+            "verdict": "correct",
+            "grading_method": "system",
+        }
+    ]
+    result = mock_interview_v2._build_assessment_result(
+        evaluations=evaluations,
+        issued=issued,
+        ai_meta={"provider": "test", "model": "test", "batches": 1},
+    )
+    assert result["analysis_status"] == "incomplete"
+    assert result["overall_score"] is None
+    assert result["missing_evaluation_question_ids"] == [2]
+
+
+def test_complete_result_is_derived_from_question_scores_not_ai_overall_impression():
+    issued = [
+        {"question_id": 1, "section": "quantitative"},
+        {"question_id": 2, "section": "technical"},
+    ]
+    evaluations = [
+        {
+            "question_id": 1,
+            "section": "quantitative",
+            "score": 100,
+            "verdict": "correct",
+            "grading_method": "system",
+        },
+        {
+            "question_id": 2,
+            "section": "technical",
+            "score": 0,
+            "verdict": "incorrect",
+            "grading_method": "ai",
+        },
+    ]
+    result = mock_interview_v2._build_assessment_result(
+        evaluations=evaluations,
+        issued=issued,
+        ai_meta={"provider": "test", "model": "test", "batches": 1},
+    )
+    assert result["analysis_status"] == "complete"
+    assert result["raw_assessment_score"] == 50
+    assert result["score_summary"]["correct"] == 1
+    assert result["score_summary"]["incorrect"] == 1
+    assert result["overall_score"] != 82
