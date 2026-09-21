@@ -1274,7 +1274,21 @@
       $('#setup-panel').classList.remove('hidden');
       await Promise.all([loadJobs(),loadHistory()]);
       const demo=new URLSearchParams(location.search).get('demo');
-      if(demo==='result'){ $('#setup-panel').classList.add('hidden'); renderResult(buildPreviewResult(),false); }
+      if(demo==='result'||demo==='integrity'){
+        if(demo==='integrity'){
+          state.integrityWarnings=4;
+          state.autoSubmittedIntegrity=true;
+          state.integrityTerminationReason='Repeated secure-environment violations reached the configured warning limit.';
+          state.integrityEvents=[
+            {event_type:'fullscreen_exit',detail:'Secure full-screen mode was exited.',at:new Date(Date.now()-180000).toISOString(),question:8,warning_number:1,source:'browser'},
+            {event_type:'tab_hidden',detail:'The assessment tab lost visibility.',at:new Date(Date.now()-120000).toISOString(),question:12,warning_number:2,source:'browser'},
+            {event_type:'candidate_not_visible',detail:'The candidate was not visible in consecutive liveness checks.',at:new Date(Date.now()-60000).toISOString(),question:17,warning_number:3,source:'camera'},
+            {event_type:'mobile_phone_detected',detail:'A mobile phone was detected in two consecutive AI-vision checks.',at:new Date(Date.now()-30000).toISOString(),question:19,warning_number:4,source:'vision'}
+          ];
+        }
+        $('#setup-panel').classList.add('hidden');
+        renderResult(buildPreviewResult(),false);
+      }
       return;
     }
     try {
