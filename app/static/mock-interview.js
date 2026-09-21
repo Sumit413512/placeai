@@ -92,7 +92,7 @@
     list.innerHTML = BLUEPRINT.map((item,index)=>`
       <div class="blueprint-row">
         <span class="blueprint-index">${String(index+1).padStart(2,'0')}</span>
-        <div><strong>${esc(item.label)}</strong><small>${item.minutes} min · ${item.kind === 'mcq' ? 'Objective' : item.kind === 'mixed' ? 'Objective + applied' : 'Applied response'}</small></div>
+        <div><strong>${esc(item.label)}</strong><small>${item.minutes} min · ${item.kind === 'mcq' ? 'Objective' : item.kind === 'mixed' ? 'Objective + applied' : item.kind === 'code' ? 'Coding IDE + test cases' : 'Applied response'}</small></div>
         <b>${item.count}</b>
       </div>`).join('');
   }
@@ -1313,7 +1313,7 @@
       toast('Full-screen permission is required to start the assessment.','error');
       return;
     }
-    state.assessmentActive=true;state.finishing=false;state.current=0;state.totalRemaining=TOTAL_SECONDS;state.sectionRemaining=0;state.integrityEvents=[];state.integrityWarnings=0;state.lastWarningAt=0;state.autoSubmittedIntegrity=false;state.integrityTerminationReason='';state.proctorVisionBusy=false;state.proctorModelBusy=false;state.faceMissStreak=0;state.multipleFaceStreak=0;state.phoneDetectionStreak=0;state.signalStreaks={candidate:0,multiple:0,phone:0};state.signalLastWarning={candidate:0,multiple:0,phone:0,monitor:0};
+    state.assessmentActive=true;state.finishing=false;state.current=0;state.totalRemaining=TOTAL_SECONDS;state.sectionRemaining=0;state.integrityEvents=[];state.codingDrafts={};state.codingRuns={};state.codingBusy=false;state.integrityWarnings=0;state.lastWarningAt=0;state.autoSubmittedIntegrity=false;state.integrityTerminationReason='';state.proctorVisionBusy=false;state.proctorModelBusy=false;state.faceMissStreak=0;state.multipleFaceStreak=0;state.phoneDetectionStreak=0;state.signalStreaks={candidate:0,multiple:0,phone:0};state.signalLastWarning={candidate:0,multiple:0,phone:0,monitor:0};
     document.body.classList.remove('integrity-critical');
     updateIntegrityWarningUI();
     document.body.classList.add('secure-assessment');
@@ -1574,7 +1574,8 @@
     let weight = 0;
     sectionScores.forEach(function(row){ const w=RESULT_SECTION_WEIGHTS[row.key]||0; weighted += row.score*w; weight += w; });
     const objective = evaluations.filter(function(x){ return x.grading_method === 'system'; });
-    const subjective = evaluations.filter(function(x){ return x.grading_method !== 'system'; });
+    const subjective = evaluations.filter(function(x){ return x.answer_type === 'text'; });
+    const coding = evaluations.filter(function(x){ return x.answer_type === 'code'; });
     const score = Math.round(weighted/(weight||1));
     return {
       analysis_status:'complete',
@@ -1584,7 +1585,8 @@
       score_summary:{
         total_questions:evaluations.length,evaluated_questions:evaluations.length,correct:totals.correct,partial:totals.partial,incorrect:totals.incorrect,insufficient:totals.insufficient,system_graded:totals.system_graded,ai_graded:totals.ai_graded,
         objective_accuracy:objective.length?Math.round(100*objective.filter(function(x){return x.score===100;}).length/objective.length):null,
-        subjective_average:subjective.length?Math.round(subjective.reduce(function(a,b){return a+b.score;},0)/subjective.length):null
+        subjective_average:subjective.length?Math.round(subjective.reduce(function(a,b){return a+b.score;},0)/subjective.length):null,
+        coding_average:coding.length?Math.round(coding.reduce(function(a,b){return a+b.score;},0)/coding.length):null
       },
       section_scores:sectionScores,
       dimensions:Object.fromEntries(sectionScores.map(function(x){return [x.key,x.score];})),
