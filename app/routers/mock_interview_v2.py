@@ -318,11 +318,11 @@ def _difficulty_for(index: int, total: int, requested: str) -> str:
 
 
 CODE_LANGUAGES: dict[str, dict[str, Any]] = {
-    "python": {"label": "Python 3", "judge0_id": 71},
-    "javascript": {"label": "JavaScript (Node.js)", "judge0_id": 63},
-    "java": {"label": "Java", "judge0_id": 62},
-    "cpp": {"label": "C++17", "judge0_id": 54},
-    "c": {"label": "C", "judge0_id": 50},
+    "python": {"label": "Python 3.14", "judge0_id": 113},
+    "javascript": {"label": "JavaScript (Node.js 22)", "judge0_id": 102},
+    "java": {"label": "Java 17", "judge0_id": 91},
+    "cpp": {"label": "C++ (GCC 14)", "judge0_id": 105},
+    "c": {"label": "C (GCC 14)", "judge0_id": 103},
 }
 
 
