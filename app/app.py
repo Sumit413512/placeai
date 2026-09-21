@@ -143,7 +143,7 @@ async def security_headers(request: Request, call_next):
         )
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     if path == "/health" or path.startswith("/auth/") or path in {
-        "/", "/privacy", "/terms", "/acceptable-use"
+        "/", "/mock-interview", "/privacy", "/terms", "/acceptable-use"
     }:
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
