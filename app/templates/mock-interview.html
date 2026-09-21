@@ -29,25 +29,25 @@
     <div class="hero-copy">
       <span class="eyebrow">Placement Preparation Lab</span>
       <h1>Interview Intelligence</h1>
-      <p>A structured, role-specific campus placement simulation that combines aptitude, reasoning, communication, technical depth, programming, coding, resume defence, behavioural assessment and secure interview controls in one measurable readiness workflow.</p>
+      <p>A structured, role-specific campus placement simulation combining aptitude, reasoning, communication, technical depth, programming, coding, resume defence, behavioural assessment and secure interview controls in one measurable readiness workflow.</p>
       <div class="hero-meta">
-        <span>50+ scored items</span><span>10 assessment sections</span><span>Role & JD grounded</span><span>Secure simulation</span>
+        <span>50+ scored items</span><span>10 assessment sections</span><span>Forward-only</span><span>Secure full-screen</span><span>Camera liveness gate</span>
       </div>
     </div>
     <aside class="hero-score-card">
       <span class="card-kicker">PlaceAI standard</span>
       <strong>Full Placement Mock</strong>
-      <p>Question count and section mix are controlled by the assessment blueprint—not by the student.</p>
+      <p>Question count, coverage, difficulty and section sequence are controlled by the assessment blueprint—not by the student.</p>
       <div class="mini-stats"><div><b>50+</b><span>Items</span></div><div><b>90–120</b><span>Minutes</span></div><div><b>10</b><span>Sections</span></div></div>
     </aside>
   </section>
 
-  <div id="preview-banner" class="preview-banner hidden"><strong>Design preview</strong><span>This Render preview uses sample assessment data so you can review the new UI/UX safely without changing production.</span></div>
+  <div id="preview-banner" class="preview-banner hidden"><strong>Design preview</strong><span>This Render preview uses sample assessment data so the secure UI/UX can be reviewed without changing production records. No biometric verification is performed in preview mode.</span></div>
   <div id="auth-state" class="notice">Checking your student session…</div>
 
   <section id="setup-panel" class="panel hidden">
     <div class="panel-head">
-      <div><span class="step">01 · Assessment blueprint</span><h2>Prepare your full placement simulation</h2><p>PlaceAI automatically builds the assessment from the selected opportunity, role requirements and standardized campus-placement coverage.</p></div>
+      <div><span class="step">01 · Assessment blueprint</span><h2>Prepare your full placement simulation</h2><p>PlaceAI automatically builds the mock from the opportunity, role requirements and a standardized campus-placement assessment blueprint.</p></div>
       <span class="status-pill">50-question minimum</span>
     </div>
 
@@ -60,18 +60,19 @@
           <div class="locked-setting">
             <span>Assessment configuration</span>
             <strong>Standardized Full Mock</strong>
-            <small>Students cannot reduce question count, remove sections or lower assessment coverage.</small>
+            <small>Students cannot reduce question count, remove sections, lower difficulty or switch to a shorter round.</small>
           </div>
           <button class="button primary button-wide" type="submit">Continue to secure system check</button>
         </form>
 
         <div class="assessment-policy">
-          <strong>How this mock works</strong>
+          <strong>Assessment rules</strong>
           <ul>
-            <li>Questions are delivered one at a time in a fixed section sequence.</li>
-            <li>Section and total timers remain visible throughout the assessment.</li>
-            <li>Question sets are role-grounded and can vary between students to reduce answer sharing.</li>
-            <li>Integrity events are review signals, not automatic accusations.</li>
+            <li>Questions are delivered one at a time and cannot be revisited after submission.</li>
+            <li>Question and option text is rendered to a protected canvas layer with candidate watermarking.</li>
+            <li>Copy, paste, context-menu and common clipboard shortcuts are blocked during the assessment.</li>
+            <li>Leaving full-screen or switching away pauses the test and creates an integrity event.</li>
+            <li>Integrity events are review signals, not automatic allegations of misconduct.</li>
           </ul>
         </div>
       </div>
@@ -79,36 +80,44 @@
       <aside class="blueprint-card">
         <div class="blueprint-title"><span>Assessment map</span><strong>50 primary items</strong></div>
         <div id="blueprint-list" class="blueprint-list"></div>
-        <div class="blueprint-total"><span>Adaptive follow-ups may be added during interview sections.</span><b>50+</b></div>
+        <div class="blueprint-total"><span>Adaptive follow-ups can be added in interview stages.</span><b>50+</b></div>
       </aside>
     </div>
   </section>
 
   <section id="system-panel" class="panel hidden">
     <div class="panel-head">
-      <div><span class="step">02 · Secure environment</span><h2>System & integrity check</h2><p>Verify the device before the assessment. Camera and microphone are used only after permission is granted.</p></div>
+      <div><span class="step">02 · Secure environment</span><h2>System, identity & liveness check</h2><p>Camera, microphone and full-screen access are verified before entry. Secure mode cannot start until required checks pass.</p></div>
       <span id="system-status-pill" class="status-pill neutral">Not checked</span>
     </div>
 
     <div class="system-grid">
-      <div class="camera-card">
-        <video id="camera-preview" playsinline muted></video>
-        <div id="camera-placeholder" class="camera-placeholder"><span>Camera preview</span><small>Your camera feed appears here after permission is granted.</small></div>
-        <div class="camera-footer"><span id="device-label">No media access yet</span><span class="live-indicator hidden" id="camera-live">LIVE</span></div>
+      <div>
+        <div class="camera-card">
+          <video id="camera-preview" playsinline muted></video>
+          <div id="camera-placeholder" class="camera-placeholder"><span>Camera preview</span><small>Your camera feed appears here after permission is granted.</small></div>
+          <div class="camera-footer"><span id="device-label">No media access yet</span><span class="live-indicator hidden" id="camera-live">LIVE</span></div>
+        </div>
+        <div class="liveness-card">
+          <div><span class="card-kicker">Active liveness</span><strong id="liveness-title">Not started</strong><small id="liveness-help">PlaceAI will ask for a short head-movement challenge where compatible face-detection capability is available.</small></div>
+          <button id="run-liveness" class="button secondary" type="button" disabled>Run liveness check</button>
+        </div>
       </div>
+
       <div class="checks-card">
         <div class="check-row" data-check="browser"><span class="check-icon">1</span><div><strong>Supported browser</strong><small>Modern secure browser capabilities</small></div><b>Checking</b></div>
-        <div class="check-row" data-check="camera"><span class="check-icon">2</span><div><strong>Camera access</strong><small>Presence monitoring for secure simulation</small></div><b>Required</b></div>
+        <div class="check-row" data-check="camera"><span class="check-icon">2</span><div><strong>Camera access</strong><small>Continuous presence signal during secure simulation</small></div><b>Required</b></div>
         <div class="check-row" data-check="microphone"><span class="check-icon">3</span><div><strong>Microphone access</strong><small>Ready for voice interview stages</small></div><b>Required</b></div>
-        <div class="check-row" data-check="fullscreen"><span class="check-icon">4</span><div><strong>Full-screen mode</strong><small>Exit events are recorded during assessment</small></div><b>Required</b></div>
-        <div class="check-row" data-check="clipboard"><span class="check-icon">5</span><div><strong>Clipboard controls</strong><small>Copy and paste are restricted during the mock</small></div><b>Enabled</b></div>
-        <div class="check-row" data-check="visibility"><span class="check-icon">6</span><div><strong>Focus monitoring</strong><small>Tab/window focus changes create review events</small></div><b>Enabled</b></div>
+        <div class="check-row" data-check="liveness"><span class="check-icon">4</span><div><strong>Liveness verification</strong><small>Active face-presence / motion challenge where supported</small></div><b>Required</b></div>
+        <div class="check-row" data-check="fullscreen"><span class="check-icon">5</span><div><strong>Full-screen mode</strong><small>Exit pauses the assessment until full-screen is restored</small></div><b>Required</b></div>
+        <div class="check-row" data-check="clipboard"><span class="check-icon">6</span><div><strong>Clipboard lockdown</strong><small>Copy, paste and context menu are restricted</small></div><b>Enabled</b></div>
+        <div class="check-row" data-check="visibility"><span class="check-icon">7</span><div><strong>Focus monitoring</strong><small>Tab/window focus changes create review events</small></div><b>Enabled</b></div>
       </div>
     </div>
 
     <div class="consent-row">
       <label class="consent"><input id="consent-check" type="checkbox"><span>I understand that this secure mock can use camera, microphone, full-screen and browser-focus signals for placement-practice integrity review.</span></label>
-      <div class="system-actions"><button id="run-check" class="button secondary" type="button">Run system check</button><button id="start-assessment" class="button primary" type="button" disabled>Start 50+ item mock</button></div>
+      <div class="system-actions"><button id="run-check" class="button secondary" type="button">Run system check</button><button id="start-assessment" class="button primary" type="button" disabled>Start secure mock</button></div>
     </div>
   </section>
 
@@ -123,19 +132,19 @@
     <div class="assessment-main">
       <div class="assessment-toolbar">
         <div><span id="section-label">Section</span><strong id="question-progress">Question 1 of 50</strong></div>
-        <div class="toolbar-right"><span id="section-timer">12:00</span><button id="flag-question" class="ghost-button" type="button">Flag</button></div>
+        <div class="toolbar-right"><span id="section-timer">12:00</span><span class="forward-badge">Forward-only</span></div>
       </div>
 
       <div class="question-stage">
-        <div class="question-badges"><span id="question-section" class="category"></span><span id="question-difficulty" class="category"></span></div>
-        <h2 id="question-text">Loading assessment…</h2>
-        <p id="question-guidance" class="question-guidance">Answer using clear reasoning, relevant examples and only information you can support.</p>
-        <label class="answer-field">Your response
-          <textarea id="current-answer" maxlength="5000" placeholder="Type your answer here. Your response is saved locally as you progress."></textarea>
-        </label>
+        <div class="question-badges"><span id="question-section" class="category"></span><span id="question-difficulty" class="category"></span><span class="category secure-question">Protected question</span></div>
+        <div id="question-canvas-wrap" class="protected-question">
+          <canvas id="question-canvas" width="1200" height="360"></canvas>
+        </div>
+        <p id="question-guidance" class="question-guidance">Question text is rendered to canvas and watermarked. Continue forward after submitting; completed questions cannot be reopened.</p>
+        <div id="answer-area"></div>
         <div class="question-footer">
-          <span id="autosave-state">Not saved yet</span>
-          <div><button id="previous-question" class="button secondary" type="button">Previous</button><button id="next-question" class="button primary" type="button">Save & continue</button></div>
+          <span id="autosave-state">Response not submitted</span>
+          <div><button id="next-question" class="button primary" type="button">Submit & continue</button></div>
         </div>
       </div>
 
@@ -171,6 +180,15 @@
     <div id="history-list" class="history-list"></div>
   </section>
 </main>
+
+<div id="integrity-overlay" class="integrity-overlay hidden" role="dialog" aria-modal="true">
+  <div class="integrity-dialog">
+    <span class="card-kicker">Assessment paused</span>
+    <h2 id="integrity-overlay-title">Secure full-screen was interrupted</h2>
+    <p id="integrity-overlay-text">This event has been added to the integrity timeline. Restore the secure environment to continue.</p>
+    <button id="restore-secure-mode" class="button primary" type="button">Restore secure mode</button>
+  </div>
+</div>
 
 <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 <script src="/static/api-errors.js" defer></script>
