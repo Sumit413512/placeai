@@ -827,8 +827,8 @@
   function renderSectionPerformance(rows) {
     rows = rows || [];
     $('#section-performance').innerHTML = rows.map(function(row){
-      return '<tr><td><strong>'+esc(row.label||row.key)+'</strong></td><td class="section-score">'+(row.score??'—')+'/100</td><td class="good-count">'+(row.correct??0)+'</td><td class="partial-count">'+(row.partial??0)+'</td><td class="bad-count">'+(row.incorrect??0)+'</td><td>'+(row.questions??0)+'</td></tr>';
-    }).join('') || '<tr><td colspan="6">No section results available.</td></tr>';
+      return '<tr><td><strong>'+esc(row.label||row.key)+'</strong></td><td class="section-score">'+(row.score??'—')+'/100</td><td class="good-count">'+(row.correct??0)+'</td><td class="partial-count">'+(row.partial??0)+'</td><td class="bad-count">'+(row.incorrect??0)+'</td><td>'+(row.insufficient??0)+'</td><td>'+(row.questions??0)+'</td></tr>';
+    }).join('') || '<tr><td colspan="7">No section results available.</td></tr>';
   }
 
   function reviewDetailsList(title,items) {
@@ -892,6 +892,7 @@
     $('#summary-correct').textContent=summary.correct??'—';
     $('#summary-partial').textContent=summary.partial??'—';
     $('#summary-incorrect').textContent=summary.incorrect??'—';
+    $('#summary-insufficient').textContent=summary.insufficient??'—';
     $('#summary-objective').textContent=summary.objective_accuracy===null||summary.objective_accuracy===undefined?'—':summary.objective_accuracy+'%';
     $('#summary-subjective').textContent=summary.subjective_average===null||summary.subjective_average===undefined?'—':summary.subjective_average+'/100';
     renderSectionPerformance(result.section_scores||[]);
