@@ -1800,6 +1800,67 @@ def _reconcile_integrity_events(
     }
 
 
+@router.post("/code/run", dependencies=[Depends(student_ai_guard)])
+def run_mock_interview_code_v2(
+    body: MockInterviewCodeRunV2,
+    current_user: User = Depends(require_student_premium_access),
+    db: Session = Depends(get_db),
+):
+    profile = _profile(current_user, db)
+    interview = db.query(MockInterview).filter(
+        MockInterview.id == body.interview_id,
+        MockInterview.student_id == profile.id,
+    ).first()
+    if not interview:
+        raise HTTPException(status_code=404, detail="Mock interview not found")
+
+    issued = _issued_questions(interview)
+    item = next((row for row in issued if row["question_id"] == body.question_id), None)
+    if not item or item.get("answer_type") != "code":
+        raise HTTPException(status_code=404, detail="Coding question not found")
+
+    try:
+        execution = _run_code_tests(
+            item=item,
+            language=body.language,
+            source_code=body.source_code,
+            include_hidden=body.mode == "submit",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    public_results = []
+    for result in execution["results"]:
+        if result["visibility"] == "hidden":
+            public_results.append({
+                "index": result["index"],
+                "visibility": "hidden",
+                "passed": result["passed"],
+                "status": result["status"],
+                "stdout": "",
+                "stderr": "",
+                "compile_output": "",
+                "time": result["time"],
+                "memory": result["memory"],
+            })
+        else:
+            public_results.append(result)
+
+    return {
+        "question_id": body.question_id,
+        "mode": body.mode,
+        "language": body.language,
+        "compile_success": execution["compile_success"],
+        "passed": execution["passed"],
+        "total": execution["total"],
+        "sample_count": execution["sample_count"],
+        "hidden_count": execution["hidden_count"],
+        "results": public_results,
+    }
+
+
 @router.post("/proctor-frame")
 def analyze_proctor_frame_v2(
     body: MockInterviewProctorFrameV2,
