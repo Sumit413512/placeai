@@ -12,11 +12,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
-from app.ai_provider import call_ai_text, current_ai_model, current_ai_provider
+from app.ai_provider import call_ai_text, call_ai_vision_text, current_ai_model, current_ai_provider
 from app.ai_rate_limit import student_ai_guard
 from app.database import get_db
-from app.dependencies import require_student
-from app.models import ApprovalStatus, Job, MockInterview, StudentProfile, User
+from app.dependencies import require_institution_admin, require_student
+from app.models import ApprovalStatus, AuditEvent, Job, MockInterview, StudentProfile, User
 from app.placement_access import job_is_visible_to_student
 from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
 from app.student_entitlements import require_student_premium_access
@@ -67,11 +67,40 @@ class MockInterviewAnswerV2(BaseModel):
     answer: str = Field(min_length=1, max_length=8000)
 
 
+class MockInterviewIntegrityEventV2(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    event_type: str = Field(min_length=2, max_length=80)
+    detail: str = Field(default="", max_length=1000)
+    at: str = Field(default="", max_length=80)
+    question: int | None = Field(default=None, ge=1, le=FULL_MOCK_QUESTION_COUNT)
+    warning_number: int | None = Field(default=None, ge=1, le=20)
+    source: str = Field(default="browser", pattern="^(browser|camera|vision|system)$")
+
+
 class MockInterviewEvaluationV2(BaseModel):
     model_config = {"extra": "forbid"}
 
     interview_id: str
     answers: list[MockInterviewAnswerV2] = Field(min_length=1, max_length=FULL_MOCK_QUESTION_COUNT)
+    integrity_events: list[MockInterviewIntegrityEventV2] = Field(default_factory=list, max_length=120)
+    integrity_warning_count: int = Field(default=0, ge=0, le=100)
+    integrity_auto_submitted: bool = False
+    integrity_termination_reason: str | None = Field(default=None, max_length=1000)
+
+
+class MockInterviewProctorFrameV2(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    interview_id: str
+    image_data_url: str = Field(min_length=100, max_length=450_000)
+
+
+class MockInterviewIntegritySignalV2(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    interview_id: str
+    event: MockInterviewIntegrityEventV2
 
 
 def _call_interview_ai(prompt: str, *, max_output_tokens: int, fast: bool = False) -> str:
@@ -1144,6 +1173,121 @@ def _build_assessment_result(
     }
 
 
+
+@router.post("/proctor-frame")
+def analyze_proctor_frame_v2(
+    body: MockInterviewProctorFrameV2,
+    current_user: User = Depends(require_student),
+    db: Session = Depends(get_db),
+):
+    """Best-effort webcam object/presence analysis. Frames are processed, not persisted."""
+    profile = _profile(current_user, db)
+    interview = db.query(MockInterview).filter(
+        MockInterview.id == body.interview_id,
+        MockInterview.student_id == profile.id,
+    ).first()
+    if not interview:
+        raise HTTPException(status_code=404, detail="Mock interview not found")
+    if not body.image_data_url.startswith("data:image/jpeg;base64,"):
+        raise HTTPException(status_code=422, detail="Proctor frame must be a compressed JPEG data URL")
+
+    prompt = """
+Analyze this single webcam frame only for assessment-integrity signals.
+Return ONLY valid JSON:
+{"candidate_visible":true,"person_count":1,"mobile_phone_detected":false,"notes":"..."}
+
+Rules:
+- candidate_visible means one person's face/body is visibly present enough to reasonably infer candidate presence.
+- person_count is the number of clearly visible people; use 0 if no person is visible.
+- mobile_phone_detected is true only if a handheld mobile phone/smartphone is clearly visible.
+- If uncertain about a phone, return false.
+- Do not infer identity, age, gender, race, emotion, attention, honesty, gaze, disability, or intent.
+- Do not identify the person.
+"""
+    try:
+        raw = call_ai_vision_text(prompt, body.image_data_url)
+        data = extract_json_from_response(raw)
+        if not isinstance(data, dict):
+            raise ValueError("Invalid vision response")
+        person_count = max(0, min(5, int(data.get("person_count", 0) or 0)))
+        return {
+            "candidate_visible": bool(data.get("candidate_visible", person_count >= 1)),
+            "person_count": person_count,
+            "mobile_phone_detected": bool(data.get("mobile_phone_detected", False)),
+            "notes": str(data.get("notes", ""))[:500],
+            "model": current_ai_model(),
+            "provider": current_ai_provider(),
+            "stored": False,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        LOGGER.warning("Proctor frame analysis unavailable error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Proctor vision analysis is temporarily unavailable") from exc
+
+
+@router.post("/integrity-event")
+def record_integrity_event_v2(
+    body: MockInterviewIntegritySignalV2,
+    current_user: User = Depends(require_student),
+    db: Session = Depends(get_db),
+):
+    profile = _profile(current_user, db)
+    interview = db.query(MockInterview).filter(
+        MockInterview.id == body.interview_id,
+        MockInterview.student_id == profile.id,
+    ).first()
+    if not interview:
+        raise HTTPException(status_code=404, detail="Mock interview not found")
+    event = body.event.model_dump()
+    audit = AuditEvent(
+        actor_user_id=current_user.id,
+        organization_id=profile.organization_id,
+        action="mock_interview_integrity_signal",
+        entity_type="mock_interview",
+        entity_id=interview.id,
+    )
+    audit.details = event
+    db.add(audit)
+    db.commit()
+    return {"recorded": True}
+
+
+@router.get("/institution-results")
+def institution_mock_interview_results_v2(
+    current_user: User = Depends(require_institution_admin),
+    db: Session = Depends(get_db),
+):
+    if not current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Institution account is not linked to an organization")
+    rows = (
+        db.query(MockInterview)
+        .join(StudentProfile, MockInterview.student_id == StudentProfile.id)
+        .filter(StudentProfile.organization_id == current_user.organization_id)
+        .order_by(MockInterview.created_at.desc())
+        .limit(250)
+        .all()
+    )
+    output = []
+    for row in rows:
+        try:
+            evaluation = json.loads(row.evaluation_json or "{}")
+        except json.JSONDecodeError:
+            evaluation = {}
+        output.append({
+            "interview_id": row.id,
+            "student_id": row.student_id,
+            "job_id": row.job_id,
+            "overall_score": row.overall_score,
+            "overall_feedback": row.overall_feedback,
+            "integrity_report": evaluation.get("integrity_report", {}),
+            "score_summary": evaluation.get("score_summary", {}),
+            "section_scores": evaluation.get("section_scores", []),
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        })
+    return output
+
+
 @router.post("/evaluate", dependencies=[Depends(student_ai_guard)])
 def evaluate_mock_interview_v2(
     body: MockInterviewEvaluationV2,
@@ -1207,6 +1351,31 @@ def evaluate_mock_interview_v2(
         ai_meta=ai_meta,
     )
 
+    integrity_events = [event.model_dump() for event in body.integrity_events]
+    integrity_status = (
+        "auto_submitted_review_required"
+        if body.integrity_auto_submitted
+        else ("review_required" if integrity_events else "clear")
+    )
+    integrity_report = {
+        "status": integrity_status,
+        "warning_count": body.integrity_warning_count,
+        "warning_limit": 4,
+        "auto_submitted": body.integrity_auto_submitted,
+        "termination_reason": body.integrity_termination_reason or "",
+        "events": integrity_events,
+        "institution_name": (
+            profile.institution.name
+            if profile.institution
+            else (profile.college or "")
+        ),
+        "note": (
+            "Integrity signals identify events for institutional review and are not, by themselves, "
+            "a finding of cheating or misconduct."
+        ),
+    }
+    result["integrity_report"] = integrity_report
+
     interview.answers_json = json.dumps(answers_payload)
     interview.evaluation_json = json.dumps(result)
     if result["analysis_status"] == "complete":
@@ -1233,6 +1402,7 @@ def evaluate_mock_interview_v2(
     return {
         "interview_id": interview.id,
         "job_title": job.title,
+        "institution_name": profile.institution.name if profile.institution else (profile.college or ""),
         **result,
         "evaluation_mode": "hybrid_question_level",
         "evaluation_ms": evaluation_ms,
