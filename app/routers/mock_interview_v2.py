@@ -32,9 +32,9 @@ ASSESSMENT_BLUEPRINT = (
     ("quantitative", "Quantitative Aptitude", 8),
     ("logical", "Logical & Analytical Reasoning", 8),
     ("communication", "Verbal & Communication", 6),
-    ("technical", "Technical Fundamentals", 8),
-    ("programming", "Programming & Debugging", 6),
-    ("coding", "Coding Challenges", 2),
+    ("technical", "Technical Assessment · Fundamentals", 8),
+    ("programming", "Technical Assessment · Programming & Debugging", 6),
+    ("coding", "Technical Assessment · Coding Editor", 2),
     ("resume", "Resume & Project Defence", 4),
     ("behavioral", "Behavioural & HR", 4),
     ("role", "Role / JD / Company", 2),
@@ -276,7 +276,7 @@ def _question_prompt(
 {PROMPT_GUARDRAIL}
 
 You are a senior interviewer preparing a realistic campus interview for the exact role below.
-{("Generate exactly 50 NEW primary assessment items for a standardized full campus-placement mock. Use this exact section blueprint and do not omit or merge sections: quantitative 8; logical 8; communication 6; technical 8; programming 6; coding 2; resume 4; behavioral 4; role 2; situational 2. Difficulty must progress from foundational to intermediate and then challenging within each section. At least half of technical/programming/coding/resume/role items must directly test the role description, required skills or candidate's relevant experience. For quantitative, logical and communication items, prefer objective multiple-choice questions with exactly four plausible options. For technical and programming, mix objective and applied questions. Coding, resume, behavioral, role and situational items should normally be applied-response questions." if count == FULL_MOCK_QUESTION_COUNT else f"Generate exactly {count} NEW role-specific practice interview questions. {focus_instruction} Difficulty: {difficulty}. Prefer applied technical reasoning, debugging, design, behavioral evidence, situational judgment and role fit over trivia.")}
+{("Generate exactly 48 NEW AI-authored primary assessment items for a standardized full campus-placement mock. PlaceAI injects 2 server-owned executable coding-editor questions separately, so DO NOT generate coding-section items. Use this exact AI-authored section blueprint: quantitative 8; logical 8; communication 6; technical 8; programming 6; resume 4; behavioral 4; role 2; situational 2. Technical, programming and the 2 server-owned coding-editor questions together form the candidate-facing Technical Assessment. Difficulty must progress from foundational to intermediate and then challenging within each section. At least half of technical/programming/resume/role items must directly test the role description, required skills or candidate's relevant experience. For quantitative, logical and communication items, prefer objective multiple-choice questions with exactly four plausible options. For technical and programming, mix objective and applied questions. Resume, behavioral, role and situational items should normally be applied-response questions." if count == FULL_MOCK_QUESTION_COUNT else f"Generate exactly {count} NEW role-specific practice interview questions. {focus_instruction} Difficulty: {difficulty}. Prefer applied technical reasoning, debugging, design, behavioral evidence, situational judgment and role fit over trivia.")}
 Questions must be concise, non-discriminatory and suitable for campus placement preparation.
 Use ONLY facts present in ROLE and CANDIDATE CONTEXT. Do not invent company processes, technologies, projects,
 metrics, responsibilities, achievements or candidate experience. If a fact is not provided, ask a generic
