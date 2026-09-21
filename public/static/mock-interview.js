@@ -1855,6 +1855,7 @@
     $('#summary-insufficient').textContent=summary.insufficient??'—';
     $('#summary-objective').textContent=summary.objective_accuracy===null||summary.objective_accuracy===undefined?'—':summary.objective_accuracy+'%';
     $('#summary-subjective').textContent=summary.subjective_average===null||summary.subjective_average===undefined?'—':summary.subjective_average+'/100';
+    $('#summary-coding').textContent=summary.coding_average===null||summary.coding_average===undefined?'—':summary.coding_average+'/100';
     renderSectionPerformance(result.section_scores||[]);
     $('#dimension-grid').innerHTML=Object.entries(result.dimensions||{}).map(function(entry){
       const score=entry[1];
