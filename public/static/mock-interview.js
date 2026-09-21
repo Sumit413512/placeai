@@ -349,7 +349,7 @@
     $('#question-section').textContent=info.label;
     $('#question-difficulty').textContent=q.difficulty || 'Mixed';
     $('#question-guidance').textContent=q.answer_type==='mcq'
-      ? 'Select one option, then submit. Question and option content is rendered to canvas and cannot be selected as page text.'
+      ? 'Select one option. Use Save answer to keep it on the current question, or Save & Next to lock it and move forward.'
       : 'Respond using clear reasoning and evidence. After submission this question is permanently closed.';
     drawTextCanvas($('#question-canvas'),q.question,`${state.candidateLabel} · Q${state.current+1}`);
     renderAnswerArea(q);
@@ -1297,6 +1297,22 @@
       $('#setup-panel').classList.remove('hidden');
       await Promise.all([loadJobs(),loadHistory()]);
       const demo=new URLSearchParams(location.search).get('demo');
+      if(demo==='assessment'){
+        const job=previewJobs()[0];
+        state.session={interview_id:'preview-assessment',job_title:job.title,company_name:job.company_name,mode:'assessment'};
+        state.questions=makeDemoQuestions(job);
+        state.answers=new Array(state.questions.length);
+        state.current=0;
+        state.expandedSections={quantitative:true};
+        $('#interview-title').textContent=job.title+' placement simulation';
+        $('#interview-context').textContent=(job.company_name||'Opportunity')+' · '+state.questions.length+' primary items · secure forward-only mode';
+        $('#setup-panel').classList.add('hidden');
+        $('#history-panel').classList.add('hidden');
+        document.body.classList.add('secure-assessment');
+        $('#interview-panel').classList.remove('hidden');
+        renderQuestion();
+        return;
+      }
       if(demo==='result'||demo==='integrity'){
         if(demo==='integrity'){
           state.integrityWarnings=4;
