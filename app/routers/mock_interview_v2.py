@@ -1604,7 +1604,8 @@ def _build_assessment_result(
     section_rows = []
     section_scores: dict[str, int] = {}
     total_correct = total_partial = total_incorrect = total_insufficient = 0
-    system_graded = ai_graded = 0
+    system_graded = ai_graded = code_graded = 0
+    coding_tests_passed = coding_tests_total = 0
 
     for key, label, _ in ASSESSMENT_BLUEPRINT:
         section_evals = [item for item in evaluations if item.get("section") == key]
@@ -1615,10 +1616,15 @@ def _build_assessment_result(
         counts = {"correct": 0, "partial": 0, "incorrect": 0, "insufficient": 0}
         for item in section_evals:
             counts[_verdict_bucket(item.get("verdict", "insufficient"))] += 1
-            if item.get("grading_method") == "system":
+            if item.get("grading_method") in {"system", "system_relevance_gate"}:
                 system_graded += 1
             elif item.get("grading_method") == "ai":
                 ai_graded += 1
+            elif item.get("grading_method") == "code_execution":
+                code_graded += 1
+                execution = item.get("execution") if isinstance(item.get("execution"), dict) else {}
+                coding_tests_passed += int(execution.get("passed", 0) or 0)
+                coding_tests_total += int(execution.get("total", 0) or 0)
         total_correct += counts["correct"]
         total_partial += counts["partial"]
         total_incorrect += counts["incorrect"]
@@ -1701,6 +1707,9 @@ def _build_assessment_result(
             "insufficient": total_insufficient,
             "system_graded": system_graded,
             "ai_graded": ai_graded,
+            "code_graded": code_graded,
+            "coding_tests_passed": coding_tests_passed,
+            "coding_tests_total": coding_tests_total,
             "objective_accuracy": objective_accuracy,
             "subjective_average": subjective_average,
         },
@@ -1714,12 +1723,14 @@ def _build_assessment_result(
         "missing_evaluation_question_ids": missing_ids,
         "grading": {
             "objective": "server-side answer key",
-            "subjective": "AI question-level rubric",
+            "coding": "sandbox compilation/execution against server-owned sample + hidden tests",
+            "subjective": "GPT-5.6 Sol question-level rubric with deterministic relevance caps",
             **ai_meta,
         },
         "disclaimer": (
             "Assessment scores reflect performance on this PlaceAI simulation. "
-            "Open-ended answers are AI-evaluated against the issued question and rubric; "
+            "Coding correctness is determined by sandbox execution against server-owned tests. "
+            "Open-ended answers are AI-evaluated against the issued question with deterministic relevance/correctness caps; "
             "integrity signals are reported separately and require human interpretation."
         ),
     }
