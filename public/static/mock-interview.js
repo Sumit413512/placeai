@@ -413,19 +413,91 @@
     },1000);
   }
 
-  function logIntegrity(type,detail) {
-    state.integrityEvents.push({type,detail,at:new Date().toISOString(),question:state.current+1});
-    $('#integrity-count').textContent=`${state.integrityEvents.length} review event${state.integrityEvents.length===1?'':'s'}`;
+  function updateIntegrityWarningUI() {
+    const text=state.integrityWarnings+' / '+state.integrityWarningLimit+' warnings';
+    if($('#integrity-warning-badge')) $('#integrity-warning-badge').textContent=text;
+    if($('#overlay-warning-number')) $('#overlay-warning-number').textContent=String(Math.max(1,state.integrityWarnings));
+    if(state.integrityWarnings>=Math.max(1,state.integrityWarningLimit-1)) document.body.classList.add('integrity-critical');
+  }
+
+  function persistIntegrityEvent(event) {
+    if(previewMode || !state.session?.interview_id) return;
+    api('/mock-interview/integrity-event',{
+      method:'POST',
+      body:JSON.stringify({interview_id:state.session.interview_id,event:event})
+    }).catch(function(){});
+  }
+
+  function logIntegrity(type,detail,source,warningNumber) {
+    const event={
+      event_type:type,
+      detail:detail||'',
+      at:new Date().toISOString(),
+      question:Math.min(state.questions.length||TOTAL_QUESTIONS,state.current+1),
+      warning_number:warningNumber||null,
+      source:source||'system'
+    };
+    state.integrityEvents.push(event);
+    $('#integrity-count').textContent=state.integrityEvents.length+' integrity event'+(state.integrityEvents.length===1?'':'s');
+    persistIntegrityEvent(event);
+    return event;
   }
 
   function showIntegrityPause(title,text) {
-    if(!state.assessmentActive || state.finishing) return;
+    if(!state.assessmentActive || state.finishing || state.autoSubmittedIntegrity) return;
     $('#integrity-overlay-title').textContent=title;
     $('#integrity-overlay-text').textContent=text;
+    $('#restore-secure-mode').disabled=false;
+    $('#restore-secure-mode').textContent='Restore secure mode';
+    updateIntegrityWarningUI();
     $('#integrity-overlay').classList.remove('hidden');
   }
 
+  function autoTerminateForIntegrity(reason) {
+    if(state.autoSubmittedIntegrity || state.finishing) return;
+    state.autoSubmittedIntegrity=true;
+    state.integrityTerminationReason=reason||'Integrity warning limit reached.';
+    state.integrityWarnings=Math.max(state.integrityWarnings,state.integrityWarningLimit);
+    updateIntegrityWarningUI();
+    document.body.classList.add('integrity-critical');
+    logIntegrity('integrity_auto_submit',state.integrityTerminationReason,'system',state.integrityWarnings);
+    fillUnansweredResponses('[No response submitted — assessment auto-submitted after integrity warning limit]');
+    $('#integrity-overlay-title').textContent='Assessment auto-submitted';
+    $('#integrity-overlay-text').textContent='The secure assessment reached the configured integrity-warning limit. Your attempt is being submitted with an institutional review flag.';
+    $('#restore-secure-mode').disabled=true;
+    $('#restore-secure-mode').textContent='Submitting…';
+    $('#integrity-overlay').classList.remove('hidden');
+    toast('Integrity warning limit reached. Assessment is being submitted for review.','error');
+    setTimeout(function(){finishAssessment(true);},650);
+  }
+
+  function registerIntegrityWarning(type,detail,source,title,pause) {
+    if(!state.assessmentActive || state.finishing || state.autoSubmittedIntegrity) return;
+    const now=Date.now();
+    if(now-state.lastWarningAt<2500){
+      logIntegrity(type,detail+' (correlated with the current warning)','system',null);
+      return;
+    }
+    state.lastWarningAt=now;
+    state.integrityWarnings+=1;
+    logIntegrity(type,detail,source||'browser',state.integrityWarnings);
+    updateIntegrityWarningUI();
+    if(state.integrityWarnings>=state.integrityWarningLimit){
+      autoTerminateForIntegrity(detail);
+      return;
+    }
+    if(pause!==false){
+      showIntegrityPause(
+        title||'Integrity warning',
+        detail+' Warning '+state.integrityWarnings+' of '+state.integrityWarningLimit+'. Restore the secure environment to continue.'
+      );
+    }else{
+      toast('Integrity warning '+state.integrityWarnings+' of '+state.integrityWarningLimit+': '+detail,'error');
+    }
+  }
+
   async function restoreSecureMode() {
+    if(state.autoSubmittedIntegrity)return;
     try {
       await $('#interview-panel').requestFullscreen();
       $('#integrity-overlay').classList.add('hidden');
@@ -460,19 +532,51 @@
     window.removeEventListener('blur',blurGuard);
   }
 
-  function blockClipboard(event){if(!state.assessmentActive)return;event.preventDefault();logIntegrity('clipboard_blocked',`${event.type} attempt blocked.`);toast('Clipboard actions are disabled in secure mode.','error');}
-  function blockContext(event){if(!state.assessmentActive)return;event.preventDefault();logIntegrity('context_menu_blocked','Context menu attempt blocked.');}
+  function blockClipboard(event){
+    if(!state.assessmentActive)return;
+    event.preventDefault();
+    logIntegrity('clipboard_blocked',event.type+' attempt blocked.','browser',null);
+    toast('Clipboard actions are disabled in secure mode.','error');
+  }
+  function blockContext(event){
+    if(!state.assessmentActive)return;
+    event.preventDefault();
+    logIntegrity('context_menu_blocked','Context menu attempt blocked.','browser',null);
+  }
   function blockKeys(event){
     if(!state.assessmentActive)return;
     const key=event.key.toLowerCase();
-    if((event.ctrlKey||event.metaKey)&&['c','v','x','p','s','u','a'].includes(key)){event.preventDefault();logIntegrity('shortcut_blocked',`Blocked keyboard shortcut: ${key}`);}
-    if(event.key==='F12'){event.preventDefault();logIntegrity('developer_shortcut','Developer-tools shortcut attempted.');}
+    if((event.ctrlKey||event.metaKey)&&['c','v','x','p','s','u','a'].includes(key)){
+      event.preventDefault();
+      logIntegrity('shortcut_blocked','Blocked keyboard shortcut: '+key,'browser',null);
+    }
+    if(event.key==='F12'){
+      event.preventDefault();
+      logIntegrity('developer_shortcut','Developer-tools shortcut attempted.','browser',null);
+    }
   }
   function beforeUnload(event){if(!state.assessmentActive)return;event.preventDefault();event.returnValue='';}
-  function blockBack(){if(!state.assessmentActive)return;history.pushState({placeaiSecure:true},'',location.href);logIntegrity('back_navigation','Back navigation attempt blocked.');showIntegrityPause('Navigation attempt detected','The assessment is forward-only. Restore secure mode to continue.');}
-  function visibilityGuard(){if(!state.assessmentActive||state.finishing)return;if(document.hidden){logIntegrity('tab_hidden','Assessment tab lost visibility.');}else if(document.fullscreenElement) showIntegrityPause('Focus interruption recorded','The assessment tab lost visibility. This event is available in the integrity timeline.');}
-  function blurGuard(){if(!state.assessmentActive||state.finishing)return;logIntegrity('window_blur','Browser window lost focus.');}
-  function fullscreenGuard(){if(!state.assessmentActive||state.finishing||state.ignoreFullscreen)return;if(!document.fullscreenElement){logIntegrity('fullscreen_exit','Secure full-screen was exited.');showIntegrityPause('Secure full-screen was interrupted','The assessment is paused. This event has been added to the integrity timeline. Restore full-screen to continue.');}}
+  function blockBack(){
+    if(!state.assessmentActive)return;
+    history.pushState({placeaiSecure:true},'',location.href);
+    registerIntegrityWarning('back_navigation','Browser back navigation was attempted.','browser','Navigation attempt detected',true);
+  }
+  function visibilityGuard(){
+    if(!state.assessmentActive||state.finishing)return;
+    if(document.hidden){
+      registerIntegrityWarning('tab_hidden','The assessment tab lost visibility.','browser','Tab switch detected',true);
+    }
+  }
+  function blurGuard(){
+    if(!state.assessmentActive||state.finishing)return;
+    logIntegrity('window_blur','Browser window lost focus.','browser',null);
+  }
+  function fullscreenGuard(){
+    if(!state.assessmentActive||state.finishing||state.ignoreFullscreen)return;
+    if(!document.fullscreenElement){
+      registerIntegrityWarning('fullscreen_exit','Secure full-screen mode was exited.','browser','Full-screen interruption detected',true);
+    }
+  }
 
   async function runSystemCheck() {
     setCheck('browser','pass','Ready');
