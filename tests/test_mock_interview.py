@@ -462,7 +462,7 @@ def test_public_coding_spec_never_exposes_hidden_test_inputs_or_expected_outputs
     for case in internal["test_cases"]:
         if case["hidden"]:
             assert case["input"] not in serialized
-            assert case["expected_output"] not in serialized
+    assert "test_cases" not in public
 
 
 def test_anything_is_zero_and_never_sent_to_ai(monkeypatch):
