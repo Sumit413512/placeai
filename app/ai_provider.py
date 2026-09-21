@@ -227,6 +227,74 @@ def current_ai_provider() -> str:
     return "unavailable"
 
 
+def call_ai_vision_text(
+    prompt: str,
+    image_data_url: str,
+    *,
+    model_override: str = "gpt-5.6-luna",
+    max_output_tokens: int = 350,
+    timeout_seconds: float = 18,
+) -> str:
+    """Analyze one user-supplied image with the configured OpenAI vision model.
+
+    This is intentionally separate from the generic text failover chain: proctor-frame
+    analysis is best-effort and must never block or fabricate an integrity signal when
+    no vision-capable provider is configured.
+    """
+    if not image_data_url.startswith("data:image/"):
+        raise ValueError("Vision input must be an image data URL")
+    keys = _openai_keys()
+    if not keys:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Vision analysis is not configured.",
+        )
+    model = (model_override or "gpt-5.6-luna").strip()
+    payload: dict[str, object] = {
+        "model": model,
+        "input": [{
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": prompt},
+                {"type": "input_image", "image_url": image_data_url},
+            ],
+        }],
+        "max_output_tokens": max(128, min(int(max_output_tokens), 800)),
+        "reasoning": {"effort": "none"},
+        "store": False,
+    }
+    last_error: Exception | None = None
+    for slot, api_key in enumerate(keys, start=1):
+        try:
+            response = httpx.post(
+                "https://api.openai.com/v1/responses",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json=payload,
+                timeout=_request_timeout(timeout_seconds),
+            )
+            response.raise_for_status()
+            text = _extract_openai_text(response.json())
+            if not text:
+                raise RuntimeError("OpenAI vision returned an empty response")
+            _LAST_AI_MODEL.set(model)
+            _LAST_AI_PROVIDER.set("openai")
+            return text
+        except Exception as exc:
+            last_error = exc
+            LOGGER.warning(
+                "Vision provider attempt failed provider=openai slot=%s error_type=%s",
+                slot,
+                type(exc).__name__,
+            )
+    if last_error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Vision analysis is temporarily unavailable.",
+        ) from last_error
+    raise HTTPException(status_code=503, detail="Vision analysis is temporarily unavailable.")
+
+
+
 def call_ai_text(
     prompt: str,
     *,
