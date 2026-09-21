@@ -568,6 +568,10 @@
         detail+' Warning '+state.integrityWarnings+' of '+state.integrityWarningLimit+'. Restore the secure environment to continue.'
       );
     }else{
+      showProctorWarning(
+        title||'Integrity warning',
+        detail+' Warning '+state.integrityWarnings+' of '+state.integrityWarningLimit+'.'
+      );
       toast('Integrity warning '+state.integrityWarnings+' of '+state.integrityWarningLimit+': '+detail,'error');
     }
   }
@@ -1038,7 +1042,7 @@
       toast('Full-screen permission is required to start the assessment.','error');
       return;
     }
-    state.assessmentActive=true;state.finishing=false;state.current=0;state.totalRemaining=TOTAL_SECONDS;state.sectionRemaining=0;state.integrityEvents=[];state.integrityWarnings=0;state.lastWarningAt=0;state.autoSubmittedIntegrity=false;state.integrityTerminationReason='';state.proctorVisionBusy=false;state.faceMissStreak=0;state.multipleFaceStreak=0;state.phoneDetectionStreak=0;
+    state.assessmentActive=true;state.finishing=false;state.current=0;state.totalRemaining=TOTAL_SECONDS;state.sectionRemaining=0;state.integrityEvents=[];state.integrityWarnings=0;state.lastWarningAt=0;state.autoSubmittedIntegrity=false;state.integrityTerminationReason='';state.proctorVisionBusy=false;state.proctorModelBusy=false;state.faceMissStreak=0;state.multipleFaceStreak=0;state.phoneDetectionStreak=0;state.signalStreaks={candidate:0,multiple:0,phone:0};state.signalLastWarning={candidate:0,multiple:0,phone:0,monitor:0};
     document.body.classList.remove('integrity-critical');
     updateIntegrityWarningUI();
     document.body.classList.add('secure-assessment');
@@ -1061,43 +1065,50 @@
   }
 
   async function runVisionProctorCheck() {
-    if(previewMode || !state.assessmentActive || state.proctorVisionBusy || document.hidden || !state.session?.interview_id) return;
+    if(previewMode||!state.assessmentActive||state.proctorVisionBusy||document.hidden||!state.session?.interview_id)return;
     const image=captureProctorFrame();
     if(!image)return;
     state.proctorVisionBusy=true;
     try{
-      const data=await api('/mock-interview/proctor-frame',{method:'POST',body:JSON.stringify({interview_id:state.session.interview_id,image_data_url:image})});
-      $('#camera-proctor-status').textContent=data.mobile_phone_detected?'Phone signal detected':'AI vision active';
+      const data=await api('/mock-interview/proctor-frame',{
+        method:'POST',
+        body:JSON.stringify({interview_id:state.session.interview_id,image_data_url:image})
+      });
       if(data.mobile_phone_detected){
-        state.phoneDetectionStreak+=1;
-        logIntegrity('phone_visual_signal','AI vision detected a clearly visible mobile-phone object in the webcam frame.','vision',null);
-        if(state.phoneDetectionStreak>=2){
-          state.phoneDetectionStreak=0;
-          registerIntegrityWarning('mobile_phone_detected','A mobile phone was detected in two consecutive AI-vision checks.','vision','Mobile-phone warning',false);
-        }
-      }else{
-        state.phoneDetectionStreak=0;
+        logIntegrity('cloud_phone_confirmation','Secondary vision analysis confirmed a visible mobile-phone signal.','vision',null);
+        confirmVisualSignal(
+          'phone',
+          true,
+          2,
+          'mobile_phone_detected',
+          'A mobile phone was confirmed in repeated webcam checks.',
+          'Mobile phone detected'
+        );
       }
-
-      if(!('FaceDetector' in window)){
-        if(!data.candidate_visible || Number(data.person_count||0)===0){
-          state.faceMissStreak+=1;
-          if(state.faceMissStreak>=2){
-            state.faceMissStreak=0;
-            registerIntegrityWarning('candidate_not_visible','The candidate was not visible in consecutive webcam checks.','vision','Candidate not visible',false);
-          }
-        }else state.faceMissStreak=0;
-
-        if(Number(data.person_count||0)>1){
-          state.multipleFaceStreak+=1;
-          if(state.multipleFaceStreak>=2){
-            state.multipleFaceStreak=0;
-            registerIntegrityWarning('multiple_people','More than one person was visible in consecutive webcam checks.','vision','Multiple people detected',false);
-          }
-        }else state.multipleFaceStreak=0;
+      if(!data.candidate_visible||Number(data.person_count||0)===0){
+        logIntegrity('cloud_candidate_absence','Secondary vision analysis could not see the candidate.','vision',null);
+        confirmVisualSignal(
+          'candidate',
+          true,
+          3,
+          'candidate_not_visible',
+          'The candidate was not visible in repeated webcam checks.',
+          'Candidate not visible'
+        );
+      }
+      if(Number(data.person_count||0)>1){
+        logIntegrity('cloud_multiple_people','Secondary vision analysis detected more than one person.','vision',null);
+        confirmVisualSignal(
+          'multiple',
+          true,
+          2,
+          'multiple_people',
+          'More than one person was confirmed in repeated webcam checks.',
+          'Multiple people detected'
+        );
       }
     }catch(error){
-      $('#camera-proctor-status').textContent='Vision check unavailable';
+      logIntegrity('secondary_vision_unavailable','Secondary cloud vision check was temporarily unavailable; on-device monitoring remained active.','system',null);
     }finally{
       state.proctorVisionBusy=false;
     }
@@ -1105,48 +1116,64 @@
 
   async function startPresenceMonitoring() {
     clearInterval(state.faceTimer);
+    clearInterval(state.localProctorTimer);
     clearInterval(state.proctorVisionTimer);
-    state.faceMissStreak=0;state.multipleFaceStreak=0;state.phoneDetectionStreak=0;
-    const video=$('#assessment-camera');
-    const track=state.mediaStream?.getVideoTracks?.()[0];
-    if(track){
-      track.onended=function(){registerIntegrityWarning('camera_stopped','Camera access stopped during the assessment.','camera','Camera stopped',true);};
-      track.onmute=function(){logIntegrity('camera_muted','Camera stream was temporarily muted.','camera',null);};
+    clearInterval(state.mediaWatchTimer);
+
+    state.signalStreaks={candidate:0,multiple:0,phone:0};
+    state.signalLastWarning={candidate:0,multiple:0,phone:0,monitor:0};
+    state.faceMissStreak=0;
+    state.multipleFaceStreak=0;
+    state.phoneDetectionStreak=0;
+
+    if('FaceDetector' in window && !state.nativeFaceDetector){
+      try{state.nativeFaceDetector=new FaceDetector({fastMode:true,maxDetectedFaces:3});}catch{state.nativeFaceDetector=null;}
     }
 
-    if('FaceDetector' in window){
-      const detector=new FaceDetector({fastMode:true,maxDetectedFaces:3});
-      state.faceTimer=setInterval(async function(){
-        if(!state.assessmentActive||document.hidden||state.finishing)return;
-        try{
-          const faces=await detector.detect(video);
-          if(faces.length===0){
-            state.faceMissStreak+=1;
-            $('#camera-proctor-status').textContent='Candidate not visible';
-            if(state.faceMissStreak>=2){
-              state.faceMissStreak=0;
-              registerIntegrityWarning('candidate_not_visible','The candidate was not visible in consecutive liveness checks.','camera','Candidate not visible',false);
-            }
-          }else{
-            state.faceMissStreak=0;
-            $('#camera-proctor-status').textContent='Presence verified';
-          }
-          if(faces.length>1){
-            state.multipleFaceStreak+=1;
-            if(state.multipleFaceStreak>=2){
-              state.multipleFaceStreak=0;
-              registerIntegrityWarning('multiple_people',faces.length+' faces were detected in consecutive camera checks.','camera','Multiple people detected',false);
-            }
-          }else state.multipleFaceStreak=0;
-        }catch{}
-      },7000);
-    }else{
-      $('#camera-proctor-status').textContent=previewMode?'Preview camera active':'AI vision presence check';
+    const cameraTrack=state.mediaStream?.getVideoTracks?.()[0];
+    if(cameraTrack){
+      cameraTrack.onended=function(){
+        registerIntegrityWarning('camera_stopped','Camera access stopped during the assessment.','camera','Camera stopped',true);
+      };
+      cameraTrack.onmute=function(){
+        logIntegrity('camera_muted','Camera stream was temporarily muted.','camera',null);
+      };
     }
+    const screenTrack=state.screenStream?.getVideoTracks?.()[0];
+    if(screenTrack){
+      screenTrack.onended=function(){
+        state.screenReady=false;
+        registerIntegrityWarning(
+          'screen_share_stopped',
+          'Entire-screen sharing stopped during the assessment.',
+          'screen',
+          'Screen sharing stopped',
+          true
+        );
+      };
+    }
+
+    $('#camera-proctor-status').textContent='Initializing proctor model…';
+    await ensureProctorModel();
+    if(!state.proctorModelReady){
+      registerIntegrityWarning(
+        'proctor_model_unavailable',
+        'The on-device proctoring model became unavailable.',
+        'system',
+        'Proctoring unavailable',
+        true
+      );
+      return;
+    }
+
+    $('#camera-proctor-status').textContent='Candidate present · monitoring';
+    state.localProctorTimer=setInterval(runLocalProctorCheck,1500);
+    state.mediaWatchTimer=setInterval(checkLiveMediaIntegrity,3500);
+    setTimeout(runLocalProctorCheck,650);
 
     if(!previewMode){
-      state.proctorVisionTimer=setInterval(runVisionProctorCheck,18000);
-      setTimeout(runVisionProctorCheck,4500);
+      state.proctorVisionTimer=setInterval(runVisionProctorCheck,10000);
+      setTimeout(runVisionProctorCheck,5000);
     }
   }
 
