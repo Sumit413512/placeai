@@ -91,7 +91,7 @@
     list.innerHTML = BLUEPRINT.map((item,index)=>`
       <div class="blueprint-row">
         <span class="blueprint-index">${String(index+1).padStart(2,'0')}</span>
-        <div><strong>${esc(item.label)}</strong><small>${item.minutes} min · ${item.kind === 'mcq' ? 'Objective' : item.kind === 'mixed' ? 'Objective + applied' : 'Applied response'}</small></div>
+        <div><strong>${esc(item.label)}</strong><small>${item.minutes} min · ${item.kind === 'mcq' ? 'Objective' : item.kind === 'mixed' ? 'Objective + applied' : item.kind === 'code' ? 'Executable coding' : 'Applied response'}</small></div>
         <b>${item.count}</b>
       </div>`).join('');
   }
@@ -205,8 +205,8 @@
       c:"#include <stdio.h>\nint main(void){ /* solution */ return 0; }\n"
     };
     const languages=[
-      {key:'python',label:'Python 3'},{key:'javascript',label:'JavaScript (Node.js)'},
-      {key:'java',label:'Java'},{key:'cpp',label:'C++17'},{key:'c',label:'C'}
+      {key:'python',label:'Python 3.14'},{key:'javascript',label:'JavaScript (Node.js 22)'},
+      {key:'java',label:'Java 17'},{key:'cpp',label:'C++ (GCC 14)'},{key:'c',label:'C (GCC 14)'}
     ];
     if(index===0)return {
       question:'Remove duplicates while preserving first occurrence. Input N and then N integers. Print distinct integers in first-occurrence order.',
