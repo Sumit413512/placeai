@@ -960,6 +960,16 @@
       next_practice_plan:sectionScores.slice().sort(function(a,b){return a.score-b.score;}).slice(0,3).map(function(x){return 'Complete a targeted '+x.label+' drill before the next full mock.';}),
       evaluations:evaluations,
       grading:{objective:'server-side answer key',subjective:'static preview heuristic - production uses AI',provider:'preview',model:'no live AI'},
+      integrity_report:{
+        status:state.autoSubmittedIntegrity?'auto_submitted_review_required':(state.integrityEvents.length?'review_required':'clear'),
+        warning_count:state.integrityWarnings,
+        warning_limit:state.integrityWarningLimit,
+        auto_submitted:state.autoSubmittedIntegrity,
+        termination_reason:state.integrityTerminationReason||'',
+        events:state.integrityEvents,
+        institution_name:'Preview Institution',
+        note:'Preview integrity signals are for UI review and are not automatic findings of misconduct.'
+      },
       disclaimer:'Render preview scoring is deterministic for UI review. Production open-ended responses are evaluated by the PlaceAI AI rubric; integrity signals remain separate.'
     };
   }
@@ -1016,7 +1026,14 @@
         await new Promise(function(resolve){setTimeout(resolve,1400);});
         result = buildPreviewResult();
       } else {
-        result = await api('/mock-interview/evaluate',{method:'POST',body:JSON.stringify({interview_id:state.session.interview_id,answers:state.answers.filter(Boolean)})});
+        result = await api('/mock-interview/evaluate',{method:'POST',body:JSON.stringify({
+          interview_id:state.session.interview_id,
+          answers:state.answers.filter(Boolean),
+          integrity_events:state.integrityEvents,
+          integrity_warning_count:state.integrityWarnings,
+          integrity_auto_submitted:state.autoSubmittedIntegrity,
+          integrity_termination_reason:state.integrityTerminationReason||null
+        })});
       }
       markAnalysisComplete();
       state.lastResult = result;
@@ -1040,12 +1057,13 @@
     state.finishing=true;
     clearInterval(state.timerId);
     clearInterval(state.faceTimer);
+    clearInterval(state.proctorVisionTimer);
     state.ignoreFullscreen=true;
     try{if(document.fullscreenElement)await document.exitFullscreen();}catch{}
     state.ignoreFullscreen=false;
     state.assessmentActive=false;
     uninstallSecureGuards();
-    document.body.classList.remove('secure-assessment');
+    document.body.classList.remove('secure-assessment','integrity-critical');
     $('#integrity-overlay').classList.add('hidden');
     $('#interview-panel').classList.add('hidden');
     await runResultAnalysis(!!auto);
@@ -1093,6 +1111,48 @@
     $$('.review-filter').forEach(function(button){button.classList.toggle('active',button.dataset.reviewFilter===filter);});
   }
 
+  function renderIntegrityReport(result) {
+    const report=result.integrity_report||{
+      status:state.autoSubmittedIntegrity?'auto_submitted_review_required':(state.integrityEvents.length?'review_required':'clear'),
+      warning_count:state.integrityWarnings,
+      warning_limit:state.integrityWarningLimit,
+      auto_submitted:state.autoSubmittedIntegrity,
+      termination_reason:state.integrityTerminationReason||'',
+      events:state.integrityEvents,
+      institution_name:result.institution_name||'',
+      note:'Integrity signals require human interpretation.'
+    };
+    const status=report.status||'clear';
+    const warnings=Number(report.warning_count||0);
+    const limit=Number(report.warning_limit||4);
+    $('#result-warning-count').textContent=warnings+' / '+limit;
+    $('#integrity-institution-name').textContent=report.institution_name||result.institution_name||'Not linked';
+    if(status==='auto_submitted_review_required'){
+      $('#integrity-status').textContent='Auto-submitted · review required';
+      $('#integrity-summary-text').textContent='The assessment reached the configured integrity-warning limit and was submitted automatically. Academic scoring remains separate from the integrity review.';
+    }else if(status==='review_required'){
+      $('#integrity-status').textContent='Review recommended';
+      $('#integrity-summary-text').textContent='One or more integrity signals were recorded. They require institutional review and do not by themselves establish misconduct.';
+    }else{
+      $('#integrity-status').textContent='No review events';
+      $('#integrity-summary-text').textContent='No integrity warning events were recorded during this assessment.';
+    }
+    const termination=$('#integrity-termination-note');
+    if(report.auto_submitted){
+      termination.classList.remove('hidden');
+      termination.innerHTML='<strong>Automatic submission:</strong> '+esc(report.termination_reason||'Integrity warning limit reached.')+' The institution should review the event timeline before drawing any conclusion.';
+    }else termination.classList.add('hidden');
+
+    const events=Array.isArray(report.events)?report.events:[];
+    $('#integrity-event-list').innerHTML=events.length?events.map(function(event){
+      const type=event.event_type||event.type||'integrity_signal';
+      const warning=event.warning_number?'<b>Warning '+event.warning_number+'</b>':'<b>Logged</b>';
+      let time='—';
+      try{time=event.at?new Date(event.at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';}catch{}
+      return '<article class="integrity-event-row '+(event.warning_number?'warning':'')+'"><time>'+esc(time)+'</time><div><strong>'+esc(type.replaceAll('_',' '))+'</strong><small>'+esc(event.detail||'Integrity signal recorded.')+'</small></div>'+warning+'</article>';
+    }).join(''):'<p class="disclaimer">No integrity events were recorded for this attempt.</p>';
+  }
+
   function renderResult(result,auto) {
     state.lastResult=result;
     const complete=result.analysis_status!=='incomplete';
@@ -1101,8 +1161,7 @@
     $('#report-iri').textContent=result.overall_score===null||result.overall_score===undefined?'Withheld':result.overall_score+'/100';
     $('#overall-feedback').textContent=result.overall_feedback||'Assessment completed.';
     $('#grading-method-label').textContent=previewMode?'Answer key + preview scoring (production uses AI)':'Answer key + question-level AI';
-    $('#integrity-status').textContent=state.integrityEvents.length===0?'No review events':'Review recommended';
-    $('#integrity-summary-text').textContent=state.integrityEvents.length===0?'No browser integrity events were recorded during this session.':state.integrityEvents.length+' event'+(state.integrityEvents.length===1?' was':'s were')+' recorded for human review. Events are not treated as automatic proof of misconduct.';
+    renderIntegrityReport(result);
     const banner=$('#analysis-status-banner');
     if(!complete){
       banner.classList.remove('hidden');banner.classList.add('error');
@@ -1141,8 +1200,8 @@
   }
 
   function resetAssessment() {
-    clearInterval(state.timerId);clearInterval(state.faceTimer);
-    state.assessmentActive=false;state.finishing=false;state.current=0;state.answers=[];state.questions=[];state.session=null;state.livenessPassed=false;state.systemReady=false;state.lastResult=null;state.reviewFilter='all';clearAnalysisTimers();
+    clearInterval(state.timerId);clearInterval(state.faceTimer);clearInterval(state.proctorVisionTimer);
+    state.assessmentActive=false;state.finishing=false;state.current=0;state.answers=[];state.questions=[];state.session=null;state.livenessPassed=false;state.systemReady=false;state.lastResult=null;state.reviewFilter='all';state.integrityEvents=[];state.integrityWarnings=0;state.lastWarningAt=0;state.autoSubmittedIntegrity=false;state.integrityTerminationReason='';state.faceMissStreak=0;state.multipleFaceStreak=0;state.phoneDetectionStreak=0;clearAnalysisTimers();
     if(state.mediaStream){state.mediaStream.getTracks().forEach(t=>t.stop());state.mediaStream=null;}
     document.body.classList.remove('secure-assessment');
     $('#result-panel').classList.add('hidden');$('#analysis-panel').classList.add('hidden');$('#system-panel').classList.add('hidden');$('#setup-panel').classList.remove('hidden');
@@ -1157,6 +1216,7 @@
   $('#run-liveness')?.addEventListener('click',runLiveness);
   $('#consent-check')?.addEventListener('change',updateStartEligibility);
   $('#start-assessment')?.addEventListener('click',startAssessment);
+  $('#save-question')?.addEventListener('click',saveCurrentAnswerOnly);
   $('#next-question')?.addEventListener('click',submitAndContinue);
   $('#restore-secure-mode')?.addEventListener('click',restoreSecureMode);
   $('#practice-again')?.addEventListener('click',resetAssessment);
