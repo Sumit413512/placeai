@@ -43,7 +43,10 @@
     timerId:null,
     faceTimer:null,
     candidateLabel:'Candidate',
-    ignoreFullscreen:false
+    ignoreFullscreen:false,
+    lastResult:null,
+    reviewFilter:'all',
+    analysisTimers:[]
   };
 
   function toast(message, type='') {
@@ -581,67 +584,308 @@
     renderQuestion();
   }
 
-  function mockResult() {
+
+  const RESULT_SECTION_WEIGHTS = {
+    quantitative:10, logical:10, communication:10, technical:20, programming:15,
+    coding:15, resume:7, behavioral:5, role:5, situational:3
+  };
+
+  function verdictBucket(verdict) {
+    verdict = verdict || '';
+    if (verdict === 'correct' || verdict === 'strong') return 'correct';
+    if (verdict === 'partially_correct' || verdict === 'acceptable') return 'partial';
+    if (verdict === 'incorrect' || verdict === 'weak') return 'incorrect';
+    return 'insufficient';
+  }
+
+  function previewTextEvaluation(question, answer) {
+    const clean = (answer || '').trim();
+    const words = clean.toLowerCase().match(/[a-z0-9+#.-]+/g) || [];
+    const unique = new Set(words);
+    const obviousJunk = /^(anything|test|testing|asdf+|qwer+|random|abc+|xyz+|hello|nothing|idk|i don't know)[\\s.!?]*$/i.test(clean)
+      || (words.length > 2 && unique.size / words.length < 0.25);
+    const qTerms = new Set((question.question || '').toLowerCase().match(/[a-z0-9+#.-]{3,}/g) || []);
+    const overlap = Array.from(unique).filter(function(token){ return qTerms.has(token); }).length;
+    let score = 0;
+    if (!clean) score = 0;
+    else if (obviousJunk) score = 4;
+    else {
+      score = 12 + Math.min(28, words.length * 1.15) + Math.min(25, overlap * 7);
+      if (words.length >= 35) score += 10;
+      if (/[0-9]|because|therefore|first|then|example|validate|test|result|trade.?off/i.test(clean)) score += 8;
+      score = Math.min(78, Math.round(score));
+      if (overlap === 0 && words.length < 25) score = Math.min(score, 22);
+    }
+    const behavioral = ['resume','behavioral','role','situational'].includes(question.section);
+    let verdict = 'insufficient';
+    if (behavioral) verdict = score >= 75 ? 'strong' : score >= 55 ? 'acceptable' : score >= 20 ? 'weak' : 'insufficient';
+    else verdict = score >= 75 ? 'correct' : score >= 50 ? 'partially_correct' : score >= 16 ? 'incorrect' : 'insufficient';
     return {
-      overall_score:82,
-      overall_feedback:'Strong baseline placement readiness with clear technical fundamentals and structured reasoning. The next improvement priority is deeper explanation of trade-offs in programming and project-defence answers.',
-      dimensions:{aptitude:86,reasoning:81,communication:84,technical:79,programming:76,coding:78,resume_defence:88,behavioral:85},
-      strengths:['Clear problem decomposition across aptitude and technical questions.','Strong resume/project ownership language.','Professional, concise communication in behavioural scenarios.'],
-      improvements:['Explain technical trade-offs more explicitly.','Use measurable evidence when defending project outcomes.','Practice edge-case reasoning in coding and debugging responses.'],
-      weak_topics:['Algorithmic complexity under constraints','Database indexing trade-offs','Production debugging edge cases'],
-      next_practice_plan:['Targeted 20-minute DSA/complexity drill.','Resume defence round focused on evidence and metrics.','Technical follow-up simulation with deeper probing.'],
-      evaluations:[],
-      disclaimer:'Preparation signal only. Integrity events are provided separately for human review and are not automatic findings of misconduct.'
+      question_id:question.question_id, question:question.question, section:question.section, category:question.category,
+      difficulty:question.difficulty, answer_type:'text', answer:clean, correct_answer:'', score:score, verdict:verdict,
+      grading_method:'preview_heuristic',
+      rubric:{correctness:score,relevance:Math.min(100,overlap*20),reasoning:Math.min(100,Math.round(words.length*1.7)),completeness:Math.min(100,Math.round(words.length*2)),clarity:words.length?65:0},
+      feedback:score<16?'The response does not provide enough relevant evidence to answer the question.':score<50?'The response contains limited relevant material but does not adequately answer the question.':'The response addresses the question, but production AI performs deeper correctness and rubric analysis.',
+      strengths:score>=50?['Contains some question-relevant content.']:[],
+      issues:score<50?['Insufficient question-specific reasoning or evidence.']:['Static preview cannot validate deep technical correctness.'],
+      missing_points:['Give a direct answer, reasoning, concrete evidence and a validation/result step.'],
+      key_points:[], better_answer_outline:'Direct answer -> reasoning/method -> evidence/example -> validation/result.',
+      ideal_answer:'Static preview only. Production uses the PlaceAI AI evaluator to generate a question-specific strong answer.'
     };
   }
 
-  async function finishAssessment(auto=false) {
-    if(state.finishing)return; state.finishing=true;
-    clearInterval(state.timerId); clearInterval(state.faceTimer);
-    let result;
-    try {
-      if(previewMode) result=mockResult();
-      else {
-        result=await api('/mock-interview/evaluate',{method:'POST',body:JSON.stringify({interview_id:state.session.interview_id,answers:state.answers.filter(Boolean)})});
+  function buildPreviewResult() {
+    if (!state.questions.length) {
+      const job = previewJobs()[0];
+      state.questions = makeDemoQuestions(job);
+      state.answers = state.questions.map(function(q){
+        if (q.answer_type === 'mcq') {
+          return {question_id:q.question_id, answer:q.question_id % 3 === 0 ? q.options[0] : (q.correct || q.options[0])};
+        }
+        return {question_id:q.question_id, answer:q.question_id % 4 === 0 ? 'anything' : 'I would first clarify the requirement, apply a structured approach, test edge cases, and validate the result with measurable evidence.'};
+      });
+    }
+    const evaluations = state.questions.map(function(q){
+      const answer = state.answers[q.question_id-1] ? state.answers[q.question_id-1].answer : '';
+      if (q.answer_type === 'mcq') {
+        const correct = q.correct || '';
+        const isCorrect = !!correct && answer.trim().toLowerCase() === correct.trim().toLowerCase();
+        return {
+          question_id:q.question_id,question:q.question,section:q.section,category:q.category,difficulty:q.difficulty,
+          answer_type:'mcq',answer:answer,correct_answer:correct,score:isCorrect?100:0,verdict:isCorrect?'correct':'incorrect',
+          grading_method:'system',
+          rubric:{correctness:isCorrect?100:0,relevance:isCorrect?100:0,reasoning:null,completeness:isCorrect?100:0,clarity:null},
+          feedback:isCorrect?'Correct answer.':'Incorrect answer.',
+          strengths:isCorrect?['Selected the correct option.']:[],
+          issues:isCorrect?[]:['The selected option does not match the answer key.'],
+          missing_points:[],key_points:correct?['Correct answer: '+correct]:[],better_answer_outline:'',ideal_answer:correct
+        };
       }
-    } catch(error){state.finishing=false;startTimer();toast(error.message,'error');return;}
+      return previewTextEvaluation(q, answer);
+    });
 
+    const sectionScores = [];
+    const totals = {correct:0,partial:0,incorrect:0,insufficient:0,system_graded:0,ai_graded:0};
+    BLUEPRINT.forEach(function(section){
+      const items = evaluations.filter(function(x){ return x.section === section.key; });
+      if (!items.length) return;
+      const counts = {correct:0,partial:0,incorrect:0,insufficient:0};
+      items.forEach(function(item){
+        counts[verdictBucket(item.verdict)] += 1;
+        if (item.grading_method === 'system') totals.system_graded += 1;
+        else totals.ai_graded += 1;
+      });
+      Object.keys(counts).forEach(function(k){ totals[k] += counts[k]; });
+      sectionScores.push({key:section.key,label:section.label,score:Math.round(items.reduce(function(a,b){return a+b.score;},0)/items.length),questions:items.length,correct:counts.correct,partial:counts.partial,incorrect:counts.incorrect,insufficient:counts.insufficient});
+    });
+    let weighted = 0;
+    let weight = 0;
+    sectionScores.forEach(function(row){ const w=RESULT_SECTION_WEIGHTS[row.key]||0; weighted += row.score*w; weight += w; });
+    const objective = evaluations.filter(function(x){ return x.grading_method === 'system'; });
+    const subjective = evaluations.filter(function(x){ return x.grading_method !== 'system'; });
+    const score = Math.round(weighted/(weight||1));
+    return {
+      analysis_status:'complete',
+      overall_score:score,
+      raw_assessment_score:Math.round(evaluations.reduce(function(a,b){return a+b.score;},0)/evaluations.length),
+      overall_feedback:'Preview scoring evaluated all '+evaluations.length+' responses question-by-question. '+totals.correct+' were correct/strong, '+totals.partial+' partial/acceptable, '+totals.incorrect+' incorrect/weak, and '+totals.insufficient+' insufficient.',
+      score_summary:{
+        total_questions:evaluations.length,evaluated_questions:evaluations.length,correct:totals.correct,partial:totals.partial,incorrect:totals.incorrect,insufficient:totals.insufficient,system_graded:totals.system_graded,ai_graded:totals.ai_graded,
+        objective_accuracy:objective.length?Math.round(100*objective.filter(function(x){return x.score===100;}).length/objective.length):null,
+        subjective_average:subjective.length?Math.round(subjective.reduce(function(a,b){return a+b.score;},0)/subjective.length):null
+      },
+      section_scores:sectionScores,
+      dimensions:Object.fromEntries(sectionScores.map(function(x){return [x.key,x.score];})),
+      strengths:sectionScores.slice().sort(function(a,b){return b.score-a.score;}).slice(0,3).map(function(x){return x.label+': '+x.score+'/100.';}),
+      improvements:sectionScores.slice().sort(function(a,b){return a.score-b.score;}).slice(0,3).map(function(x){return x.label+': '+x.score+'/100 - review the question-level feedback.';}),
+      weak_topics:sectionScores.slice().sort(function(a,b){return a.score-b.score;}).filter(function(x){return x.score<70;}).slice(0,3).map(function(x){return x.label;}),
+      next_practice_plan:sectionScores.slice().sort(function(a,b){return a.score-b.score;}).slice(0,3).map(function(x){return 'Complete a targeted '+x.label+' drill before the next full mock.';}),
+      evaluations:evaluations,
+      grading:{objective:'server-side answer key',subjective:'static preview heuristic - production uses AI',provider:'preview',model:'no live AI'},
+      disclaimer:'Render preview scoring is deterministic for UI review. Production open-ended responses are evaluated by the PlaceAI AI rubric; integrity signals remain separate.'
+    };
+  }
+
+  function clearAnalysisTimers() {
+    (state.analysisTimers || []).forEach(clearTimeout);
+    state.analysisTimers = [];
+  }
+
+  function setAnalysisPhase(index) {
+    const rows = $$('.analysis-step');
+    rows.forEach(function(row,i){
+      row.classList.toggle('done', i < index);
+      row.classList.toggle('active', i === index);
+      const b = row.querySelector('b');
+      if (b) b.textContent = i < index ? 'Done' : i === index ? 'Running' : 'Queued';
+    });
+    const messages = [
+      'Checking objective answers against protected server-side answer keys.',
+      'AI is evaluating every open-ended answer against the exact question and scoring rubric.',
+      'Building section-level accuracy, strengths, gaps and readiness scores from question results.',
+      'Generating corrections, ideal approaches and the next-practice plan.'
+    ];
+    $('#analysis-message').textContent = messages[Math.min(index,3)];
+  }
+
+  function showAnalysisPanel() {
+    clearAnalysisTimers();
+    $('#result-panel').classList.add('hidden');
+    $('#analysis-panel').classList.remove('hidden');
+    $('#retry-analysis').classList.add('hidden');
+    setAnalysisPhase(0);
+    state.analysisTimers.push(setTimeout(function(){setAnalysisPhase(1);},700));
+    state.analysisTimers.push(setTimeout(function(){setAnalysisPhase(2);},5000));
+    state.analysisTimers.push(setTimeout(function(){setAnalysisPhase(3);},10000));
+    $('#analysis-panel').scrollIntoView({behavior:'smooth',block:'start'});
+  }
+
+  function markAnalysisComplete() {
+    clearAnalysisTimers();
+    $$('.analysis-step').forEach(function(row){
+      row.classList.remove('active');
+      row.classList.add('done');
+      const b=row.querySelector('b');
+      if(b)b.textContent='Done';
+    });
+  }
+
+  async function runResultAnalysis(auto) {
+    showAnalysisPanel();
+    try {
+      let result;
+      if (previewMode) {
+        await new Promise(function(resolve){setTimeout(resolve,1400);});
+        result = buildPreviewResult();
+      } else {
+        result = await api('/mock-interview/evaluate',{method:'POST',body:JSON.stringify({interview_id:state.session.interview_id,answers:state.answers.filter(Boolean)})});
+      }
+      markAnalysisComplete();
+      state.lastResult = result;
+      state.finishing = false;
+      setTimeout(function(){
+        $('#analysis-panel').classList.add('hidden');
+        renderResult(result,!!auto);
+      },250);
+    } catch(error) {
+      clearAnalysisTimers();
+      state.finishing = false;
+      $('#analysis-message').textContent = 'Analysis could not be completed: '+error.message;
+      $('#retry-analysis').classList.remove('hidden');
+      toast('Question-level analysis did not complete. No final score was fabricated.','error');
+    }
+  }
+
+  async function finishAssessment(auto) {
+    if(state.finishing)return;
+    state.finishing=true;
+    clearInterval(state.timerId);
+    clearInterval(state.faceTimer);
     state.ignoreFullscreen=true;
-    try{if(document.fullscreenElement) await document.exitFullscreen();}catch{}
+    try{if(document.fullscreenElement)await document.exitFullscreen();}catch{}
     state.ignoreFullscreen=false;
-    state.assessmentActive=false; uninstallSecureGuards(); document.body.classList.remove('secure-assessment');
-    $('#integrity-overlay').classList.add('hidden'); $('#interview-panel').classList.add('hidden');
-    renderResult(result,auto);
+    state.assessmentActive=false;
+    uninstallSecureGuards();
+    document.body.classList.remove('secure-assessment');
+    $('#integrity-overlay').classList.add('hidden');
+    $('#interview-panel').classList.add('hidden');
+    await runResultAnalysis(!!auto);
+  }
+
+  function renderSectionPerformance(rows) {
+    rows = rows || [];
+    $('#section-performance').innerHTML = rows.map(function(row){
+      return '<tr><td><strong>'+esc(row.label||row.key)+'</strong></td><td class="section-score">'+(row.score??'—')+'/100</td><td class="good-count">'+(row.correct??0)+'</td><td class="partial-count">'+(row.partial??0)+'</td><td class="bad-count">'+(row.incorrect??0)+'</td><td>'+(row.questions??0)+'</td></tr>';
+    }).join('') || '<tr><td colspan="6">No section results available.</td></tr>';
+  }
+
+  function reviewDetailsList(title,items) {
+    items = items || [];
+    if(!items.length)return '';
+    return '<div class="review-detail-box"><h5>'+esc(title)+'</h5><ul>'+items.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></div>';
+  }
+
+  function renderQuestionReviews(filter) {
+    filter = filter || 'all';
+    state.reviewFilter=filter;
+    const result=state.lastResult||{};
+    const rows=(result.evaluations||[]).filter(function(item){return filter==='all'||verdictBucket(item.verdict)===filter;});
+    $('#answer-feedback').innerHTML=rows.map(function(item){
+      const bucket=verdictBucket(item.verdict);
+      const rubric=item.rubric||{};
+      const rubricEntries=Object.entries(rubric).filter(function(entry){return entry[1]!==null&&entry[1]!==undefined;});
+      const expected=item.correct_answer||item.ideal_answer||'';
+      let html='<article class="answer-review review-'+bucket+'"><header class="answer-review-header"><div><div class="question-meta-line">';
+      html+='<span class="review-chip '+bucket+'">'+esc((item.verdict||bucket).replaceAll('_',' '))+'</span>';
+      html+='<span class="review-chip">'+esc((item.section||'interview').replaceAll('_',' '))+'</span>';
+      html+='<span class="review-chip">'+esc(item.grading_method==='system'?'System graded':item.grading_method==='ai'?'AI graded':'Preview graded')+'</span>';
+      html+='</div><h4>Q'+item.question_id+'. '+esc(item.question||'')+'</h4></div><div class="answer-score-box"><strong>'+(item.score??'—')+'</strong><small>/100</small></div></header>';
+      html+='<div class="answer-comparison"><div class="answer-pane"><span>Your answer</span><p>'+esc(item.answer||'No answer')+'</p></div>';
+      html+='<div class="answer-pane correct-pane"><span>'+(item.answer_type==='mcq'?'Correct answer':'Strong answer / reference')+'</span><p>'+esc(expected||'See detailed feedback below.')+'</p></div></div>';
+      html+='<p class="review-feedback"><strong>Assessment:</strong> '+esc(item.feedback||'No detailed feedback returned.')+'</p>';
+      if(rubricEntries.length){
+        html+='<div class="rubric-grid">'+rubricEntries.map(function(entry){return '<div class="rubric-item"><span>'+esc(entry[0].replaceAll('_',' '))+'</span><strong>'+entry[1]+'/100</strong></div>';}).join('')+'</div>';
+      }
+      html+='<div class="review-details">'+reviewDetailsList('What worked',item.strengths||[])+reviewDetailsList('Errors / gaps',[].concat(item.issues||[],item.missing_points||[]))+'</div>';
+      if(item.better_answer_outline)html+='<div class="ideal-answer-box"><strong>Better answer structure</strong><p>'+esc(item.better_answer_outline)+'</p></div>';
+      html+='</article>';
+      return html;
+    }).join('') || '<p class="disclaimer">No questions match this filter.</p>';
+    $$('.review-filter').forEach(function(button){button.classList.toggle('active',button.dataset.reviewFilter===filter);});
   }
 
   function renderResult(result,auto) {
-    $('#overall-score').textContent=result.overall_score ?? '—';
-    $('#report-iri').textContent=`${result.overall_score ?? '—'}/100`;
-    $('#overall-feedback').textContent=result.overall_feedback || 'Assessment completed.';
+    state.lastResult=result;
+    const complete=result.analysis_status!=='incomplete';
+    const summary=result.score_summary||{};
+    $('#overall-score').textContent=result.overall_score??'—';
+    $('#report-iri').textContent=result.overall_score===null||result.overall_score===undefined?'Withheld':result.overall_score+'/100';
+    $('#overall-feedback').textContent=result.overall_feedback||'Assessment completed.';
+    $('#grading-method-label').textContent=previewMode?'Answer key + preview scoring (production uses AI)':'Answer key + question-level AI';
     $('#integrity-status').textContent=state.integrityEvents.length===0?'No review events':'Review recommended';
-    $('#integrity-summary-text').textContent=state.integrityEvents.length===0
-      ? 'No browser integrity events were recorded during this session.'
-      : `${state.integrityEvents.length} event${state.integrityEvents.length===1?' was':'s were'} recorded for human review. Events are not treated as automatic proof of misconduct.`;
-    $('#dimension-grid').innerHTML=Object.entries(result.dimensions||{}).map(([key,score])=>`<article class="dimension"><small>${esc(key.replaceAll('_',' '))}</small><strong>${score}</strong><div class="meter"><i style="width:${Math.max(0,Math.min(100,Number(score)||0))}%"></i></div></article>`).join('');
-    const list=(values,fallback)=> (values||[]).map(x=>`<li>${esc(x)}</li>`).join('') || `<li>${esc(fallback)}</li>`;
-    $('#strength-list').innerHTML=list(result.strengths,'No specific strength returned.');
+    $('#integrity-summary-text').textContent=state.integrityEvents.length===0?'No browser integrity events were recorded during this session.':state.integrityEvents.length+' event'+(state.integrityEvents.length===1?' was':'s were')+' recorded for human review. Events are not treated as automatic proof of misconduct.';
+    const banner=$('#analysis-status-banner');
+    if(!complete){
+      banner.classList.remove('hidden');banner.classList.add('error');
+      banner.textContent='AI analysis is incomplete. PlaceAI intentionally withheld the final score instead of estimating technical correctness. Retry the analysis to complete the report.';
+      $('#retry-analysis-result').classList.remove('hidden');
+    } else if(previewMode){
+      banner.classList.remove('hidden','error');
+      banner.textContent='Render preview: objective answers are graded exactly; open-ended responses use a local UI-review heuristic. Production uses the server-side AI evaluator.';
+      $('#retry-analysis-result').classList.add('hidden');
+    } else {
+      banner.classList.add('hidden');$('#retry-analysis-result').classList.add('hidden');
+    }
+    $('#summary-total').textContent=summary.total_questions??'—';
+    $('#summary-correct').textContent=summary.correct??'—';
+    $('#summary-partial').textContent=summary.partial??'—';
+    $('#summary-incorrect').textContent=summary.incorrect??'—';
+    $('#summary-objective').textContent=summary.objective_accuracy===null||summary.objective_accuracy===undefined?'—':summary.objective_accuracy+'%';
+    $('#summary-subjective').textContent=summary.subjective_average===null||summary.subjective_average===undefined?'—':summary.subjective_average+'/100';
+    renderSectionPerformance(result.section_scores||[]);
+    $('#dimension-grid').innerHTML=Object.entries(result.dimensions||{}).map(function(entry){
+      const score=entry[1];
+      return '<article class="dimension"><small>'+esc(entry[0].replaceAll('_',' '))+'</small><strong>'+score+'</strong><div class="meter"><i style="width:'+Math.max(0,Math.min(100,Number(score)||0))+'%"></i></div></article>';
+    }).join('');
+    const list=function(values,fallback){return (values||[]).map(function(x){return '<li>'+esc(x)+'</li>';}).join('')||'<li>'+esc(fallback)+'</li>';};
+    $('#strength-list').innerHTML=list(result.strengths,'No strong area identified yet.');
     $('#improvement-list').innerHTML=list(result.improvements,'No specific improvement returned.');
     $('#weak-topic-list').innerHTML=list(result.weak_topics,'No major weak topic detected.');
     $('#practice-plan-list').innerHTML=list(result.next_practice_plan,'Run another role-specific assessment.');
-    $('#answer-feedback').innerHTML=(result.evaluations||[]).map((item,index)=>`<article class="answer-review"><header><strong>Q${index+1}. ${esc(item.question||'')}</strong><b>${item.score ?? '—'}/100</b></header><p>${esc(item.feedback||'')}</p></article>`).join('') || '<p class="disclaimer">Question-level coaching is hidden in this UI preview.</p>';
-    $('#result-disclaimer').textContent=result.disclaimer || '';
+    $('#result-disclaimer').textContent=result.disclaimer||'';
+    renderQuestionReviews('all');
     $('#result-panel').classList.remove('hidden');
     $('#result-panel').scrollIntoView({behavior:'smooth',block:'start'});
     loadHistory();
-    if(auto) toast('Assessment submitted automatically when time expired.');
+    if(auto)toast('Assessment submitted automatically when time expired.');
   }
 
   function resetAssessment() {
     clearInterval(state.timerId);clearInterval(state.faceTimer);
-    state.assessmentActive=false;state.finishing=false;state.current=0;state.answers=[];state.questions=[];state.session=null;state.livenessPassed=false;state.systemReady=false;
+    state.assessmentActive=false;state.finishing=false;state.current=0;state.answers=[];state.questions=[];state.session=null;state.livenessPassed=false;state.systemReady=false;state.lastResult=null;state.reviewFilter='all';clearAnalysisTimers();
     if(state.mediaStream){state.mediaStream.getTracks().forEach(t=>t.stop());state.mediaStream=null;}
     document.body.classList.remove('secure-assessment');
-    $('#result-panel').classList.add('hidden');$('#system-panel').classList.add('hidden');$('#setup-panel').classList.remove('hidden');
+    $('#result-panel').classList.add('hidden');$('#analysis-panel').classList.add('hidden');$('#system-panel').classList.add('hidden');$('#setup-panel').classList.remove('hidden');
     $('#consent-check').checked=false;$('#start-assessment').disabled=true;$('#run-liveness').disabled=true;
     setCheck('liveness',null,'Required');
     $('#camera-placeholder').classList.remove('hidden');$('#camera-live').classList.add('hidden');
@@ -656,6 +900,9 @@
   $('#next-question')?.addEventListener('click',submitAndContinue);
   $('#restore-secure-mode')?.addEventListener('click',restoreSecureMode);
   $('#practice-again')?.addEventListener('click',resetAssessment);
+  $('#retry-analysis')?.addEventListener('click',function(){if(state.finishing)return;state.finishing=true;runResultAnalysis(false);});
+  $('#retry-analysis-result')?.addEventListener('click',function(){if(state.finishing)return;state.finishing=true;runResultAnalysis(false);});
+  $('#review-filters')?.addEventListener('click',function(event){const button=event.target.closest('[data-review-filter]');if(button)renderQuestionReviews(button.dataset.reviewFilter);});
 
   (async()=>{
     renderBlueprint();
@@ -667,7 +914,7 @@
       $('#setup-panel').classList.remove('hidden');
       await Promise.all([loadJobs(),loadHistory()]);
       const demo=new URLSearchParams(location.search).get('demo');
-      if(demo==='result'){ $('#setup-panel').classList.add('hidden'); renderResult(mockResult(),false); }
+      if(demo==='result'){ $('#setup-panel').classList.add('hidden'); renderResult(buildPreviewResult(),false); }
       return;
     }
     try {
