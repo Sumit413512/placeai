@@ -806,33 +806,94 @@
     setCheck('visibility','pass','Enabled');
     setCheck('fullscreen',document.fullscreenEnabled?'pass':'fail',document.fullscreenEnabled?'Supported':'Unavailable');
 
+    state.singleMonitorReady=currentMonitorStatus()!=='extended';
+    setCheck(
+      'monitor',
+      state.singleMonitorReady?'pass':'fail',
+      state.singleMonitorReady?(window.screen && 'isExtended' in window.screen?'Single display':'Browser check limited'):'Extended display detected'
+    );
+
+    let mediaReady=false;
     try {
-      if(state.mediaStream) state.mediaStream.getTracks().forEach(t=>t.stop());
-      state.mediaStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}},audio:true});
-      const video=$('#camera-preview'); video.srcObject=state.mediaStream; await video.play();
-      $('#assessment-camera').srcObject=state.mediaStream; $('#assessment-camera').play().catch(()=>{});
-      $('#camera-placeholder').classList.add('hidden'); $('#camera-live').classList.remove('hidden');
-      const videoTrack=state.mediaStream.getVideoTracks()[0], audioTrack=state.mediaStream.getAudioTracks()[0];
+      if(state.mediaStream) state.mediaStream.getTracks().forEach(function(t){t.stop();});
+      state.mediaStream=await navigator.mediaDevices.getUserMedia({
+        video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}},
+        audio:true
+      });
+      const video=$('#camera-preview');
+      video.srcObject=state.mediaStream;
+      await video.play();
+      $('#assessment-camera').srcObject=state.mediaStream;
+      $('#assessment-camera').play().catch(function(){});
+      $('#camera-placeholder').classList.add('hidden');
+      $('#camera-live').classList.remove('hidden');
+      const videoTrack=state.mediaStream.getVideoTracks()[0];
+      const audioTrack=state.mediaStream.getAudioTracks()[0];
       $('#device-label').textContent=videoTrack?.label || 'Camera connected';
       setCheck('camera',videoTrack?'pass':'fail',videoTrack?'Connected':'Missing');
       setCheck('microphone',audioTrack?'pass':'fail',audioTrack?'Connected':'Missing');
+      mediaReady=Boolean(videoTrack&&audioTrack);
       $('#run-liveness').disabled=!videoTrack;
-      $('#system-status-pill').textContent='Media ready';
-      $('#system-status-pill').classList.remove('neutral');
-      if(previewMode) {
-        $('#liveness-help').textContent='Preview mode can simulate the liveness workflow for UI review. No biometric verification is performed or stored.';
-      } else if('FaceDetector' in window) {
-        $('#liveness-help').textContent='Compatible face detection is available. Run the active movement challenge to continue.';
-      } else {
-        $('#liveness-help').textContent='Native face detection is unavailable; PlaceAI will use the active motion + AI person-presence fallback.';
-        setCheck('liveness',null,'Pending');
+    } catch (error) {
+      setCheck('camera','fail','Permission required');
+      setCheck('microphone','fail','Permission required');
+      $('#run-liveness').disabled=true;
+      toast('Camera and microphone permission are required for the proctored assessment.','error');
+    }
+
+    state.screenReady=false;
+    try {
+      if(state.screenStream) state.screenStream.getTracks().forEach(function(t){t.stop();});
+      if(!navigator.mediaDevices?.getDisplayMedia) throw new Error('Screen sharing unavailable');
+      state.screenStream=await navigator.mediaDevices.getDisplayMedia({
+        video:{displaySurface:'monitor'},
+        audio:false
+      });
+      const screenTrack=state.screenStream.getVideoTracks()[0];
+      if(!screenTrack) throw new Error('No screen-share track');
+      const surface=screenTrack.getSettings?.().displaySurface;
+      if(surface && surface!=='monitor'){
+        screenTrack.stop();
+        state.screenStream=null;
+        setCheck('screen','fail','Share entire screen');
+        toast('Share your entire screen, not a tab or single window, to continue.','error');
+      }else{
+        state.screenReady=true;
+        setCheck('screen','pass',surface==='monitor'?'Entire screen shared':'Screen shared');
+        screenTrack.onended=function(){
+          state.screenReady=false;
+          setCheck('screen','fail','Sharing stopped');
+          updateStartEligibility();
+          if(state.assessmentActive){
+            registerIntegrityWarning(
+              'screen_share_stopped',
+              'Entire-screen sharing stopped during the assessment.',
+              'screen',
+              'Screen sharing stopped',
+              true
+            );
+          }
+        };
       }
     } catch (error) {
-      setCheck('camera','fail','Denied');
-      setCheck('microphone','fail','Denied');
-      $('#system-status-pill').textContent='Permission required';
-      toast('Camera and microphone permission are required for secure mode.','error');
+      state.screenReady=false;
+      setCheck('screen','fail','Permission required');
+      toast('Entire-screen sharing is required for the proctored assessment.','error');
     }
+
+    const modelReady=await ensureProctorModel();
+    if(modelReady){
+      if('FaceDetector' in window){
+        try{state.nativeFaceDetector=new FaceDetector({fastMode:true,maxDetectedFaces:3});}catch{state.nativeFaceDetector=null;}
+      }
+      $('#liveness-help').textContent='Keep one person centered in view and complete the short movement challenge. On-device detection remains active during the assessment.';
+    }else{
+      $('#liveness-help').textContent='The on-device proctoring model could not load. Check your connection and run the system check again.';
+      $('#run-liveness').disabled=true;
+    }
+
+    $('#system-status-pill').textContent=mediaReady&&state.screenReady&&modelReady?'Preflight ready':'Action required';
+    $('#system-status-pill').classList.toggle('neutral',!(mediaReady&&state.screenReady&&modelReady));
     updateStartEligibility();
   }
 
@@ -858,87 +919,86 @@
 
   async function runLiveness() {
     if(!state.mediaStream){toast('Run the system check first.','error');return;}
+    if(!state.proctorModelReady){toast('The on-device proctor model must be ready first.','error');return;}
+
     $('#run-liveness').disabled=true;
     $('#liveness-title').textContent='Checking active presence…';
-
-    if(previewMode) {
-      await new Promise(r=>setTimeout(r,900));
-      state.livenessPassed=true;
-      $('#liveness-title').textContent='Preview workflow passed';
-      $('#liveness-help').textContent='UI preview only — no biometric or ML liveness conclusion has been made.';
-      setCheck('liveness','pass','Preview flow');
-      updateStartEligibility();
-      return;
-    }
+    $('#liveness-help').textContent='Keep one person centered in view and slowly move your head left and right.';
 
     const video=$('#camera-preview');
     try {
-      if('FaceDetector' in window) {
-        const detector=new FaceDetector({fastMode:true,maxDetectedFaces:2});
-        const samples=[];
-        $('#liveness-help').textContent='Keep one face visible, then slowly move your head left and right.';
-        for(let i=0;i<14;i++){
-          await new Promise(r=>setTimeout(r,220));
-          const faces=await detector.detect(video);
-          if(faces.length!==1){samples.push(null);continue;}
-          const box=faces[0].boundingBox;
-          samples.push((box.x+box.width/2)/Math.max(1,video.videoWidth));
+      const motionFrames=[];
+      const personCounts=[];
+      const faceCenters=[];
+
+      for(let i=0;i<6;i++){
+        motionFrames.push(motionSignature(video));
+        const predictions=await detectProctorObjects(video);
+        const persons=predictions.filter(function(item){return item.class==='person'&&Number(item.score||0)>=0.42;});
+        personCounts.push(persons.length);
+
+        if(state.nativeFaceDetector){
+          try{
+            const faces=await state.nativeFaceDetector.detect(video);
+            if(faces.length===1){
+              const box=faces[0].boundingBox;
+              faceCenters.push((box.x+box.width/2)/Math.max(1,video.videoWidth));
+            }
+          }catch{
+            state.nativeFaceDetector=null;
+          }
         }
-        const valid=samples.filter(x=>typeof x==='number');
-        const movement=valid.length?Math.max(...valid)-Math.min(...valid):0;
-        if(valid.length>=9 && movement>=0.08){
-          state.livenessPassed=true;
-          $('#liveness-title').textContent='Active liveness signal passed';
-          $('#liveness-help').textContent='One face remained visible and sufficient head movement was observed during the challenge.';
-          setCheck('liveness','pass','Passed');
-        }else{
-          state.livenessPassed=false;
-          $('#liveness-title').textContent='Liveness not verified';
-          $('#liveness-help').textContent='Keep one face visible and repeat the left/right movement challenge.';
-          setCheck('liveness','fail','Retry');
-          $('#run-liveness').disabled=false;
-        }
-      } else {
-        $('#liveness-help').textContent='Slowly move your head left and right. PlaceAI will combine visible motion with an AI person-presence check.';
-        const first=motionSignature(video);
-        await new Promise(r=>setTimeout(r,1100));
-        const second=motionSignature(video);
-        await new Promise(r=>setTimeout(r,1100));
-        const third=motionSignature(video);
-        const movement=Math.max(motionDelta(first,second),motionDelta(second,third),motionDelta(first,third));
-        const image=captureProctorFrame();
-        if(!image) throw new Error('Camera frame unavailable');
-        const vision=await api('/mock-interview/proctor-frame',{method:'POST',body:JSON.stringify({interview_id:state.session.interview_id,image_data_url:image})});
-        if(vision.candidate_visible && Number(vision.person_count||0)===1 && movement>=0.025){
-          state.livenessPassed=true;
-          $('#liveness-title').textContent='Active presence challenge passed';
-          $('#liveness-help').textContent='One person was visible and sufficient live camera motion was observed. This is an integrity signal, not biometric identity verification.';
-          setCheck('liveness','pass','Passed');
-        }else{
-          state.livenessPassed=false;
-          $('#liveness-title').textContent='Active presence not verified';
-          $('#liveness-help').textContent='Keep one person centered in the camera and repeat the head-movement challenge.';
-          setCheck('liveness','fail','Retry');
-          $('#run-liveness').disabled=false;
-        }
+        await new Promise(function(resolve){setTimeout(resolve,330);});
       }
-    } catch {
+
+      let maxMotion=0;
+      for(let i=1;i<motionFrames.length;i++){
+        maxMotion=Math.max(maxMotion,motionDelta(motionFrames[i-1],motionFrames[i]));
+      }
+      const singlePersonSamples=personCounts.filter(function(count){return count===1;}).length;
+      const multiplePersonSamples=personCounts.filter(function(count){return count>1;}).length;
+      const faceMovement=faceCenters.length>=2?Math.max(...faceCenters)-Math.min(...faceCenters):0;
+      const movementPassed=maxMotion>=0.012 || faceMovement>=0.055;
+      const presencePassed=singlePersonSamples>=4 && multiplePersonSamples===0;
+
+      if(presencePassed&&movementPassed){
+        state.livenessPassed=true;
+        $('#liveness-title').textContent='Active presence check passed';
+        $('#liveness-help').textContent='One candidate remained visible and live movement was observed. Continuous monitoring will continue during the assessment.';
+        setCheck('liveness','pass','Passed');
+      }else{
+        state.livenessPassed=false;
+        $('#liveness-title').textContent='Active presence not verified';
+        $('#liveness-help').textContent=multiplePersonSamples>0
+          ? 'Only one person may be visible. Clear the camera view and repeat the check.'
+          : 'Keep your full face/upper body visible and repeat the left/right movement challenge.';
+        setCheck('liveness','fail','Retry');
+        $('#run-liveness').disabled=false;
+      }
+    } catch (error) {
       state.livenessPassed=false;
-      $('#liveness-title').textContent='Liveness check unavailable';
-      $('#liveness-help').textContent='The active presence check could not be completed. Verify camera/network access and retry.';
+      $('#liveness-title').textContent='Presence check unavailable';
+      $('#liveness-help').textContent='The on-device presence check could not complete. Verify camera access and rerun the system check.';
       setCheck('liveness','fail','Retry');
       $('#run-liveness').disabled=false;
     }
     updateStartEligibility();
   }
 
-
   function updateStartEligibility() {
     const consent=$('#consent-check').checked;
-    const media=Boolean(state.mediaStream?.getVideoTracks().length && state.mediaStream?.getAudioTracks().length);
-    state.systemReady=media && state.livenessPassed && document.fullscreenEnabled;
-    $('#start-assessment').disabled=!(state.systemReady && consent);
-    if(state.systemReady) $('#system-status-pill').textContent='Ready for secure mode';
+    const media=Boolean(state.mediaStream?.getVideoTracks().length&&state.mediaStream?.getAudioTracks().length);
+    state.singleMonitorReady=currentMonitorStatus()!=='extended';
+    state.systemReady=Boolean(
+      media &&
+      state.screenReady &&
+      state.proctorModelReady &&
+      state.livenessPassed &&
+      state.singleMonitorReady &&
+      document.fullscreenEnabled
+    );
+    $('#start-assessment').disabled=!(state.systemReady&&consent);
+    $('#system-status-pill').textContent=state.systemReady?'Ready for proctored assessment':'Action required';
   }
 
   async function prepareAssessment(event) {
