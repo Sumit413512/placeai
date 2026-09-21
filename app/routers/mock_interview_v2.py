@@ -1197,7 +1197,9 @@ def _evaluate_coding_answers(
         execution = item["execution"]
         pass_rate = _clamp_score(execution.get("pass_rate"))
         quality_row = ai_by_id.get(qid, {})
-        quality = _clamp_score(quality_row.get("quality_score")) if quality_row else 50
+        # AI code-quality review is additive coaching, never a prerequisite for functional
+        # correctness. If it is unavailable, preserve the sandbox pass-rate as the score.
+        quality = _clamp_score(quality_row.get("quality_score")) if quality_row else pass_rate
         compile_success = bool(execution.get("compile_success"))
         score = 0 if not compile_success else _clamp_score(round(pass_rate * 0.90 + quality * 0.10))
         if pass_rate == 100 and compile_success:
@@ -1794,7 +1796,7 @@ def record_integrity_event_v2(
     return {"recorded": True}
 
 
-@router.post("/coding/run")
+@router.post("/coding/run", dependencies=[Depends(student_ai_guard)])
 def run_coding_question_v2(
     body: MockInterviewCodingRunV2,
     current_user: User = Depends(require_student_premium_access),
