@@ -350,3 +350,23 @@ def test_integrity_event_model_accepts_on_device_and_screen_sources():
     )
     assert on_device.source == "on_device_ml"
     assert screen.source == "screen"
+
+
+def test_mock_assessment_security_headers_are_scoped_to_assessment_only():
+    assessment = client.get("/mock-interview")
+    assert assessment.status_code == 200
+    permissions = assessment.headers.get("permissions-policy", "")
+    csp = assessment.headers.get("content-security-policy", "")
+    assert "camera=(self)" in permissions
+    assert "microphone=(self)" in permissions
+    assert "display-capture=(self)" in permissions
+    assert "https://cdn.jsdelivr.net" in csp
+    assert "https://storage.googleapis.com" in csp
+
+    home = client.get("/")
+    home_permissions = home.headers.get("permissions-policy", "")
+    home_csp = home.headers.get("content-security-policy", "")
+    assert "camera=()" in home_permissions
+    assert "microphone=()" in home_permissions
+    assert "https://cdn.jsdelivr.net" not in home_csp
+    assert "https://storage.googleapis.com" not in home_csp
