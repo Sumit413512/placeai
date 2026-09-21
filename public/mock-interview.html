@@ -87,7 +87,7 @@
 
   <section id="system-panel" class="panel hidden">
     <div class="panel-head">
-      <div><span class="step">02 · Secure environment</span><h2>System, identity & liveness check</h2><p>Camera, microphone and full-screen access are verified before entry. Secure mode cannot start until required checks pass.</p></div>
+      <div><span class="step">02 · Secure preflight</span><h2>System &amp; proctoring check</h2><p>Camera, microphone, entire-screen sharing, on-device proctoring, active presence and secure-browser controls must pass before the assessment can begin.</p></div>
       <span id="system-status-pill" class="status-pill neutral">Not checked</span>
     </div>
 
@@ -99,7 +99,7 @@
           <div class="camera-footer"><span id="device-label">No media access yet</span><span class="live-indicator hidden" id="camera-live">LIVE</span></div>
         </div>
         <div class="liveness-card">
-          <div><span class="card-kicker">Active liveness</span><strong id="liveness-title">Not started</strong><small id="liveness-help">PlaceAI will ask for a short head-movement challenge where compatible face-detection capability is available.</small></div>
+          <div><span class="card-kicker">Active liveness</span><strong id="liveness-title">Not started</strong><small id="liveness-help">Run the system check first. PlaceAI will then verify one-person presence and live movement before entry.</small></div>
           <button id="run-liveness" class="button secondary" type="button" disabled>Run liveness check</button>
         </div>
       </div>
@@ -115,7 +115,6 @@
         <div class="check-row" data-check="monitor"><span class="check-icon">8</span><div><strong>Single-monitor check</strong><small>Blocks known extended-display configurations where supported</small></div><b>Checking</b></div>
         <div class="check-row" data-check="clipboard"><span class="check-icon">9</span><div><strong>Clipboard control</strong><small>Copy, paste and context-menu actions are restricted</small></div><b>Enabled</b></div>
         <div class="check-row" data-check="visibility"><span class="check-icon">10</span><div><strong>Focus monitoring</strong><small>Tab and window changes are recorded</small></div><b>Enabled</b></div>
-      </div>
       </div>
     </div>
 
