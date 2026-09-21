@@ -602,8 +602,8 @@
       } else if('FaceDetector' in window) {
         $('#liveness-help').textContent='Compatible face detection is available. Run the active movement challenge to continue.';
       } else {
-        $('#liveness-help').textContent='This browser does not expose the required local face-detection capability. Secure liveness cannot be certified in this browser.';
-        setCheck('liveness','fail','Unsupported');
+        $('#liveness-help').textContent='Native face detection is unavailable; PlaceAI will use the active motion + AI person-presence fallback.';
+        setCheck('liveness',null,'Pending');
       }
     } catch (error) {
       setCheck('camera','fail','Denied');
@@ -614,10 +614,30 @@
     updateStartEligibility();
   }
 
+  function motionSignature(video) {
+    const canvas=document.createElement('canvas');
+    canvas.width=64;canvas.height=48;
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    ctx.drawImage(video,0,0,64,48);
+    const data=ctx.getImageData(0,0,64,48).data;
+    const values=[];
+    for(let i=0;i<data.length;i+=16){
+      values.push((data[i]+data[i+1]+data[i+2])/3);
+    }
+    return values;
+  }
+
+  function motionDelta(a,b) {
+    if(!a||!b||a.length!==b.length)return 0;
+    let total=0;
+    for(let i=0;i<a.length;i++)total+=Math.abs(a[i]-b[i]);
+    return total/(a.length*255);
+  }
+
   async function runLiveness() {
     if(!state.mediaStream){toast('Run the system check first.','error');return;}
     $('#run-liveness').disabled=true;
-    $('#liveness-title').textContent='Checking face presence…';
+    $('#liveness-title').textContent='Checking active presence…';
 
     if(previewMode) {
       await new Promise(r=>setTimeout(r,900));
@@ -629,47 +649,67 @@
       return;
     }
 
-    if(!('FaceDetector' in window)) {
-      $('#liveness-title').textContent='Unsupported in this browser';
-      setCheck('liveness','fail','Unsupported');
-      toast('A compatible secure browser is required for active liveness verification.','error');
-      return;
-    }
-
+    const video=$('#camera-preview');
     try {
-      const detector=new FaceDetector({fastMode:true,maxDetectedFaces:2});
-      const video=$('#camera-preview');
-      const samples=[];
-      $('#liveness-help').textContent='Keep your face centered, then slowly move your head left and right.';
-      for(let i=0;i<14;i++){
-        await new Promise(r=>setTimeout(r,220));
-        const faces=await detector.detect(video);
-        if(faces.length!==1){samples.push(null);continue;}
-        const box=faces[0].boundingBox;
-        samples.push((box.x+box.width/2)/Math.max(1,video.videoWidth));
-      }
-      const valid=samples.filter(x=>typeof x==='number');
-      const movement=valid.length?Math.max(...valid)-Math.min(...valid):0;
-      if(valid.length>=9 && movement>=0.08){
-        state.livenessPassed=true;
-        $('#liveness-title').textContent='Active liveness passed';
-        $('#liveness-help').textContent='One live face and sufficient head movement were observed during the challenge.';
-        setCheck('liveness','pass','Passed');
-      }else{
-        state.livenessPassed=false;
-        $('#liveness-title').textContent='Liveness not verified';
-        $('#liveness-help').textContent='Keep one face visible and repeat the left/right movement challenge.';
-        setCheck('liveness','fail','Retry');
-        $('#run-liveness').disabled=false;
+      if('FaceDetector' in window) {
+        const detector=new FaceDetector({fastMode:true,maxDetectedFaces:2});
+        const samples=[];
+        $('#liveness-help').textContent='Keep one face visible, then slowly move your head left and right.';
+        for(let i=0;i<14;i++){
+          await new Promise(r=>setTimeout(r,220));
+          const faces=await detector.detect(video);
+          if(faces.length!==1){samples.push(null);continue;}
+          const box=faces[0].boundingBox;
+          samples.push((box.x+box.width/2)/Math.max(1,video.videoWidth));
+        }
+        const valid=samples.filter(x=>typeof x==='number');
+        const movement=valid.length?Math.max(...valid)-Math.min(...valid):0;
+        if(valid.length>=9 && movement>=0.08){
+          state.livenessPassed=true;
+          $('#liveness-title').textContent='Active liveness signal passed';
+          $('#liveness-help').textContent='One face remained visible and sufficient head movement was observed during the challenge.';
+          setCheck('liveness','pass','Passed');
+        }else{
+          state.livenessPassed=false;
+          $('#liveness-title').textContent='Liveness not verified';
+          $('#liveness-help').textContent='Keep one face visible and repeat the left/right movement challenge.';
+          setCheck('liveness','fail','Retry');
+          $('#run-liveness').disabled=false;
+        }
+      } else {
+        $('#liveness-help').textContent='Slowly move your head left and right. PlaceAI will combine visible motion with an AI person-presence check.';
+        const first=motionSignature(video);
+        await new Promise(r=>setTimeout(r,1100));
+        const second=motionSignature(video);
+        await new Promise(r=>setTimeout(r,1100));
+        const third=motionSignature(video);
+        const movement=Math.max(motionDelta(first,second),motionDelta(second,third),motionDelta(first,third));
+        const image=captureProctorFrame();
+        if(!image) throw new Error('Camera frame unavailable');
+        const vision=await api('/mock-interview/proctor-frame',{method:'POST',body:JSON.stringify({interview_id:state.session.interview_id,image_data_url:image})});
+        if(vision.candidate_visible && Number(vision.person_count||0)===1 && movement>=0.025){
+          state.livenessPassed=true;
+          $('#liveness-title').textContent='Active presence challenge passed';
+          $('#liveness-help').textContent='One person was visible and sufficient live camera motion was observed. This is an integrity signal, not biometric identity verification.';
+          setCheck('liveness','pass','Passed');
+        }else{
+          state.livenessPassed=false;
+          $('#liveness-title').textContent='Active presence not verified';
+          $('#liveness-help').textContent='Keep one person centered in the camera and repeat the head-movement challenge.';
+          setCheck('liveness','fail','Retry');
+          $('#run-liveness').disabled=false;
+        }
       }
     } catch {
       state.livenessPassed=false;
       $('#liveness-title').textContent='Liveness check unavailable';
-      setCheck('liveness','fail','Unavailable');
+      $('#liveness-help').textContent='The active presence check could not be completed. Verify camera/network access and retry.';
+      setCheck('liveness','fail','Retry');
       $('#run-liveness').disabled=false;
     }
     updateStartEligibility();
   }
+
 
   function updateStartEligibility() {
     const consent=$('#consent-check').checked;
