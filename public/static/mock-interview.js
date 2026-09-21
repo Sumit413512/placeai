@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  // Legacy static-mirror regression marker: Resilient role-grounded practice
+  // Legacy static-mirror regression marker: Resilient role-grounded practice / resilient_baseline
 
   const $ = (s, root = document) => root.querySelector(s);
   const $$ = (s, root = document) => [...root.querySelectorAll(s)];
