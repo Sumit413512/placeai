@@ -1011,12 +1011,20 @@ def _resilient_baseline_evaluation(
         question_hits = len(answer_terms & question_terms)
         sentence_count = len([part for part in re.split(r"[.!?]+", answer) if part.strip()])
 
+        failure_reason = _obvious_answer_failure(item, answer)
         completeness = min(28, int(len(words) / 3.5))
         relevance = min(22, role_hits * 5 + question_hits * 3)
         structure = min(14, max(0, sentence_count - 1) * 4)
-        baseline = min(72, 24 + completeness + relevance + structure)
-        if len(words) < 12:
-            baseline = min(baseline, 42)
+        if failure_reason:
+            baseline = 0
+            relevance = 0
+            structure = 0
+        else:
+            baseline = min(72, completeness + relevance + structure)
+            if question_hits == 0 and role_hits == 0:
+                baseline = min(baseline, 12)
+            elif len(words) < 12:
+                baseline = min(baseline, 30)
 
         all_scores.append(baseline)
         relevance_scores.append(min(72, 32 + relevance + min(18, completeness)))
@@ -1032,8 +1040,12 @@ def _resilient_baseline_evaluation(
         missing_points.append("Technical correctness was not scored because the live AI evaluator was temporarily unavailable.")
 
         feedback = (
-            "Continuity-mode feedback: the answer was checked for completeness, structure and relevance to the "
-            "issued question and approved role context. Technical correctness requires live AI evaluation."
+            failure_reason
+            if failure_reason
+            else (
+                "Continuity-mode feedback: the answer was checked for completeness, structure and relevance to the "
+                "issued question and approved role context. Technical correctness requires live AI evaluation."
+            )
         )
         evaluations.append({
             "question_id": qid,
