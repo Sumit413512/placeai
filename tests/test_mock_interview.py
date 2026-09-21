@@ -370,3 +370,10 @@ def test_mock_assessment_security_headers_are_scoped_to_assessment_only():
     assert "microphone=()" in home_permissions
     assert "https://cdn.jsdelivr.net" not in home_csp
     assert "https://storage.googleapis.com" not in home_csp
+
+
+def test_mock_assessment_html_is_never_cached_across_releases():
+    response = client.get("/mock-interview")
+    assert response.status_code == 200
+    assert response.headers.get("cache-control") == "no-store"
+    assert response.headers.get("pragma") == "no-cache"
