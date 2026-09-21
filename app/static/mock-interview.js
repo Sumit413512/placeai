@@ -307,7 +307,7 @@
         if(existingIndex>=0) state.selectedOption=existingIndex;
       }
       area.innerHTML=`<div class="answer-options">${question.options.map((_,i)=>`<button class="option-button" type="button" data-option-index="${i}"><span class="option-key">${String.fromCharCode(65+i)}</span><canvas class="option-canvas"></canvas></button>`).join('')}</div>`;
-      $('.option-button',area).forEach((button,i)=>{
+      $$('.option-button',area).forEach((button,i)=>{
         drawOptionCanvas(button.querySelector('canvas'),question.options[i],state.candidateLabel);
         if(state.selectedOption===i) button.classList.add('selected');
         button.addEventListener('click',()=>{
