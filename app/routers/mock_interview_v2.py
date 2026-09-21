@@ -1784,6 +1784,97 @@ def record_integrity_event_v2(
     return {"recorded": True}
 
 
+@router.post("/coding/run")
+def run_coding_question_v2(
+    body: MockInterviewCodingRunV2,
+    current_user: User = Depends(require_student_premium_access),
+    db: Session = Depends(get_db),
+):
+    profile = _profile(current_user, db)
+    interview = db.query(MockInterview).filter(
+        MockInterview.id == body.interview_id,
+        MockInterview.student_id == profile.id,
+    ).first()
+    if not interview:
+        raise HTTPException(status_code=404, detail="Mock interview not found")
+
+    issued = _issued_questions(interview)
+    item = next((row for row in issued if row["question_id"] == body.question_id), None)
+    if not item or item.get("answer_type") != "code":
+        raise HTTPException(status_code=404, detail="Coding question not found")
+    spec = item.get("coding_spec") if isinstance(item.get("coding_spec"), dict) else None
+    if not spec:
+        raise HTTPException(status_code=409, detail="Coding question configuration is unavailable")
+    if body.language not in SUPPORTED_CODING_LANGUAGES:
+        raise HTTPException(status_code=422, detail="Unsupported coding language")
+
+    all_cases = list(spec.get("test_cases") or [])
+    test_cases = (
+        [case for case in all_cases if not bool(case.get("hidden"))]
+        if body.mode == "run"
+        else all_cases
+    )
+    try:
+        execution = execute_test_suite(
+            source_code=body.source_code,
+            language=body.language,
+            test_cases=test_cases,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        LOGGER.warning(
+            "Coding runner unavailable interview_id=%s question_id=%s error_type=%s",
+            interview.id,
+            body.question_id,
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Coding execution service is temporarily unavailable. Your code has not been lost; please retry.",
+        ) from exc
+
+    response_rows = []
+    for row, case in zip(execution.get("test_results", []), test_cases):
+        hidden = bool(case.get("hidden"))
+        result_row = {
+            "index": row.get("index"),
+            "hidden": hidden,
+            "passed": bool(row.get("passed")),
+            "status": row.get("status"),
+            "time": row.get("time"),
+            "memory": row.get("memory"),
+        }
+        if not hidden:
+            result_row.update({
+                "input": str(case.get("input", "")),
+                "expected_output": str(case.get("expected_output", "")),
+                "actual_output": str(row.get("stdout", ""))[:3000],
+                "stderr": str(row.get("stderr", ""))[:3000],
+            })
+        response_rows.append(result_row)
+
+    hidden_total = sum(1 for case in test_cases if bool(case.get("hidden")))
+    hidden_passed = sum(
+        1 for row in response_rows if row["hidden"] and row["passed"]
+    )
+    return {
+        "question_id": body.question_id,
+        "mode": body.mode,
+        "language": execution.get("language"),
+        "language_label": execution.get("language_label"),
+        "compile_success": bool(execution.get("compile_success")),
+        "compile_output": str(execution.get("compile_output", ""))[:3000],
+        "passed": int(execution.get("passed", 0) or 0),
+        "total": int(execution.get("total", 0) or 0),
+        "pass_rate": int(execution.get("pass_rate", 0) or 0),
+        "hidden_passed": hidden_passed,
+        "hidden_total": hidden_total,
+        "execution_ms": execution.get("execution_ms"),
+        "test_results": response_rows,
+    }
+
+
 @router.get("/institution-results")
 def institution_mock_interview_results_v2(
     current_user: User = Depends(require_institution_admin),
