@@ -64,6 +64,24 @@ def student_ai_guard(
     )
 
 
+def code_execution_guard(
+    request: Request,
+    current_user: User = Depends(require_student),
+    db: Session = Depends(get_db),
+) -> None:
+    """Rate-limit sandbox executions without consuming the student's AI-analysis budget."""
+    enforce_rate_limit(
+        db,
+        request,
+        scope="code:execution",
+        identifier=current_user.id,
+        limit=30,
+        window_seconds=600,
+        block_seconds=300,
+        include_client_address=False,
+    )
+
+
 def recruiter_ai_guard(
     request: Request,
     current_user: User = Depends(require_recruiter),

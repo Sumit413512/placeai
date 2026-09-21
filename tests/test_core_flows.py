@@ -803,9 +803,9 @@ def test_mock_interview_server_issued_session_integrity(monkeypatch):
             "strengths": ["Relevant reasoning"],
             "improvements": ["Add measurable outcomes"],
             "evaluations": [
-                {"question_id": 1, "score": 83, "feedback": "Good", "better_answer_outline": "Context → decision → result"},
-                {"question_id": 2, "score": 82, "feedback": "Good", "better_answer_outline": "Triage → isolate → verify"},
-                {"question_id": 3, "score": 81, "feedback": "Good", "better_answer_outline": "Situation → action → result"},
+                {"question_id": 1, "score": 83, "verdict": "correct", "rubric": {"correctness": 85, "relevance": 90, "reasoning": 82, "completeness": 80, "clarity": 82}, "feedback": "Good", "better_answer_outline": "Context → decision → result"},
+                {"question_id": 2, "score": 82, "verdict": "correct", "rubric": {"correctness": 84, "relevance": 88, "reasoning": 82, "completeness": 79, "clarity": 81}, "feedback": "Good", "better_answer_outline": "Triage → isolate → verify"},
+                {"question_id": 3, "score": 81, "verdict": "acceptable", "rubric": {"correctness": 80, "relevance": 88, "reasoning": 80, "completeness": 78, "clarity": 82}, "feedback": "Good", "better_answer_outline": "Situation → action → result"},
             ],
         })
 

@@ -3,17 +3,20 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.ai_provider import call_ai_text, call_ai_vision_text, current_ai_model, current_ai_provider
-from app.ai_rate_limit import student_ai_guard
+from app.ai_rate_limit import code_execution_guard, student_ai_guard
 from app.database import get_db
 from app.dependencies import require_institution_admin, require_student
 from app.models import ApprovalStatus, AuditEvent, Job, MockInterview, StudentProfile, User
@@ -64,7 +67,17 @@ class MockInterviewAnswerV2(BaseModel):
     model_config = {"extra": "forbid"}
 
     question_id: int
-    answer: str = Field(min_length=1, max_length=8000)
+    answer: str = Field(min_length=1, max_length=32000)
+
+
+class MockInterviewCodeRunV2(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    interview_id: str
+    question_id: int = Field(ge=1, le=FULL_MOCK_QUESTION_COUNT)
+    language: str = Field(pattern="^(python|javascript|java|cpp|c)$")
+    source_code: str = Field(min_length=1, max_length=20000)
+    mode: str = Field(default="run", pattern="^(run|submit)$")
 
 
 class MockInterviewIntegrityEventV2(BaseModel):
@@ -104,19 +117,19 @@ class MockInterviewIntegritySignalV2(BaseModel):
 
 
 def _call_interview_ai(prompt: str, *, max_output_tokens: int, fast: bool = False) -> str:
-    """Call the canonical provider chain with an explicit interactive latency budget.
+    """Use Luna for generation and Sol for final assessment analysis.
 
-    Question generation uses the lower-latency GPT-5.6 Luna model. Evaluation keeps the
-    configured production model, but disables extra reasoning because the rubric and
-    evidence are already supplied in the prompt.
+    Final grading is intentionally routed to the flagship reasoning/coding model because
+    result accuracy matters more than generation latency. Deterministic answer keys and
+    code execution remain authoritative where available.
     """
     return call_ai_text(
         prompt,
-        reasoning_effort="none",
+        reasoning_effort="none" if fast else "medium",
         max_output_tokens=max_output_tokens,
-        model_override="gpt-5.6-luna" if fast else None,
-        timeout_seconds=10 if fast else 45,
-        retry_count_per_provider=0,
+        model_override="gpt-5.6-luna" if fast else "gpt-5.6-sol",
+        timeout_seconds=10 if fast else 55,
+        retry_count_per_provider=0 if fast else 1,
     )
 
 
@@ -174,10 +187,20 @@ def _issued_questions(row: MockInterview) -> list[dict[str, Any]]:
                 "answer_type": str(item.get("answer_type", "text")).strip().lower(),
                 "options": [str(x)[:1000] for x in (item.get("options") or [])[:4]],
                 "correct_answer": str(item.get("correct_answer", ""))[:1000],
+                "coding_spec": item.get("coding_spec") if isinstance(item.get("coding_spec"), dict) else {},
             })
     if not normalized:
         raise HTTPException(status_code=409, detail="Interview question set is unavailable")
     return normalized
+
+
+def _client_question(item: dict[str, Any]) -> dict[str, Any]:
+    payload = {key: value for key, value in item.items() if key not in {"correct_answer", "coding_spec"}}
+    if item.get("answer_type") == "code":
+        payload["coding_spec"] = _public_coding_spec(
+            item.get("coding_spec") if isinstance(item.get("coding_spec"), dict) else {}
+        )
+    return payload
 
 
 def _question_norm(value: str) -> str:
@@ -291,6 +314,292 @@ def _difficulty_for(index: int, total: int, requested: str) -> str:
     if ratio <= 0.68:
         return "medium"
     return "hard"
+
+
+
+CODE_LANGUAGES: dict[str, dict[str, Any]] = {
+    "python": {"label": "Python 3.14", "judge0_id": 113},
+    "javascript": {"label": "JavaScript (Node.js 22)", "judge0_id": 102},
+    "java": {"label": "Java 17", "judge0_id": 91},
+    "cpp": {"label": "C++ (GCC 14)", "judge0_id": 105},
+    "c": {"label": "C (GCC 14)", "judge0_id": 103},
+}
+
+
+def _coding_question_bank() -> list[dict[str, Any]]:
+    common_starters = {
+        "python": "import sys\n\ndef solve():\n    data = sys.stdin.read().strip().split()\n    # Write your solution here\n\nif __name__ == '__main__':\n    solve()\n",
+        "javascript": "const fs = require('fs');\nconst input = fs.readFileSync(0, 'utf8').trim();\n// Write your solution here\n",
+        "java": "import java.io.*;\nimport java.util.*;\n\npublic class Main {\n    public static void main(String[] args) throws Exception {\n        // Write your solution here\n    }\n}\n",
+        "cpp": "#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    // Write your solution here\n    return 0;\n}\n",
+        "c": "#include <stdio.h>\n#include <stdlib.h>\n\nint main(void) {\n    /* Write your solution here */\n    return 0;\n}\n",
+    }
+    return [
+        {
+            "question": (
+                "Remove duplicates while preserving first occurrence. Input: first line N, second line N integers. "
+                "Print the distinct integers in the order of their first appearance, separated by one space. "
+                "For N = 0, print an empty line."
+            ),
+            "section": "coding",
+            "category": "coding",
+            "difficulty": "medium",
+            "answer_type": "code",
+            "options": [],
+            "correct_answer": "",
+            "coding_spec": {
+                "problem_key": "stable_unique",
+                "allowed_languages": list(CODE_LANGUAGES),
+                "starter_code": common_starters,
+                "constraints": [
+                    "0 <= N <= 100000",
+                    "Each value fits in a signed 32-bit integer.",
+                    "Preserve the first occurrence of each value.",
+                ],
+                "sample_tests": [
+                    {"input": "5\n1 2 2 3 1\n", "output": "1 2 3"},
+                    {"input": "5\n4 4 4 4 4\n", "output": "4"},
+                    {"input": "6\n-1 -1 0 2 0 -1\n", "output": "-1 0 2"},
+                ],
+                "hidden_tests": [
+                    {"input": "1\n7\n", "output": "7"},
+                    {"input": "7\n3 1 3 2 1 4 2\n", "output": "3 1 2 4"},
+                    {"input": "0\n\n", "output": ""},
+                    {"input": "8\n10 20 10 30 20 40 50 40\n", "output": "10 20 30 40 50"},
+                    {"input": "5\n0 -1 0 -1 2\n", "output": "0 -1 2"},
+                    {"input": "6\n5 4 3 2 1 0\n", "output": "5 4 3 2 1 0"},
+                    {"input": "9\n1 1 2 2 3 3 4 4 5\n", "output": "1 2 3 4 5"},
+                ],
+                "time_limit_seconds": 2.0,
+                "memory_limit_kb": 128000,
+            },
+        },
+        {
+            "question": (
+                "Find the length of the longest consecutive integer sequence in an unsorted array. "
+                "Input: first line N, second line N integers. Print one integer: the longest sequence length. "
+                "Aim for O(N) expected time. For N = 0, print 0."
+            ),
+            "section": "coding",
+            "category": "coding",
+            "difficulty": "hard",
+            "answer_type": "code",
+            "options": [],
+            "correct_answer": "",
+            "coding_spec": {
+                "problem_key": "longest_consecutive",
+                "allowed_languages": list(CODE_LANGUAGES),
+                "starter_code": common_starters,
+                "constraints": [
+                    "0 <= N <= 100000",
+                    "Values fit in signed 32-bit integers.",
+                    "Duplicate values may occur.",
+                    "Target expected complexity: O(N).",
+                ],
+                "sample_tests": [
+                    {"input": "6\n100 4 200 1 3 2\n", "output": "4"},
+                    {"input": "6\n1 2 0 1 3 4\n", "output": "5"},
+                    {"input": "5\n-2 -1 0 1 2\n", "output": "5"},
+                ],
+                "hidden_tests": [
+                    {"input": "0\n\n", "output": "0"},
+                    {"input": "1\n5\n", "output": "1"},
+                    {"input": "7\n10 5 12 3 55 11 4\n", "output": "3"},
+                    {"input": "8\n8 7 6 5 4 3 2 1\n", "output": "8"},
+                    {"input": "6\n1 3 5 7 9 11\n", "output": "1"},
+                    {"input": "10\n20 21 22 30 31 32 33 40 50 60\n", "output": "4"},
+                    {"input": "9\n-5 -4 -3 10 11 12 13 14 100\n", "output": "5"},
+                ],
+                "time_limit_seconds": 2.0,
+                "memory_limit_kb": 128000,
+            },
+        },
+    ]
+
+
+def _public_coding_spec(spec: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "problem_key": spec.get("problem_key", ""),
+        "allowed_languages": [
+            {"key": key, "label": CODE_LANGUAGES[key]["label"]}
+            for key in spec.get("allowed_languages", [])
+            if key in CODE_LANGUAGES
+        ],
+        "starter_code": {
+            key: value
+            for key, value in (spec.get("starter_code") or {}).items()
+            if key in CODE_LANGUAGES
+        },
+        "constraints": [str(x) for x in (spec.get("constraints") or [])[:10]],
+        "sample_tests": [
+            {"input": str(case.get("input", "")), "output": str(case.get("output", ""))}
+            for case in (spec.get("sample_tests") or [])[:5]
+        ],
+        "test_case_count": len(spec.get("sample_tests") or []) + len(spec.get("hidden_tests") or []),
+        "hidden_test_count": len(spec.get("hidden_tests") or []),
+    }
+
+
+def _judge0_base_url() -> str:
+    return (os.getenv("JUDGE0_API_URL") or "https://ce.judge0.com").rstrip("/")
+
+
+def _judge0_headers() -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    token = (os.getenv("JUDGE0_API_TOKEN") or "").strip()
+    if token:
+        headers["X-Auth-Token"] = token
+    return headers
+
+
+def _normalized_program_output(value: str) -> str:
+    lines = [line.rstrip() for line in (value or "").replace("\r\n", "\n").split("\n")]
+    while lines and not lines[-1]:
+        lines.pop()
+    return "\n".join(lines).strip()
+
+
+def _judge0_execute_case(
+    *,
+    language: str,
+    source_code: str,
+    stdin: str,
+    expected_output: str,
+    time_limit_seconds: float,
+    memory_limit_kb: int,
+) -> dict[str, Any]:
+    language_meta = CODE_LANGUAGES.get(language)
+    if not language_meta:
+        raise ValueError("Unsupported coding language")
+    payload = {
+        "language_id": language_meta["judge0_id"],
+        "source_code": source_code,
+        "stdin": stdin,
+        "expected_output": expected_output,
+        "cpu_time_limit": max(0.5, min(float(time_limit_seconds), 5.0)),
+        "wall_time_limit": max(1.0, min(float(time_limit_seconds) * 2.5, 10.0)),
+        "memory_limit": max(32000, min(int(memory_limit_kb), 256000)),
+    }
+    url = f"{_judge0_base_url()}/submissions?base64_encoded=false&wait=true"
+    try:
+        response = httpx.post(url, headers=_judge0_headers(), json=payload, timeout=15.0)
+        response.raise_for_status()
+        data = response.json()
+        token = data.get("token")
+        if token and not isinstance(data.get("status"), dict):
+            for _ in range(8):
+                time.sleep(0.25)
+                poll = httpx.get(
+                    f"{_judge0_base_url()}/submissions/{token}?base64_encoded=false",
+                    headers=_judge0_headers(),
+                    timeout=8.0,
+                )
+                poll.raise_for_status()
+                data = poll.json()
+                status_id = int((data.get("status") or {}).get("id", 0) or 0)
+                if status_id not in {1, 2}:
+                    break
+        status_obj = data.get("status") if isinstance(data.get("status"), dict) else {}
+        status_id = int(status_obj.get("id", 0) or 0)
+        stdout = str(data.get("stdout") or "")
+        stderr = str(data.get("stderr") or "")
+        compile_output = str(data.get("compile_output") or "")
+        passed = (
+            status_id == 3
+            and _normalized_program_output(stdout) == _normalized_program_output(expected_output)
+        )
+        return {
+            "passed": passed,
+            "status_id": status_id,
+            "status": str(status_obj.get("description") or "Unknown")[:120],
+            "stdout": stdout[:4000],
+            "stderr": stderr[:4000],
+            "compile_output": compile_output[:4000],
+            "time": str(data.get("time") or "")[:40],
+            "memory": data.get("memory"),
+        }
+    except Exception as exc:
+        LOGGER.warning("Code runner unavailable error_type=%s", type(exc).__name__)
+        raise RuntimeError("Code execution service is temporarily unavailable") from exc
+
+
+def _parse_code_answer(answer: str) -> tuple[str, str]:
+    try:
+        payload = json.loads(answer)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Coding answer is not valid JSON") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("Coding answer payload is invalid")
+    language = str(payload.get("language", "")).strip().lower()
+    source_code = str(payload.get("source_code", ""))
+    if language not in CODE_LANGUAGES:
+        raise ValueError("Unsupported coding language")
+    if not source_code.strip() or len(source_code) > 20000:
+        raise ValueError("Source code is missing or too large")
+    return language, source_code
+
+
+def _run_code_tests(
+    *,
+    item: dict[str, Any],
+    language: str,
+    source_code: str,
+    include_hidden: bool,
+) -> dict[str, Any]:
+    spec = item.get("coding_spec") if isinstance(item.get("coding_spec"), dict) else {}
+    allowed = spec.get("allowed_languages") or []
+    if language not in allowed:
+        raise ValueError("Selected language is not allowed for this coding question")
+    tests = list(spec.get("sample_tests") or [])
+    sample_count = len(tests)
+    if include_hidden:
+        tests.extend(spec.get("hidden_tests") or [])
+    if not tests:
+        raise ValueError("Coding question has no test cases")
+    results_by_index: dict[int, dict[str, Any]] = {}
+
+    def run_one(index: int, case: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        result = _judge0_execute_case(
+            language=language,
+            source_code=source_code,
+            stdin=str(case.get("input", "")),
+            expected_output=str(case.get("output", "")),
+            time_limit_seconds=float(spec.get("time_limit_seconds", 2.0) or 2.0),
+            memory_limit_kb=int(spec.get("memory_limit_kb", 128000) or 128000),
+        )
+        return index, {
+            "index": index,
+            "visibility": "sample" if index <= sample_count else "hidden",
+            "passed": bool(result["passed"]),
+            "status": result["status"],
+            "stdout": result["stdout"] if index <= sample_count else "",
+            "stderr": result["stderr"] if index <= sample_count else "",
+            "compile_output": result["compile_output"] if index <= sample_count else "",
+            "time": result["time"],
+            "memory": result["memory"],
+        }
+
+    with ThreadPoolExecutor(max_workers=min(3, len(tests))) as executor:
+        futures = [
+            executor.submit(run_one, index, case)
+            for index, case in enumerate(tests, start=1)
+        ]
+        for future in as_completed(futures):
+            index, result = future.result()
+            results_by_index[index] = result
+
+    results = [results_by_index[index] for index in sorted(results_by_index)]
+    passed = sum(1 for result in results if result["passed"])
+    return {
+        "language": language,
+        "passed": passed,
+        "total": len(tests),
+        "executed": len(results),
+        "sample_count": sample_count,
+        "hidden_count": max(0, len(tests) - sample_count),
+        "compile_success": not any(result["compile_output"] for result in results),
+        "results": results,
+    }
 
 
 def _fallback_questions(
@@ -438,6 +747,10 @@ def _fallback_questions(
     chosen = []
     for section, _, target in ASSESSMENT_BLUEPRINT:
         missing = max(0, target - section_counts.get(section, 0))
+        if section == "coding":
+            for item in _coding_question_bank()[:missing]:
+                chosen.append(item)
+            continue
         if section in objective:
             for question, options, correct in objective[section][:missing]:
                 chosen.append({
@@ -514,6 +827,10 @@ def _generate_unique_questions(
                     section = str(item.get("section", item.get("category", "technical"))).strip().lower()
                     allowed_sections = {key for key, _, _ in ASSESSMENT_BLUEPRINT}
                     if section not in allowed_sections or section_counts[section] >= target_map[section]:
+                        continue
+                    # Coding items are generated from a server-owned executable bank so
+                    # hidden tests and correctness criteria cannot be hallucinated by AI.
+                    if section == "coding":
                         continue
                     category = str(item.get("category", section)).strip().lower() or section
                 else:
@@ -625,10 +942,7 @@ def start_mock_interview_v2(
     db.add(interview)
     db.commit()
     db.refresh(interview)
-    client_questions = [
-        {key: value for key, value in item.items() if key != "correct_answer"}
-        for item in questions
-    ]
+    client_questions = [_client_question(item) for item in questions]
     return {
         "interview_id": interview.id,
         "job_id": job.id,
@@ -697,12 +1011,20 @@ def _resilient_baseline_evaluation(
         question_hits = len(answer_terms & question_terms)
         sentence_count = len([part for part in re.split(r"[.!?]+", answer) if part.strip()])
 
+        failure_reason = _obvious_answer_failure(item, answer)
         completeness = min(28, int(len(words) / 3.5))
         relevance = min(22, role_hits * 5 + question_hits * 3)
         structure = min(14, max(0, sentence_count - 1) * 4)
-        baseline = min(72, 24 + completeness + relevance + structure)
-        if len(words) < 12:
-            baseline = min(baseline, 42)
+        if failure_reason:
+            baseline = 0
+            relevance = 0
+            structure = 0
+        else:
+            baseline = min(72, completeness + relevance + structure)
+            if question_hits == 0 and role_hits == 0:
+                baseline = min(baseline, 12)
+            elif len(words) < 12:
+                baseline = min(baseline, 30)
 
         all_scores.append(baseline)
         relevance_scores.append(min(72, 32 + relevance + min(18, completeness)))
@@ -718,8 +1040,12 @@ def _resilient_baseline_evaluation(
         missing_points.append("Technical correctness was not scored because the live AI evaluator was temporarily unavailable.")
 
         feedback = (
-            "Continuity-mode feedback: the answer was checked for completeness, structure and relevance to the "
-            "issued question and approved role context. Technical correctness requires live AI evaluation."
+            failure_reason
+            if failure_reason
+            else (
+                "Continuity-mode feedback: the answer was checked for completeness, structure and relevance to the "
+                "issued question and approved role context. Technical correctness requires live AI evaluation."
+            )
         )
         evaluations.append({
             "question_id": qid,
@@ -840,6 +1166,203 @@ def _objective_evaluation(item: dict[str, Any], answer: str) -> dict[str, Any] |
     }
 
 
+
+_OBVIOUS_BAD_ANSWERS = {
+    "anything", "test", "testing", "random", "asdf", "qwerty", "abc", "xyz",
+    "nothing", "no idea", "idk", "i dont know", "i don't know", "skip", "na", "n/a",
+}
+
+
+def _obvious_answer_failure(item: dict[str, Any], answer: str) -> str | None:
+    normalized = re.sub(r"\s+", " ", (answer or "").strip().casefold())
+    words = re.findall(r"[a-z0-9+#.-]+", normalized)
+    if not normalized:
+        return "No substantive response was provided."
+    if normalized in _OBVIOUS_BAD_ANSWERS:
+        return "The response is a placeholder or explicit non-answer."
+    if len(words) <= 2:
+        return "The response is too short to address the question."
+    if len(words) >= 4 and len(set(words)) / len(words) < 0.35:
+        return "The response is predominantly repetitive and does not provide meaningful evidence."
+    filler = {"anything", "whatever", "something", "stuff", "things", "random", "test", "okay", "ok"}
+    if words and all(word in filler for word in words):
+        return "The response contains generic filler rather than an answer to the question."
+    return None
+
+
+def _invalid_text_evaluation(item: dict[str, Any], answer: str, reason: str) -> dict[str, Any]:
+    section = item.get("section") or item.get("category") or "interview"
+    behavioral = section in {"resume", "behavioral", "role", "situational"}
+    verdict = "weak" if behavioral else "insufficient"
+    return {
+        "question_id": item["question_id"],
+        "question": item["question"],
+        "section": section,
+        "category": item.get("category") or section,
+        "difficulty": item.get("difficulty") or "mixed",
+        "answer_type": "text",
+        "answer": answer,
+        "correct_answer": "",
+        "score": 0,
+        "verdict": verdict,
+        "grading_method": "system_relevance_gate",
+        "rubric": {
+            "correctness": 0,
+            "relevance": 0,
+            "reasoning": 0,
+            "completeness": 0,
+            "clarity": 0,
+        },
+        "feedback": reason + " No communication or clarity credit is awarded when the response does not answer the question.",
+        "strengths": [],
+        "issues": [reason],
+        "missing_points": ["Answer the exact question with relevant reasoning, evidence or an example."],
+        "key_points": [],
+        "better_answer_outline": "Direct answer → relevant reasoning/evidence → example or validation.",
+        "ideal_answer": "",
+    }
+
+
+def _code_review_with_ai(
+    *,
+    item: dict[str, Any],
+    language: str,
+    source_code: str,
+    execution: dict[str, Any],
+) -> dict[str, Any]:
+    prompt = f"""
+{PROMPT_GUARDRAIL}
+
+You are PlaceAI's senior code reviewer. The execution engine is authoritative for correctness.
+Do NOT override, reinterpret or contradict the test-case result. Review only code quality:
+algorithmic complexity, data-structure choice, edge cases visible in the code, readability,
+maintainability and whether the implementation matches the stated target complexity.
+
+Return ONLY JSON:
+{{
+  "complexity_analysis":"...",
+  "quality_score":0,
+  "strengths":["..."],
+  "issues":["..."],
+  "improvement":"..."
+}}
+
+QUESTION
+{item["question"]}
+
+LANGUAGE
+{language}
+
+EXECUTION SUMMARY
+Passed {execution["passed"]} of {execution["total"]} tests.
+Compile success: {execution["compile_success"]}
+
+SOURCE CODE
+{source_code[:20000]}
+"""
+    try:
+        raw = _call_interview_ai(prompt, max_output_tokens=1800, fast=False)
+        data = extract_json_from_response(raw)
+        if not isinstance(data, dict):
+            raise ValueError("Invalid code-review payload")
+        return {
+            "complexity_analysis": str(data.get("complexity_analysis", ""))[:3000],
+            "quality_score": _clamp_score(data.get("quality_score")),
+            "strengths": [str(x)[:800] for x in (data.get("strengths") or [])[:6]],
+            "issues": [str(x)[:800] for x in (data.get("issues") or [])[:6]],
+            "improvement": str(data.get("improvement", ""))[:3000],
+            "provider": current_ai_provider(),
+            "model": current_ai_model(),
+        }
+    except Exception as exc:
+        LOGGER.warning("AI code review unavailable error_type=%s", type(exc).__name__)
+        return {
+            "complexity_analysis": "AI code-quality review was unavailable. Correctness remains based on executed test cases.",
+            "quality_score": 0,
+            "strengths": [],
+            "issues": [],
+            "improvement": "Review algorithmic complexity, edge cases and readability before the next attempt.",
+            "provider": "unavailable",
+            "model": "",
+        }
+
+
+def _coding_evaluation(item: dict[str, Any], answer: str) -> dict[str, Any]:
+    language, source_code = _parse_code_answer(answer)
+    execution = _run_code_tests(
+        item=item,
+        language=language,
+        source_code=source_code,
+        include_hidden=True,
+    )
+    total = max(1, int(execution["total"]))
+    score = round(100 * int(execution["passed"]) / total)
+    if execution["passed"] == total and execution["compile_success"]:
+        verdict = "correct"
+    elif execution["passed"] > 0 and execution["compile_success"]:
+        verdict = "partially_correct"
+    else:
+        verdict = "incorrect"
+
+    review = _code_review_with_ai(
+        item=item,
+        language=language,
+        source_code=source_code,
+        execution=execution,
+    )
+    feedback = (
+        f'Code execution: {execution["passed"]}/{execution["total"]} test cases passed. '
+        + ("Compilation succeeded." if execution["compile_success"] else "Compilation failed.")
+    )
+    if review.get("complexity_analysis"):
+        feedback += " " + str(review["complexity_analysis"])
+
+    return {
+        "question_id": item["question_id"],
+        "question": item["question"],
+        "section": "coding",
+        "category": "coding",
+        "difficulty": item.get("difficulty") or "mixed",
+        "answer_type": "code",
+        "answer": json.dumps({"language": language, "source_code": source_code}),
+        "correct_answer": "",
+        "score": score,
+        "verdict": verdict,
+        "grading_method": "code_execution",
+        "rubric": {
+            "correctness": score,
+            "relevance": score,
+            "reasoning": review.get("quality_score", 0),
+            "completeness": score,
+            "clarity": review.get("quality_score", 0),
+        },
+        "feedback": feedback,
+        "strengths": review.get("strengths", []),
+        "issues": review.get("issues", []),
+        "missing_points": (
+            [] if score == 100
+            else [f'{execution["total"] - execution["passed"]} test case(s) still fail.']
+        ),
+        "key_points": [
+            f'Language: {CODE_LANGUAGES[language]["label"]}',
+            f'Test cases passed: {execution["passed"]}/{execution["total"]}',
+            "Correctness score is determined by sandbox execution, not AI opinion.",
+        ],
+        "better_answer_outline": review.get("improvement", ""),
+        "ideal_answer": "",
+        "execution": {
+            "language": language,
+            "passed": execution["passed"],
+            "total": execution["total"],
+            "sample_count": execution["sample_count"],
+            "hidden_count": execution["hidden_count"],
+            "compile_success": execution["compile_success"],
+            "results": execution["results"],
+        },
+        "code_review": review,
+    }
+
+
 def _subjective_prompt(
     *,
     profile: StudentProfile,
@@ -890,8 +1413,12 @@ Score 0-100. Use these verdicts only:
 - weak: vague/generic behavioral/resume/role response with limited evidence
 
 IMPORTANT:
-- Random text, repeated words, placeholders such as "anything", gibberish, generic filler, or an answer unrelated to the
-  question should normally score 0-15 and use verdict "incorrect", "insufficient", or "weak".
+- First decide whether the response actually answers THIS question. Semantic relevance is a gate, not a bonus.
+- Random text, repeated words, placeholders such as "anything", gibberish, generic filler, evasive text, or an unrelated answer
+  must score 0-10. Communication quality must NOT rescue an irrelevant response.
+- If relevance is below 25/100, overall score must be <=15 and clarity must be <=15.
+- For technical/programming responses, if technical correctness is below 25/100, overall score must be <=25.
+- A polished but wrong answer is still wrong. A grammatically strong non-answer earns no communication credit.
 - Do not reward claims that are not supported by the candidate context or answer.
 - The score must reflect the response to THIS question, not an overall impression of the candidate.
 - Give actionable feedback and an example strong answer/solution, but never invent the candidate's personal experience.
@@ -1011,25 +1538,41 @@ def _evaluate_subjective_with_ai(
         if verdict not in allowed_verdicts:
             verdict = "insufficient"
         rubric_raw = source.get("rubric") if isinstance(source.get("rubric"), dict) else {}
+        rubric = {
+            "correctness": _clamp_score(rubric_raw.get("correctness")),
+            "relevance": _clamp_score(rubric_raw.get("relevance")),
+            "reasoning": _clamp_score(rubric_raw.get("reasoning")),
+            "completeness": _clamp_score(rubric_raw.get("completeness")),
+            "clarity": _clamp_score(rubric_raw.get("clarity")),
+        }
+        score = _clamp_score(source.get("score"))
+        section = item.get("section") or item.get("category") or "interview"
+
+        # Deterministic post-validation: model fluency can never override semantic failure.
+        if rubric["relevance"] < 25:
+            score = min(score, 15)
+            rubric["clarity"] = min(rubric["clarity"], 15)
+            verdict = "weak" if section in {"resume", "behavioral", "role", "situational"} else "incorrect"
+        if section in {"technical", "programming"} and rubric["correctness"] < 25:
+            score = min(score, 25)
+            if verdict in {"correct", "strong", "acceptable"}:
+                verdict = "incorrect"
+        if verdict in {"incorrect", "insufficient", "weak"}:
+            score = min(score, 25)
+
         normalized.append({
             "question_id": qid,
             "question": item["question"],
-            "section": item.get("section") or item.get("category") or "interview",
+            "section": section,
             "category": item.get("category") or "interview",
             "difficulty": item.get("difficulty") or "mixed",
             "answer_type": "text",
             "answer": item["answer"],
             "correct_answer": "",
-            "score": _clamp_score(source.get("score")),
+            "score": score,
             "verdict": verdict,
             "grading_method": "ai",
-            "rubric": {
-                "correctness": _clamp_score(rubric_raw.get("correctness")),
-                "relevance": _clamp_score(rubric_raw.get("relevance")),
-                "reasoning": _clamp_score(rubric_raw.get("reasoning")),
-                "completeness": _clamp_score(rubric_raw.get("completeness")),
-                "clarity": _clamp_score(rubric_raw.get("clarity")),
-            },
+            "rubric": rubric,
             "feedback": str(source.get("feedback", ""))[:5000],
             "strengths": [str(x)[:1000] for x in (source.get("strengths") or [])[:8]],
             "issues": [str(x)[:1000] for x in (source.get("issues") or [])[:8]],
@@ -1061,7 +1604,8 @@ def _build_assessment_result(
     section_rows = []
     section_scores: dict[str, int] = {}
     total_correct = total_partial = total_incorrect = total_insufficient = 0
-    system_graded = ai_graded = 0
+    system_graded = ai_graded = code_graded = 0
+    coding_tests_passed = coding_tests_total = 0
 
     for key, label, _ in ASSESSMENT_BLUEPRINT:
         section_evals = [item for item in evaluations if item.get("section") == key]
@@ -1072,10 +1616,15 @@ def _build_assessment_result(
         counts = {"correct": 0, "partial": 0, "incorrect": 0, "insufficient": 0}
         for item in section_evals:
             counts[_verdict_bucket(item.get("verdict", "insufficient"))] += 1
-            if item.get("grading_method") == "system":
+            if item.get("grading_method") in {"system", "system_relevance_gate"}:
                 system_graded += 1
             elif item.get("grading_method") == "ai":
                 ai_graded += 1
+            elif item.get("grading_method") == "code_execution":
+                code_graded += 1
+                execution = item.get("execution") if isinstance(item.get("execution"), dict) else {}
+                coding_tests_passed += int(execution.get("passed", 0) or 0)
+                coding_tests_total += int(execution.get("total", 0) or 0)
         total_correct += counts["correct"]
         total_partial += counts["partial"]
         total_incorrect += counts["incorrect"]
@@ -1124,7 +1673,7 @@ def _build_assessment_result(
     ]
 
     objective_items = [item for item in evaluations if item.get("grading_method") == "system"]
-    subjective_items = [item for item in evaluations if item.get("grading_method") == "ai"]
+    subjective_items = [item for item in evaluations if item.get("grading_method") in {"ai", "system_relevance_gate"}]
     objective_accuracy = (
         round(100 * sum(item["score"] == 100 for item in objective_items) / len(objective_items))
         if objective_items else None
@@ -1158,6 +1707,9 @@ def _build_assessment_result(
             "insufficient": total_insufficient,
             "system_graded": system_graded,
             "ai_graded": ai_graded,
+            "code_graded": code_graded,
+            "coding_tests_passed": coding_tests_passed,
+            "coding_tests_total": coding_tests_total,
             "objective_accuracy": objective_accuracy,
             "subjective_average": subjective_average,
         },
@@ -1171,12 +1723,14 @@ def _build_assessment_result(
         "missing_evaluation_question_ids": missing_ids,
         "grading": {
             "objective": "server-side answer key",
-            "subjective": "AI question-level rubric",
+            "coding": "sandbox compilation/execution against server-owned sample + hidden tests",
+            "subjective": "GPT-5.6 Sol question-level rubric with deterministic relevance caps",
             **ai_meta,
         },
         "disclaimer": (
             "Assessment scores reflect performance on this PlaceAI simulation. "
-            "Open-ended answers are AI-evaluated against the issued question and rubric; "
+            "Coding correctness is determined by sandbox execution against server-owned tests. "
+            "Open-ended answers are AI-evaluated against the issued question with deterministic relevance/correctness caps; "
             "integrity signals are reported separately and require human interpretation."
         ),
     }
@@ -1254,6 +1808,67 @@ def _reconcile_integrity_events(
         "warning_count": warning_count,
         "auto_submitted": auto_submitted,
         "termination_reason": termination_reason,
+    }
+
+
+@router.post("/code/run", dependencies=[Depends(code_execution_guard)])
+def run_mock_interview_code_v2(
+    body: MockInterviewCodeRunV2,
+    current_user: User = Depends(require_student_premium_access),
+    db: Session = Depends(get_db),
+):
+    profile = _profile(current_user, db)
+    interview = db.query(MockInterview).filter(
+        MockInterview.id == body.interview_id,
+        MockInterview.student_id == profile.id,
+    ).first()
+    if not interview:
+        raise HTTPException(status_code=404, detail="Mock interview not found")
+
+    issued = _issued_questions(interview)
+    item = next((row for row in issued if row["question_id"] == body.question_id), None)
+    if not item or item.get("answer_type") != "code":
+        raise HTTPException(status_code=404, detail="Coding question not found")
+
+    try:
+        execution = _run_code_tests(
+            item=item,
+            language=body.language,
+            source_code=body.source_code,
+            include_hidden=body.mode == "submit",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    public_results = []
+    for result in execution["results"]:
+        if result["visibility"] == "hidden":
+            public_results.append({
+                "index": result["index"],
+                "visibility": "hidden",
+                "passed": result["passed"],
+                "status": result["status"],
+                "stdout": "",
+                "stderr": "",
+                "compile_output": "",
+                "time": result["time"],
+                "memory": result["memory"],
+            })
+        else:
+            public_results.append(result)
+
+    return {
+        "question_id": body.question_id,
+        "mode": body.mode,
+        "language": body.language,
+        "compile_success": execution["compile_success"],
+        "passed": execution["passed"],
+        "total": execution["total"],
+        "sample_count": execution["sample_count"],
+        "hidden_count": execution["hidden_count"],
+        "results": public_results,
     }
 
 
@@ -1455,11 +2070,62 @@ def evaluate_mock_interview_v2(
                 "ideal_answer": "",
             })
             continue
+        if item.get("answer_type") == "code":
+            try:
+                evaluations.append(_coding_evaluation(item, answer))
+            except ValueError as exc:
+                evaluations.append({
+                    "question_id": qid,
+                    "question": item["question"],
+                    "section": "coding",
+                    "category": "coding",
+                    "difficulty": item.get("difficulty") or "mixed",
+                    "answer_type": "code",
+                    "answer": answer,
+                    "correct_answer": "",
+                    "score": 0,
+                    "verdict": "incorrect",
+                    "grading_method": "code_execution",
+                    "rubric": {
+                        "correctness": 0,
+                        "relevance": 0,
+                        "reasoning": 0,
+                        "completeness": 0,
+                        "clarity": 0,
+                    },
+                    "feedback": f"Code submission could not be evaluated: {str(exc)[:500]}",
+                    "strengths": [],
+                    "issues": [str(exc)[:1000]],
+                    "missing_points": ["Submit valid source code in one of the allowed languages."],
+                    "key_points": [],
+                    "better_answer_outline": "",
+                    "ideal_answer": "",
+                    "execution": {
+                        "language": "",
+                        "passed": 0,
+                        "total": len((item.get("coding_spec") or {}).get("sample_tests") or [])
+                            + len((item.get("coding_spec") or {}).get("hidden_tests") or []),
+                        "sample_count": len((item.get("coding_spec") or {}).get("sample_tests") or []),
+                        "hidden_count": len((item.get("coding_spec") or {}).get("hidden_tests") or []),
+                        "compile_success": False,
+                        "results": [],
+                    },
+                })
+            except RuntimeError:
+                LOGGER.warning("Final coding evaluation deferred because execution service is unavailable question_id=%s", qid)
+            continue
+
         objective = _objective_evaluation(item, answer)
         if objective is not None:
             evaluations.append(objective)
-        else:
-            subjective_items.append({**item, "answer": answer})
+            continue
+
+        failure_reason = _obvious_answer_failure(item, answer)
+        if failure_reason:
+            evaluations.append(_invalid_text_evaluation(item, answer, failure_reason))
+            continue
+
+        subjective_items.append({**item, "answer": answer})
 
     subjective_evaluations, ai_meta = _evaluate_subjective_with_ai(
         profile=profile,

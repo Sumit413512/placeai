@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/api-errors.css">
-  <link rel="stylesheet" href="/static/mock-interview.css?v=20260921-proctor2">
+  <link rel="stylesheet" href="/static/mock-interview.css?v=20260921-coding1">
   <link rel="stylesheet" href="/static/brand.css">
   <link rel="stylesheet" href="/static/ui-fixes.css">
 </head>
@@ -221,7 +221,7 @@
 
   <section id="result-panel" class="panel result-panel hidden">
     <div class="panel-head result-head">
-      <div><span class="step">04 · Assessment intelligence</span><h2>Complete performance report</h2><p>System-graded correctness, AI-evaluated interview answers and integrity signals are shown separately.</p></div>
+      <div><span class="step">04 · Assessment intelligence</span><h2>Complete performance report</h2><p>Answer-key correctness, sandbox-executed coding, AI-evaluated descriptive answers and integrity signals are shown separately.</p></div>
       <div class="score-badge"><strong id="overall-score">—</strong><span>/100 IRI</span></div>
     </div>
 
@@ -232,7 +232,7 @@
         <span>Interview Readiness Index</span>
         <strong id="report-iri">—</strong>
         <p id="overall-feedback">Complete the assessment to generate evidence-based coaching.</p>
-        <div class="grading-method"><span>Grading</span><b id="grading-method-label">Answer key + question-level AI</b></div>
+        <div class="grading-method"><span>Grading</span><b id="grading-method-label">Answer key + sandbox + question-level AI</b></div>
       </article>
       <article class="report-card integrity">
         <span>Assessment integrity</span>
@@ -249,7 +249,8 @@
       <article class="score-stat wrong"><span>Incorrect / weak</span><strong id="summary-incorrect">—</strong><small>responses</small></article>
       <article class="score-stat insufficient"><span>Unanswered / insufficient</span><strong id="summary-insufficient">—</strong><small>responses</small></article>
       <article class="score-stat"><span>Objective accuracy</span><strong id="summary-objective">—</strong><small>system graded</small></article>
-      <article class="score-stat"><span>AI answer average</span><strong id="summary-subjective">—</strong><small>open-ended</small></article>
+      <article class="score-stat"><span>Open-ended average</span><strong id="summary-subjective">—</strong><small>AI + relevance gate</small></article>
+      <article class="score-stat"><span>Coding tests</span><strong id="summary-coding">—</strong><small>passed / total</small></article>
     </div>
 
     <section id="integrity-report-panel" class="result-section integrity-report-section">
@@ -326,6 +327,6 @@
 <script src="/static/api-errors.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.es2017.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js" defer></script>
-<script src="/static/mock-interview.js?v=20260921-proctor2" defer></script>
+<script src="/static/mock-interview.js?v=20260921-coding1" defer></script>
 </body>
 </html>
