@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import re
 import time
 from difflib import SequenceMatcher
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
@@ -64,7 +66,17 @@ class MockInterviewAnswerV2(BaseModel):
     model_config = {"extra": "forbid"}
 
     question_id: int
-    answer: str = Field(min_length=1, max_length=8000)
+    answer: str = Field(min_length=1, max_length=24000)
+
+
+class MockInterviewCodeRunV2(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    interview_id: str
+    question_id: int = Field(ge=1, le=FULL_MOCK_QUESTION_COUNT)
+    language: str = Field(pattern="^(python|javascript|java|cpp|c)$")
+    source_code: str = Field(min_length=1, max_length=20000)
+    mode: str = Field(default="run", pattern="^(run|submit)$")
 
 
 class MockInterviewIntegrityEventV2(BaseModel):
@@ -104,19 +116,19 @@ class MockInterviewIntegritySignalV2(BaseModel):
 
 
 def _call_interview_ai(prompt: str, *, max_output_tokens: int, fast: bool = False) -> str:
-    """Call the canonical provider chain with an explicit interactive latency budget.
+    """Use Luna for generation and Sol for final assessment analysis.
 
-    Question generation uses the lower-latency GPT-5.6 Luna model. Evaluation keeps the
-    configured production model, but disables extra reasoning because the rubric and
-    evidence are already supplied in the prompt.
+    Final grading is intentionally routed to the flagship reasoning/coding model because
+    result accuracy matters more than generation latency. Deterministic answer keys and
+    code execution remain authoritative where available.
     """
     return call_ai_text(
         prompt,
-        reasoning_effort="none",
+        reasoning_effort="none" if fast else "medium",
         max_output_tokens=max_output_tokens,
-        model_override="gpt-5.6-luna" if fast else None,
-        timeout_seconds=10 if fast else 45,
-        retry_count_per_provider=0,
+        model_override="gpt-5.6-luna" if fast else "gpt-5.6-sol",
+        timeout_seconds=10 if fast else 55,
+        retry_count_per_provider=0 if fast else 1,
     )
 
 
