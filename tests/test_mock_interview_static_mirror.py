@@ -116,6 +116,8 @@ def test_proctor_runtime_is_required_and_active_in_preview_and_production():
     css = _text("app/static/mock-interview.css")
 
     assert "@tensorflow/tfjs@4.22.0" in html
+    assert "tf.es2017.min.js" in html
+    assert "/dist/tf.min.js" not in html
     assert "@tensorflow-models/coco-ssd@2.2.3" in html
     assert 'data-check="screen"' in html
     assert 'data-check="proctor"' in html
