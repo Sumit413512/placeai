@@ -430,3 +430,128 @@ def test_integrity_reconciliation_deduplicates_client_copy_and_keeps_client_fall
     assert result["warning_count"] == 2
     assert result["auto_submitted"] is False
     assert result["events"] == [event]
+
+
+def test_obvious_non_answer_scores_zero_before_ai():
+    item = {
+        "question_id": 7,
+        "question": "Explain how you would debug a failing API and validate the fix.",
+        "section": "technical",
+        "category": "technical",
+        "difficulty": "medium",
+        "answer_type": "text",
+    }
+    reason = mock_interview_v2._obvious_answer_failure(item, "anything")
+    assert reason
+    result = mock_interview_v2._invalid_text_evaluation(item, "anything", reason)
+    assert result["score"] == 0
+    assert result["rubric"]["relevance"] == 0
+    assert result["rubric"]["clarity"] == 0
+    assert result["verdict"] == "insufficient"
+
+
+def test_subjective_post_validation_caps_irrelevant_ai_score(monkeypatch):
+    item = {
+        "question_id": 1,
+        "question": "Explain database indexing trade-offs.",
+        "section": "technical",
+        "category": "technical",
+        "difficulty": "medium",
+        "answer": "I enjoy football and music in my free time.",
+    }
+    payload = {
+        "evaluations": [{
+            "question_id": 1,
+            "score": 68,
+            "verdict": "partially_correct",
+            "rubric": {
+                "correctness": 10,
+                "relevance": 5,
+                "reasoning": 50,
+                "completeness": 50,
+                "clarity": 80,
+            },
+            "feedback": "Fluent but unrelated.",
+            "strengths": [],
+            "issues": ["Unrelated"],
+            "missing_points": [],
+            "key_points": [],
+            "better_answer_outline": "",
+            "ideal_answer": "",
+        }]
+    }
+    monkeypatch.setattr(mock_interview_v2, "_call_interview_ai", lambda *args, **kwargs: json.dumps(payload))
+    monkeypatch.setattr(mock_interview_v2, "current_ai_provider", lambda: "openai")
+    monkeypatch.setattr(mock_interview_v2, "current_ai_model", lambda: "gpt-5.6-sol")
+    profile = _demo_profile()
+    job = _demo_job()
+    evaluations, meta = mock_interview_v2._evaluate_subjective_with_ai(
+        profile=profile, job=job, items=[item]
+    )
+    assert evaluations[0]["score"] <= 15
+    assert evaluations[0]["rubric"]["clarity"] <= 15
+    assert evaluations[0]["verdict"] == "incorrect"
+    assert meta["model"] == "gpt-5.6-sol"
+
+
+def test_coding_bank_has_server_owned_hidden_tests_and_five_languages():
+    bank = mock_interview_v2._coding_question_bank()
+    assert len(bank) == 2
+    for item in bank:
+        assert item["answer_type"] == "code"
+        spec = item["coding_spec"]
+        assert set(spec["allowed_languages"]) == {"python", "javascript", "java", "cpp", "c"}
+        assert len(spec["sample_tests"]) >= 2
+        assert len(spec["sample_tests"]) + len(spec["hidden_tests"]) >= 8
+        public = mock_interview_v2._public_coding_spec(spec)
+        assert "hidden_tests" not in public
+        assert public["hidden_test_count"] == len(spec["hidden_tests"])
+
+
+def test_coding_evaluation_score_is_derived_from_executed_tests(monkeypatch):
+    item = {"question_id": 41, **mock_interview_v2._coding_question_bank()[0]}
+    outcomes = [True] * 8 + [False] * 2
+    counter = {"i": 0}
+
+    def fake_execute(**kwargs):
+        index = counter["i"]
+        counter["i"] += 1
+        passed = outcomes[index]
+        return {
+            "passed": passed,
+            "status_id": 3 if passed else 4,
+            "status": "Accepted" if passed else "Wrong Answer",
+            "stdout": kwargs["expected_output"] if passed else "wrong",
+            "stderr": "",
+            "compile_output": "",
+            "time": "0.01",
+            "memory": 1024,
+        }
+
+    monkeypatch.setattr(mock_interview_v2, "_judge0_execute_case", fake_execute)
+    monkeypatch.setattr(
+        mock_interview_v2,
+        "_code_review_with_ai",
+        lambda **kwargs: {
+            "complexity_analysis": "Review only.",
+            "quality_score": 80,
+            "strengths": [],
+            "issues": [],
+            "improvement": "",
+            "provider": "test",
+            "model": "gpt-5.6-sol",
+        },
+    )
+    answer = json.dumps({"language": "python", "source_code": "print('x')"})
+    result = mock_interview_v2._coding_evaluation(item, answer)
+    assert result["score"] == 80
+    assert result["verdict"] == "partially_correct"
+    assert result["grading_method"] == "code_execution"
+    assert result["execution"]["passed"] == 8
+    assert result["execution"]["total"] == 10
+    assert "AI opinion" in result["key_points"][2]
+
+
+def test_code_run_route_is_exposed():
+    paths = client.get("/openapi.json").json()["paths"]
+    assert "/mock-interview/code/run" in paths
