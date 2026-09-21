@@ -933,6 +933,7 @@
     try {
       const motionFrames=[];
       const personCounts=[];
+      const faceCounts=[];
       const faceCenters=[];
 
       for(let i=0;i<6;i++){
@@ -941,9 +942,11 @@
         const persons=predictions.filter(function(item){return item.class==='person'&&Number(item.score||0)>=0.32;});
         personCounts.push(persons.length);
 
+        let detectedFaces=-1;
         if(state.nativeFaceDetector){
           try{
             const faces=await state.nativeFaceDetector.detect(video);
+            detectedFaces=faces.length;
             if(faces.length===1){
               const box=faces[0].boundingBox;
               faceCenters.push((box.x+box.width/2)/Math.max(1,video.videoWidth));
@@ -952,6 +955,7 @@
             state.nativeFaceDetector=null;
           }
         }
+        faceCounts.push(detectedFaces);
         await new Promise(function(resolve){setTimeout(resolve,330);});
       }
 
@@ -959,8 +963,12 @@
       for(let i=1;i<motionFrames.length;i++){
         maxMotion=Math.max(maxMotion,motionDelta(motionFrames[i-1],motionFrames[i]));
       }
-      const singlePersonSamples=personCounts.filter(function(count){return count===1;}).length;
-      const multiplePersonSamples=personCounts.filter(function(count){return count>1;}).length;
+      const singlePersonSamples=personCounts.filter(function(count,index){
+        return count===1 || faceCounts[index]===1;
+      }).length;
+      const multiplePersonSamples=personCounts.filter(function(count,index){
+        return count>1 || faceCounts[index]>1;
+      }).length;
       const faceMovement=faceCenters.length>=2?Math.max(...faceCenters)-Math.min(...faceCenters):0;
       const movementPassed=maxMotion>=0.012 || faceMovement>=0.055;
       const presencePassed=singlePersonSamples>=4 && multiplePersonSamples===0;
