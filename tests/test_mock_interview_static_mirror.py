@@ -81,8 +81,8 @@ def test_mcq_interaction_and_expandable_navigator_contract():
     css = _text("app/static/mock-interview.css")
     js = _text("app/static/mock-interview.js")
 
-    assert "mock-interview.css?v=20260921-proctor2" in html
-    assert "mock-interview.js?v=20260921-proctor2" in html
+    assert "mock-interview.css?v=20260921-coding1" in html
+    assert "mock-interview.js?v=20260921-coding1" in html
     assert 'role="radiogroup"' in js
     assert 'role="radio"' in js
     assert "option-select-indicator" in js
