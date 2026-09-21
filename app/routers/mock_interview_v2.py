@@ -465,12 +465,13 @@ def _generate_unique_questions(
     model = "role-grounded-v1"
 
     try:
+        prompt_count = count if count == FULL_MOCK_QUESTION_COUNT else count + (2 if count >= 5 else 1)
         prompt = _question_prompt(
             profile=profile,
             job=job,
             focus=focus,
             difficulty=difficulty,
-            count=count + (2 if count >= 5 else 1),
+            count=prompt_count,
             avoid=previous,
         )
         raw = _call_interview_ai(prompt, max_output_tokens=7600 if count == FULL_MOCK_QUESTION_COUNT else 1800, fast=True)
@@ -500,8 +501,12 @@ def _generate_unique_questions(
                 if q_difficulty not in {"easy", "medium", "hard"}:
                     q_difficulty = _difficulty_for(len(accepted) + 1, count, difficulty)
                 options = [str(x)[:1000] for x in (item.get("options") or [])[:4]] if count == FULL_MOCK_QUESTION_COUNT else []
-                answer_type = "mcq" if count == FULL_MOCK_QUESTION_COUNT and len(options) == 4 else "text"
-                correct_answer = str(item.get("correct_answer", ""))[:1000] if answer_type == "mcq" else ""
+                raw_correct = str(item.get("correct_answer", ""))[:1000]
+                resolved_correct = _resolve_correct_option(options, raw_correct) if len(options) == 4 else ""
+                answer_type = "mcq" if count == FULL_MOCK_QUESTION_COUNT and resolved_correct else "text"
+                correct_answer = resolved_correct if answer_type == "mcq" else ""
+                if answer_type == "text":
+                    options = []
                 accepted.append({
                     "question": question[:2000],
                     "section": section,
