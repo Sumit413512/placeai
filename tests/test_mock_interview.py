@@ -335,3 +335,18 @@ def test_full_mock_rejects_malformed_objective_ai_items_and_falls_back_to_valid_
     assert all(item["answer_type"] == "mcq" for item in objective)
     assert all(len(item["options"]) == 4 for item in objective)
     assert all(item["correct_answer"] in item["options"] for item in objective)
+
+
+def test_integrity_event_model_accepts_on_device_and_screen_sources():
+    on_device = mock_interview_v2.MockInterviewIntegrityEventV2(
+        event_type="mobile_phone_detected",
+        detail="Phone detected",
+        source="on_device_ml",
+    )
+    screen = mock_interview_v2.MockInterviewIntegrityEventV2(
+        event_type="screen_share_stopped",
+        detail="Screen sharing stopped",
+        source="screen",
+    )
+    assert on_device.source == "on_device_ml"
+    assert screen.source == "screen"
