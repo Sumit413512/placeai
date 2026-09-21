@@ -305,6 +305,282 @@ def _difficulty_for(index: int, total: int, requested: str) -> str:
     return "hard"
 
 
+
+CODE_LANGUAGES: dict[str, dict[str, Any]] = {
+    "python": {"label": "Python 3", "judge0_id": 71},
+    "javascript": {"label": "JavaScript (Node.js)", "judge0_id": 63},
+    "java": {"label": "Java", "judge0_id": 62},
+    "cpp": {"label": "C++17", "judge0_id": 54},
+    "c": {"label": "C", "judge0_id": 50},
+}
+
+
+def _coding_question_bank() -> list[dict[str, Any]]:
+    common_starters = {
+        "python": "import sys\n\ndef solve():\n    data = sys.stdin.read().strip().split()\n    # Write your solution here\n\nif __name__ == '__main__':\n    solve()\n",
+        "javascript": "const fs = require('fs');\nconst input = fs.readFileSync(0, 'utf8').trim();\n// Write your solution here\n",
+        "java": "import java.io.*;\nimport java.util.*;\n\npublic class Main {\n    public static void main(String[] args) throws Exception {\n        // Write your solution here\n    }\n}\n",
+        "cpp": "#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    // Write your solution here\n    return 0;\n}\n",
+        "c": "#include <stdio.h>\n#include <stdlib.h>\n\nint main(void) {\n    /* Write your solution here */\n    return 0;\n}\n",
+    }
+    return [
+        {
+            "question": (
+                "Remove duplicates while preserving first occurrence. Input: first line N, second line N integers. "
+                "Print the distinct integers in the order of their first appearance, separated by one space. "
+                "For N = 0, print an empty line."
+            ),
+            "section": "coding",
+            "category": "coding",
+            "difficulty": "medium",
+            "answer_type": "code",
+            "options": [],
+            "correct_answer": "",
+            "coding_spec": {
+                "problem_key": "stable_unique",
+                "allowed_languages": list(CODE_LANGUAGES),
+                "starter_code": common_starters,
+                "constraints": [
+                    "0 <= N <= 100000",
+                    "Each value fits in a signed 32-bit integer.",
+                    "Preserve the first occurrence of each value.",
+                ],
+                "sample_tests": [
+                    {"input": "5\n1 2 2 3 1\n", "output": "1 2 3"},
+                    {"input": "5\n4 4 4 4 4\n", "output": "4"},
+                    {"input": "6\n-1 -1 0 2 0 -1\n", "output": "-1 0 2"},
+                ],
+                "hidden_tests": [
+                    {"input": "1\n7\n", "output": "7"},
+                    {"input": "7\n3 1 3 2 1 4 2\n", "output": "3 1 2 4"},
+                    {"input": "0\n\n", "output": ""},
+                    {"input": "8\n10 20 10 30 20 40 50 40\n", "output": "10 20 30 40 50"},
+                    {"input": "5\n0 -1 0 -1 2\n", "output": "0 -1 2"},
+                    {"input": "6\n5 4 3 2 1 0\n", "output": "5 4 3 2 1 0"},
+                    {"input": "9\n1 1 2 2 3 3 4 4 5\n", "output": "1 2 3 4 5"},
+                ],
+                "time_limit_seconds": 2.0,
+                "memory_limit_kb": 128000,
+            },
+        },
+        {
+            "question": (
+                "Find the length of the longest consecutive integer sequence in an unsorted array. "
+                "Input: first line N, second line N integers. Print one integer: the longest sequence length. "
+                "Aim for O(N) expected time. For N = 0, print 0."
+            ),
+            "section": "coding",
+            "category": "coding",
+            "difficulty": "hard",
+            "answer_type": "code",
+            "options": [],
+            "correct_answer": "",
+            "coding_spec": {
+                "problem_key": "longest_consecutive",
+                "allowed_languages": list(CODE_LANGUAGES),
+                "starter_code": common_starters,
+                "constraints": [
+                    "0 <= N <= 100000",
+                    "Values fit in signed 32-bit integers.",
+                    "Duplicate values may occur.",
+                    "Target expected complexity: O(N).",
+                ],
+                "sample_tests": [
+                    {"input": "6\n100 4 200 1 3 2\n", "output": "4"},
+                    {"input": "6\n1 2 0 1 3 4\n", "output": "5"},
+                    {"input": "5\n-2 -1 0 1 2\n", "output": "5"},
+                ],
+                "hidden_tests": [
+                    {"input": "0\n\n", "output": "0"},
+                    {"input": "1\n5\n", "output": "1"},
+                    {"input": "7\n10 5 12 3 55 11 4\n", "output": "3"},
+                    {"input": "8\n8 7 6 5 4 3 2 1\n", "output": "8"},
+                    {"input": "6\n1 3 5 7 9 11\n", "output": "1"},
+                    {"input": "10\n20 21 22 30 31 32 33 40 50 60\n", "output": "4"},
+                    {"input": "9\n-5 -4 -3 10 11 12 13 14 100\n", "output": "5"},
+                ],
+                "time_limit_seconds": 2.0,
+                "memory_limit_kb": 128000,
+            },
+        },
+    ]
+
+
+def _public_coding_spec(spec: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "problem_key": spec.get("problem_key", ""),
+        "allowed_languages": [
+            {"key": key, "label": CODE_LANGUAGES[key]["label"]}
+            for key in spec.get("allowed_languages", [])
+            if key in CODE_LANGUAGES
+        ],
+        "starter_code": {
+            key: value
+            for key, value in (spec.get("starter_code") or {}).items()
+            if key in CODE_LANGUAGES
+        },
+        "constraints": [str(x) for x in (spec.get("constraints") or [])[:10]],
+        "sample_tests": [
+            {"input": str(case.get("input", "")), "output": str(case.get("output", ""))}
+            for case in (spec.get("sample_tests") or [])[:5]
+        ],
+        "test_case_count": len(spec.get("sample_tests") or []) + len(spec.get("hidden_tests") or []),
+        "hidden_test_count": len(spec.get("hidden_tests") or []),
+    }
+
+
+def _judge0_base_url() -> str:
+    return (os.getenv("JUDGE0_API_URL") or "https://ce.judge0.com").rstrip("/")
+
+
+def _judge0_headers() -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    token = (os.getenv("JUDGE0_API_TOKEN") or "").strip()
+    if token:
+        headers["X-Auth-Token"] = token
+    return headers
+
+
+def _normalized_program_output(value: str) -> str:
+    lines = [line.rstrip() for line in (value or "").replace("\r\n", "\n").split("\n")]
+    while lines and not lines[-1]:
+        lines.pop()
+    return "\n".join(lines).strip()
+
+
+def _judge0_execute_case(
+    *,
+    language: str,
+    source_code: str,
+    stdin: str,
+    expected_output: str,
+    time_limit_seconds: float,
+    memory_limit_kb: int,
+) -> dict[str, Any]:
+    language_meta = CODE_LANGUAGES.get(language)
+    if not language_meta:
+        raise ValueError("Unsupported coding language")
+    payload = {
+        "language_id": language_meta["judge0_id"],
+        "source_code": source_code,
+        "stdin": stdin,
+        "expected_output": expected_output,
+        "cpu_time_limit": max(0.5, min(float(time_limit_seconds), 5.0)),
+        "wall_time_limit": max(1.0, min(float(time_limit_seconds) * 2.5, 10.0)),
+        "memory_limit": max(32000, min(int(memory_limit_kb), 256000)),
+    }
+    url = f"{_judge0_base_url()}/submissions?base64_encoded=false&wait=true"
+    try:
+        response = httpx.post(url, headers=_judge0_headers(), json=payload, timeout=15.0)
+        response.raise_for_status()
+        data = response.json()
+        token = data.get("token")
+        if token and not isinstance(data.get("status"), dict):
+            for _ in range(8):
+                time.sleep(0.25)
+                poll = httpx.get(
+                    f"{_judge0_base_url()}/submissions/{token}?base64_encoded=false",
+                    headers=_judge0_headers(),
+                    timeout=8.0,
+                )
+                poll.raise_for_status()
+                data = poll.json()
+                status_id = int((data.get("status") or {}).get("id", 0) or 0)
+                if status_id not in {1, 2}:
+                    break
+        status_obj = data.get("status") if isinstance(data.get("status"), dict) else {}
+        status_id = int(status_obj.get("id", 0) or 0)
+        stdout = str(data.get("stdout") or "")
+        stderr = str(data.get("stderr") or "")
+        compile_output = str(data.get("compile_output") or "")
+        passed = (
+            status_id == 3
+            and _normalized_program_output(stdout) == _normalized_program_output(expected_output)
+        )
+        return {
+            "passed": passed,
+            "status_id": status_id,
+            "status": str(status_obj.get("description") or "Unknown")[:120],
+            "stdout": stdout[:4000],
+            "stderr": stderr[:4000],
+            "compile_output": compile_output[:4000],
+            "time": str(data.get("time") or "")[:40],
+            "memory": data.get("memory"),
+        }
+    except Exception as exc:
+        LOGGER.warning("Code runner unavailable error_type=%s", type(exc).__name__)
+        raise RuntimeError("Code execution service is temporarily unavailable") from exc
+
+
+def _parse_code_answer(answer: str) -> tuple[str, str]:
+    try:
+        payload = json.loads(answer)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Coding answer is not valid JSON") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("Coding answer payload is invalid")
+    language = str(payload.get("language", "")).strip().lower()
+    source_code = str(payload.get("source_code", ""))
+    if language not in CODE_LANGUAGES:
+        raise ValueError("Unsupported coding language")
+    if not source_code.strip() or len(source_code) > 20000:
+        raise ValueError("Source code is missing or too large")
+    return language, source_code
+
+
+def _run_code_tests(
+    *,
+    item: dict[str, Any],
+    language: str,
+    source_code: str,
+    include_hidden: bool,
+) -> dict[str, Any]:
+    spec = item.get("coding_spec") if isinstance(item.get("coding_spec"), dict) else {}
+    allowed = spec.get("allowed_languages") or []
+    if language not in allowed:
+        raise ValueError("Selected language is not allowed for this coding question")
+    tests = list(spec.get("sample_tests") or [])
+    sample_count = len(tests)
+    if include_hidden:
+        tests.extend(spec.get("hidden_tests") or [])
+    if not tests:
+        raise ValueError("Coding question has no test cases")
+    results = []
+    for index, case in enumerate(tests, start=1):
+        result = _judge0_execute_case(
+            language=language,
+            source_code=source_code,
+            stdin=str(case.get("input", "")),
+            expected_output=str(case.get("output", "")),
+            time_limit_seconds=float(spec.get("time_limit_seconds", 2.0) or 2.0),
+            memory_limit_kb=int(spec.get("memory_limit_kb", 128000) or 128000),
+        )
+        results.append({
+            "index": index,
+            "visibility": "sample" if index <= sample_count else "hidden",
+            "passed": bool(result["passed"]),
+            "status": result["status"],
+            "stdout": result["stdout"] if index <= sample_count else "",
+            "stderr": result["stderr"] if index <= sample_count else "",
+            "compile_output": result["compile_output"] if index <= sample_count else "",
+            "time": result["time"],
+            "memory": result["memory"],
+        })
+        if result["compile_output"] and index == 1:
+            break
+    passed = sum(1 for result in results if result["passed"])
+    return {
+        "language": language,
+        "passed": passed,
+        "total": len(tests),
+        "executed": len(results),
+        "sample_count": sample_count,
+        "hidden_count": max(0, len(tests) - sample_count),
+        "compile_success": not any(result["compile_output"] for result in results),
+        "results": results,
+    }
+
+
 def _fallback_questions(
     *,
     profile: StudentProfile,
