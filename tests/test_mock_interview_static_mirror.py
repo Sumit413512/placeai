@@ -81,8 +81,8 @@ def test_mcq_interaction_and_expandable_navigator_contract():
     css = _text("app/static/mock-interview.css")
     js = _text("app/static/mock-interview.js")
 
-    assert "mock-interview.css?v=20260921-coding1" in html
-    assert "mock-interview.js?v=20260921-coding1" in html
+    assert "mock-interview.css?v=20260921-coding2" in html
+    assert "mock-interview.js?v=20260921-coding2" in html
     assert 'role="radiogroup"' in js
     assert 'role="radio"' in js
     assert "option-select-indicator" in js
@@ -173,15 +173,34 @@ def test_executable_coding_workspace_is_mirrored_and_cache_busted():
     js = _text("app/static/mock-interview.js")
     css = _text("app/static/mock-interview.css")
 
-    assert "mock-interview.css?v=20260921-coding1" in html
-    assert "mock-interview.js?v=20260921-coding1" in html
+    assert "mock-interview.css?v=20260921-coding2" in html
+    assert "mock-interview.js?v=20260921-coding2" in html
     assert "code-workspace" in js
     assert "code-language" in js
     assert "run-code" in js
     assert "submit-code-tests" in js
     assert "/mock-interview/code/run" in js
-    assert "Run sample tests" in js
-    assert "Submit tests" in js
+    assert "Run Code" in js
+    assert "Submit Code" in js
     assert ".code-editor" in css
     assert ".code-test-result" in css
     assert ".review-code" in css
+
+
+def test_coding_editor_is_presented_inside_technical_assessment_family():
+    js = _text("app/static/mock-interview.js")
+    assert "Technical Assessment · Fundamentals" in js
+    assert "Technical Assessment · Programming & Debugging" in js
+    assert "Technical Assessment · Coding Editor" in js
+    assert "Coding Challenges" not in js
+
+
+def test_coding_editor_has_line_numbers_and_real_tab_indentation():
+    js = _text("app/static/mock-interview.js")
+    css = _text("app/static/mock-interview.css")
+    assert 'id="code-line-numbers"' in js
+    assert "updateCodeLineNumbers" in js
+    assert "event.key!=='Tab'" in js
+    assert "this.setRangeText(indent,start,end,'end')" in js
+    assert ".code-line-numbers" in css
+    assert ".code-editor-frame" in css
