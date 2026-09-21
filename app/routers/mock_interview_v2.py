@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.ai_provider import call_ai_text, call_ai_vision_text, current_ai_model, current_ai_provider
-from app.ai_rate_limit import student_ai_guard
+from app.ai_rate_limit import code_execution_guard, student_ai_guard
 from app.database import get_db
 from app.dependencies import require_institution_admin, require_student
 from app.models import ApprovalStatus, AuditEvent, Job, MockInterview, StudentProfile, User
@@ -1811,7 +1811,7 @@ def _reconcile_integrity_events(
     }
 
 
-@router.post("/code/run", dependencies=[Depends(student_ai_guard)])
+@router.post("/code/run", dependencies=[Depends(code_execution_guard)])
 def run_mock_interview_code_v2(
     body: MockInterviewCodeRunV2,
     current_user: User = Depends(require_student_premium_access),
