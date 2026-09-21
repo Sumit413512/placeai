@@ -14,7 +14,7 @@
     {key:'communication', label:'Verbal & Communication', count:6, minutes:10, kind:'mcq'},
     {key:'technical', label:'Technical Fundamentals', count:8, minutes:14, kind:'mixed'},
     {key:'programming', label:'Programming & Debugging', count:6, minutes:14, kind:'mixed'},
-    {key:'coding', label:'Coding Challenges', count:2, minutes:24, kind:'text'},
+    {key:'coding', label:'Coding Challenges', count:2, minutes:24, kind:'code'},
     {key:'resume', label:'Resume & Project Defence', count:4, minutes:10, kind:'text'},
     {key:'behavioral', label:'Behavioural & HR', count:4, minutes:10, kind:'text'},
     {key:'role', label:'Role / JD / Company', count:2, minutes:5, kind:'text'},
@@ -70,7 +70,9 @@
     faceMissStreak:0,
     multipleFaceStreak:0,
     phoneDetectionStreak:0,
-    expandedSections:{}
+    expandedSections:{},
+    codeDrafts:{},
+    codeExecution:{}
   };
 
   function toast(message, type='') {
