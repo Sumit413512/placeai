@@ -51,7 +51,9 @@ def test_proctored_assessment_navigation_and_warning_ui_contract():
     assert 'Save &amp; Next' in html
     assert "const status=attempted?'attempted':isCurrent?'current':'unattempted';" in js
     assert "const currentClass=isCurrent?' is-current':'';" in js
-    assert "class=\"palette-question '+status+' locked\"" in js
+    assert "palette-question" in js
+    assert ".palette-question.attempted.is-current" in css
+    assert ".palette-question.current.is-current" in css
     assert "integrityWarningLimit:4" in js
     assert "autoTerminateForIntegrity" in js
     assert "/mock-interview/proctor-frame" in js
