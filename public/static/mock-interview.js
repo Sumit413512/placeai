@@ -391,12 +391,202 @@
     renderSectionNav();
   }
 
+  function codingDraftKey(questionId, language) {
+    return String(questionId)+'::'+String(language || 'python');
+  }
+
+  function selectedCodingLanguage(question) {
+    const spec=question.coding_spec||{};
+    const allowed=Array.isArray(spec.allowed_languages)?spec.allowed_languages:[];
+    const existing=state.answers[question.question_id-1];
+    const preferred=existing?.language || state.codingRuns[question.question_id]?.language || 'python';
+    return allowed.some(function(item){return item.key===preferred;}) ? preferred : (allowed[0]?.key || 'python');
+  }
+
+  function codingDraft(question, language) {
+    const key=codingDraftKey(question.question_id,language);
+    if(Object.prototype.hasOwnProperty.call(state.codingDrafts,key)) return state.codingDrafts[key];
+    const existing=state.answers[question.question_id-1];
+    if(existing?.language===language && existing?.answer) {
+      state.codingDrafts[key]=existing.answer;
+      return existing.answer;
+    }
+    const starter=String(question.coding_spec?.starter_code?.[language] || '');
+    state.codingDrafts[key]=starter;
+    return starter;
+  }
+
+  function renderCodingTestResults(result) {
+    const panel=$('#coding-test-panel');
+    if(!panel)return;
+    if(!result){
+      panel.innerHTML='<div class="coding-empty-state">Run the sample tests to check your code. Hidden tests run only when you submit the coding question.</div>';
+      return;
+    }
+    const compileClass=result.compile_success?'pass':'fail';
+    const summary='<div class="coding-run-summary '+compileClass+'">'
+      +'<div><span>'+(result.compile_success?'Compilation successful':'Compilation failed')+'</span><strong>'+Number(result.passed||0)+' / '+Number(result.total||0)+' tests passed</strong></div>'
+      +'<b>'+Number(result.pass_rate||0)+'%</b></div>';
+    const rows=(result.test_results||[]).map(function(row){
+      const visibility=row.hidden?'Hidden test':'Sample test';
+      let detail='';
+      if(!row.hidden){
+        detail='<div class="test-case-io"><div><span>Input</span><pre>'+esc(row.input||'')+'</pre></div>'
+          +'<div><span>Expected</span><pre>'+esc(row.expected_output||'')+'</pre></div>'
+          +'<div><span>Output</span><pre>'+esc(row.actual_output||'')+'</pre></div></div>';
+      }
+      return '<article class="coding-test-row '+(row.passed?'pass':'fail')+'">'
+        +'<div><strong>'+visibility+' '+row.index+'</strong><small>'+esc(row.status||'')+'</small></div>'
+        +'<b>'+(row.passed?'Passed':'Failed')+'</b>'+detail+'</article>';
+    }).join('');
+    const compile=result.compile_output
+      ? '<div class="compiler-output"><span>Compiler output</span><pre>'+esc(result.compile_output)+'</pre></div>'
+      : '';
+    panel.innerHTML=summary+rows+compile;
+  }
+
+  function renderCodingAnswer(question, area, existing) {
+    const spec=question.coding_spec||{};
+    const allowed=Array.isArray(spec.allowed_languages)?spec.allowed_languages:[];
+    const language=selectedCodingLanguage(question);
+    const source=codingDraft(question,language);
+    const samples=Array.isArray(spec.sample_tests)?spec.sample_tests:[];
+    area.className='answer-area coding-answer-area';
+    area.innerHTML='<div class="coding-workspace">'
+      +'<section class="coding-problem-card">'
+      +'<div class="coding-problem-head"><div><span>Coding challenge</span><strong>'+esc(spec.title||'Coding Challenge')+'</strong></div><b>'+Number(spec.hidden_test_count||0)+' hidden tests</b></div>'
+      +'<p>'+esc(spec.problem_statement||question.question)+'</p>'
+      +'<div class="coding-spec-grid"><div><span>Input format</span><p>'+esc(spec.input_format||'See question')+'</p></div><div><span>Output format</span><p>'+esc(spec.output_format||'See question')+'</p></div></div>'
+      +(Array.isArray(spec.constraints)&&spec.constraints.length?'<div class="coding-constraints"><span>Constraints</span><ul>'+spec.constraints.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></div>':'')
+      +'<div class="coding-sample-strip">'+samples.map(function(t){return '<article><span>Sample '+t.index+'</span><pre>Input\n'+esc(t.input||'')+'\nExpected\n'+esc(t.expected_output||'')+'</pre></article>';}).join('')+'</div>'
+      +'</section>'
+      +'<section class="coding-editor-card">'
+      +'<div class="coding-editor-toolbar"><div><span>Language</span><select id="coding-language">'+allowed.map(function(item){return '<option value="'+esc(item.key)+'" '+(item.key===language?'selected':'')+'>'+esc(item.label)+'</option>';}).join('')+'</select></div>'
+      +'<div class="coding-editor-actions"><button id="run-code" class="button secondary" type="button">Run sample tests</button><button id="submit-code" class="button primary" type="button">Submit code</button></div></div>'
+      +'<div class="code-editor-shell"><div class="code-line-gutter" id="code-line-gutter"></div><textarea id="coding-editor" class="coding-editor" spellcheck="false" autocomplete="off" autocapitalize="off" maxlength="20000"></textarea></div>'
+      +'<div id="coding-test-panel" class="coding-test-panel"></div>'
+      +'</section></div>';
+
+    const editor=$('#coding-editor');
+    editor.value=source;
+    const refreshGutter=function(){
+      const lines=Math.max(1,editor.value.split('\n').length);
+      $('#code-line-gutter').innerHTML=Array.from({length:lines},function(_,i){return '<span>'+(i+1)+'</span>';}).join('');
+    };
+    refreshGutter();
+    editor.addEventListener('input',function(){
+      state.codingDrafts[codingDraftKey(question.question_id,$('#coding-language').value)]=editor.value;
+      delete state.codingRuns[question.question_id];
+      refreshGutter();
+      $('#autosave-state').textContent='Code changed · not submitted';
+    });
+    editor.addEventListener('keydown',function(event){
+      if(event.key==='Tab'){
+        event.preventDefault();
+        const start=editor.selectionStart,end=editor.selectionEnd;
+        editor.setRangeText('  ',start,end,'end');
+        editor.dispatchEvent(new Event('input',{bubbles:true}));
+      }
+    });
+    editor.addEventListener('scroll',function(){
+      $('#code-line-gutter').scrollTop=editor.scrollTop;
+    });
+    $('#coding-language').addEventListener('change',function(){
+      const previous=language;
+      state.codingDrafts[codingDraftKey(question.question_id,previous)]=editor.value;
+      const next=this.value;
+      editor.value=codingDraft(question,next);
+      delete state.codingRuns[question.question_id];
+      refreshGutter();
+      $('#autosave-state').textContent='Language changed · not submitted';
+      renderCodingTestResults(null);
+    });
+    $('#run-code').addEventListener('click',function(){runCodingQuestion(question,'run');});
+    $('#submit-code').addEventListener('click',function(){runCodingQuestion(question,'submit');});
+
+    const prior=state.codingRuns[question.question_id];
+    renderCodingTestResults(prior?.result || null);
+  }
+
+  async function runCodingQuestion(question, mode) {
+    if(state.codingBusy)return false;
+    const editor=$('#coding-editor');
+    const language=$('#coding-language')?.value || 'python';
+    const source=(editor?.value || '').trimEnd();
+    if(!source.trim()){toast('Write code before running the challenge.','error');return false;}
+    state.codingDrafts[codingDraftKey(question.question_id,language)]=source;
+    state.codingBusy=true;
+    const runBtn=$('#run-code'), submitBtn=$('#submit-code');
+    if(runBtn)runBtn.disabled=true;
+    if(submitBtn)submitBtn.disabled=true;
+    if(submitBtn&&mode==='submit')submitBtn.textContent='Submitting…';
+    if(runBtn&&mode==='run')runBtn.textContent='Running…';
+    try{
+      let result;
+      if(previewMode){
+        await new Promise(function(resolve){setTimeout(resolve,650);});
+        const unfinished=/write your solution here|return false|return 0;|return '-1'|return "-1"/i.test(source);
+        const sampleTotal=(question.coding_spec?.sample_tests||[]).length||2;
+        const passed=unfinished?0:sampleTotal;
+        result={
+          mode:mode,language:language,language_label:language,compile_success:true,
+          passed:passed,total:sampleTotal,pass_rate:Math.round(100*passed/sampleTotal),
+          hidden_passed:0,hidden_total:mode==='submit'?Number(question.coding_spec?.hidden_test_count||0):0,
+          test_results:(question.coding_spec?.sample_tests||[]).map(function(test){
+            return {index:test.index,hidden:false,passed:!unfinished,status:unfinished?'Wrong Answer':'Accepted',input:test.input,expected_output:test.expected_output,actual_output:unfinished?'Preview starter code output':'Preview simulated pass'};
+          })
+        };
+      }else{
+        result=await api('/mock-interview/coding/run',{
+          method:'POST',
+          body:JSON.stringify({
+            interview_id:state.session.interview_id,
+            question_id:question.question_id,
+            language:language,
+            source_code:source,
+            mode:mode
+          })
+        });
+      }
+      state.codingRuns[question.question_id]={
+        language:language,
+        source:source,
+        submitted:mode==='submit',
+        result:result
+      };
+      renderCodingTestResults(result);
+      $('#autosave-state').textContent=mode==='submit'
+        ? 'Code submitted · '+result.passed+'/'+result.total+' tests passed'
+        : 'Sample run complete · code not submitted yet';
+      toast(mode==='submit'
+        ? 'Code submitted: '+result.passed+'/'+result.total+' tests passed.'
+        : 'Sample tests completed: '+result.passed+'/'+result.total+' passed.',
+        result.compile_success?'':'error'
+      );
+      return true;
+    }catch(error){
+      toast(error.message||'Coding execution failed. Your code is still saved locally.','error');
+      return false;
+    }finally{
+      state.codingBusy=false;
+      if(runBtn){runBtn.disabled=false;runBtn.textContent='Run sample tests';}
+      if(submitBtn){submitBtn.disabled=false;submitBtn.textContent='Submit code';}
+    }
+  }
+
   function renderAnswerArea(question) {
     const area=$('#answer-area');
     area.className='answer-area '+(question.answer_type==='mcq'?'mcq-answer-area':'text-answer-area');
     area.onclick=null;
     state.selectedOption=null;
     const existing=state.answers[question.question_id-1];
+
+    if(question.answer_type==='code'){
+      $('#next-question').disabled=false;
+      $('#save-question').disabled=false;
+      renderCodingAnswer(question,area,existing);
+      return;
+    }
 
     if(question.answer_type==='mcq'){
       const options=Array.isArray(question.options)?question.options.filter(function(option){return typeof option==='string'&&option.trim();}).slice(0,4):[];
@@ -468,7 +658,9 @@
     $('#question-difficulty').textContent=q.difficulty || 'Mixed';
     $('#question-guidance').textContent=q.answer_type==='mcq'
       ? 'Select one option. Use Save answer to keep it on the current question, or Save & Next to lock it and move forward.'
-      : 'Respond using clear reasoning and evidence. After submission this question is permanently closed.';
+      : q.answer_type==='code'
+        ? 'Write and run your solution in the PlaceAI IDE. Sample runs do not affect scoring; Submit Code executes the full test suite.'
+        : 'Respond using clear reasoning and evidence. After submission this question is permanently closed.';
     const stage=$('.question-stage');
     if(stage) stage.scrollTop=0;
     drawTextCanvas($('#question-canvas'),q.question,`${state.candidateLabel} · Q${state.current+1}`);
@@ -487,11 +679,18 @@
     if(q.answer_type==='mcq') {
       if(state.selectedOption===null) { toast('Select an option before continuing.','error'); return false; }
       answer=q.options[state.selectedOption];
+      state.answers[q.question_id-1]={question_id:q.question_id,answer:answer};
+    } else if(q.answer_type==='code') {
+      const language=$('#coding-language')?.value || selectedCodingLanguage(q);
+      answer=($('#coding-editor')?.value || '').trimEnd();
+      if(!answer.trim()) { toast('Write your solution before continuing.','error'); return false; }
+      state.codingDrafts[codingDraftKey(q.question_id,language)]=answer;
+      state.answers[q.question_id-1]={question_id:q.question_id,answer:answer,language:language};
     } else {
       answer=($('#current-answer')?.value || '').trim();
       if(!answer) { toast('Enter your response before continuing.','error'); return false; }
+      state.answers[q.question_id-1]={question_id:q.question_id,answer:answer};
     }
-    state.answers[q.question_id-1]={question_id:q.question_id,answer};
     $('#autosave-state').textContent='Answer saved';
     renderSectionNav();
     return true;
@@ -1255,7 +1454,21 @@
   }
 
   async function submitAndContinue() {
+    const q=state.questions[state.current];
     if(!answerCurrentQuestion()) return;
+    if(q?.answer_type==='code'){
+      const saved=state.answers[q.question_id-1];
+      const prior=state.codingRuns[q.question_id];
+      const currentSubmitted=prior
+        && prior.submitted
+        && prior.language===saved.language
+        && prior.source===saved.answer;
+      if(!currentSubmitted){
+        const ok=await runCodingQuestion(q,'submit');
+        if(!ok)return;
+        answerCurrentQuestion();
+      }
+    }
     if(state.current>=state.questions.length-1){await finishAssessment(false);return;}
     state.current++;
     renderQuestion();
