@@ -449,6 +449,7 @@
     const spec=question.coding_spec||{};
     const allowed=Array.isArray(spec.allowed_languages)?spec.allowed_languages:[];
     const language=selectedCodingLanguage(question);
+    let currentLanguage=language;
     const source=codingDraft(question,language);
     const samples=Array.isArray(spec.sample_tests)?spec.sample_tests:[];
     area.className='answer-area coding-answer-area';
@@ -492,9 +493,9 @@
       $('#code-line-gutter').scrollTop=editor.scrollTop;
     });
     $('#coding-language').addEventListener('change',function(){
-      const previous=language;
-      state.codingDrafts[codingDraftKey(question.question_id,previous)]=editor.value;
+      state.codingDrafts[codingDraftKey(question.question_id,currentLanguage)]=editor.value;
       const next=this.value;
+      currentLanguage=next;
       editor.value=codingDraft(question,next);
       delete state.codingRuns[question.question_id];
       refreshGutter();
