@@ -75,7 +75,7 @@ class MockInterviewIntegrityEventV2(BaseModel):
     at: str = Field(default="", max_length=80)
     question: int | None = Field(default=None, ge=1, le=FULL_MOCK_QUESTION_COUNT)
     warning_number: int | None = Field(default=None, ge=1, le=20)
-    source: str = Field(default="browser", pattern="^(browser|camera|vision|system)$")
+    source: str = Field(default="browser", pattern="^(browser|camera|vision|system|screen|on_device_ml)$")
 
 
 class MockInterviewEvaluationV2(BaseModel):
