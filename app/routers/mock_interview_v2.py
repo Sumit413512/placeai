@@ -1392,7 +1392,7 @@ def _evaluate_subjective_with_ai(
     # Result analysis deliberately takes longer than question generation. Smaller batches
     # let the flagship reasoning model grade each answer against the exact question without
     # losing detail in a very large 50-item response.
-    batches = [ai_items[index:index + 6] for index in range(0, len(ai_items), 6)]
+    batches = [ai_items[index:index + 10] for index in range(0, len(ai_items), 10)]
     results: list[dict[str, Any]] = []
     provider = "unknown"
     model = "gpt-5.6-sol"
@@ -1401,7 +1401,7 @@ def _evaluate_subjective_with_ai(
         try:
             raw = _call_interview_evaluator(
                 _subjective_prompt(profile=profile, job=job, items=batch),
-                max_output_tokens=5200,
+                max_output_tokens=7000,
             )
             data = extract_json_from_response(raw)
             source = data.get("evaluations", []) if isinstance(data, dict) else []
