@@ -81,8 +81,8 @@ def test_mcq_interaction_and_expandable_navigator_contract():
     css = _text("app/static/mock-interview.css")
     js = _text("app/static/mock-interview.js")
 
-    assert "mock-interview.css?v=20260921-mcqfix2" in html
-    assert "mock-interview.js?v=20260921-mcqfix2" in html
+    assert "mock-interview.css?v=20260921-mcqfix3" in html
+    assert "mock-interview.js?v=20260921-mcqfix3" in html
     assert 'role="radiogroup"' in js
     assert 'role="radio"' in js
     assert "option-select-indicator" in js
@@ -98,3 +98,12 @@ def test_mcq_handler_does_not_call_foreach_on_single_element_helper():
     js = _text("app/static/mock-interview.js")
     assert "area.onclick=function(event)" in js
     assert "$('.option-button',area).forEach" not in js
+
+
+def test_mcq_fail_safe_blocks_progression_when_options_are_invalid():
+    js = _text("app/static/mock-interview.js")
+    css = _text("app/static/mock-interview.css")
+    assert "options.length!==4" in js
+    assert "mcq_options_invalid" in js
+    assert "Question options unavailable" in js
+    assert ".answer-load-error" in css
