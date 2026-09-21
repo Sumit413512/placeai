@@ -286,7 +286,7 @@ Do not ask multiple questions that are substantially the same within this new se
 
 Return ONLY valid JSON.
 For a 50-item full assessment use:
-{{"questions":[{{"question":"...","section":"quantitative|logical|communication|technical|programming|coding|resume|behavioral|role|situational","category":"...","difficulty":"easy|medium|hard","answer_type":"mcq|text","options":["A","B","C","D"],"correct_answer":"exact option text or empty for text"}}]}}
+{{"questions":[{{"question":"...","section":"quantitative|logical|communication|technical|programming|resume|behavioral|role|situational","category":"...","difficulty":"easy|medium|hard","answer_type":"mcq|text","options":["A","B","C","D"],"correct_answer":"exact option text or empty for text"}}]}}
 For legacy practice rounds use:
 {{"questions":[{{"question":"...","category":"technical|behavioral|hr|situational|communication","difficulty":"easy|medium|hard"}}]}}
 
