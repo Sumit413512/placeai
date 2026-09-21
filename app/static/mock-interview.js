@@ -1736,10 +1736,39 @@
       let html='<article class="answer-review review-'+bucket+'"><header class="answer-review-header"><div><div class="question-meta-line">';
       html+='<span class="review-chip '+bucket+'">'+esc((item.verdict||bucket).replaceAll('_',' '))+'</span>';
       html+='<span class="review-chip">'+esc((item.section||'interview').replaceAll('_',' '))+'</span>';
-      html+='<span class="review-chip">'+esc(item.grading_method==='system'?'System graded':item.grading_method==='ai'?'AI graded':'Preview graded')+'</span>';
+      const gradingLabel=item.grading_method==='system'
+        ?'System graded'
+        :item.grading_method==='system_relevance_gate'
+          ?'Relevance gate'
+          :item.grading_method==='ai_rubric_server_scored'
+            ?'AI rubric · server score'
+            :item.grading_method==='code_tests+ai'
+              ?'Sandbox tests + AI review'
+              :(item.grading_method||'Analysis');
+      html+='<span class="review-chip">'+esc(gradingLabel)+'</span>';
       html+='</div><h4>Q'+item.question_id+'. '+esc(item.question||'')+'</h4></div><div class="answer-score-box"><strong>'+(item.score??'—')+'</strong><small>/100</small></div></header>';
-      html+='<div class="answer-comparison"><div class="answer-pane"><span>Your answer</span><p>'+esc(item.answer||'No answer')+'</p></div>';
-      html+='<div class="answer-pane correct-pane"><span>'+(item.answer_type==='mcq'?'Correct answer':'Strong answer / reference')+'</span><p>'+esc(expected||'See detailed feedback below.')+'</p></div></div>';
+      if(item.answer_type==='code'){
+        const coding=item.coding||{};
+        const testRows=Array.isArray(coding.test_results)?coding.test_results:[];
+        html+='<div class="code-review-block"><div class="code-review-head"><strong>'+esc(coding.language_label||item.language||'Code submission')+'</strong><span>'+(coding.compile_success?'Compilation successful':'Compilation failed')+'</span></div><pre class="code-review-source">'+esc(item.answer||'No code submitted')+'</pre></div>';
+        html+='<div class="code-result-grid">'
+          +'<div class="code-result-stat"><span>Tests passed</span><strong>'+Number(coding.passed||0)+' / '+Number(coding.total||0)+'</strong></div>'
+          +'<div class="code-result-stat"><span>Functional score</span><strong>'+Number(coding.pass_rate||0)+'/100</strong></div>'
+          +'<div class="code-result-stat"><span>AI code quality</span><strong>'+Number(coding.quality_score||0)+'/100</strong></div>'
+          +'<div class="code-result-stat"><span>Execution</span><strong>'+esc(coding.execution_ms?coding.execution_ms+' ms':'—')+'</strong></div>'
+          +'</div>';
+        if(coding.complexity)html+='<div class="ideal-answer-box"><strong>Complexity / approach review</strong><p>'+esc(coding.complexity)+'</p></div>';
+        if(testRows.length){
+          html+='<div class="coding-result-tests">'+testRows.map(function(row){
+            return '<span class="'+(row.passed?'pass':'fail')+'">'+(row.hidden?'Hidden':'Sample')+' '+row.index+' · '+(row.passed?'Passed':'Failed')+'</span>';
+          }).join('')+'</div>';
+        }
+        if(coding.compile_output)html+='<div class="compiler-output"><span>Compiler output</span><pre>'+esc(coding.compile_output)+'</pre></div>';
+        if(expected)html+='<div class="ideal-answer-box"><strong>Reference approach</strong><p>'+esc(expected)+'</p></div>';
+      }else{
+        html+='<div class="answer-comparison"><div class="answer-pane"><span>Your answer</span><p>'+esc(item.answer||'No answer')+'</p></div>';
+        html+='<div class="answer-pane correct-pane"><span>'+(item.answer_type==='mcq'?'Correct answer':'Strong answer / reference')+'</span><p>'+esc(expected||'See detailed feedback below.')+'</p></div></div>';
+      }
       html+='<p class="review-feedback"><strong>Assessment:</strong> '+esc(item.feedback||'No detailed feedback returned.')+'</p>';
       if(rubricEntries.length){
         html+='<div class="rubric-grid">'+rubricEntries.map(function(entry){return '<div class="rubric-item"><span>'+esc(entry[0].replaceAll('_',' '))+'</span><strong>'+entry[1]+'/100</strong></div>';}).join('')+'</div>';
@@ -1801,7 +1830,9 @@
     $('#overall-score').textContent=result.overall_score??'—';
     $('#report-iri').textContent=result.overall_score===null||result.overall_score===undefined?'Withheld':result.overall_score+'/100';
     $('#overall-feedback').textContent=result.overall_feedback||'Assessment completed.';
-    $('#grading-method-label').textContent=previewMode?'Answer key + preview scoring (production uses AI)':'Answer key + question-level AI';
+    $('#grading-method-label').textContent=previewMode
+      ?'Answer key + preview scoring'
+      :'Answer keys + sandbox coding tests + GPT-5.6 Sol rubric analysis';
     renderIntegrityReport(result);
     const banner=$('#analysis-status-banner');
     if(!complete){
@@ -1869,6 +1900,9 @@
     state.signalStreaks={candidate:0,multiple:0,phone:0};
     state.signalLastWarning={candidate:0,multiple:0,phone:0,monitor:0};
     state.expandedSections={};
+    state.codingDrafts={};
+    state.codingRuns={};
+    state.codingBusy=false;
     clearAnalysisTimers();
     if(state.mediaStream){state.mediaStream.getTracks().forEach(function(t){t.stop();});state.mediaStream=null;}
     if(state.screenStream){state.screenStream.getTracks().forEach(function(t){t.stop();});state.screenStream=null;}
