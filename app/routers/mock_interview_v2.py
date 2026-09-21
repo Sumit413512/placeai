@@ -1277,6 +1277,12 @@ def institution_mock_interview_results_v2(
         output.append({
             "interview_id": row.id,
             "student_id": row.student_id,
+            "student_name": row.student.full_name if row.student else None,
+            "student_college": (
+                row.student.institution.name
+                if row.student and row.student.institution
+                else (row.student.college if row.student else None)
+            ),
             "job_id": row.job_id,
             "overall_score": row.overall_score,
             "overall_feedback": row.overall_feedback,
@@ -1333,6 +1339,39 @@ def evaluate_mock_interview_v2(
             "answer_type": item.get("answer_type"),
             "answer": answer,
         })
+        if answer.startswith("[No response submitted"):
+            evaluations.append({
+                "question_id": qid,
+                "question": item["question"],
+                "section": item.get("section") or item.get("category") or "interview",
+                "category": item.get("category") or "interview",
+                "difficulty": item.get("difficulty") or "mixed",
+                "answer_type": item.get("answer_type") or "text",
+                "answer": answer,
+                "correct_answer": (
+                    str(item.get("correct_answer", ""))
+                    if item.get("answer_type") == "mcq"
+                    else ""
+                ),
+                "score": 0,
+                "verdict": "insufficient",
+                "grading_method": "system",
+                "rubric": {
+                    "correctness": 0,
+                    "relevance": 0,
+                    "reasoning": 0,
+                    "completeness": 0,
+                    "clarity": 0,
+                },
+                "feedback": "No candidate response was submitted before the question or assessment closed.",
+                "strengths": [],
+                "issues": ["Question was not answered."],
+                "missing_points": ["Submit a substantive response within the allotted time."],
+                "key_points": [],
+                "better_answer_outline": "",
+                "ideal_answer": "",
+            })
+            continue
         objective = _objective_evaluation(item, answer)
         if objective is not None:
             evaluations.append(objective)
