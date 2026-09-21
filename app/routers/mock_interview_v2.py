@@ -1498,7 +1498,7 @@ def _build_assessment_result(
     section_rows = []
     section_scores: dict[str, int] = {}
     total_correct = total_partial = total_incorrect = total_insufficient = 0
-    system_graded = ai_graded = 0
+    system_graded = ai_graded = coding_graded = 0
 
     for key, label, _ in ASSESSMENT_BLUEPRINT:
         section_evals = [item for item in evaluations if item.get("section") == key]
@@ -1509,9 +1509,12 @@ def _build_assessment_result(
         counts = {"correct": 0, "partial": 0, "incorrect": 0, "insufficient": 0}
         for item in section_evals:
             counts[_verdict_bucket(item.get("verdict", "insufficient"))] += 1
-            if item.get("grading_method") == "system":
+            grading_method = str(item.get("grading_method") or "")
+            if grading_method in {"system", "system_relevance_gate"}:
                 system_graded += 1
-            elif item.get("grading_method") == "ai":
+            elif grading_method == "code_tests+ai":
+                coding_graded += 1
+            elif grading_method.startswith("ai"):
                 ai_graded += 1
         total_correct += counts["correct"]
         total_partial += counts["partial"]
@@ -1560,8 +1563,15 @@ def _build_assessment_result(
         for row in weakest
     ]
 
-    objective_items = [item for item in evaluations if item.get("grading_method") == "system"]
-    subjective_items = [item for item in evaluations if item.get("grading_method") == "ai"]
+    objective_items = [
+        item for item in evaluations
+        if item.get("grading_method") in {"system", "system_relevance_gate"}
+        and item.get("answer_type") == "mcq"
+    ]
+    subjective_items = [
+        item for item in evaluations
+        if str(item.get("grading_method") or "").startswith("ai")
+    ]
     objective_accuracy = (
         round(100 * sum(item["score"] == 100 for item in objective_items) / len(objective_items))
         if objective_items else None
@@ -1595,6 +1605,7 @@ def _build_assessment_result(
             "insufficient": total_insufficient,
             "system_graded": system_graded,
             "ai_graded": ai_graded,
+            "coding_graded": coding_graded,
             "objective_accuracy": objective_accuracy,
             "subjective_average": subjective_average,
         },
@@ -1846,10 +1857,13 @@ def evaluate_mock_interview_v2(
     answers_payload: list[dict[str, Any]] = []
     evaluations: list[dict[str, Any]] = []
     subjective_items: list[dict[str, Any]] = []
+    coding_items: list[dict[str, Any]] = []
 
     for item in issued:
         qid = item["question_id"]
-        answer = submitted_by_id[qid].answer.strip()
+        submitted = submitted_by_id[qid]
+        answer = submitted.answer.strip()
+        language = (submitted.language or "").strip().lower() or None
         answers_payload.append({
             "question_id": qid,
             "question": item["question"],
@@ -1858,6 +1872,7 @@ def evaluate_mock_interview_v2(
             "difficulty": item.get("difficulty"),
             "answer_type": item.get("answer_type"),
             "answer": answer,
+            "language": language,
         })
         if answer.startswith("[No response submitted"):
             evaluations.append({
@@ -1892,11 +1907,22 @@ def evaluate_mock_interview_v2(
                 "ideal_answer": "",
             })
             continue
+        if item.get("answer_type") == "code":
+            coding_items.append({**item, "answer": answer, "language": language})
+            continue
+
         objective = _objective_evaluation(item, answer)
         if objective is not None:
             evaluations.append(objective)
         else:
             subjective_items.append({**item, "answer": answer})
+
+    coding_evaluations, coding_meta = _evaluate_coding_answers(
+        profile=profile,
+        job=job,
+        items=coding_items,
+    )
+    evaluations.extend(coding_evaluations)
 
     subjective_evaluations, ai_meta = _evaluate_subjective_with_ai(
         profile=profile,
@@ -1904,6 +1930,7 @@ def evaluate_mock_interview_v2(
         items=subjective_items,
     )
     evaluations.extend(subjective_evaluations)
+    ai_meta = {**ai_meta, "coding": coding_meta}
     result = _build_assessment_result(
         evaluations=evaluations,
         issued=issued,
