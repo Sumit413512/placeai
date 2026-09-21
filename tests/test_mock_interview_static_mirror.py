@@ -94,10 +94,11 @@ def test_mcq_interaction_and_expandable_navigator_contract():
     assert "pointer-events:none" in css
 
 
-def test_mcq_handler_does_not_call_foreach_on_single_element_helper():
+def test_mcq_handler_uses_collection_helper_and_delegated_click_handler():
     js = _text("app/static/mock-interview.js")
     assert "area.onclick=function(event)" in js
-    assert "$('.option-button',area).forEach" not in js
+    assert "$('.option-button',area).forEach(function(button,i)" in js
+    assert "$('.option-button',area).forEach(function(x)" in js
 
 
 def test_mcq_fail_safe_blocks_progression_when_options_are_invalid():
