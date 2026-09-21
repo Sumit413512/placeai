@@ -56,3 +56,17 @@ def test_proctored_assessment_navigation_and_warning_ui_contract():
     assert "/mock-interview/proctor-frame" in js
     assert "mobile_phone_detected" in js
     assert "background:#7f1d1d" in css or "#7f1d1d" in css
+
+
+def test_mcq_options_bind_all_buttons_and_navigator_is_expandable():
+    js = _text("app/static/mock-interview.js")
+    css = _text("app/static/mock-interview.css")
+
+    assert "$$('.option-button',area).forEach" in js
+    assert "      $('.option-button',area).forEach" not in js
+    assert "data-section-toggle" in js
+    assert "toggleNavigatorSection" in js
+    assert "palette-section-toggle" in css
+    assert "palette-question-wrap" in css
+    assert "option-button.selected:after" in css
+    assert "demo==='assessment'" in js
