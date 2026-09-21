@@ -67,7 +67,7 @@ class MockInterviewAnswerV2(BaseModel):
     model_config = {"extra": "forbid"}
 
     question_id: int
-    answer: str = Field(min_length=1, max_length=24000)
+    answer: str = Field(min_length=1, max_length=32000)
 
 
 class MockInterviewCodeRunV2(BaseModel):
@@ -1673,7 +1673,7 @@ def _build_assessment_result(
     ]
 
     objective_items = [item for item in evaluations if item.get("grading_method") == "system"]
-    subjective_items = [item for item in evaluations if item.get("grading_method") == "ai"]
+    subjective_items = [item for item in evaluations if item.get("grading_method") in {"ai", "system_relevance_gate"}]
     objective_accuracy = (
         round(100 * sum(item["score"] == 100 for item in objective_items) / len(objective_items))
         if objective_items else None
