@@ -73,3 +73,21 @@ def test_mcq_options_bind_all_buttons_and_navigator_is_expandable():
     assert "palette-question-wrap" in css
     assert "option-button.selected:after" in css
     assert "demo==='assessment'" in js
+
+
+def test_mcq_interaction_and_expandable_navigator_contract():
+    html = _text("app/templates/mock-interview.html")
+    css = _text("app/static/mock-interview.css")
+    js = _text("app/static/mock-interview.js")
+
+    assert "mock-interview.css?v=20260921-mcqfix2" in html
+    assert "mock-interview.js?v=20260921-mcqfix2" in html
+    assert 'role="radiogroup"' in js
+    assert 'role="radio"' in js
+    assert "option-select-indicator" in js
+    assert "aria-checked" in js
+    assert "data-section-toggle" in js
+    assert "palette-question-wrap" in js
+    assert "expandedSections" in js
+    assert ".option-select-indicator" in css
+    assert "pointer-events:none" in css
