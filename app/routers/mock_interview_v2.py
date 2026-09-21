@@ -74,13 +74,7 @@ class MockInterviewEvaluationV2(BaseModel):
     answers: list[MockInterviewAnswerV2] = Field(min_length=1, max_length=FULL_MOCK_QUESTION_COUNT)
 
 
-def _call_interview_ai(
-    prompt: str,
-    *,
-    max_output_tokens: int,
-    fast: bool = False,
-    timeout_seconds: int | None = None,
-) -> str:
+def _call_interview_ai(prompt: str, *, max_output_tokens: int, fast: bool = False) -> str:
     """Call the canonical provider chain with an explicit interactive latency budget.
 
     Question generation uses the lower-latency GPT-5.6 Luna model. Evaluation keeps the
@@ -92,7 +86,7 @@ def _call_interview_ai(
         reasoning_effort="none",
         max_output_tokens=max_output_tokens,
         model_override="gpt-5.6-luna" if fast else None,
-        timeout_seconds=timeout_seconds if timeout_seconds is not None else (10 if fast else 24),
+        timeout_seconds=10 if fast else 45,
         retry_count_per_provider=0,
     )
 
@@ -924,7 +918,6 @@ def _evaluate_subjective_with_ai(
             _subjective_prompt(profile=profile, job=job, items=items),
             max_output_tokens=9000,
             fast=False,
-            timeout_seconds=45,
         )
         data = extract_json_from_response(raw)
         source = data.get("evaluations", []) if isinstance(data, dict) else []
@@ -946,7 +939,6 @@ def _evaluate_subjective_with_ai(
                     _subjective_prompt(profile=profile, job=job, items=batch),
                     max_output_tokens=5200,
                     fast=False,
-                    timeout_seconds=40,
                 )
                 data = extract_json_from_response(raw)
                 source = data.get("evaluations", []) if isinstance(data, dict) else []
@@ -1071,7 +1063,11 @@ def _build_assessment_result(
         weight = SECTION_WEIGHTS.get(section, 0)
         weighted_total += score * weight
         applied_weight += weight
-    readiness_index = round(weighted_total / applied_weight) if applied_weight else raw_score
+    readiness_index = (
+        round(weighted_total / applied_weight)
+        if len(issued) == FULL_MOCK_QUESTION_COUNT and applied_weight
+        else raw_score
+    )
 
     strongest = sorted(section_rows, key=lambda row: row["score"], reverse=True)[:3]
     weakest = sorted(section_rows, key=lambda row: row["score"])[:3]
