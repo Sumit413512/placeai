@@ -115,7 +115,12 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    # Camera/microphone stay denied platform-wide. Only the dedicated Interview
+    # Intelligence document may request same-origin media for an explicit secure mock.
+    if path == "/mock-interview":
+        response.headers["Permissions-Policy"] = "camera=(self), microphone=(self), geolocation=()"
+    else:
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
