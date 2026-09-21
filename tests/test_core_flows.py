@@ -787,29 +787,43 @@ def test_mock_interview_server_issued_session_integrity(monkeypatch):
         db.close()
 
     def fake_ai(prompt, *, max_output_tokens, fast=False):
-        if "Generate exactly" in prompt:
-            return json.dumps({"questions": [
-                {"question_id": 1, "question": "Explain a production API decision you made.", "category": "technical"},
-                {"question_id": 2, "question": "How would you debug a failing service?", "category": "situational"},
-                {"question_id": 3, "question": "Describe a disagreement you resolved.", "category": "behavioral"},
-            ]})
+        return json.dumps({"questions": [
+            {"question_id": 1, "question": "Explain a production API decision you made.", "category": "technical"},
+            {"question_id": 2, "question": "How would you debug a failing service?", "category": "situational"},
+            {"question_id": 3, "question": "Describe a disagreement you resolved.", "category": "behavioral"},
+        ]})
+
+    def fake_evaluator(prompt, *, max_output_tokens):
         return json.dumps({
-            "overall_score": 82,
-            "overall_feedback": "Strong structured practice response.",
-            "dimensions": {
-                "relevance": 84, "clarity": 82, "structure": 80, "language_precision": 81,
-                "role_knowledge": 85, "problem_solving": 83, "professionalism": 79
-            },
-            "strengths": ["Relevant reasoning"],
-            "improvements": ["Add measurable outcomes"],
             "evaluations": [
-                {"question_id": 1, "score": 83, "feedback": "Good", "better_answer_outline": "Context → decision → result"},
-                {"question_id": 2, "score": 82, "feedback": "Good", "better_answer_outline": "Triage → isolate → verify"},
-                {"question_id": 3, "score": 81, "feedback": "Good", "better_answer_outline": "Situation → action → result"},
-            ],
+                {
+                    "question_id": 1,
+                    "verdict": "correct",
+                    "rubric": {"correctness": 90, "relevance": 90, "reasoning": 80, "completeness": 80, "clarity": 80},
+                    "feedback": "Technically grounded.",
+                    "better_answer_outline": "Context → decision → validation",
+                },
+                {
+                    "question_id": 2,
+                    "verdict": "strong",
+                    "rubric": {"correctness": 85, "relevance": 90, "reasoning": 90, "completeness": 80, "clarity": 85},
+                    "feedback": "Structured diagnosis.",
+                    "better_answer_outline": "Reproduce → isolate → fix → verify",
+                },
+                {
+                    "question_id": 3,
+                    "verdict": "strong",
+                    "rubric": {"correctness": 80, "relevance": 90, "reasoning": 85, "completeness": 80, "clarity": 85},
+                    "feedback": "Specific conflict handling.",
+                    "better_answer_outline": "Situation → action → result",
+                },
+            ]
         })
 
     monkeypatch.setattr(mock_router, "_call_interview_ai", fake_ai)
+    monkeypatch.setattr(mock_router, "_call_interview_evaluator", fake_evaluator)
+    monkeypatch.setattr(mock_router, "current_ai_provider", lambda: "openai")
+    monkeypatch.setattr(mock_router, "current_ai_model", lambda: "gpt-5.6-sol")
 
     started = client.post("/mock-interview/start", headers=auth(student), json={
         "job_id": job_id, "focus": "balanced", "question_count": 3
@@ -840,14 +854,28 @@ def test_mock_interview_server_issued_session_integrity(monkeypatch):
     assert injected.status_code == 422
 
     answers = [
-        {"question_id": q["question_id"], "answer": f"Structured answer for question {q['question_id']}"}
-        for q in payload["questions"]
+        {
+            "question_id": payload["questions"][0]["question_id"],
+            "answer": "For the production API I chose a versioned REST contract, validated error handling with integration tests, and monitored the rollout before expanding traffic.",
+        },
+        {
+            "question_id": payload["questions"][1]["question_id"],
+            "answer": "I would reproduce the failing service, inspect logs and metrics, isolate the smallest failing dependency, implement the fix, and verify it with regression tests.",
+        },
+        {
+            "question_id": payload["questions"][2]["question_id"],
+            "answer": "During a project disagreement I clarified the shared objective, compared both proposals with evidence, agreed on a small experiment, and used the result to reach a decision.",
+        },
     ]
     evaluated = client.post("/mock-interview/evaluate", headers=auth(student), json={
         "interview_id": payload["interview_id"], "answers": answers
     })
     assert evaluated.status_code == 200, evaluated.text
-    assert evaluated.json()["overall_score"] == 82
+    evaluation_payload = evaluated.json()
+    assert evaluation_payload["analysis_status"] == "complete"
+    assert evaluation_payload["overall_score"] == 86
+    assert evaluation_payload["overall_score"] != 82
+    assert evaluation_payload["grading"]["score_authority"] == "server-derived rubric"
 
     repeated = client.post("/mock-interview/evaluate", headers=auth(student), json={
         "interview_id": payload["interview_id"], "answers": answers
@@ -856,7 +884,11 @@ def test_mock_interview_server_issued_session_integrity(monkeypatch):
 
     history = client.get("/mock-interview/history", headers=auth(student))
     assert history.status_code == 200
-    assert any(row["id"] == payload["interview_id"] and row["overall_score"] == 82 for row in history.json())
+    assert any(
+        row["id"] == payload["interview_id"]
+        and row["overall_score"] == evaluation_payload["overall_score"]
+        for row in history.json()
+    )
 
     dashboard = client.get("/students/dashboard", headers=auth(student))
     assert dashboard.status_code == 200
