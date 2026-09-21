@@ -46,7 +46,17 @@
     ignoreFullscreen:false,
     lastResult:null,
     reviewFilter:'all',
-    analysisTimers:[]
+    analysisTimers:[],
+    integrityWarnings:0,
+    integrityWarningLimit:4,
+    lastWarningAt:0,
+    autoSubmittedIntegrity:false,
+    integrityTerminationReason:'',
+    proctorVisionTimer:null,
+    proctorVisionBusy:false,
+    faceMissStreak:0,
+    multipleFaceStreak:0,
+    phoneDetectionStreak:0
   };
 
   function toast(message, type='') {
@@ -264,16 +274,26 @@
     return BLUEPRINT.find(x=>x.key===question?.section) || BLUEPRINT[0];
   }
 
+  function isAttemptedAnswer(answer) {
+    return Boolean(answer && answer.answer && !String(answer.answer).startsWith('['));
+  }
+
   function renderSectionNav() {
-    const currentQ = state.questions[state.current];
-    const nav = $('#section-nav');
-    nav.innerHTML = BLUEPRINT.map((item,index)=>{
-      const sectionQuestions=state.questions.filter(q=>q.section===item.key);
-      const first=sectionQuestions[0]?.question_id || 1;
-      const last=sectionQuestions.at(-1)?.question_id || first;
-      const done=state.current+1 > last;
-      const active=currentQ?.section===item.key;
-      return `<div class="section-link ${active?'active':''} ${done?'done':''}"><span>${String(index+1).padStart(2,'0')}</span><strong>${esc(item.label)}</strong><b>${item.count}</b></div>`;
+    const nav=$('#section-nav');
+    const attemptedCount=state.answers.filter(isAttemptedAnswer).length;
+    if($('#palette-progress')) $('#palette-progress').textContent=attemptedCount+' / '+state.questions.length;
+    nav.innerHTML=BLUEPRINT.map(function(section){
+      const rows=state.questions.map(function(q,index){return {q:q,index:index};}).filter(function(row){return row.q.section===section.key;});
+      if(!rows.length)return '';
+      const chips=rows.map(function(row){
+        const isCurrent=row.index===state.current;
+        const attempted=isAttemptedAnswer(state.answers[row.q.question_id-1]);
+        const status=isCurrent?'current':attempted?'attempted':'unattempted';
+        const label='Question '+row.q.question_id+' · '+status;
+        return '<span class="palette-question '+status+' locked" aria-label="'+esc(label)+'" title="'+esc(label)+'">'+row.q.question_id+'</span>';
+      }).join('');
+      const done=rows.filter(function(row){return isAttemptedAnswer(state.answers[row.q.question_id-1]);}).length;
+      return '<section class="palette-section"><div class="palette-section-title"><strong>'+esc(section.label)+'</strong><span>'+done+'/'+rows.length+'</span></div><div class="palette-question-grid">'+chips+'</div></section>';
     }).join('');
   }
 
@@ -282,9 +302,14 @@
     state.selectedOption=null;
     const existing=state.answers[question.question_id-1];
     if (question.answer_type==='mcq' && question.options?.length) {
+      if(existing?.answer) {
+        const existingIndex=question.options.findIndex(function(option){return option===existing.answer;});
+        if(existingIndex>=0) state.selectedOption=existingIndex;
+      }
       area.innerHTML=`<div class="answer-options">${question.options.map((_,i)=>`<button class="option-button" type="button" data-option-index="${i}"><span class="option-key">${String.fromCharCode(65+i)}</span><canvas class="option-canvas"></canvas></button>`).join('')}</div>`;
-      $$('.option-button',area).forEach((button,i)=>{
+      $('.option-button',area).forEach((button,i)=>{
         drawOptionCanvas(button.querySelector('canvas'),question.options[i],state.candidateLabel);
+        if(state.selectedOption===i) button.classList.add('selected');
         button.addEventListener('click',()=>{
           $$('.option-button',area).forEach(x=>x.classList.remove('selected'));
           button.classList.add('selected'); state.selectedOption=i;
@@ -310,8 +335,8 @@
     drawTextCanvas($('#question-canvas'),q.question,`${state.candidateLabel} · Q${state.current+1}`);
     renderAnswerArea(q);
     renderSectionNav();
-    $('#autosave-state').textContent='Response not submitted';
-    $('#next-question').textContent=state.current===state.questions.length-1?'Submit final response':'Submit & continue';
+    $('#autosave-state').textContent=isAttemptedAnswer(state.answers[q.question_id-1])?'Answer saved':'Response not saved';
+    $('#next-question').textContent=state.current===state.questions.length-1?'Save & Submit':'Save & Next';
     const sectionFirst=state.questions.findIndex(x=>x.section===q.section);
     if(state.current===sectionFirst || state.sectionRemaining<=0) state.sectionRemaining=info.minutes*60;
     updateTimers();
@@ -328,7 +353,8 @@
       if(!answer) { toast('Enter your response before continuing.','error'); return false; }
     }
     state.answers[q.question_id-1]={question_id:q.question_id,answer};
-    $('#autosave-state').textContent='Response submitted';
+    $('#autosave-state').textContent='Answer saved';
+    renderSectionNav();
     return true;
   }
 
