@@ -91,3 +91,9 @@ def test_mcq_interaction_and_expandable_navigator_contract():
     assert "expandedSections" in js
     assert ".option-select-indicator" in css
     assert "pointer-events:none" in css
+
+
+def test_mcq_collection_handler_uses_queryselectorall_helper():
+    js = _text("app/static/mock-interview.js")
+    assert "$$('.option-button',area).forEach" in js
+    assert "$('.option-button',area).forEach" not in js
