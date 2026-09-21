@@ -1154,6 +1154,203 @@ def _objective_evaluation(item: dict[str, Any], answer: str) -> dict[str, Any] |
     }
 
 
+
+_OBVIOUS_BAD_ANSWERS = {
+    "anything", "test", "testing", "random", "asdf", "qwerty", "abc", "xyz",
+    "nothing", "no idea", "idk", "i dont know", "i don't know", "skip", "na", "n/a",
+}
+
+
+def _obvious_answer_failure(item: dict[str, Any], answer: str) -> str | None:
+    normalized = re.sub(r"\s+", " ", (answer or "").strip().casefold())
+    words = re.findall(r"[a-z0-9+#.-]+", normalized)
+    if not normalized:
+        return "No substantive response was provided."
+    if normalized in _OBVIOUS_BAD_ANSWERS:
+        return "The response is a placeholder or explicit non-answer."
+    if len(words) <= 2:
+        return "The response is too short to address the question."
+    if len(words) >= 4 and len(set(words)) / len(words) < 0.35:
+        return "The response is predominantly repetitive and does not provide meaningful evidence."
+    filler = {"anything", "whatever", "something", "stuff", "things", "random", "test", "okay", "ok"}
+    if words and all(word in filler for word in words):
+        return "The response contains generic filler rather than an answer to the question."
+    return None
+
+
+def _invalid_text_evaluation(item: dict[str, Any], answer: str, reason: str) -> dict[str, Any]:
+    section = item.get("section") or item.get("category") or "interview"
+    behavioral = section in {"resume", "behavioral", "role", "situational"}
+    verdict = "weak" if behavioral else "insufficient"
+    return {
+        "question_id": item["question_id"],
+        "question": item["question"],
+        "section": section,
+        "category": item.get("category") or section,
+        "difficulty": item.get("difficulty") or "mixed",
+        "answer_type": "text",
+        "answer": answer,
+        "correct_answer": "",
+        "score": 0,
+        "verdict": verdict,
+        "grading_method": "system_relevance_gate",
+        "rubric": {
+            "correctness": 0,
+            "relevance": 0,
+            "reasoning": 0,
+            "completeness": 0,
+            "clarity": 0,
+        },
+        "feedback": reason + " No communication or clarity credit is awarded when the response does not answer the question.",
+        "strengths": [],
+        "issues": [reason],
+        "missing_points": ["Answer the exact question with relevant reasoning, evidence or an example."],
+        "key_points": [],
+        "better_answer_outline": "Direct answer → relevant reasoning/evidence → example or validation.",
+        "ideal_answer": "",
+    }
+
+
+def _code_review_with_ai(
+    *,
+    item: dict[str, Any],
+    language: str,
+    source_code: str,
+    execution: dict[str, Any],
+) -> dict[str, Any]:
+    prompt = f"""
+{PROMPT_GUARDRAIL}
+
+You are PlaceAI's senior code reviewer. The execution engine is authoritative for correctness.
+Do NOT override, reinterpret or contradict the test-case result. Review only code quality:
+algorithmic complexity, data-structure choice, edge cases visible in the code, readability,
+maintainability and whether the implementation matches the stated target complexity.
+
+Return ONLY JSON:
+{{
+  "complexity_analysis":"...",
+  "quality_score":0,
+  "strengths":["..."],
+  "issues":["..."],
+  "improvement":"..."
+}}
+
+QUESTION
+{item["question"]}
+
+LANGUAGE
+{language}
+
+EXECUTION SUMMARY
+Passed {execution["passed"]} of {execution["total"]} tests.
+Compile success: {execution["compile_success"]}
+
+SOURCE CODE
+{source_code[:20000]}
+"""
+    try:
+        raw = _call_interview_ai(prompt, max_output_tokens=1800, fast=False)
+        data = extract_json_from_response(raw)
+        if not isinstance(data, dict):
+            raise ValueError("Invalid code-review payload")
+        return {
+            "complexity_analysis": str(data.get("complexity_analysis", ""))[:3000],
+            "quality_score": _clamp_score(data.get("quality_score")),
+            "strengths": [str(x)[:800] for x in (data.get("strengths") or [])[:6]],
+            "issues": [str(x)[:800] for x in (data.get("issues") or [])[:6]],
+            "improvement": str(data.get("improvement", ""))[:3000],
+            "provider": current_ai_provider(),
+            "model": current_ai_model(),
+        }
+    except Exception as exc:
+        LOGGER.warning("AI code review unavailable error_type=%s", type(exc).__name__)
+        return {
+            "complexity_analysis": "AI code-quality review was unavailable. Correctness remains based on executed test cases.",
+            "quality_score": 0,
+            "strengths": [],
+            "issues": [],
+            "improvement": "Review algorithmic complexity, edge cases and readability before the next attempt.",
+            "provider": "unavailable",
+            "model": "",
+        }
+
+
+def _coding_evaluation(item: dict[str, Any], answer: str) -> dict[str, Any]:
+    language, source_code = _parse_code_answer(answer)
+    execution = _run_code_tests(
+        item=item,
+        language=language,
+        source_code=source_code,
+        include_hidden=True,
+    )
+    total = max(1, int(execution["total"]))
+    score = round(100 * int(execution["passed"]) / total)
+    if execution["passed"] == total and execution["compile_success"]:
+        verdict = "correct"
+    elif execution["passed"] > 0 and execution["compile_success"]:
+        verdict = "partially_correct"
+    else:
+        verdict = "incorrect"
+
+    review = _code_review_with_ai(
+        item=item,
+        language=language,
+        source_code=source_code,
+        execution=execution,
+    )
+    feedback = (
+        f'Code execution: {execution["passed"]}/{execution["total"]} test cases passed. '
+        + ("Compilation succeeded." if execution["compile_success"] else "Compilation failed.")
+    )
+    if review.get("complexity_analysis"):
+        feedback += " " + str(review["complexity_analysis"])
+
+    return {
+        "question_id": item["question_id"],
+        "question": item["question"],
+        "section": "coding",
+        "category": "coding",
+        "difficulty": item.get("difficulty") or "mixed",
+        "answer_type": "code",
+        "answer": json.dumps({"language": language, "source_code": source_code}),
+        "correct_answer": "",
+        "score": score,
+        "verdict": verdict,
+        "grading_method": "code_execution",
+        "rubric": {
+            "correctness": score,
+            "relevance": score,
+            "reasoning": review.get("quality_score", 0),
+            "completeness": score,
+            "clarity": review.get("quality_score", 0),
+        },
+        "feedback": feedback,
+        "strengths": review.get("strengths", []),
+        "issues": review.get("issues", []),
+        "missing_points": (
+            [] if score == 100
+            else [f'{execution["total"] - execution["passed"]} test case(s) still fail.']
+        ),
+        "key_points": [
+            f'Language: {CODE_LANGUAGES[language]["label"]}',
+            f'Test cases passed: {execution["passed"]}/{execution["total"]}',
+            "Correctness score is determined by sandbox execution, not AI opinion.",
+        ],
+        "better_answer_outline": review.get("improvement", ""),
+        "ideal_answer": "",
+        "execution": {
+            "language": language,
+            "passed": execution["passed"],
+            "total": execution["total"],
+            "sample_count": execution["sample_count"],
+            "hidden_count": execution["hidden_count"],
+            "compile_success": execution["compile_success"],
+            "results": execution["results"],
+        },
+        "code_review": review,
+    }
+
+
 def _subjective_prompt(
     *,
     profile: StudentProfile,
