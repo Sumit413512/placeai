@@ -38,6 +38,7 @@
     proctorModelReady:false,
     proctorModelLoading:null,
     proctorModelBusy:false,
+    nativeFaceDetector:null,
     localProctorTimer:null,
     mediaWatchTimer:null,
     proctorBannerTimer:null,
@@ -721,12 +722,24 @@
       const phones=predictions.filter(function(item){return (item.class==='cell phone'||item.class==='mobile phone')&&Number(item.score||0)>=0.34;});
       const phoneScore=phones.reduce(function(max,item){return Math.max(max,Number(item.score||0));},0);
 
+      let faceCount=null;
+      if(state.nativeFaceDetector){
+        try{
+          const faces=await state.nativeFaceDetector.detect(video);
+          faceCount=Array.isArray(faces)?faces.length:null;
+        }catch{
+          state.nativeFaceDetector=null;
+        }
+      }
+      const candidateMissing=persons.length===0 && (faceCount===null || faceCount===0);
+      const multiplePeople=persons.length>1 || (faceCount!==null && faceCount>1);
+
       if(phones.length){
         $('#camera-proctor-status').textContent='Mobile phone detected';
         logIntegrity('phone_visual_signal','On-device object detection identified a visible mobile phone (confidence '+Math.round(phoneScore*100)+'%).','on_device_ml',null);
-      }else if(persons.length===0){
+      }else if(candidateMissing){
         $('#camera-proctor-status').textContent='Candidate not visible';
-      }else if(persons.length>1){
+      }else if(multiplePeople){
         $('#camera-proctor-status').textContent='Multiple people detected';
       }else{
         $('#camera-proctor-status').textContent='Candidate present · monitoring';
@@ -742,7 +755,7 @@
       );
       confirmVisualSignal(
         'candidate',
-        persons.length===0,
+        candidateMissing,
         3,
         'candidate_not_visible',
         'The candidate was not visible in consecutive webcam checks.',
@@ -750,7 +763,7 @@
       );
       confirmVisualSignal(
         'multiple',
-        persons.length>1,
+        multiplePeople,
         2,
         'multiple_people',
         'More than one person was detected in consecutive webcam checks.',
