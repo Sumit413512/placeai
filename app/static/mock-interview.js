@@ -195,6 +195,29 @@
     ]
   };
 
+
+  function demoCodingSpec(index) {
+    const starter={
+      python:"import sys\n\ndef solve():\n    data = sys.stdin.read().strip().split()\n    # Write your solution here\n\nif __name__ == '__main__':\n    solve()\n",
+      javascript:"const fs = require('fs');\nconst input = fs.readFileSync(0, 'utf8').trim();\n// Write your solution here\n",
+      java:"import java.io.*;\nimport java.util.*;\n\npublic class Main {\n    public static void main(String[] args) throws Exception {\n        // Write your solution here\n    }\n}\n",
+      cpp:"#include <bits/stdc++.h>\nusing namespace std;\nint main(){ ios::sync_with_stdio(false); cin.tie(nullptr); /* solution */ return 0; }\n",
+      c:"#include <stdio.h>\nint main(void){ /* solution */ return 0; }\n"
+    };
+    const languages=[
+      {key:'python',label:'Python 3'},{key:'javascript',label:'JavaScript (Node.js)'},
+      {key:'java',label:'Java'},{key:'cpp',label:'C++17'},{key:'c',label:'C'}
+    ];
+    if(index===0)return {
+      question:'Remove duplicates while preserving first occurrence. Input N and then N integers. Print distinct integers in first-occurrence order.',
+      spec:{allowed_languages:languages,starter_code:starter,constraints:['0 <= N <= 100000','Preserve first occurrence order.'],sample_tests:[{input:'5\n1 2 2 3 1\n',output:'1 2 3'},{input:'5\n4 4 4 4 4\n',output:'4'}],test_case_count:10,hidden_test_count:7}
+    };
+    return {
+      question:'Find the length of the longest consecutive integer sequence in an unsorted array. Aim for O(N) expected time.',
+      spec:{allowed_languages:languages,starter_code:starter,constraints:['0 <= N <= 100000','Target expected complexity: O(N).'],sample_tests:[{input:'6\n100 4 200 1 3 2\n',output:'4'},{input:'6\n1 2 0 1 3 4\n',output:'5'}],test_case_count:10,hidden_test_count:7}
+    };
+  }
+
   function makeDemoQuestions(job) {
     const questions = [];
     let id = 1;
@@ -204,6 +227,11 @@
         if (bank[i]) {
           const [question,options,correct] = bank[i];
           questions.push({question_id:id++,section:section.key,category:section.label,difficulty:i < Math.ceil(section.count*.4)?'Foundation':i < Math.ceil(section.count*.8)?'Intermediate':'Advanced',question,answer_type:'mcq',options,correct});
+          continue;
+        }
+        if(section.key==='coding'){
+          const demo=demoCodingSpec(i);
+          questions.push({question_id:id++,section:'coding',category:section.label,difficulty:i===0?'Intermediate':'Advanced',question:demo.question,answer_type:'code',coding_spec:demo.spec,options:[]});
           continue;
         }
         const skill = (job.required_skills || ['role fundamentals'])[i % Math.max(1,(job.required_skills || []).length)] || 'role fundamentals';
@@ -1588,10 +1616,15 @@
       let html='<article class="answer-review review-'+bucket+'"><header class="answer-review-header"><div><div class="question-meta-line">';
       html+='<span class="review-chip '+bucket+'">'+esc((item.verdict||bucket).replaceAll('_',' '))+'</span>';
       html+='<span class="review-chip">'+esc((item.section||'interview').replaceAll('_',' '))+'</span>';
-      html+='<span class="review-chip">'+esc(item.grading_method==='system'?'System graded':item.grading_method==='ai'?'AI graded':'Preview graded')+'</span>';
+      html+='<span class="review-chip">'+esc(item.grading_method==='system'?'System graded':item.grading_method==='code_execution'?'Sandbox graded':item.grading_method==='system_relevance_gate'?'Relevance gate':item.grading_method==='ai'?'AI graded':'Preview graded')+'</span>';
       html+='</div><h4>Q'+item.question_id+'. '+esc(item.question||'')+'</h4></div><div class="answer-score-box"><strong>'+(item.score??'—')+'</strong><small>/100</small></div></header>';
-      html+='<div class="answer-comparison"><div class="answer-pane"><span>Your answer</span><p>'+esc(item.answer||'No answer')+'</p></div>';
-      html+='<div class="answer-pane correct-pane"><span>'+(item.answer_type==='mcq'?'Correct answer':'Strong answer / reference')+'</span><p>'+esc(expected||'See detailed feedback below.')+'</p></div></div>';
+      let answerBody='<p>'+esc(item.answer||'No answer')+'</p>';
+      if(item.answer_type==='code'){
+        const stored=parseStoredCodeAnswer(item.answer);
+        answerBody='<div class="review-code-meta"><strong>'+esc(stored?.language||'code')+'</strong><span>'+esc(item.execution?((item.execution.passed||0)+'/'+(item.execution.total||0)+' tests passed'):'')+'</span></div><pre class="review-code">'+esc(stored?.source_code||'No code submitted')+'</pre>';
+      }
+      html+='<div class="answer-comparison"><div class="answer-pane"><span>Your answer</span>'+answerBody+'</div>';
+      html+='<div class="answer-pane correct-pane"><span>'+(item.answer_type==='mcq'?'Correct answer':item.answer_type==='code'?'Execution result':'Strong answer / reference')+'</span><p>'+esc(item.answer_type==='code'?(item.feedback||'See execution evidence below.'):(expected||'See detailed feedback below.'))+'</p></div></div>';
       html+='<p class="review-feedback"><strong>Assessment:</strong> '+esc(item.feedback||'No detailed feedback returned.')+'</p>';
       if(rubricEntries.length){
         html+='<div class="rubric-grid">'+rubricEntries.map(function(entry){return '<div class="rubric-item"><span>'+esc(entry[0].replaceAll('_',' '))+'</span><strong>'+entry[1]+'/100</strong></div>';}).join('')+'</div>';
