@@ -12,9 +12,9 @@
     {key:'quantitative', label:'Quantitative Aptitude', count:8, minutes:12, kind:'mcq'},
     {key:'logical', label:'Logical & Analytical Reasoning', count:8, minutes:12, kind:'mcq'},
     {key:'communication', label:'Verbal & Communication', count:6, minutes:10, kind:'mcq'},
-    {key:'technical', label:'Technical Fundamentals', count:8, minutes:14, kind:'mixed'},
-    {key:'programming', label:'Programming & Debugging', count:6, minutes:14, kind:'mixed'},
-    {key:'coding', label:'Coding Challenges', count:2, minutes:24, kind:'code'},
+    {key:'technical', label:'Technical Assessment · Fundamentals', count:8, minutes:14, kind:'mixed'},
+    {key:'programming', label:'Technical Assessment · Programming & Debugging', count:6, minutes:14, kind:'mixed'},
+    {key:'coding', label:'Technical Assessment · Coding Editor', count:2, minutes:24, kind:'code'},
     {key:'resume', label:'Resume & Project Defence', count:4, minutes:10, kind:'text'},
     {key:'behavioral', label:'Behavioural & HR', count:4, minutes:10, kind:'text'},
     {key:'role', label:'Role / JD / Company', count:2, minutes:5, kind:'text'},
@@ -394,7 +394,7 @@
       return '<article class="code-test-result '+status+'"><div><strong>'+visibility+' test '+result.index+'</strong><span>'+esc(result.status||'')+'</span></div><b>'+(result.passed?'Passed':'Failed')+'</b>'+detail+'</article>';
     }).join('');
     panel.innerHTML='<div class="code-run-summary '+(compile?'compile-ok':'compile-fail')+'">'
-      +'<div><span>'+(compile?'Compilation / runtime ready':'Compilation failed')+'</span><strong>'+passed+' / '+total+' tests passed</strong></div>'
+      +'<div><span>'+(compile?'Compilation / execution completed':'Compilation / runtime failed')+'</span><strong>'+passed+' / '+total+' tests passed</strong></div>'
       +'<b>'+Math.round(total?passed/total*100:0)+'%</b></div>'
       +'<div class="code-test-results">'+rows+'</div>';
   }
@@ -409,7 +409,7 @@
     const submitButton=$('#submit-code-tests');
     if(runButton)runButton.disabled=true;
     if(submitButton)submitButton.disabled=true;
-    $('#code-run-status').textContent=mode==='submit'?'Running all test cases…':'Compiling and running sample tests…';
+    $('#code-run-status').textContent=mode==='submit'?'Submitting against sample + hidden tests…':'Compiling and running sample tests…';
     try{
       if(previewMode){
         await new Promise(function(resolve){setTimeout(resolve,500);});
@@ -437,7 +437,7 @@
     }finally{
       if(runButton)runButton.disabled=false;
       if(submitButton)submitButton.disabled=false;
-      $('#code-run-status').textContent=mode==='submit'?'Submission test run complete':'Sample test run complete';
+      $('#code-run-status').textContent=mode==='submit'?'Code submission complete':'Sample test run complete';
     }
   }
 
@@ -513,20 +513,42 @@
       let activeLanguage=initialLanguage;
       area.innerHTML='<div class="code-workspace">'
         +'<div class="code-toolbar"><label>Language<select id="code-language">'+languages.map(function(lang){return '<option value="'+esc(lang.key)+'">'+esc(lang.label)+'</option>';}).join('')+'</select></label>'
-        +'<div class="code-actions"><button id="run-code" type="button" class="button secondary">Run sample tests</button><button id="submit-code-tests" type="button" class="button primary">Submit tests</button></div></div>'
-        +'<div class="code-editor-shell"><div class="code-editor-title"><span>Solution editor</span><small id="code-run-status">Not run yet</small></div><textarea id="code-editor" class="code-editor" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></div>'
+        +'<div class="code-actions"><button id="run-code" type="button" class="button secondary">Run Code</button><button id="submit-code-tests" type="button" class="button primary">Submit Code</button></div></div>'
+        +'<div class="code-editor-shell"><div class="code-editor-title"><span>Solution editor</span><small id="code-run-status">Not run yet</small></div><div class="code-editor-frame"><pre id="code-line-numbers" class="code-line-numbers" aria-hidden="true">1</pre><textarea id="code-editor" class="code-editor" aria-label="Code editor" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></div></div>'
         +'<div class="code-problem-meta"><div><strong>Constraints</strong><ul>'+(spec.constraints||[]).map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></div><div><strong>Sample tests</strong>'+(spec.sample_tests||[]).map(function(test,i){return '<article class="sample-case"><span>Sample '+(i+1)+'</span><pre>Input\n'+esc(test.input||'')+'\nExpected\n'+esc(test.output||'')+'</pre></article>';}).join('')+'</div></div>'
         +'<div id="code-execution-panel" class="code-execution-panel"></div>'
         +'</div>';
       $('#code-language').value=initialLanguage;
       $('#code-editor').value=initialCode;
-      $('#code-editor').addEventListener('input',function(){bucket[$('#code-language').value]=this.value;$('#autosave-state').textContent='Code changed · not saved yet';});
+      const updateCodeLineNumbers=function(){
+        const editor=$('#code-editor');
+        const gutter=$('#code-line-numbers');
+        if(!editor||!gutter)return;
+        const count=Math.max(1,editor.value.split('\n').length);
+        gutter.textContent=Array.from({length:count},function(_,i){return String(i+1);}).join('\n');
+        gutter.scrollTop=editor.scrollTop;
+      };
+      $('#code-editor').addEventListener('input',function(){bucket[$('#code-language').value]=this.value;updateCodeLineNumbers();$('#autosave-state').textContent='Code changed · not saved yet';});
+      $('#code-editor').addEventListener('scroll',function(){const gutter=$('#code-line-numbers');if(gutter)gutter.scrollTop=this.scrollTop;});
+      $('#code-editor').addEventListener('keydown',function(event){
+        if(event.key!=='Tab')return;
+        event.preventDefault();
+        const start=this.selectionStart;
+        const end=this.selectionEnd;
+        const indent='    ';
+        this.setRangeText(indent,start,end,'end');
+        bucket[$('#code-language').value]=this.value;
+        updateCodeLineNumbers();
+        $('#autosave-state').textContent='Code changed · not saved yet';
+      });
+      updateCodeLineNumbers();
       $('#code-language').addEventListener('change',function(){
         const editor=$('#code-editor');
         bucket[activeLanguage]=editor.value;
         const lang=this.value;
         activeLanguage=lang;
         editor.value=bucket[lang]??((spec.starter_code&&spec.starter_code[lang])||'');
+        updateCodeLineNumbers();
         $('#autosave-state').textContent='Language changed · code not saved yet';
       });
       $('#run-code').addEventListener('click',function(){runCurrentCode('run');});
@@ -555,7 +577,7 @@
     $('#question-guidance').textContent=q.answer_type==='mcq'
       ? 'Select one option. Use Save answer to keep it on the current question, or Save & Next to lock it and move forward.'
       : q.answer_type==='code'
-        ? 'Write a complete program, run sample tests, then submit against all available tests before Save & Next.'
+        ? 'Technical coding question: write a complete program, use Run Code for sample tests, then Submit Code for sample + hidden tests before Save & Next.'
         : 'Respond using clear reasoning and evidence. After submission this question is permanently closed.';
     const stage=$('.question-stage');
     if(stage) stage.scrollTop=0;

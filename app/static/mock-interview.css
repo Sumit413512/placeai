@@ -216,6 +216,8 @@ body.integrity-critical .proctor-warning-banner{border-color:#d83c4c;background:
 .code-editor-shell{border:1px solid #cfd8e4;border-radius:12px;overflow:hidden;background:#0d1522}
 .code-editor-title{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 11px;background:#111d2c;border-bottom:1px solid #26384d;color:#dbe7f6}
 .code-editor-title span{font-size:10px;font-weight:800}.code-editor-title small{font-size:8.5px;color:#92a5bc}
+.code-editor-frame{display:grid;grid-template-columns:48px minmax(0,1fr);align-items:stretch;background:#0d1522}
+.code-line-numbers{margin:0;padding:14px 8px 14px 6px;border-right:1px solid #26384d;background:#09111c;color:#657990;text-align:right;user-select:none;pointer-events:none;overflow:hidden;font:500 13px/1.55 "SFMono-Regular",Consolas,"Liberation Mono",monospace}
 .code-editor{display:block;width:100%;min-height:300px;max-height:420px;resize:vertical;border:0;outline:0;background:#0d1522;color:#eef5ff;padding:14px 16px;font:500 13px/1.55 "SFMono-Regular",Consolas,"Liberation Mono",monospace;tab-size:4;white-space:pre;overflow:auto}
 .code-problem-meta{display:grid;grid-template-columns:minmax(180px,.7fr) minmax(260px,1.3fr);gap:10px}
 .code-problem-meta>div{border:1px solid #e0e6ee;border-radius:10px;background:#fff;padding:10px}

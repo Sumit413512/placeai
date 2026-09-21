@@ -555,3 +555,11 @@ def test_coding_evaluation_score_is_derived_from_executed_tests(monkeypatch):
 def test_code_run_route_is_exposed():
     paths = client.get("/openapi.json").json()["paths"]
     assert "/mock-interview/code/run" in paths
+
+
+def test_technical_assessment_labels_include_executable_coding_subsection():
+    labels = {key: label for key, label, _ in mock_interview_v2.ASSESSMENT_BLUEPRINT}
+    assert labels["technical"] == "Technical Assessment · Fundamentals"
+    assert labels["programming"] == "Technical Assessment · Programming & Debugging"
+    assert labels["coding"] == "Technical Assessment · Coding Editor"
+    assert sum(count for _, _, count in mock_interview_v2.ASSESSMENT_BLUEPRINT) == 50
