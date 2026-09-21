@@ -154,7 +154,7 @@
       ['A campus recruiter shortlists 72 of 120 applicants. What percentage of applicants were shortlisted?',['50%','55%','60%','65%'],'60%'],
       ['A test has 80 questions. A candidate answers 68. What fraction of the test was attempted?',['75%','80%','85%','90%'],'85%'],
       ['An internship stipend increases from 20,000 to 23,000. What is the percentage increase?',['10%','12%','15%','18%'],'15%'],
-      ['Five students complete a task in 12 hours at the same rate. How many student-hours are required?',['17','48','60','72'],'60%'],
+      ['Five students complete a task in 12 hours at the same rate. How many student-hours are required?',['17','48','60','72'],'60'],
       ['The ratio of technical to HR questions is 3:2. If there are 30 technical questions, how many HR questions are there?',['12','18','20','24'],'20'],
       ['A score rises from 64 to 80. What is the absolute increase?',['12','14','16','20'],'16'],
       ['If 3 out of 8 applicants clear a round, what is the approximate clearance percentage?',['27.5%','32.5%','37.5%','42.5%'],'37.5%'],
@@ -264,7 +264,7 @@
     const lines=wrapText(ctx,text,width-40);
     const height=Math.max(90,lines.length*34+30);
     canvas.width=width;canvas.height=height;
-    ctx.fillStyle='#ffffff';ctx.fillRect(0,0,width,height);
+    ctx.clearRect(0,0,width,height);
     ctx.fillStyle='#27364c';ctx.font='500 25px "DM Sans", Arial, sans-serif';
     let y=31;lines.forEach(line=>{ctx.fillText(line,12,y);y+=34;});
     ctx.font='700 12px "DM Sans", Arial, sans-serif';ctx.fillStyle='rgba(40,91,160,.13)';
@@ -284,7 +284,6 @@
     const attemptedCount=state.answers.filter(isAttemptedAnswer).length;
     if($('#palette-progress')) $('#palette-progress').textContent=attemptedCount+' / '+state.questions.length;
     const currentQuestion=state.questions[state.current];
-    if(currentQuestion?.section) state.expandedSections[currentQuestion.section]=true;
 
     nav.innerHTML=BLUEPRINT.map(function(section){
       const rows=state.questions.map(function(q,index){return {q:q,index:index};}).filter(function(row){return row.q.section===section.key;});
@@ -326,15 +325,28 @@
         const existingIndex=question.options.findIndex(function(option){return option===existing.answer;});
         if(existingIndex>=0) state.selectedOption=existingIndex;
       }
-      area.innerHTML=`<div class="answer-options">${question.options.map((_,i)=>`<button class="option-button" type="button" data-option-index="${i}"><span class="option-key">${String.fromCharCode(65+i)}</span><canvas class="option-canvas"></canvas></button>`).join('')}</div>`;
-      $$('.option-button',area).forEach((button,i)=>{
+      area.innerHTML=`<div class="answer-options" role="radiogroup" aria-label="Answer options">${question.options.map((option,i)=>`<button class="option-button" type="button" role="radio" aria-checked="false" aria-label="Option ${String.fromCharCode(65+i)}: ${esc(option)}" data-option-index="${i}"><span class="option-key">${String.fromCharCode(65+i)}</span><canvas class="option-canvas" aria-hidden="true"></canvas><span class="option-select-indicator" aria-hidden="true"></span></button>`).join('')}</div>`;
+      $('.option-button',area).forEach((button,i)=>{
         drawOptionCanvas(button.querySelector('canvas'),question.options[i],state.candidateLabel);
-        if(state.selectedOption===i) button.classList.add('selected');
-        button.addEventListener('click',()=>{
-          $$('.option-button',area).forEach(x=>x.classList.remove('selected'));
-          button.classList.add('selected'); state.selectedOption=i;
-        });
+        if(state.selectedOption===i){
+          button.classList.add('selected');
+          button.setAttribute('aria-checked','true');
+        }
       });
+      area.addEventListener('click',function onOptionClick(event){
+        const button=event.target.closest('.option-button');
+        if(!button || !area.contains(button)) return;
+        const i=Number(button.dataset.optionIndex);
+        if(!Number.isInteger(i) || i<0 || i>=question.options.length) return;
+        $('.option-button',area).forEach(function(x){
+          x.classList.remove('selected');
+          x.setAttribute('aria-checked','false');
+        });
+        button.classList.add('selected');
+        button.setAttribute('aria-checked','true');
+        state.selectedOption=i;
+        $('#autosave-state').textContent='Option '+String.fromCharCode(65+i)+' selected · not saved yet';
+      },{once:false});
     } else {
       area.innerHTML='<label class="answer-field">Your response<textarea id="current-answer" class="secure-textarea" maxlength="5000" autocomplete="off" spellcheck="true" placeholder="Write a concise, evidence-based response."></textarea></label>';
       if(existing?.answer) $('#current-answer').value=existing.answer;
@@ -344,7 +356,7 @@
   function renderQuestion() {
     const q=state.questions[state.current];
     if(!q) return;
-    state.expandedSections[q.section]=true;
+    if(!(q.section in state.expandedSections)) state.expandedSections[q.section]=true;
     const info=currentSectionInfo(q);
     $('#section-label').textContent=info.label;
     $('#question-progress').textContent=`Question ${state.current+1} of ${state.questions.length}`;
