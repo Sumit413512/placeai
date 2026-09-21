@@ -473,6 +473,39 @@
       return;
     }
 
+    if(question.answer_type==='code'){
+      const spec=question.coding_spec||{};
+      const languages=Array.isArray(spec.allowed_languages)?spec.allowed_languages:[];
+      const stored=existing?.answer?parseStoredCodeAnswer(existing.answer):null;
+      const initialLanguage=(stored&&languages.some(x=>x.key===stored.language)?stored.language:(languages[0]?.key||'python'));
+      const bucket=codeDraftBucket(question.question_id);
+      if(stored?.source_code) bucket[stored.language]=stored.source_code;
+      const starter=(spec.starter_code&&spec.starter_code[initialLanguage])||'';
+      const initialCode=bucket[initialLanguage]??starter;
+      area.innerHTML='<div class="code-workspace">'
+        +'<div class="code-toolbar"><label>Language<select id="code-language">'+languages.map(function(lang){return '<option value="'+esc(lang.key)+'">'+esc(lang.label)+'</option>';}).join('')+'</select></label>'
+        +'<div class="code-actions"><button id="run-code" type="button" class="button secondary">Run sample tests</button><button id="submit-code-tests" type="button" class="button primary">Submit tests</button></div></div>'
+        +'<div class="code-editor-shell"><div class="code-editor-title"><span>Solution editor</span><small id="code-run-status">Not run yet</small></div><textarea id="code-editor" class="code-editor" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></div>'
+        +'<div class="code-problem-meta"><div><strong>Constraints</strong><ul>'+(spec.constraints||[]).map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></div><div><strong>Sample tests</strong>'+(spec.sample_tests||[]).map(function(test,i){return '<article class="sample-case"><span>Sample '+(i+1)+'</span><pre>Input\n'+esc(test.input||'')+'\nExpected\n'+esc(test.output||'')+'</pre></article>';}).join('')+'</div></div>'
+        +'<div id="code-execution-panel" class="code-execution-panel"></div>'
+        +'</div>';
+      $('#code-language').value=initialLanguage;
+      $('#code-editor').value=initialCode;
+      $('#code-editor').addEventListener('input',function(){bucket[$('#code-language').value]=this.value;$('#autosave-state').textContent='Code changed · not saved yet';});
+      $('#code-language').addEventListener('change',function(){
+        const editor=$('#code-editor');
+        bucket[initialLanguage]=bucket[initialLanguage]??editor.value;
+        const lang=this.value;
+        editor.value=bucket[lang]??((spec.starter_code&&spec.starter_code[lang])||'');
+      });
+      $('#run-code').addEventListener('click',function(){runCurrentCode('run');});
+      $('#submit-code-tests').addEventListener('click',function(){runCurrentCode('submit');});
+      renderCodeExecution(state.codeExecution[question.question_id]||null);
+      $('#next-question').disabled=false;
+      $('#save-question').disabled=false;
+      return;
+    }
+
     $('#next-question').disabled=false;
     $('#save-question').disabled=false;
     area.innerHTML='<label class="answer-field">Your response<textarea id="current-answer" class="secure-textarea" maxlength="5000" autocomplete="off" spellcheck="true" placeholder="Write a concise, evidence-based response."></textarea></label>';
@@ -490,7 +523,9 @@
     $('#question-difficulty').textContent=q.difficulty || 'Mixed';
     $('#question-guidance').textContent=q.answer_type==='mcq'
       ? 'Select one option. Use Save answer to keep it on the current question, or Save & Next to lock it and move forward.'
-      : 'Respond using clear reasoning and evidence. After submission this question is permanently closed.';
+      : q.answer_type==='code'
+        ? 'Write a complete program, run sample tests, then submit against all available tests before Save & Next.'
+        : 'Respond using clear reasoning and evidence. After submission this question is permanently closed.';
     const stage=$('.question-stage');
     if(stage) stage.scrollTop=0;
     drawTextCanvas($('#question-canvas'),q.question,`${state.candidateLabel} · Q${state.current+1}`);
@@ -509,6 +544,12 @@
     if(q.answer_type==='mcq') {
       if(state.selectedOption===null) { toast('Select an option before continuing.','error'); return false; }
       answer=q.options[state.selectedOption];
+    } else if(q.answer_type==='code') {
+      const language=$('#code-language')?.value||'';
+      const source=($('#code-editor')?.value||'').trimEnd();
+      if(!language || !source.trim()) { toast('Enter a coding solution before continuing.','error'); return false; }
+      answer=JSON.stringify({language:language,source_code:source});
+      codeDraftBucket(q.question_id)[language]=source;
     } else {
       answer=($('#current-answer')?.value || '').trim();
       if(!answer) { toast('Enter your response before continuing.','error'); return false; }
