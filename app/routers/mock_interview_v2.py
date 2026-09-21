@@ -1313,7 +1313,8 @@ For resume/behavioral/role/situational questions use this rubric:
 - structure and completeness: 10%
 - role fit / reflection / clarity: 10%
 
-Score 0-100. Use these verdicts only:
+Score EACH rubric dimension from 0-100. PlaceAI calculates the final numeric score server-side; do not try to compensate
+one dimension with another. Use these verdicts only:
 - correct: substantively correct and complete enough for the question
 - partially_correct: meaningful correct content but material gaps/errors remain
 - incorrect: substantively wrong, irrelevant, contradictory or unsupported
@@ -1335,7 +1336,6 @@ Return ONLY valid JSON:
   "evaluations": [
     {{
       "question_id": 1,
-      "score": 0,
       "verdict": "correct|partially_correct|incorrect|insufficient|strong|acceptable|weak",
       "rubric": {{
         "correctness": 0,
@@ -1377,73 +1377,76 @@ def _evaluate_subjective_with_ai(
     if not items:
         return [], {"provider": "system", "model": "answer-key", "batches": 0}
 
-    # One complete pass gives the model the strongest cross-question context while every
-    # score remains question-local. If that fails, retry in smaller batches rather than
-    # fabricating a lexical "correctness" score.
-    batches = [items]
+    gated: list[dict[str, Any]] = []
+    ai_items: list[dict[str, Any]] = []
+    for item in items:
+        if _is_obvious_non_answer(item, item["answer"]):
+            gated.append(_non_answer_evaluation(item, item["answer"]))
+        else:
+            ai_items.append(item)
+
+    if not ai_items:
+        return gated, {
+            "provider": "system",
+            "model": "strict-relevance-gate",
+            "batches": 0,
+        }
+
+    # Result analysis deliberately takes longer than question generation. Smaller batches
+    # let the flagship reasoning model grade each answer against the exact question without
+    # losing detail in a very large 50-item response.
+    batches = [ai_items[index:index + 6] for index in range(0, len(ai_items), 6)]
     results: list[dict[str, Any]] = []
     provider = "unknown"
-    model = "unknown"
-    try:
-        raw = _call_interview_ai(
-            _subjective_prompt(profile=profile, job=job, items=items),
-            max_output_tokens=9000,
-            fast=False,
-        )
-        data = extract_json_from_response(raw)
-        source = data.get("evaluations", []) if isinstance(data, dict) else []
-        if not isinstance(source, list):
-            raise ValueError("AI evaluator returned no evaluations")
-        results = [item for item in source if isinstance(item, dict)]
-        provider = current_ai_provider()
-        model = current_ai_model()
-    except Exception as first_exc:
-        LOGGER.warning(
-            "Full subjective assessment evaluation failed; retrying in batches error_type=%s",
-            type(first_exc).__name__,
-        )
-        results = []
-        batches = [items[index:index + 8] for index in range(0, len(items), 8)]
-        for batch in batches:
-            try:
-                raw = _call_interview_ai(
-                    _subjective_prompt(profile=profile, job=job, items=batch),
-                    max_output_tokens=5200,
-                    fast=False,
-                )
-                data = extract_json_from_response(raw)
-                source = data.get("evaluations", []) if isinstance(data, dict) else []
-                if not isinstance(source, list):
-                    raise ValueError("AI evaluator returned no batch evaluations")
-                results.extend(item for item in source if isinstance(item, dict))
-                provider = current_ai_provider()
-                model = current_ai_model()
-            except Exception as batch_exc:
-                LOGGER.warning(
-                    "Subjective evaluation batch failed error_type=%s question_ids=%s",
-                    type(batch_exc).__name__,
-                    [item["question_id"] for item in batch],
-                )
+    model = "gpt-5.6-sol"
 
-    normalized: list[dict[str, Any]] = []
-    allowed_verdicts = {
-        "correct", "partially_correct", "incorrect", "insufficient",
-        "strong", "acceptable", "weak",
-    }
+    for batch in batches:
+        try:
+            raw = _call_interview_evaluator(
+                _subjective_prompt(profile=profile, job=job, items=batch),
+                max_output_tokens=5200,
+            )
+            data = extract_json_from_response(raw)
+            source = data.get("evaluations", []) if isinstance(data, dict) else []
+            if not isinstance(source, list):
+                raise ValueError("AI evaluator returned no batch evaluations")
+            results.extend(item for item in source if isinstance(item, dict))
+            provider = current_ai_provider()
+            model = current_ai_model()
+        except Exception as batch_exc:
+            LOGGER.warning(
+                "Subjective evaluation batch failed error_type=%s question_ids=%s",
+                type(batch_exc).__name__,
+                [item["question_id"] for item in batch],
+            )
+
+    normalized: list[dict[str, Any]] = list(gated)
     by_id = {
         int(item.get("question_id")): item
         for item in results
         if str(item.get("question_id", "")).isdigit()
     }
-    for item in items:
+
+    for item in ai_items:
         qid = item["question_id"]
         source = by_id.get(qid)
         if not source:
             continue
-        verdict = str(source.get("verdict", "insufficient")).strip().lower()
-        if verdict not in allowed_verdicts:
-            verdict = "insufficient"
+
         rubric_raw = source.get("rubric") if isinstance(source.get("rubric"), dict) else {}
+        rubric = {
+            "correctness": _clamp_score(rubric_raw.get("correctness")),
+            "relevance": _clamp_score(rubric_raw.get("relevance")),
+            "reasoning": _clamp_score(rubric_raw.get("reasoning")),
+            "completeness": _clamp_score(rubric_raw.get("completeness")),
+            "clarity": _clamp_score(rubric_raw.get("clarity")),
+        }
+        score, verdict = _score_subjective_rubric(
+            item=item,
+            answer=item["answer"],
+            rubric=rubric,
+        )
+
         normalized.append({
             "question_id": qid,
             "question": item["question"],
@@ -1453,16 +1456,10 @@ def _evaluate_subjective_with_ai(
             "answer_type": "text",
             "answer": item["answer"],
             "correct_answer": "",
-            "score": _clamp_score(source.get("score")),
+            "score": score,
             "verdict": verdict,
-            "grading_method": "ai",
-            "rubric": {
-                "correctness": _clamp_score(rubric_raw.get("correctness")),
-                "relevance": _clamp_score(rubric_raw.get("relevance")),
-                "reasoning": _clamp_score(rubric_raw.get("reasoning")),
-                "completeness": _clamp_score(rubric_raw.get("completeness")),
-                "clarity": _clamp_score(rubric_raw.get("clarity")),
-            },
+            "grading_method": "ai_rubric_server_scored",
+            "rubric": rubric,
             "feedback": str(source.get("feedback", ""))[:5000],
             "strengths": [str(x)[:1000] for x in (source.get("strengths") or [])[:8]],
             "issues": [str(x)[:1000] for x in (source.get("issues") or [])[:8]],
@@ -1471,7 +1468,14 @@ def _evaluate_subjective_with_ai(
             "better_answer_outline": str(source.get("better_answer_outline", ""))[:5000],
             "ideal_answer": str(source.get("ideal_answer", ""))[:7000],
         })
-    return normalized, {"provider": provider, "model": model, "batches": len(batches)}
+
+    return normalized, {
+        "provider": provider,
+        "model": model,
+        "batches": len(batches),
+        "score_authority": "server-derived rubric",
+        "relevance_gate_count": len(gated),
+    }
 
 
 def _verdict_bucket(verdict: str) -> str:
