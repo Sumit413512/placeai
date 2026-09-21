@@ -563,3 +563,44 @@ def test_technical_assessment_labels_include_executable_coding_subsection():
     assert labels["programming"] == "Technical Assessment · Programming & Debugging"
     assert labels["coding"] == "Technical Assessment · Coding Editor"
     assert sum(count for _, _, count in mock_interview_v2.ASSESSMENT_BLUEPRINT) == 50
+
+
+def test_full_assessment_orders_server_coding_inside_technical_flow():
+    items = []
+    serial = 1
+    for section, _, count in reversed(mock_interview_v2.ASSESSMENT_BLUEPRINT):
+        for _ in range(count):
+            items.append({
+                "question": f"{section}-{serial}",
+                "section": section,
+                "category": section,
+                "difficulty": "medium",
+                "answer_type": "code" if section == "coding" else "text",
+                "options": [],
+                "correct_answer": "",
+            })
+            serial += 1
+
+    ordered = mock_interview_v2._order_full_assessment_items(items)
+    sections = [item["section"] for item in ordered]
+
+    assert len(ordered) == 50
+    assert sections[:8] == ["quantitative"] * 8
+    assert sections[22:30] == ["technical"] * 8
+    assert sections[30:36] == ["programming"] * 6
+    assert sections[36:38] == ["coding"] * 2
+    assert sections[38:42] == ["resume"] * 4
+    assert sections[-2:] == ["situational"] * 2
+
+
+def test_full_assessment_ordering_is_stable_within_each_section():
+    items = [
+        {"section": "coding", "question": "coding-a"},
+        {"section": "technical", "question": "technical-a"},
+        {"section": "coding", "question": "coding-b"},
+        {"section": "technical", "question": "technical-b"},
+    ]
+    ordered = mock_interview_v2._order_full_assessment_items(items)
+    assert [item["question"] for item in ordered] == [
+        "technical-a", "technical-b", "coding-a", "coding-b"
+    ]

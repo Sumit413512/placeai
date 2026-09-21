@@ -305,6 +305,24 @@ AVOID QUESTIONS FROM PREVIOUS PRACTICE
 """
 
 
+def _order_full_assessment_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep the 50-item assessment in authoritative blueprint order.
+
+    AI-generated sections and server-injected coding questions may arrive at different
+    times. Stable section ordering prevents server-owned coding items from drifting to
+    the end of the assessment while preserving the original order within each section.
+    """
+    order = {key: index for index, (key, _, _) in enumerate(ASSESSMENT_BLUEPRINT)}
+    indexed = list(enumerate(items))
+    indexed.sort(
+        key=lambda pair: (
+            order.get(str(pair[1].get("section", "")).strip().lower(), len(order)),
+            pair[0],
+        )
+    )
+    return [item for _, item in indexed]
+
+
 def _difficulty_for(index: int, total: int, requested: str) -> str:
     if requested != "mixed":
         return requested
@@ -891,9 +909,14 @@ def _generate_unique_questions(
         accepted.extend(fallback_items[:needed])
         generation_mode = "ai_plus_fallback" if provider != "local" else "resilient_fallback"
 
+    ordered = (
+        _order_full_assessment_items(accepted[:count])
+        if count == FULL_MOCK_QUESTION_COUNT
+        else accepted[:count]
+    )
     questions = [
         {"question_id": index, **item}
-        for index, item in enumerate(accepted[:count], start=1)
+        for index, item in enumerate(ordered, start=1)
     ]
     metadata = {
         "generation_mode": generation_mode,
