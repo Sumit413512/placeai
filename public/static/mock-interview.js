@@ -294,9 +294,10 @@
       const chips=rows.map(function(row){
         const isCurrent=row.index===state.current;
         const attempted=isAttemptedAnswer(state.answers[row.q.question_id-1]);
-        const status=isCurrent?'current':attempted?'attempted':'unattempted';
-        const label='Question '+row.q.question_id+' · '+status;
-        return '<span class="palette-question '+status+' locked" aria-label="'+esc(label)+'" title="'+esc(label)+'">'+row.q.question_id+'</span>';
+        const status=attempted?'attempted':isCurrent?'current':'unattempted';
+        const currentClass=isCurrent?' is-current':'';
+        const label='Question '+row.q.question_id+' · '+(attempted?'attempted':isCurrent?'currently attempting':'not attempted');
+        return '<span class="palette-question '+status+currentClass+' locked" aria-label="'+esc(label)+'" title="'+esc(label)+'">'+row.q.question_id+'</span>';
       }).join('');
       const done=rows.filter(function(row){return isAttemptedAnswer(state.answers[row.q.question_id-1]);}).length;
       return '<section class="palette-section '+(isCurrentSection?'active-section':'')+' '+(isExpanded?'expanded':'collapsed')+'">'
@@ -317,6 +318,7 @@
 
   function renderAnswerArea(question) {
     const area=$('#answer-area');
+    area.className='answer-area '+(question.answer_type==='mcq'?'mcq-answer-area':'text-answer-area');
     state.selectedOption=null;
     const existing=state.answers[question.question_id-1];
     if (question.answer_type==='mcq' && question.options?.length) {
@@ -351,6 +353,8 @@
     $('#question-guidance').textContent=q.answer_type==='mcq'
       ? 'Select one option. Use Save answer to keep it on the current question, or Save & Next to lock it and move forward.'
       : 'Respond using clear reasoning and evidence. After submission this question is permanently closed.';
+    const stage=$('.question-stage');
+    if(stage) stage.scrollTop=0;
     drawTextCanvas($('#question-canvas'),q.question,`${state.candidateLabel} · Q${state.current+1}`);
     renderAnswerArea(q);
     renderSectionNav();
