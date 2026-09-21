@@ -947,19 +947,13 @@ def _is_obvious_non_answer(item: dict[str, Any], answer: str) -> bool:
         return True
 
     words = _text_words(clean)
-    if len(words) <= 2:
-        return True
     unique = set(words)
     if len(words) >= 4 and len(unique) / max(len(words), 1) < 0.28:
         return True
 
-    # Only apply lexical irrelevance as a hard gate to very short responses. Longer
-    # answers can use valid synonyms and must be judged semantically by the AI evaluator.
-    if len(words) <= 5:
-        question_terms = _evidence_terms(str(item.get("question", "")))
-        answer_terms = _evidence_terms(answer)
-        if question_terms and not (question_terms & answer_terms):
-            return True
+    # Do not hard-reject a short but potentially meaningful phrase (for example,
+    # "hash map"). The semantic evaluator handles it, while the server-side score cap
+    # for very short answers prevents such a response from receiving inflated credit.
     return False
 
 
