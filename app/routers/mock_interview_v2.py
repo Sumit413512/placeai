@@ -130,8 +130,12 @@ def _issued_questions(row: MockInterview) -> list[dict[str, Any]]:
             normalized.append({
                 "question_id": question_id,
                 "question": question,
+                "section": str(item.get("section", item.get("category", "interview"))).strip().lower(),
                 "category": str(item.get("category", "interview")).strip().lower(),
                 "difficulty": str(item.get("difficulty", "mixed")).strip().lower(),
+                "answer_type": str(item.get("answer_type", "text")).strip().lower(),
+                "options": [str(x)[:1000] for x in (item.get("options") or [])[:4]],
+                "correct_answer": str(item.get("correct_answer", ""))[:1000],
             })
     if not normalized:
         raise HTTPException(status_code=409, detail="Interview question set is unavailable")
@@ -235,7 +239,8 @@ Do NOT repeat, lightly reword, paraphrase or reuse the concept framing of any pr
 Do not ask multiple questions that are substantially the same within this new set.
 
 Return ONLY valid JSON:
-{{"questions":[{{"question":"...","category":"technical|behavioral|hr|situational|communication","difficulty":"easy|medium|hard"}}]}}
+{{"questions":[{{"question":"...","section":"quantitative|logical|communication|technical|programming|coding|resume|behavioral|role|situational","category":"...","difficulty":"easy|medium|hard","answer_type":"mcq|text","options":["A","B","C","D"],"correct_answer":"exact option text or empty for text"}}]}}
+For text-response questions, return options=[] and correct_answer="".
 
 ROLE
 Title: {job.title}
@@ -273,95 +278,130 @@ def _fallback_questions(
     previous: list[str],
     already: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Build a deterministic, role-grounded safety net without inventing facts.
+    """Fill missing blueprint sections with deterministic, role-grounded items."""
+    existing_items = already or []
+    existing_text = [*previous, *(item["question"] for item in existing_items)]
+    targets = {key: target for key, _, target in ASSESSMENT_BLUEPRINT}
+    section_counts = {key: 0 for key in targets}
+    for item in existing_items:
+        section = str(item.get("section", "")).strip().lower()
+        if section in section_counts:
+            section_counts[section] += 1
 
-    This is deliberately a contingency path, not a replacement for live AI. It uses only
-    the approved opportunity and student profile fields already available to PlaceAI.
-    """
-    existing = [*previous, *(item["question"] for item in (already or []))]
     skills = [str(x).strip() for x in (job.required_skills or []) if str(x).strip()]
     if not skills:
         skills = [str(x).strip() for x in (profile.skills or []) if str(x).strip()]
-    skills = skills[:10] or ["the core skills required for this role"]
+    skills = skills[:12] or ["the core skills required for this role"]
 
-    technical: list[tuple[str, str]] = []
-    for skill in skills:
-        technical.extend([
-            (
-                f"For the {job.title} role, describe a practical task where you would use {skill}. "
-                "How would you verify that your solution works correctly?",
-                "technical",
-            ),
-            (
-                f"Suppose a task involving {skill} is failing in a project relevant to {job.title}. "
-                "Walk through how you would diagnose the problem, choose a fix, and check for regressions.",
-                "technical",
-            ),
-        ])
+    objective = {
+        "quantitative": [
+            ("A placement test has 80 questions and a candidate attempts 68. What percentage was attempted?", ["75%", "80%", "85%", "90%"], "85%"),
+            ("A stipend rises from 20,000 to 23,000. What is the percentage increase?", ["10%", "12%", "15%", "18%"], "15%"),
+            ("Five students work for 12 hours at the same rate. How many student-hours of work is that?", ["17", "48", "60", "72"], "60"),
+            ("The ratio of technical to HR items is 3:2. If there are 30 technical items, how many HR items are there?", ["12", "18", "20", "24"], "20"),
+            ("A score rises from 64 to 80. What is the absolute increase?", ["12", "14", "16", "20"], "16"),
+            ("Three of eight candidates clear a round. What percentage is that?", ["27.5%", "32.5%", "37.5%", "42.5%"], "37.5%"),
+            ("What is the average of 72, 78, 84 and 86?", ["78", "79", "80", "81"], "80"),
+            ("A team completes 3/5 of a task. What percentage remains?", ["20%", "30%", "40%", "60%"], "40%"),
+        ],
+        "logical": [
+            ("All backend engineers in a team know APIs. Which statement must be true?", ["All API engineers are backend engineers", "All backend engineers know APIs", "All backend engineers know SQL", "No API engineer knows SQL"], "All backend engineers know APIs"),
+            ("Complete the sequence: 3, 6, 12, 24, ?", ["30", "36", "42", "48"], "48"),
+            ("If A is before B and B is before C, which must be true?", ["C is before A", "A is before C", "B is after C", "A and C are simultaneous"], "A is before C"),
+            ("A candidate must choose SQL and exactly one of Python or Java. Which combination is valid?", ["Python + Java", "SQL only", "Python + SQL", "Java only"], "Python + SQL"),
+            ("Find the odd one out.", ["API", "Database", "Operating System", "Resume"], "Resume"),
+            ("If every passed coding test implies technical eligibility and Priya passed coding, what follows?", ["Priya is technically eligible", "Priya is hired", "Priya passed HR", "Nothing follows"], "Priya is technically eligible"),
+            ("Arrange from smallest to largest.", ["0.25, 40%, 1/2, 0.75", "40%, 0.25, 1/2, 0.75", "0.25, 1/2, 40%, 0.75", "1/2, 0.25, 40%, 0.75"], "0.25, 40%, 1/2, 0.75"),
+            ("If X is greater than Y and Y equals Z, which is true?", ["X < Z", "X = Z", "X > Z", "Cannot compare"], "X > Z"),
+        ],
+        "communication": [
+            ("Choose the most professional sentence.", ["Send me the file ASAP.", "Could you please share the file by 3 PM so I can complete the review?", "Need file now.", "You forgot the file."], "Could you please share the file by 3 PM so I can complete the review?"),
+            ("Which response best demonstrates active listening?", ["Changing the topic", "Repeating words without context", "Summarising the concern before responding", "Speaking for longer"], "Summarising the concern before responding"),
+            ("Which opening is usually strongest for a concise interview answer?", ["A direct response to the question", "A long personal history", "An unrelated example", "An apology"], "A direct response to the question"),
+            ("Which phrase communicates uncertainty most clearly?", ["I definitely know, maybe.", "Based on the information available, my current assumption is…", "Whatever works.", "I guess so."], "Based on the information available, my current assumption is…"),
+            ("Which framework is commonly useful for behavioural answers?", ["STAR", "FIFO", "HTTP", "CRUD"], "STAR"),
+            ("Which response is clearest when you need clarification?", ["I do not know.", "Could you clarify whether you want the technical approach or the business impact first?", "Anything is fine.", "Skip it."], "Could you clarify whether you want the technical approach or the business impact first?"),
+        ],
+    }
 
-    situational = [
-        (f"You are given an unfamiliar task in the {job.title} role with incomplete requirements. How would you clarify the problem and plan your first steps?", "situational"),
-        (f"A teammate proposes a different implementation approach for a {job.title} task. How would you compare the options and reach a decision?", "situational"),
-        (f"A deadline is close and you discover a defect in work related to the {job.title} role. What would you do, and how would you communicate the risk?", "situational"),
-        (f"You finish a feature for the {job.title} role. What checks would you perform before calling the work complete?", "situational"),
-    ]
-    behavioral = [
-        ("Tell me about a time you had to learn a technical concept quickly. What did you do and what was the outcome?", "behavioral"),
-        ("Describe a time you received critical feedback on your work. How did you respond and what changed afterward?", "behavioral"),
-        ("Give an example of a team disagreement you were involved in. How did you help move the work forward?", "behavioral"),
-        ("Describe a time you made a mistake in a project or assignment. How did you detect it, correct it and prevent a repeat?", "behavioral"),
-    ]
-    hr = [
-        (f"Why are you interested in the {job.title} opportunity, based only on the responsibilities and skills you know about it?", "hr"),
-        (f"What strengths from your current background are most relevant to the {job.title} role, and what is one area you still need to improve?", "hr"),
-        (f"What would you want to learn during your first three months in the {job.title} role?", "hr"),
-        ("How do you organize your work when you have multiple deadlines at the same time?", "communication"),
-    ]
+    applied_templates = {
+        "technical": [
+            "For the {role} role, explain a practical use of {skill} and how you would validate the result.",
+            "A production task involving {skill} is failing. Describe how you would isolate the cause and verify a safe fix.",
+            "Explain one important trade-off you would consider when using {skill} in a real {role} task.",
+            "How would you test a feature involving {skill} before release?",
+            "Describe a failure mode related to {skill} that a {role} should anticipate.",
+            "How would you explain a design decision involving {skill} to a technical reviewer?",
+            "What evidence would you collect before changing an implementation that depends on {skill}?",
+            "How would you improve the reliability or maintainability of a solution that uses {skill}?",
+        ],
+        "programming": [
+            "Code using {skill} works for normal inputs but fails on edge cases. Describe a disciplined debugging sequence.",
+            "How would you review code involving {skill} for correctness, readability and regression risk?",
+            "Explain how you would design tests for a function or module using {skill}.",
+            "A change involving {skill} makes the system slower. How would you measure and investigate the regression?",
+            "How would you handle invalid or unexpected input in an implementation involving {skill}?",
+            "Describe how you would refactor a working but difficult-to-maintain implementation involving {skill}.",
+        ],
+        "coding": [
+            "Design an algorithm for a role-relevant data-processing task. Explain the data structure, time complexity, edge cases and tests.",
+            "Given a large collection of records with duplicates, describe an efficient approach to identify and remove duplicates while preserving required ordering.",
+        ],
+        "resume": [
+            "Choose one project or skill from your resume that is relevant to {role}. Explain your exact contribution and the evidence of the outcome.",
+            "Describe the hardest technical decision in one project on your resume and why you chose that approach.",
+            "Pick one resume claim you would expect an interviewer to challenge. Defend it with specific evidence you can personally explain.",
+            "Describe one project limitation or mistake from your experience and what you would change now.",
+        ],
+        "behavioral": [
+            "Describe a time you received difficult feedback. What action did you take and what changed afterward?",
+            "Give a specific example of a disagreement in a team. How did you help move the work forward?",
+            "Describe a time you had to learn something quickly to complete a task. What was your method and result?",
+            "Tell me about a mistake you made in a project or assignment. How did you detect, correct and prevent it?",
+        ],
+        "role": [
+            "Based only on the known requirements of the {role} opportunity, which capability would you prioritise in your first 30 days and why?",
+            "Which stated requirement of the {role} opportunity best matches your current background, and what evidence supports that match?",
+        ],
+        "situational": [
+            "A deadline is close and you discover a defect that could affect users. What would you do next and how would you communicate the risk?",
+            "You receive an ambiguous task in the {role} role. How would you clarify requirements, plan the work and verify completion?",
+        ],
+    }
 
-    if focus == "technical":
-        pool = technical + situational + behavioral + hr
-    elif focus == "behavioral":
-        pool = behavioral + situational + hr + technical
-    elif focus == "hr":
-        pool = hr + behavioral + situational + technical
-    else:
-        pool = []
-        groups = [technical, behavioral, situational, hr]
-        max_len = max(len(group) for group in groups)
-        for idx in range(max_len):
-            for group in groups:
-                if idx < len(group):
-                    pool.append(group[idx])
-
-    chosen: list[dict[str, Any]] = []
-    for question, category in pool:
-        if _too_similar(question, [*existing, *(item["question"] for item in chosen)]):
+    chosen = []
+    for section, _, target in ASSESSMENT_BLUEPRINT:
+        missing = max(0, target - section_counts.get(section, 0))
+        if section in objective:
+            for question, options, correct in objective[section][:missing]:
+                chosen.append({
+                    "question": question,
+                    "section": section,
+                    "category": section,
+                    "difficulty": _difficulty_for(len(chosen) + 1, FULL_MOCK_QUESTION_COUNT, difficulty),
+                    "answer_type": "mcq",
+                    "options": options,
+                    "correct_answer": correct,
+                })
             continue
-        chosen.append({
-            "question": question[:2000],
-            "category": category,
-            "difficulty": _difficulty_for(len(chosen) + 1, count, difficulty),
-        })
-        if len(chosen) >= count:
-            break
 
-    # The fixed pools above are intentionally generous, but keep an invariant that every
-    # requested round remains usable even after a long history of prior attempts.
-    suffix = 1
-    while len(chosen) < count:
-        skill = skills[(suffix - 1) % len(skills)]
-        question = (
-            f"Practice scenario {suffix}: for a {job.title} task involving {skill}, explain your approach, "
-            "the main risk you would watch for, and how you would validate the result."
-        )
-        suffix += 1
-        if _too_similar(question, [*existing, *(item["question"] for item in chosen)]):
-            continue
-        chosen.append({
-            "question": question,
-            "category": "technical",
-            "difficulty": _difficulty_for(len(chosen) + 1, count, difficulty),
-        })
+        templates = applied_templates.get(section, [])
+        for index in range(missing):
+            template = templates[index % len(templates)]
+            skill = skills[index % len(skills)]
+            question = template.format(role=job.title, skill=skill)
+            if _too_similar(question, [*existing_text, *(item["question"] for item in chosen)]):
+                question = f"{question} Focus scenario {index + 1}."
+            chosen.append({
+                "question": question[:2000],
+                "section": section,
+                "category": section,
+                "difficulty": _difficulty_for(index + 1, max(missing, 1), difficulty),
+                "answer_type": "text",
+                "options": [],
+                "correct_answer": "",
+            })
+
     return chosen[:count]
 
 
@@ -393,6 +433,8 @@ def _generate_unique_questions(
         raw = _call_interview_ai(prompt, max_output_tokens=7600, fast=True)
         data = extract_json_from_response(raw)
         source = data.get("questions", []) if isinstance(data, dict) else []
+        target_map = {key: target for key, _, target in ASSESSMENT_BLUEPRINT}
+        section_counts = {key: 0 for key in target_map}
         if isinstance(source, list):
             for item in source:
                 if not isinstance(item, dict):
@@ -403,7 +445,9 @@ def _generate_unique_questions(
                 section = str(item.get("section", item.get("category", "technical"))).strip().lower()
                 allowed_sections = {key for key, _, _ in ASSESSMENT_BLUEPRINT}
                 if section not in allowed_sections:
-                    section = "technical"
+                    continue
+                if section_counts[section] >= target_map[section]:
+                    continue
                 category = str(item.get("category", section)).strip().lower() or section
                 q_difficulty = str(item.get("difficulty", difficulty if difficulty != "mixed" else "medium")).strip().lower()
                 if q_difficulty not in {"easy", "medium", "hard"}:
@@ -420,6 +464,7 @@ def _generate_unique_questions(
                     "options": options,
                     "correct_answer": correct_answer,
                 })
+                section_counts[section] += 1
                 if len(accepted) >= count:
                     break
         if accepted:
@@ -669,8 +714,12 @@ def evaluate_mock_interview_v2(
         {
             "question_id": item["question_id"],
             "question": item["question"],
+            "section": item.get("section"),
             "category": item.get("category"),
             "difficulty": item.get("difficulty"),
+            "answer_type": item.get("answer_type"),
+            "options": item.get("options") or [],
+            "correct_answer": item.get("correct_answer") or "",
             "answer": submitted_by_id[item["question_id"]].answer,
         }
         for item in issued
