@@ -116,39 +116,83 @@
     </div>
 
     <div class="consent-row">
-      <label class="consent"><input id="consent-check" type="checkbox"><span>I understand that this secure mock can use camera, microphone, full-screen and browser-focus signals for placement-practice integrity review.</span></label>
+      <label class="consent"><input id="consent-check" type="checkbox"><span>I understand that this secure mock can use camera, microphone, full-screen, browser-focus signals and periodic AI analysis of compressed webcam frames for person/phone integrity signals. Integrity events are review evidence, not automatic misconduct findings.</span></label>
       <div class="system-actions"><button id="run-check" class="button secondary" type="button">Run system check</button><button id="start-assessment" class="button primary" type="button" disabled>Start secure mock</button></div>
     </div>
   </section>
 
   <section id="interview-panel" class="assessment-shell hidden">
     <aside class="assessment-sidebar">
-      <div class="assessment-brand"><span class="eyebrow">Live assessment</span><strong id="interview-title">Placement simulation</strong><small id="interview-context"></small></div>
-      <div class="timer-card"><span>Total time remaining</span><strong id="total-timer">01:45:00</strong><div class="progress-track"><i id="total-progress"></i></div></div>
-      <nav id="section-nav" class="section-nav" aria-label="Assessment sections"></nav>
-      <div class="integrity-summary"><span><i class="integrity-dot"></i> Secure mode active</span><small id="integrity-count">0 review events</small></div>
+      <div class="proctor-header">
+        <div><span class="proctor-dot"></span><strong>PROCTORED TEST</strong></div>
+        <span id="integrity-warning-badge">0 / 4 warnings</span>
+      </div>
+
+      <div class="assessment-brand">
+        <span class="eyebrow">Live assessment</span>
+        <strong id="interview-title">Placement simulation</strong>
+        <small id="interview-context"></small>
+      </div>
+
+      <div class="timer-card compact-timer">
+        <div><span>Total remaining</span><strong id="total-timer">01:45:00</strong></div>
+        <div class="progress-track"><i id="total-progress"></i></div>
+      </div>
+
+      <div class="assessment-camera-card">
+        <video id="assessment-camera" playsinline muted></video>
+        <div class="assessment-camera-meta">
+          <span><i class="camera-status-dot"></i> Camera live</span>
+          <b id="camera-proctor-status">Presence monitoring</b>
+        </div>
+      </div>
+
+      <div class="palette-head">
+        <div><strong>Question navigator</strong><small>Forward-only assessment</small></div>
+        <span id="palette-progress">0 / 50</span>
+      </div>
+      <nav id="section-nav" class="section-nav question-navigator" aria-label="Assessment question status"></nav>
+      <div class="palette-legend" aria-label="Question status legend">
+        <span><i class="legend-dot attempted"></i>Attempted</span>
+        <span><i class="legend-dot current"></i>Current</span>
+        <span><i class="legend-dot unattempted"></i>Not attempted</span>
+      </div>
+
+      <div class="integrity-summary">
+        <span><i class="integrity-dot"></i> Secure monitoring active</span>
+        <small id="integrity-count">0 integrity events</small>
+      </div>
     </aside>
 
     <div class="assessment-main">
       <div class="assessment-toolbar">
         <div><span id="section-label">Section</span><strong id="question-progress">Question 1 of 50</strong></div>
-        <div class="toolbar-right"><span id="section-timer">12:00</span><span class="forward-badge">Forward-only</span></div>
+        <div class="toolbar-right">
+          <div class="section-clock"><small>Section</small><span id="section-timer">12:00</span></div>
+          <span class="forward-badge">Forward-only</span>
+          <span class="proctor-live-badge">LIVE PROCTOR</span>
+        </div>
       </div>
 
       <div class="question-stage">
         <div class="question-badges"><span id="question-section" class="category"></span><span id="question-difficulty" class="category"></span><span class="category secure-question">Protected question</span></div>
         <div id="question-canvas-wrap" class="protected-question">
-          <canvas id="question-canvas" width="1200" height="360"></canvas>
+          <canvas id="question-canvas" width="1200" height="300"></canvas>
         </div>
-        <p id="question-guidance" class="question-guidance">Question text is rendered to canvas and watermarked. Continue forward after submitting; completed questions cannot be reopened.</p>
-        <div id="answer-area"></div>
-        <div class="question-footer">
-          <span id="autosave-state">Response not submitted</span>
-          <div><button id="next-question" class="button primary" type="button">Submit & continue</button></div>
-        </div>
+        <p id="question-guidance" class="question-guidance">Question text is rendered to canvas and watermarked. Save the current response, then use Save &amp; Next to permanently move forward.</p>
+        <div id="answer-area" class="answer-area"></div>
       </div>
 
-      <aside class="camera-float"><video id="assessment-camera" playsinline muted></video><span>Secure camera</span></aside>
+      <div class="assessment-actionbar">
+        <div>
+          <span id="autosave-state">Response not saved</span>
+          <small>Once you move forward, this question cannot be reopened.</small>
+        </div>
+        <div class="assessment-action-buttons">
+          <button id="save-question" class="button secondary" type="button">Save answer</button>
+          <button id="next-question" class="button primary" type="button">Save &amp; Next</button>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -186,6 +230,7 @@
         <span>Assessment integrity</span>
         <strong id="integrity-status">Review ready</strong>
         <p id="integrity-summary-text">Integrity events are surfaced for human review and are not treated as proof of misconduct.</p>
+        <div class="integrity-result-meta"><span>Warnings</span><b id="result-warning-count">0 / 4</b></div>
       </article>
     </div>
 
@@ -198,6 +243,15 @@
       <article class="score-stat"><span>Objective accuracy</span><strong id="summary-objective">—</strong><small>system graded</small></article>
       <article class="score-stat"><span>AI answer average</span><strong id="summary-subjective">—</strong><small>open-ended</small></article>
     </div>
+
+    <section id="integrity-report-panel" class="result-section integrity-report-section">
+      <div class="result-section-head">
+        <div><span class="card-kicker">Proctoring evidence</span><h3>Integrity timeline</h3><p>Browser, camera and AI-vision signals are recorded separately from academic performance.</p></div>
+        <div class="integrity-institution"><span>Institution</span><strong id="integrity-institution-name">—</strong></div>
+      </div>
+      <div id="integrity-termination-note" class="integrity-termination-note hidden"></div>
+      <div id="integrity-event-list" class="integrity-event-list"></div>
+    </section>
 
     <section class="result-section">
       <div class="result-section-head"><div><span class="card-kicker">Section performance</span><h3>Where the score came from</h3></div><p>No section is hidden behind the overall score.</p></div>
@@ -255,6 +309,7 @@
     <span class="card-kicker">Assessment paused</span>
     <h2 id="integrity-overlay-title">Secure full-screen was interrupted</h2>
     <p id="integrity-overlay-text">This event has been added to the integrity timeline. Restore the secure environment to continue.</p>
+    <div class="integrity-warning-meter">Warning <strong id="overlay-warning-number">1</strong> of <strong>4</strong></div>
     <button id="restore-secure-mode" class="button primary" type="button">Restore secure mode</button>
   </div>
 </div>
