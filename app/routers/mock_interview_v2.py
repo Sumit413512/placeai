@@ -1401,8 +1401,12 @@ Score 0-100. Use these verdicts only:
 - weak: vague/generic behavioral/resume/role response with limited evidence
 
 IMPORTANT:
-- Random text, repeated words, placeholders such as "anything", gibberish, generic filler, or an answer unrelated to the
-  question should normally score 0-15 and use verdict "incorrect", "insufficient", or "weak".
+- First decide whether the response actually answers THIS question. Semantic relevance is a gate, not a bonus.
+- Random text, repeated words, placeholders such as "anything", gibberish, generic filler, evasive text, or an unrelated answer
+  must score 0-10. Communication quality must NOT rescue an irrelevant response.
+- If relevance is below 25/100, overall score must be <=15 and clarity must be <=15.
+- For technical/programming responses, if technical correctness is below 25/100, overall score must be <=25.
+- A polished but wrong answer is still wrong. A grammatically strong non-answer earns no communication credit.
 - Do not reward claims that are not supported by the candidate context or answer.
 - The score must reflect the response to THIS question, not an overall impression of the candidate.
 - Give actionable feedback and an example strong answer/solution, but never invent the candidate's personal experience.
@@ -1522,25 +1526,41 @@ def _evaluate_subjective_with_ai(
         if verdict not in allowed_verdicts:
             verdict = "insufficient"
         rubric_raw = source.get("rubric") if isinstance(source.get("rubric"), dict) else {}
+        rubric = {
+            "correctness": _clamp_score(rubric_raw.get("correctness")),
+            "relevance": _clamp_score(rubric_raw.get("relevance")),
+            "reasoning": _clamp_score(rubric_raw.get("reasoning")),
+            "completeness": _clamp_score(rubric_raw.get("completeness")),
+            "clarity": _clamp_score(rubric_raw.get("clarity")),
+        }
+        score = _clamp_score(source.get("score"))
+        section = item.get("section") or item.get("category") or "interview"
+
+        # Deterministic post-validation: model fluency can never override semantic failure.
+        if rubric["relevance"] < 25:
+            score = min(score, 15)
+            rubric["clarity"] = min(rubric["clarity"], 15)
+            verdict = "weak" if section in {"resume", "behavioral", "role", "situational"} else "incorrect"
+        if section in {"technical", "programming"} and rubric["correctness"] < 25:
+            score = min(score, 25)
+            if verdict in {"correct", "strong", "acceptable"}:
+                verdict = "incorrect"
+        if verdict in {"incorrect", "insufficient", "weak"}:
+            score = min(score, 25)
+
         normalized.append({
             "question_id": qid,
             "question": item["question"],
-            "section": item.get("section") or item.get("category") or "interview",
+            "section": section,
             "category": item.get("category") or "interview",
             "difficulty": item.get("difficulty") or "mixed",
             "answer_type": "text",
             "answer": item["answer"],
             "correct_answer": "",
-            "score": _clamp_score(source.get("score")),
+            "score": score,
             "verdict": verdict,
             "grading_method": "ai",
-            "rubric": {
-                "correctness": _clamp_score(rubric_raw.get("correctness")),
-                "relevance": _clamp_score(rubric_raw.get("relevance")),
-                "reasoning": _clamp_score(rubric_raw.get("reasoning")),
-                "completeness": _clamp_score(rubric_raw.get("completeness")),
-                "clarity": _clamp_score(rubric_raw.get("clarity")),
-            },
+            "rubric": rubric,
             "feedback": str(source.get("feedback", ""))[:5000],
             "strengths": [str(x)[:1000] for x in (source.get("strengths") or [])[:8]],
             "issues": [str(x)[:1000] for x in (source.get("issues") or [])[:8]],
