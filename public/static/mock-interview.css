@@ -167,3 +167,41 @@ body.integrity-critical .assessment-shell{border-color:#e11d48;box-shadow:inset 
 body.secure-assessment .toast{top:74px;right:18px;bottom:auto;max-width:340px}
 
 .answer-load-error{display:grid;gap:5px;border:1px solid #efb8b8;background:#fff7f7;color:#842828;border-radius:10px;padding:14px}.answer-load-error strong{font-size:12px}.answer-load-error span{font-size:10px;line-height:1.45}
+
+/* Secure assessment proctor warning + professional assessment polish */
+.assessment-hero .hero-copy p{max-width:860px}
+.assessment-standard-card .mini-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+.assessment-standard-card .mini-stats b{font-size:13px;line-height:1.25;white-space:normal}
+.proctor-warning-banner{
+  position:absolute;
+  z-index:35;
+  top:68px;
+  left:18px;
+  right:18px;
+  min-height:62px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding:10px 13px;
+  border:1px solid #e29a9a;
+  border-left:4px solid #b4232f;
+  border-radius:11px;
+  background:#fff7f7;
+  color:#6f1f29;
+  box-shadow:0 12px 32px rgba(91,24,31,.18)
+}
+.proctor-warning-banner>div{min-width:0}
+.proctor-warning-banner span,.proctor-warning-banner strong,.proctor-warning-banner small{display:block}
+.proctor-warning-banner span{font-size:8px;text-transform:uppercase;letter-spacing:.09em;font-weight:800;color:#a33a44}
+.proctor-warning-banner strong{font:800 13px Manrope,sans-serif;margin-top:2px}
+.proctor-warning-banner small{font-size:9.5px;line-height:1.4;margin-top:2px;color:#7d4850}
+.proctor-warning-banner>b{flex:0 0 auto;border-radius:999px;background:#8f202b;color:#fff;padding:7px 9px;font-size:10px}
+body.integrity-critical .proctor-warning-banner{border-color:#d83c4c;background:#fff1f2}
+.check-row[data-check="proctor"].pass .check-icon,
+.check-row[data-check="screen"].pass .check-icon,
+.check-row[data-check="monitor"].pass .check-icon{background:#e1f5ec;color:#087750}
+@media(max-width:760px){
+  .proctor-warning-banner{top:64px;left:10px;right:10px}
+  .assessment-standard-card .mini-stats{grid-template-columns:1fr}
+}
