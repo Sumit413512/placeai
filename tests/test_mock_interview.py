@@ -377,3 +377,56 @@ def test_mock_assessment_html_is_never_cached_across_releases():
     assert response.status_code == 200
     assert response.headers.get("cache-control") == "no-store"
     assert response.headers.get("pragma") == "no-cache"
+
+
+def test_server_integrity_evidence_cannot_be_erased_by_clean_client_submission():
+    server_events = [
+        {
+            "event_type": "fullscreen_exit",
+            "detail": "Secure full-screen mode was exited.",
+            "at": "2026-09-21T10:00:00Z",
+            "question": 7,
+            "warning_number": 1,
+            "source": "browser",
+        },
+        {
+            "event_type": "integrity_auto_submit",
+            "detail": "Integrity warning limit reached.",
+            "at": "2026-09-21T10:02:00Z",
+            "question": 8,
+            "warning_number": 4,
+            "source": "system",
+        },
+    ]
+    result = mock_interview_v2._reconcile_integrity_events(
+        server_events=server_events,
+        client_events=[],
+        client_warning_count=0,
+        client_auto_submitted=False,
+        client_termination_reason=None,
+    )
+    assert result["warning_count"] == 4
+    assert result["auto_submitted"] is True
+    assert result["termination_reason"] == "Integrity warning limit reached."
+    assert len(result["events"]) == 2
+
+
+def test_integrity_reconciliation_deduplicates_client_copy_and_keeps_client_fallback():
+    event = {
+        "event_type": "mobile_phone_detected",
+        "detail": "A mobile phone was detected.",
+        "at": "2026-09-21T10:00:00Z",
+        "question": 3,
+        "warning_number": 2,
+        "source": "on_device_ml",
+    }
+    result = mock_interview_v2._reconcile_integrity_events(
+        server_events=[event],
+        client_events=[event],
+        client_warning_count=2,
+        client_auto_submitted=False,
+        client_termination_reason=None,
+    )
+    assert result["warning_count"] == 2
+    assert result["auto_submitted"] is False
+    assert result["events"] == [event]
