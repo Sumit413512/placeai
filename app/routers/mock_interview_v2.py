@@ -2059,11 +2059,62 @@ def evaluate_mock_interview_v2(
                 "ideal_answer": "",
             })
             continue
+        if item.get("answer_type") == "code":
+            try:
+                evaluations.append(_coding_evaluation(item, answer))
+            except ValueError as exc:
+                evaluations.append({
+                    "question_id": qid,
+                    "question": item["question"],
+                    "section": "coding",
+                    "category": "coding",
+                    "difficulty": item.get("difficulty") or "mixed",
+                    "answer_type": "code",
+                    "answer": answer,
+                    "correct_answer": "",
+                    "score": 0,
+                    "verdict": "incorrect",
+                    "grading_method": "code_execution",
+                    "rubric": {
+                        "correctness": 0,
+                        "relevance": 0,
+                        "reasoning": 0,
+                        "completeness": 0,
+                        "clarity": 0,
+                    },
+                    "feedback": f"Code submission could not be evaluated: {str(exc)[:500]}",
+                    "strengths": [],
+                    "issues": [str(exc)[:1000]],
+                    "missing_points": ["Submit valid source code in one of the allowed languages."],
+                    "key_points": [],
+                    "better_answer_outline": "",
+                    "ideal_answer": "",
+                    "execution": {
+                        "language": "",
+                        "passed": 0,
+                        "total": len((item.get("coding_spec") or {}).get("sample_tests") or [])
+                            + len((item.get("coding_spec") or {}).get("hidden_tests") or []),
+                        "sample_count": len((item.get("coding_spec") or {}).get("sample_tests") or []),
+                        "hidden_count": len((item.get("coding_spec") or {}).get("hidden_tests") or []),
+                        "compile_success": False,
+                        "results": [],
+                    },
+                })
+            except RuntimeError:
+                LOGGER.warning("Final coding evaluation deferred because execution service is unavailable question_id=%s", qid)
+            continue
+
         objective = _objective_evaluation(item, answer)
         if objective is not None:
             evaluations.append(objective)
-        else:
-            subjective_items.append({**item, "answer": answer})
+            continue
+
+        failure_reason = _obvious_answer_failure(item, answer)
+        if failure_reason:
+            evaluations.append(_invalid_text_evaluation(item, answer, failure_reason))
+            continue
+
+        subjective_items.append({**item, "answer": answer})
 
     subjective_evaluations, ai_meta = _evaluate_subjective_with_ai(
         profile=profile,
