@@ -230,3 +230,231 @@ body.integrity-critical .proctor-warning-banner{border-color:#d83c4c;background:
 
 .review-code-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px;font-size:9px}.review-code-meta strong{color:#263750}.review-code-meta span{color:#708097}
 .review-code{margin:0;max-height:320px;overflow:auto;white-space:pre;tab-size:4;border-radius:8px;background:#0d1522;color:#eef5ff;padding:11px 12px;font:500 10px/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace}
+
+
+/* ==========================================================================
+   PlaceAI Secure Placement Assessment — professional UI preview 2026-09-22
+   Visual-only. Assessment blueprint, timers, proctoring, scoring, editor and
+   question behavior remain unchanged.
+   ========================================================================== */
+:root{
+  --navy:#0f1d2c;
+  --navy2:#17283a;
+  --blue:#205fbd;
+  --blue2:#184d99;
+  --ink:#172438;
+  --muted:#66778a;
+  --line:#dce3ea;
+  --soft:#f5f7f9;
+  --soft2:#edf2f6;
+}
+html{background:#f4f6f8}
+.topbar{
+  height:66px;
+  padding:0 max(24px,calc((100vw - 1200px)/2));
+  background:#0f1d2c;
+  border-bottom:1px solid #203247;
+  box-shadow:none;
+}
+.top-actions{font-size:12px}
+.secure{color:#b4c2d0}
+.secure-dot{
+  width:6px;
+  height:6px;
+  background:#56b28f;
+  box-shadow:none;
+}
+.shell{
+  width:min(1200px,calc(100% - 40px));
+  padding:40px 0 70px;
+}
+.hero{
+  grid-template-columns:minmax(0,1.2fr) 350px;
+  gap:36px;
+  align-items:center;
+  margin-bottom:24px;
+}
+.eyebrow,.step,.card-kicker{
+  color:#436a94;
+  font-size:9.5px;
+  letter-spacing:.12em;
+}
+.hero h1{
+  max-width:780px;
+  margin:11px 0 15px;
+  color:#142033;
+  font-size:clamp(38px,4.2vw,54px);
+  line-height:1.02;
+  letter-spacing:-.045em;
+}
+.hero p{
+  max-width:760px;
+  color:#607186;
+  font-size:15px;
+  line-height:1.65;
+}
+.hero-meta{
+  gap:7px;
+  margin-top:20px;
+}
+.hero-meta span{
+  padding:5px 8px;
+  border:1px solid #dde4eb;
+  border-radius:6px;
+  background:#fff;
+  color:#52657a;
+  font-size:10.5px;
+}
+.hero-score-card{
+  padding:22px;
+  border:1px solid #243a51;
+  border-radius:11px;
+  background:#13263a;
+  box-shadow:none;
+}
+.hero-score-card .card-kicker{color:#8faed0}
+.hero-score-card>strong{
+  margin:8px 0 7px;
+  font-size:19px;
+}
+.hero-score-card>p{
+  color:#b9c5d2;
+  font-size:11.5px;
+}
+.mini-stats{gap:7px;margin-top:16px}
+.mini-stats div{
+  padding:10px 9px;
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:7px;
+  background:rgba(255,255,255,.04);
+}
+.mini-stats b{font-size:16px}
+.mini-stats span{font-size:9px}
+
+.preview-banner,.notice,.panel{
+  border:1px solid #dce3ea;
+  border-radius:10px;
+  box-shadow:none;
+}
+.preview-banner{
+  padding:12px 14px;
+  background:#fff9e9;
+}
+.notice{padding:15px 17px}
+.panel{
+  padding:22px;
+  margin-top:14px;
+}
+.panel-head{
+  gap:18px;
+  padding-bottom:15px;
+  margin-bottom:18px;
+  border-bottom-color:#e7ecf1;
+}
+.panel-head h2{
+  margin:4px 0;
+  color:#1d2d42;
+  font-size:21px;
+  letter-spacing:-.025em;
+}
+.panel-head p{
+  color:#6b7a8d;
+  font-size:12.5px;
+}
+.status-pill{
+  padding:6px 8px;
+  border-radius:6px;
+  background:#edf3f9;
+  color:#315f8f;
+  font-size:9.5px;
+}
+.status-pill.neutral{
+  background:#f2f4f6;
+  color:#657487;
+}
+.setup-layout{
+  grid-template-columns:minmax(0,.95fr) minmax(360px,1.05fr);
+  gap:22px;
+}
+label{
+  color:#3e5066;
+  font-size:12px;
+}
+select,textarea,input{
+  border-radius:7px;
+}
+select,textarea{
+  border-color:#cfd9e3;
+  padding:11px 12px;
+}
+select:focus,textarea:focus{
+  border-color:#5b86b7;
+  box-shadow:0 0 0 3px rgba(32,95,189,.08);
+}
+.locked-setting{
+  border-color:#dce4eb;
+  border-radius:8px;
+  background:#f8fafb;
+}
+.button{
+  border-radius:7px!important;
+  box-shadow:none!important;
+}
+.button:hover{transform:none!important}
+.button-primary,
+.primary-button{
+  background:#205fbd!important;
+}
+.button-primary:hover,
+.primary-button:hover{
+  background:#184d99!important;
+}
+.question-card,
+.answer-card,
+.result-card,
+.analysis-card,
+.review-card,
+.assessment-standard-card{
+  border-radius:9px!important;
+  box-shadow:none!important;
+}
+.code-editor-shell{
+  border-color:#31465d;
+  border-radius:8px;
+  background:#0c1622;
+}
+.code-editor-title{
+  background:#122235;
+  border-bottom-color:#2b4057;
+}
+.code-editor-frame,.code-editor{background:#0c1622}
+.code-line-numbers{
+  border-right-color:#263b52;
+  background:#09121c;
+}
+.code-problem-meta>div,
+.code-run-summary,
+.code-test-result{
+  border-color:#dce3ea;
+  border-radius:7px;
+}
+.sample-case pre,
+.code-test-result pre{
+  background:#f5f7f9;
+  border-radius:6px;
+}
+.review-code{
+  border-radius:7px;
+  background:#0c1622;
+}
+@media(max-width:900px){
+  .hero{grid-template-columns:1fr}
+  .hero-score-card{max-width:560px}
+  .setup-layout{grid-template-columns:1fr}
+}
+@media(max-width:760px){
+  .shell{width:calc(100% - 28px);padding-top:26px}
+  .topbar{padding:0 14px}
+  .hero h1{font-size:36px}
+  .panel{padding:18px 15px}
+}
