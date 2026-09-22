@@ -508,8 +508,14 @@ class OrganizationOut(BaseModel):
     state: Optional[str] = None
     country: Optional[str] = None
     logo_url: Optional[str] = None
-    primary_color: str
+    primary_color: str = "#5B5BD6"
     is_active: bool
+
+    @field_validator("primary_color", mode="before")
+    @classmethod
+    def normalize_primary_color(cls, value: object) -> str:
+        normalized = str(value or "").strip()
+        return normalized or "#5B5BD6"
 
     model_config = {"from_attributes": True}
 
