@@ -1419,3 +1419,13 @@ body.modal-open{overflow:hidden}
     padding:30px 0;
   }
 }
+
+
+/* PlaceAI hero alignment correction — 2026-09-22
+   Aligns the left hero content with the top of the visual column only.
+   No content, behavior, feature, or responsive structure changes. */
+@media(min-width:1081px){
+  #marketing-site .hero{
+    align-items:start;
+  }
+}
