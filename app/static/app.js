@@ -250,7 +250,7 @@
       ['Workspace','dashboard','Dashboard'],['Hiring','jobs','Jobs'],['Hiring','pipeline','Drive pipeline'],['Hiring','candidates','Candidates'],['Hiring','interviews','Interviews'],['Hiring','offers','Offers'],['Trust','verification','Company verification'],['Collaboration','communications','Placement office messages'],['Insights','analytics','Analytics'],['Insights','assistant','AI placement assistant'],['Updates','notifications','Notifications'],['Account','profile','Company profile']
     ],
     institution_admin: [
-      ['Command centre','dashboard','Overview'],['Command centre','attention','Attention centre'],['Command centre','analytics2','Placement analytics'],['People','students','Students'],['People','approvals','Profile approvals'],['People','recruiters','Recruiters'],['Trust','verification','Company verification'],['Placements','jobs','Campus jobs'],['Placements','drives','Placement drives'],['Placements','pipeline','Drive pipelines'],['Placements','applications','Applications'],['Placements','interviews','Interviews'],['Placements','offers','Offer management'],['Operations','attendance','QR attendance'],['Operations','calendar','Placement calendar'],['Operations','announcements','Announcements'],['Operations','communications','Recruiter communication'],['Governance','policies','Placement policies'],['Governance','custom-fields','Custom fields'],['Governance','incidents','Incident reports'],['Governance','reports','Reports'],['Updates','notifications','Notifications'],['Governance','audit','Audit log']
+      ['Command centre','dashboard','Overview'],['Command centre','attention','Attention centre'],['Command centre','analytics2','Placement analytics'],['People','students','Students'],['People','approvals','Profile approvals'],['People','recruiters','Recruiters'],['Access','institution-access-requests','Access requests'],['Trust','verification','Company verification'],['Placements','jobs','Campus jobs'],['Placements','drives','Placement drives'],['Placements','pipeline','Drive pipelines'],['Placements','applications','Applications'],['Placements','interviews','Interviews'],['Placements','offers','Offer management'],['Operations','attendance','QR attendance'],['Operations','calendar','Placement calendar'],['Operations','announcements','Announcements'],['Operations','communications','Recruiter communication'],['Governance','policies','Placement policies'],['Governance','custom-fields','Custom fields'],['Governance','incidents','Incident reports'],['Governance','reports','Reports'],['Updates','notifications','Notifications'],['Governance','audit','Audit log']
     ],
     platform_admin: [
       ['Platform','dashboard','Overview'],['Platform','organizations','Institutions'],['People','registrations','Registrations'],['Insights','engagement','Engagement'],['Platform','integrations','Integrations'],['Access','leads','Access requests'],['Updates','notifications','Notifications']
@@ -530,6 +530,16 @@
   function candidateRow(s){return `<tr><td><span class="table-primary">${esc(s.full_name || 'Unnamed candidate')}</span><span class="table-secondary">${esc(s.college || '—')}</span></td><td>${esc(s.degree || '—')}<span class="table-secondary">${esc(s.branch || '')} · ${s.graduation_year || '—'}</span></td><td>${s.cgpa ?? '—'}</td><td>${tags(s.skills)}</td><td><button class="row-button primary" data-action="view-candidate" data-id="${s.id}">Open profile</button></td></tr>`}
 
   async function renderInstitution(view) {
+    if (view === 'institution-access-requests') {
+      setPage('Access requests','Institution access'); setContextAction();
+      const rows = await api('/institutions/access-requests');
+      const manualStatuses = ['new', 'under_review', 'approved', 'rejected'];
+      const statusControl = row => row.status === 'provisioned'
+        ? `<span class="status-badge status-approved">provisioned</span><span class="table-secondary">Account already provisioned</span>`
+        : `<select class="form-control" data-institution-access-status data-id="${esc(row.id)}" data-current-status="${esc(row.status)}" aria-label="Access request status for ${esc(row.full_name)}">${manualStatuses.map(status => `<option value="${status}" ${status === row.status ? 'selected' : ''}>${status.replaceAll('_',' ')}</option>`).join('')}</select>`;
+      $('#app-content').innerHTML = `${pageHead('Recruiter access requests','Review recruiter workspace requests linked only to your institution. Platform and Institution Admin requests remain under Platform Admin control.')}${rows.length ? `<div class="data-panel"><div class="data-toolbar"><span class="table-secondary">${rows.length} institution-scoped request${rows.length === 1 ? '' : 's'}</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Requester</th><th>Organization</th><th>Context</th><th>Received</th><th>Status / action</th></tr></thead><tbody>${rows.map(row => `<tr><td><span class="table-primary">${esc(row.full_name)}</span><span class="table-secondary">${esc(row.work_email)}</span>${row.phone ? `<span class="table-secondary">${esc(row.phone)}</span>` : ''}</td><td>${esc(row.organization_name || '—')}</td><td>${esc(row.message || 'No access context provided.')}</td><td>${fmtDate(row.created_at)}</td><td>${statusControl(row)}</td></tr>`).join('')}</tbody></table></div></div>` : emptyState('AR','No recruiter access requests','Recruiter requests linked to this institution will appear here for placement-office review.')}`;
+      return;
+    }
     if (['attention','analytics2','approvals','verification','pipeline','interviews','offers','attendance','calendar','announcements','communications','policies','custom-fields','incidents','reports'].includes(view)) return renderInstitutionEnterprise(view);
     if (view === 'dashboard') {
       setPage('Overview','Placement command centre'); setContextAction('Add student','open-student-form');
@@ -622,8 +632,21 @@
     } else if (view === 'leads') {
       setPage('Access requests','Platform control'); setContextAction();
       const rows = await api('/platform/access-requests');
-      const accessStatuses = ['new', 'under_review', 'approved', 'rejected', 'provisioned'];
-      $('#app-content').innerHTML = `${pageHead('Access requests','Privileged workspace access requests stored in the production database.')}${rows.length ? `<div class="data-panel"><div class="data-toolbar"><span class="table-secondary">${rows.length} requests</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Requester</th><th>Role</th><th>Organization</th><th>Received</th><th>Status / action</th></tr></thead><tbody>${rows.map(r => `<tr><td><span class="table-primary">${esc(r.full_name)}</span><span class="table-secondary">${esc(r.work_email)}</span></td><td>${esc(r.requested_role.replaceAll('_',' '))}</td><td>${esc(r.organization_name || '—')}</td><td>${fmtDate(r.created_at)}</td><td><select class="form-control" data-access-request-status data-id="${esc(r.id)}" data-current-status="${esc(r.status)}" aria-label="Access request status for ${esc(r.full_name)}">${accessStatuses.map(status => `<option value="${status}" ${status === r.status ? 'selected' : ''}>${status.replaceAll('_',' ')}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div></div>` : emptyState('AR','No access requests','Privileged workspace requests will appear here when submitted.')}`;
+      const manualStatuses = ['new', 'under_review', 'approved', 'rejected'];
+      const actionCell = row => {
+        if (row.status === 'provisioned') {
+          const resend = row.requested_role === 'recruiter'
+            ? `<button class="row-button primary" data-action="platform-provision-recruiter" data-id="${esc(row.id)}" data-email="${esc(row.work_email)}" data-resend="true">Resend password setup link</button>`
+            : '';
+          return `<span class="status-badge status-approved">provisioned</span>${resend ? `<div class="row-actions access-action-row">${resend}</div>` : ''}`;
+        }
+        const select = `<select class="form-control" data-platform-access-status data-id="${esc(row.id)}" data-current-status="${esc(row.status)}" aria-label="Access request status for ${esc(row.full_name)}">${manualStatuses.map(status => `<option value="${status}" ${status === row.status ? 'selected' : ''}>${status.replaceAll('_',' ')}</option>`).join('')}</select>`;
+        const provision = row.requested_role === 'recruiter' && row.status === 'approved'
+          ? `<button class="row-button primary" data-action="platform-provision-recruiter" data-id="${esc(row.id)}" data-email="${esc(row.work_email)}">Provision recruiter</button>`
+          : '';
+        return `${select}${provision ? `<div class="row-actions access-action-row">${provision}</div>` : ''}`;
+      };
+      $('#app-content').innerHTML = `${pageHead('Access requests','Privileged workspace access requests stored in the production database.')}${rows.length ? `<div class="data-panel"><div class="data-toolbar"><span class="table-secondary">${rows.length} request${rows.length === 1 ? '' : 's'}</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Requester</th><th>Role</th><th>Organization</th><th>Context</th><th>Received</th><th>Status / action</th></tr></thead><tbody>${rows.map(r => `<tr><td><span class="table-primary">${esc(r.full_name)}</span><span class="table-secondary">${esc(r.work_email)}${r.phone ? ` · ${esc(r.phone)}` : ''}</span></td><td>${esc(r.requested_role.replaceAll('_',' '))}</td><td>${esc(r.organization_name || '—')}</td><td>${esc(r.message || 'No access context provided.')}</td><td>${fmtDate(r.created_at)}</td><td>${actionCell(r)}</td></tr>`).join('')}</tbody></table></div></div>` : emptyState('AR','No access requests','Privileged workspace requests will appear here when submitted.')}`;
     } else if (view === 'registrations') {
       setPage('Registrations','Platform control'); setContextAction();
       const role=state.platformRegistrationRole||'';
@@ -715,6 +738,24 @@
       else if(a==='open-admin-form')openAdminForm(id);
       else if(a==='view-platform-registration'){const d=await api(`/platform/registrations/${encodeURIComponent(id)}`);openModal(platformRegistrationDetailHtml(d));}
       else if(a==='platform-engagement-period'){state.platformEngagementDays=Number(id)||30;await navigate('engagement');}
+      else if(a==='platform-provision-recruiter'){
+        const email=String(action.dataset.email||'').trim();
+        const resend=action.dataset.resend==='true';
+        const prompt=resend?`Send a new one-time password setup link to ${email}?`:`Provision this Recruiter account and send a one-time password setup link to ${email}?`;
+        if(!window.confirm(prompt))return;
+        action.disabled=true;
+        const original=action.textContent;
+        action.textContent=resend?'Sending setup link…':'Provisioning recruiter…';
+        try{
+          const result=await api(`/platform/access-requests/${encodeURIComponent(id)}/provision-recruiter`,{method:'POST'});
+          toast(result.setup_email_sent?'Recruiter account ready':'Setup email not delivered',result.message||'Recruiter provisioning completed.',result.setup_email_sent?'success':'error');
+          await navigate('leads');
+        }catch(error){
+          action.disabled=false;
+          action.textContent=original;
+          throw error;
+        }
+      }
       else if(a==='view-applicants')await viewApplicants(id);
       else if(a==='view-candidate')await viewCandidate(id);
       else if(a==='apply-job'){openModal(`<span class="section-kicker">Application</span><h2>Submit application</h2><p class="form-intro">Add a concise cover note or submit without one.</p><form id="apply-form" class="form-stack"><input type="hidden" name="job_id" value="${id}"><label>Cover note <span class="optional">optional</span><textarea name="cover_note" rows="5" placeholder="Why are you interested in this role?"></textarea></label><button class="button button-primary button-full">Submit application</button></form>`);}
@@ -737,6 +778,40 @@
   document.addEventListener('change',async e=>{
     try{
       if(e.target.id==='job-type-filter'){filterStudentJobs();return;}
+      if(e.target.matches?.('[data-platform-access-status]')){
+        const select=e.target,previous=select.dataset.currentStatus||select.value,next=select.value,id=select.dataset.id;
+        if(!id||next===previous)return;
+        select.disabled=true;
+        try{
+          const result=await api(`/platform/access-requests/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:next,review_note:null})});
+          select.dataset.currentStatus=result.status;
+          select.value=result.status;
+          toast('Access request updated',`Status changed to ${String(result.status).replaceAll('_',' ')}.`);
+          await navigate('leads');
+        }catch(error){
+          select.value=previous;
+          select.disabled=false;
+          throw error;
+        }
+        return;
+      }
+      if(e.target.matches?.('[data-institution-access-status]')){
+        const select=e.target,previous=select.dataset.currentStatus||select.value,next=select.value,id=select.dataset.id;
+        if(!id||next===previous)return;
+        select.disabled=true;
+        try{
+          const result=await api(`/institutions/access-requests/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:next,review_note:null})});
+          select.dataset.currentStatus=result.status;
+          select.value=result.status;
+          toast('Access request updated',`Status changed to ${String(result.status).replaceAll('_',' ')}.`);
+          await navigate('institution-access-requests');
+        }catch(error){
+          select.value=previous;
+          select.disabled=false;
+          throw error;
+        }
+        return;
+      }
       if(e.target.id==='platform-registration-role'){state.platformRegistrationRole=e.target.value||'';await navigate('registrations');return;}
       if(e.target.id==='resume-file'&&e.target.files[0]){const form=new FormData();form.append('file',e.target.files[0]);await api('/students/resume',{method:'POST',body:form});toast('Resume uploaded');navigate('resume');}
       if(e.target.id==='student-csv-file'&&e.target.files[0]){const form=new FormData();form.append('file',e.target.files[0]);const result=await api('/institutions/import/students.csv',{method:'POST',body:form});toast('CSV import complete',`${result.created} created · ${result.failed} failed`);if(result.errors?.length){openModal(`<span class="section-kicker">CSV import report</span><h2>${result.created} students created</h2><p class="form-intro">${result.failed} rows could not be imported.</p><div class="ai-box"><div class="ai-box-head"><span>ROW ERRORS</span></div><p>${result.errors.map(x=>`Row ${x.row}: ${esc(x.error)}`).join('<br>')}</p></div><button class="button button-primary button-full" data-action="close-generic-modal">Done</button>`);}await navigate('students');}
