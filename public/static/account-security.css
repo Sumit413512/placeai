@@ -50,3 +50,60 @@ html.placeai-password-rotation-open body { overflow: hidden !important; }
   .password-rotation-overlay { padding: 10px; }
   .password-rotation-card { padding: 24px 20px; max-height: calc(100dvh - 20px); }
 }
+
+
+/* PlaceAI account-security modal — professional UI preview 2026-09-22 */
+.password-rotation-overlay{
+  background:rgba(8,18,31,.72);
+  backdrop-filter:blur(6px);
+}
+.password-rotation-card{
+  width:min(540px,100%);
+  border:1px solid #dbe2e9;
+  border-radius:12px;
+  padding:30px;
+  box-shadow:0 24px 70px rgba(8,18,31,.24);
+}
+.password-rotation-card h2{
+  color:#172438;
+  font:700 26px/1.18 Manrope,sans-serif;
+  letter-spacing:-.03em;
+}
+.password-rotation-card p{
+  color:#67778b;
+  font-size:13px;
+}
+.password-rotation-kicker{
+  color:#4b6989;
+  font-size:9.5px;
+}
+.password-rotation-form label{
+  color:#3e5066;
+  font-size:12px;
+}
+.password-rotation-form input,
+.password-rotation-form select,
+.password-rotation-form textarea{
+  border-color:#cfd9e3;
+  border-radius:7px;
+  padding:11px 12px;
+}
+.password-rotation-form input:focus,
+.password-rotation-form select:focus,
+.password-rotation-form textarea:focus{
+  outline:0;
+  border-color:#5b86b7;
+  box-shadow:0 0 0 3px rgba(32,95,189,.08);
+}
+.password-rotation-submit{
+  border-radius:7px;
+  background:#205fbd;
+}
+.password-rotation-submit:hover{background:#184d99}
+.password-rotation-close{
+  top:13px;
+  right:13px;
+  width:34px;
+  height:34px;
+  border-radius:7px;
+}
