@@ -138,8 +138,10 @@ def test_rendered_release_fix_uses_current_production_credential_path() -> None:
     public_script = (root / "public" / "static" / "release-ux-fixes.js").read_text(encoding="utf-8")
     app_script = (root / "app" / "static" / "app.js").read_text(encoding="utf-8")
     proxy = (root / "render_proxy.py").read_text(encoding="utf-8")
-    assert "data-access-request-status" in app_script
+    assert "data-platform-access-status" in app_script
     assert "data-current-status" in app_script
+    assert "platform-provision-recruiter" in app_script
+    assert "/platform/access-requests/${encodeURIComponent(id)}/provision-recruiter" in app_script
     assert script == public_script
     assert "/platform/access-requests/${encodeURIComponent(requestId)}/provision-recruiter" in script
     assert "/platform/recruiters" not in script

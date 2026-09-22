@@ -24,6 +24,9 @@ def test_platform_access_requests_have_one_frontend_owner():
 
     assert "view === 'leads'" in core
     assert "const rows = await api('/platform/access-requests');" in core
+    assert "data-platform-access-status" in core
+    assert "platform-provision-recruiter" in core
+    assert "api(`/platform/access-requests/${encodeURIComponent(id)}`" in core
 
     stale_duplicate_markers = (
         "async function platformToken",

@@ -312,3 +312,10 @@
   #auth-overlay .access-role-grid{grid-template-columns:1fr}
   #auth-overlay .access-role-card{min-height:auto}
 }
+
+
+/* Extreme-narrow containment: preserve usable auth controls below 240px. */
+@media(max-width:240px){
+  #auth-overlay.modal-overlay{padding:4px}
+  #auth-overlay .auth-form-panel{padding:44px 10px 20px;scrollbar-gutter:auto}
+}

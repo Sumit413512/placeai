@@ -112,6 +112,5 @@
   const observer = new MutationObserver(() => enhanceResumeSkills());
   observer.observe(document.documentElement, { childList: true, subtree: true });
   document.addEventListener('DOMContentLoaded', enhanceResumeSkills, { once: true });
-  loadInstitutionAccessWorkspace();
   loadSiteRefresh();
 })();
