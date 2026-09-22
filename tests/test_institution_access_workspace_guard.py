@@ -11,14 +11,16 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_institution_access_view_is_a_real_workspace_view_in_both_bundles() -> None:
-    app_feature = _read("app/static/institution-access.js")
-    public_feature = _read("public/static/institution-access.js")
+def test_institution_access_view_is_a_first_class_workspace_view_in_both_bundles() -> None:
+    app_core = _read("app/static/app.js")
+    public_core = _read("public/static/app-core.js")
+    app_runtime = _read("app/static/workspace-runtime.js")
 
-    assert app_feature == public_feature
-    assert f"const VIEW_ID = '{VIEW_ID}';" in app_feature
-    assert "button.dataset.view = VIEW_ID;" in app_feature
-    assert "button.dataset.institutionAccessRequests = '';" in app_feature
+    assert app_core == public_core
+    assert "['Access','institution-access-requests','Access requests']" in app_core
+    assert "if (view === 'institution-access-requests')" in app_core
+    assert "data-institution-access-status" in app_core
+    assert "loadInstitutionAccessWorkspace();" not in app_runtime
 
 
 def test_workspace_guard_accepts_institution_access_before_extension_button_mounts() -> None:
