@@ -139,15 +139,16 @@ def test_institution_access_requests_are_tenant_scoped() -> None:
     assert privileged_update.status_code == 404
 
 
-def test_institution_access_frontend_is_mirrored_and_loaded() -> None:
+def test_institution_access_frontend_is_core_owned_and_mirrored() -> None:
     app_runtime = (ROOT / "app/static/workspace-runtime.js").read_text(encoding="utf-8")
     public_runtime = (ROOT / "public/static/workspace-runtime.js").read_text(encoding="utf-8")
-    app_feature = (ROOT / "app/static/institution-access.js").read_text(encoding="utf-8")
-    public_feature = (ROOT / "public/static/institution-access.js").read_text(encoding="utf-8")
+    app_core = (ROOT / "app/static/app.js").read_text(encoding="utf-8")
+    public_core = (ROOT / "public/static/app-core.js").read_text(encoding="utf-8")
 
     assert app_runtime == public_runtime
-    assert app_feature == public_feature
-    assert "'/static/institution-access.js'" in app_runtime
-    assert "data-institution-access-requests" in app_feature
-    assert "'/institutions/access-requests'" in app_feature
-    assert "requested_role == \"recruiter\"" not in app_feature
+    assert app_core == public_core
+    assert "loadInstitutionAccessWorkspace();" not in app_runtime
+    assert "['Access','institution-access-requests','Access requests']" in app_core
+    assert "if (view === 'institution-access-requests')" in app_core
+    assert "const rows = await api('/institutions/access-requests');" in app_core
+    assert "data-institution-access-status" in app_core
