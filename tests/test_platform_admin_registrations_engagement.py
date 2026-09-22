@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.app import app
 from app.database import Base, SessionLocal, engine
-from app.models import RefreshSession, StudentProfile, User, UserRole
+from app.models import Organization, RefreshSession, StudentProfile, User, UserRole
 from app.telemetry_models import PageViewEvent
 from app.utils import get_hashed_password
 
@@ -136,6 +136,38 @@ def test_platform_admin_engagement_includes_page_views() -> None:
     assert body["summary"]["page_views"] >= 1
     assert body["summary"]["unique_visitors"] >= 1
     assert any(item["path"] == TEST_PATH for item in body["top_pages"])
+
+
+def test_platform_organizations_tolerates_legacy_null_primary_color() -> None:
+    """A legacy organization row with a NULL color must not crash Platform Admin."""
+    slug = "legacy-null-color-regression"
+    db = SessionLocal()
+    try:
+        row = db.query(Organization).filter(Organization.slug == slug).first()
+        if not row:
+            row = Organization(
+                name="Legacy Null Color Institution",
+                slug=slug,
+                primary_color=None,
+                is_active=True,
+            )
+            db.add(row)
+            db.commit()
+    finally:
+        db.close()
+
+    try:
+        response = client.get("/platform/organizations", headers=_platform_headers())
+        assert response.status_code == 200, response.text
+        payload = next(item for item in response.json() if item["slug"] == slug)
+        assert payload["primary_color"] == "#5B5BD6"
+    finally:
+        db = SessionLocal()
+        try:
+            db.query(Organization).filter(Organization.slug == slug).delete(synchronize_session=False)
+            db.commit()
+        finally:
+            db.close()
 
 
 def test_non_platform_user_cannot_access_registration_directory() -> None:
