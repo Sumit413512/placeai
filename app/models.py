@@ -478,6 +478,42 @@ class AuditEvent(Base):
 # PlaceAI Enterprise Placement Operations (v3)
 # -----------------------------------------------------------------------------
 
+class PlacementAction(Base):
+    __tablename__ = "placement_actions"
+    __table_args__ = (UniqueConstraint("organization_id", "source_key", name="uq_placement_action_org_source"),)
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    organization_id = Column(String, ForeignKey("organizations.id"), nullable=False, index=True)
+    student_id = Column(String, ForeignKey("student_profiles.id"), nullable=True, index=True)
+    drive_id = Column(String, ForeignKey("placement_drives.id"), nullable=True, index=True)
+    job_id = Column(String, ForeignKey("jobs.id"), nullable=True, index=True)
+    owner_user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
+    action_type = Column(String(80), nullable=False, index=True)
+    source_key = Column(String(240), nullable=False)
+    title = Column(String(240), nullable=False)
+    description = Column(Text, nullable=True)
+    priority = Column(String(20), nullable=False, default="medium", index=True)
+    status = Column(String(24), nullable=False, default="open", index=True)
+    due_at = Column(DateTime, nullable=True, index=True)
+    detected_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+    resolution_note = Column(Text, nullable=True)
+    resolution_outcome = Column(String(80), nullable=True)
+    details_json = Column(Text, nullable=False, default="{}")
+
+    @property
+    def details(self):
+        try:
+            return json.loads(self.details_json or "{}")
+        except json.JSONDecodeError:
+            return {}
+
+    @details.setter
+    def details(self, value):
+        self.details_json = json.dumps(value or {})
+
+
 class DriveStage(Base):
     __tablename__ = "drive_stages"
     __table_args__ = (UniqueConstraint("drive_id", "stage_key", name="uq_drive_stage_key"),)
