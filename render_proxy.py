@@ -236,3 +236,15 @@ async def proxy(path: str, request: Request) -> Response:
             value = str(request.base_url).rstrip("/") + value[len(UPSTREAM_BASE):]
         response.headers.append(key, value)
     return response
+
+
+
+# Preview-only escape hatch: allow an existing non-production Render gateway service
+# to serve the real PlaceAI application without proxying to another deployment.
+# This is intentionally blocked in production.
+if os.getenv("PLACEAI_RENDER_DIRECT_APP", "false").strip().lower() == "true":
+    if os.getenv("ENVIRONMENT", "development").strip().lower() == "production":
+        raise RuntimeError("PLACEAI_RENDER_DIRECT_APP cannot be enabled in production")
+    from app.app import app as _direct_placeai_app
+
+    app = _direct_placeai_app
