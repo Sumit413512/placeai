@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 import importlib
 import logging
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, Request
@@ -45,6 +46,14 @@ async def lifespan(_: FastAPI):
     else:
         if settings.auto_create_schema:
             Base.metadata.create_all(bind=engine)
+        if not settings.is_production and os.getenv("PREVIEW_SEED", "false").strip().lower() == "true":
+            from app.database import SessionLocal
+            from app.preview_seed import seed_preview_data
+            db = SessionLocal()
+            try:
+                seed_preview_data(db)
+            finally:
+                db.close()
         if not settings.uses_database_file_storage:
             settings.upload_dir.mkdir(parents=True, exist_ok=True)
     if settings.is_production and not transactional_email_configured(settings):
