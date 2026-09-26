@@ -612,8 +612,13 @@ def placement_assistant(
         apps = db.query(Application).filter(Application.student_id == profile.id).all()
         interviews = db.query(InterviewSchedule).filter(InterviewSchedule.application_id.in_([a.id for a in apps])).all() if apps else []
         offers = db.query(Offer).filter(Offer.application_id.in_([a.id for a in apps])).all() if apps else []
+        from app.product_intelligence import readiness_evidence, student_next_actions
+        student_actions = student_next_actions(profile, db)
+        readiness = readiness_evidence(profile, db)
         context.update({
             "student": {"name": profile.full_name, "degree": profile.degree, "branch": profile.branch, "graduation_year": profile.graduation_year, "cgpa": profile.cgpa, "skills": profile.skills, "desired_roles": profile.desired_roles, "placement_status": profile.placement_status},
+            "next_actions": student_actions,
+            "readiness": {"score": readiness["score"], "band": readiness["readiness_band"], "evidence": readiness["evidence"], "next_best_action": readiness["next_best_action"]},
             "visible_jobs": [{"id": j.id, "title": j.title, "company": j.recruiter.company_name if j.recruiter else None, "required_skills": j.required_skills, "deadline": j.deadline.isoformat() if j.deadline else None} for j in visible_jobs[:30]],
             "applications": [{"job": a.job.title if a.job else None, "status": a.status.value, "pipeline_stage": a.pipeline_stage_key} for a in apps],
             "interviews": [{"round": i.round_name, "scheduled_at": i.scheduled_at.isoformat(), "mode": i.mode} for i in interviews],
@@ -633,8 +638,11 @@ def placement_assistant(
     elif current_user.role == UserRole.institution_admin:
         students = db.query(StudentProfile).filter(StudentProfile.organization_id == current_user.organization_id).limit(1000).all()
         drives = db.query(PlacementDrive).filter(PlacementDrive.organization_id == current_user.organization_id).all()
+        from app.product_intelligence import institution_action_centre
+        rescue = institution_action_centre(current_user.organization_id, db)
         context.update({
             "institution_id": current_user.organization_id,
+            "drive_rescue": {"summary": rescue["summary"], "actions": rescue["actions"][:50], "rescue_drives": rescue["rescue_drives"][:20]},
             "students": [{"name": s.full_name, "branch": s.branch, "year": s.graduation_year, "cgpa": s.cgpa, "placement_status": s.placement_status, "has_resume": bool(s.resume)} for s in students[:250]],
             "drives": [{"title": d.title, "status": d.status.value, "registration_deadline": d.registration_deadline.isoformat() if d.registration_deadline else None, "event_date": d.event_date.isoformat() if d.event_date else None} for d in drives],
         })
