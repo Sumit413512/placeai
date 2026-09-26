@@ -2,48 +2,43 @@ from fastapi.testclient import TestClient
 
 from app.app import app
 from app.database import Base, SessionLocal, engine
-from app.models import Organization, User, UserRole
-from app.utils import get_hashed_password
+from app.preview_seed import seed_preview_data
 
 client = TestClient(app)
 
 
-def test_institution_admin_role_login_accepts_symbol_password():
+def test_exact_preview_seed_credentials_can_role_login(monkeypatch):
     Base.metadata.create_all(bind=engine)
-    email = "preview-regression@placeai.example.com"
-    password = "PlaceAI-Preview-2026!"
+    credentials = {
+        "institution_admin": (
+            "preview-tpo@placeai.example.com",
+            "PlaceAIPreviewTPO2026",
+        ),
+        "student": (
+            "preview-student@placeai.example.com",
+            "PlaceAIPreviewStudent2026",
+        ),
+        "recruiter": (
+            "preview-recruiter@placeai.example.com",
+            "PlaceAIPreviewRecruiter2026",
+        ),
+    }
+    monkeypatch.setenv("ENVIRONMENT", "test")
+    monkeypatch.setenv("PREVIEW_SEED", "true")
+    monkeypatch.setenv("PREVIEW_TPO_PASSWORD", credentials["institution_admin"][1])
+    monkeypatch.setenv("PREVIEW_STUDENT_PASSWORD", credentials["student"][1])
+    monkeypatch.setenv("PREVIEW_RECRUITER_PASSWORD", credentials["recruiter"][1])
+
     db = SessionLocal()
     try:
-        org = db.query(Organization).filter(Organization.slug == "preview-regression").first()
-        if not org:
-            org = Organization(name="Preview Regression Institute", slug="preview-regression", is_active=True)
-            db.add(org)
-            db.flush()
-        user = db.query(User).filter(User.email == email).first()
-        if not user:
-            user = User(
-                email=email,
-                username="preview_regression_admin",
-                hashed_password=get_hashed_password(password),
-                role=UserRole.institution_admin,
-                organization_id=org.id,
-                email_verified=True,
-                is_active=True,
-            )
-            db.add(user)
-        else:
-            user.hashed_password = get_hashed_password(password)
-            user.role = UserRole.institution_admin
-            user.organization_id = org.id
-            user.email_verified = True
-            user.is_active = True
-        db.commit()
+        seed_preview_data(db)
     finally:
         db.close()
 
-    response = client.post(
-        "/auth/login-role",
-        json={"email": email, "password": password, "role": "institution_admin"},
-    )
-    assert response.status_code == 200, response.text
-    assert response.json().get("access_token")
+    for role, (email, password) in credentials.items():
+        response = client.post(
+            "/auth/login-role",
+            json={"email": email, "password": password, "role": role},
+        )
+        assert response.status_code == 200, (role, response.text)
+        assert response.json().get("access_token"), role
