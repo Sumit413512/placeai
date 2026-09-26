@@ -51,6 +51,15 @@ def seed_preview_data(db: Session) -> None:
     def ensure_user(email: str, username: str, role: UserRole, password: str, org_id: str | None = None) -> User:
         row = db.query(User).filter(User.email == email).first()
         if row:
+            # Preview accounts are disposable. Re-apply the configured credentials on
+            # every preview startup so Render env changes cannot leave stale hashes.
+            row.username = username
+            row.hashed_password = get_hashed_password(password)
+            row.role = role
+            row.organization_id = org_id
+            row.email_verified = True
+            row.is_active = True
+            db.flush()
             return row
         row = User(
             email=email,
@@ -66,27 +75,27 @@ def seed_preview_data(db: Session) -> None:
         return row
 
     tpo = ensure_user(
-        "preview-tpo@placeai.test",
+        "preview-tpo@placeai.example.com",
         "preview_tpo",
         UserRole.institution_admin,
         tpo_password,
         org.id,
     )
     recruiter_user = ensure_user(
-        "preview-recruiter@placeai.test",
+        "preview-recruiter@placeai.example.com",
         "preview_recruiter",
         UserRole.recruiter,
         recruiter_password,
     )
     student_user = ensure_user(
-        "preview-student@placeai.test",
+        "preview-student@placeai.example.com",
         "preview_student",
         UserRole.student,
         student_password,
         org.id,
     )
     pending_user = ensure_user(
-        "preview-pending@placeai.test",
+        "preview-pending@placeai.example.com",
         "preview_pending",
         UserRole.student,
         student_password,
