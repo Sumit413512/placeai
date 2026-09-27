@@ -101,6 +101,10 @@ jobs:
           test "$drives_code" = '401'
           dashboard_code=$(curl -sS -o /tmp/vercel-dashboard.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BACKEND_URL/institutions/dashboard")
           test "$dashboard_code" = '401'
+          student_actions_code=$(curl -sS -o /tmp/student-actions.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BACKEND_URL/intelligence/student/actions")
+          test "$student_actions_code" = '401'
+          institution_actions_code=$(curl -sS -o /tmp/institution-actions.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BACKEND_URL/intelligence/institution/actions")
+          test "$institution_actions_code" = '401'
 
       - name: Verify public shell, legal surface, release assets and security headers
         shell: bash
@@ -130,7 +134,11 @@ jobs:
           grep -q 'secureTemporaryPassword' /tmp/provisioning-password-fix.js
           grep -q 'data-temp-password-regenerate' /tmp/provisioning-password-fix.js
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/app-core.js" -o /tmp/app-core.js
-          grep -q 'data-access-request-status' /tmp/app-core.js
+          grep -q 'data-platform-access-status' /tmp/app-core.js
+          grep -q 'data-institution-access-status' /tmp/app-core.js
+          grep -q 'Drive Rescue' /tmp/app-core.js
+          grep -q '/intelligence/institution/actions' /tmp/app-core.js
+          grep -q '/intelligence/student/actions' /tmp/app-core.js
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/release-ux-fixes.js" -o /tmp/release-ux-fixes.js
           grep -q '/provision-recruiter' /tmp/release-ux-fixes.js
           ! grep -q "'/platform/recruiters'" /tmp/release-ux-fixes.js
