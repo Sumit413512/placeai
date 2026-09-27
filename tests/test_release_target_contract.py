@@ -12,7 +12,10 @@ def test_canonical_production_application_is_monitored() -> None:
     assert '"$BASE_URL/health"' in workflow
     assert "FORM_CONTRACTS" in workflow
     assert "integration-readiness.js" in workflow
-    assert "data-access-request-status" in workflow
+    assert "data-platform-access-status" in workflow
+    assert "data-institution-access-status" in workflow
+    assert "/intelligence/institution/actions" in workflow
+    assert "/intelligence/student/actions" in workflow
     assert "/provision-recruiter" in workflow
 
 
