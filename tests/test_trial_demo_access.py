@@ -17,21 +17,21 @@ from app.trial_demo_access import (
 from app.utils import get_hashed_password
 
 
-def _fixture():
+def _fixture(tag: str):
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
 
     recruiter_user = User(
-        email="technova-demo-recruiter@placeai.example.com",
-        username="technova_demo_recruiter",
+        email=f"technova-demo-recruiter-{tag}@placeai.example.com",
+        username=f"technova_demo_recruiter_{tag}",
         hashed_password=get_hashed_password("RecruiterPass123!"),
         role=UserRole.recruiter,
         email_verified=True,
         is_active=True,
     )
     student_user = User(
-        email="fresh-demo-student@placeai.example.com",
-        username="fresh_demo_student",
+        email=f"fresh-demo-student-{tag}@placeai.example.com",
+        username=f"fresh_demo_student_{tag}",
         hashed_password=get_hashed_password("StudentPass123!"),
         role=UserRole.student,
         email_verified=True,
@@ -73,7 +73,7 @@ def _fixture():
 
 
 def test_new_independent_student_gets_exactly_one_free_demo_attempt():
-    db, user, profile, job = _fixture()
+    db, user, profile, job = _fixture("free")
     try:
         before = trial_demo_access_state(user, profile, job, db)
         assert before["access_mode"] == "trial"
@@ -102,7 +102,7 @@ def test_new_independent_student_gets_exactly_one_free_demo_attempt():
 
 
 def test_paid_independent_student_can_continue_after_free_attempt():
-    db, user, profile, job = _fixture()
+    db, user, profile, job = _fixture("paid")
     try:
         db.add(MockInterview(
             student_id=profile.id,
@@ -130,7 +130,7 @@ def test_paid_independent_student_can_continue_after_free_attempt():
 
 
 def test_institution_sponsored_student_can_continue_after_demo_attempt():
-    db, user, profile, job = _fixture()
+    db, user, profile, job = _fixture("campus")
     try:
         org = Organization(
             name="Contract College",
