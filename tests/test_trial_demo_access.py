@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 from app.billing_models import StudentSubscription
 from app.database import Base, SessionLocal, engine
-from app.models import Job, MockInterview, RecruiterProfile, StudentProfile, User, UserRole, utcnow
+from app.models import Job, MockInterview, Organization, RecruiterProfile, StudentProfile, User, UserRole, utcnow
 from app.trial_demo_access import (
     TRIAL_DEMO_COMPANY_NAME,
     TRIAL_DEMO_JOB_TITLE,
@@ -122,6 +122,37 @@ def test_paid_independent_student_can_continue_after_free_attempt():
 
         state = enforce_trial_demo_start(user, profile, job, db)
         assert state["access_mode"] == "premium"
+        assert state["can_start"] is True
+        assert state["free_attempts_remaining"] is None
+    finally:
+        db.close()
+
+
+
+def test_institution_sponsored_student_can_continue_after_demo_attempt():
+    db, user, profile, job = _fixture()
+    try:
+        org = Organization(
+            name="Contract College",
+            slug="contract-college-demo-access",
+            is_active=True,
+        )
+        db.add(org)
+        db.flush()
+        user.organization_id = org.id
+        profile.organization_id = org.id
+        profile.college = org.name
+        profile.is_verified = True
+        db.add(MockInterview(
+            student_id=profile.id,
+            job_id=job.id,
+            questions_json='[{"question_id":1,"question":"Demo?","category":"technical"}]',
+            answers_json="[]",
+        ))
+        db.commit()
+
+        state = enforce_trial_demo_start(user, profile, job, db)
+        assert state["access_mode"] == "campus_sponsored"
         assert state["can_start"] is True
         assert state["free_attempts_remaining"] is None
     finally:
