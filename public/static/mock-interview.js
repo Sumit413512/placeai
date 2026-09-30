@@ -148,7 +148,11 @@
     const jobs = previewMode ? previewJobs() : await api('/mock-interview/jobs');
     state.jobs = jobs;
     const select = $('#job-select');
-    select.innerHTML = `<option value="">Select an opportunity…</option>${jobs.map(j=>`<option value="${esc(j.id)}">${esc(j.title)}${j.company_name ? ` · ${esc(j.company_name)}` : ''}</option>`).join('')}`;
+    select.innerHTML = `<option value="">Select an opportunity…</option>${jobs.map(j=>{
+      const demoLabel = j.is_trial_demo ? (j.can_start ? ' · 1 FREE TRIAL ATTEMPT' : ' · FREE ATTEMPT USED — UPGRADE / COLLEGE ACCESS') : '';
+      const disabled = j.is_trial_demo && !j.can_start ? ' disabled' : '';
+      return `<option value="${esc(j.id)}"${disabled}>${esc(j.title)}${j.company_name ? ` · ${esc(j.company_name)}` : ''}${demoLabel}</option>`;
+    }).join('')}`;
     if (!jobs.length) select.innerHTML = '<option value="">No approved opportunities available</option>';
   }
 
