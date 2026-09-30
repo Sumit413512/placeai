@@ -23,6 +23,7 @@ from app.models import ApprovalStatus, AuditEvent, Job, MockInterview, StudentPr
 from app.placement_access import job_is_visible_to_student
 from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
 from app.student_entitlements import require_student_premium_access
+from app.trial_demo_access import enforce_trial_demo_start
 
 router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])
 LOGGER = logging.getLogger("placeai.mock_interview")
@@ -944,6 +945,7 @@ def start_mock_interview_v2(
 ):
     profile = _profile(current_user, db)
     job = _accessible_job(profile, body.job_id, db)
+    enforce_trial_demo_start(current_user, profile, job, db)
     previous = _previous_questions(profile, job, db)
     questions, generation = _generate_unique_questions(
         profile=profile,

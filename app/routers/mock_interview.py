@@ -14,6 +14,7 @@ from app.dependencies import require_student
 from app.models import ApprovalStatus, Job, MockInterview, StudentProfile, User
 from app.placement_access import job_is_visible_to_student
 from app.routers.ai import PROMPT_GUARDRAIL, call_gemini, extract_json_from_response, get_gemini_client
+from app.trial_demo_access import trial_demo_access_state
 
 router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])
 
@@ -103,16 +104,23 @@ def mock_interview_jobs(
     profile = _profile(current_user, db)
     jobs = db.query(Job).filter(Job.is_active.is_(True), Job.approval_status == ApprovalStatus.approved).all()
     visible = [job for job in jobs if job_is_visible_to_student(profile, job, db)]
-    return [
-        {
+    result = []
+    for job in visible:
+        demo_access = trial_demo_access_state(current_user, profile, job, db)
+        result.append({
             "id": job.id,
             "title": job.title,
             "company_name": job.recruiter.company_name if job.recruiter else None,
             "required_skills": job.required_skills,
             "experience_required": job.experience_required,
-        }
-        for job in visible
-    ]
+            "is_trial_demo": demo_access["is_trial_demo"],
+            "can_start": demo_access["can_start"],
+            "attempts_used": demo_access["attempts_used"],
+            "free_attempts_remaining": demo_access["free_attempts_remaining"],
+            "access_mode": demo_access["access_mode"],
+            "access_note": demo_access.get("access_note"),
+        })
+    return result
 
 
 @router.post("/start", dependencies=[Depends(student_ai_guard)])
