@@ -13,7 +13,8 @@ from app.database import get_db
 from app.dependencies import require_student
 from app.models import ApprovalStatus, Job, MockInterview, StudentProfile, User
 from app.placement_access import job_is_visible_to_student
-from app.routers.ai import PROMPT_GUARDRAIL, call_gemini, extract_json_from_response, get_gemini_client\nfrom app.trial_demo_access import trial_demo_access_state
+from app.routers.ai import PROMPT_GUARDRAIL, call_gemini, extract_json_from_response, get_gemini_client
+from app.trial_demo_access import trial_demo_access_state
 
 router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])
 
