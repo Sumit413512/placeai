@@ -188,7 +188,7 @@ INDEX_HTML = '''<!doctype html>
       <div class="auth-form-panel">
         <div id="login-view"><span class="section-kicker">Secure access</span><h2 id="auth-title">Sign in to PlaceAI</h2></div>
         <div id="signup-view" class="hidden"><span class="section-kicker">Account access</span><h2 id="auth-create-title">Create or request access</h2></div>
-        <div id="reset-view" class="hidden"><span class="section-kicker">Account recovery</span><h2 id="auth-reset-title">Reset your password</h2><p class="form-intro">Enter your email. If the account exists, PlaceAI will send a one-time reset link when transactional email is configured.</p><form id="forgot-form" class="form-stack"><label>Email address<input type="email" name="email" required autocomplete="email"></label><button class="button button-primary button-full">Send reset link</button></form><button class="text-button back-link" data-action="show-login">← Back to sign in</button></div>
+        <div id="reset-view" class="hidden"><span class="section-kicker">Account recovery</span><h2 id="auth-reset-title">Reset your password</h2><p class="form-intro">Enter your email to request a one-time reset link. For privacy, PlaceAI shows the same confirmation whether or not an account exists.</p><form id="forgot-form" class="form-stack"><label>Email address<input type="email" name="email" required autocomplete="email"></label><button class="button button-primary button-full">Send reset link</button></form><button class="text-button back-link" data-action="show-login">← Back to sign in</button></div>
       </div>
     </div>
   </div>
