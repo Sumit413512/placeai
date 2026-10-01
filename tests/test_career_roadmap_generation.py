@@ -345,3 +345,26 @@ def test_pinned_google_genai_supports_grounded_structured_config():
     assert config.response_mime_type == "application/json"
     assert config.response_json_schema["type"] == "object"
     assert config.response_json_schema["additionalProperties"] is False
+
+
+
+def test_market_search_stops_format_churn_after_repeated_transient_failure(monkeypatch):
+    calls = []
+    monkeypatch.setattr(roadmap_market, "_keys", lambda: ["test-key"])
+    monkeypatch.setattr(roadmap_market, "_models", lambda: ["gpt-5.6-terra", "gpt-5.6"])
+    monkeypatch.setattr(roadmap_market, "_gemini_key", lambda: "")
+    monkeypatch.setattr(roadmap_market.time, "sleep", lambda *_: None)
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        return _response(503, {"error": {"message": "provider unavailable"}})
+
+    monkeypatch.setattr(roadmap_market.httpx, "post", fake_post)
+
+    with pytest.raises(HTTPException) as exc:
+        roadmap_market.search_current_market("research")
+
+    assert exc.value.status_code == 503
+    assert len(calls) == 2
+    assert all(call["model"] == "gpt-5.6-terra" for call in calls)
+    assert all(call["text"]["format"]["type"] == "json_schema" for call in calls)
