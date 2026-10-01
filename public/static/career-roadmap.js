@@ -178,13 +178,23 @@
 
     let latest = null;
     if (status.latest_available) latest = await api('/roadmap/latest');
-    root().innerHTML = pageHead(
+    const page = pageHead(
       'AI Career Roadmap',
       'Turn your target role into a clear sequence of skills, projects and milestones based on your profile and the current market.'
-    ) +
+    );
+    const editor = builderForm(esc, latest);
 
-    builderForm(esc, latest) +
-    roadmapHtml(latest, esc, fmtDate);
+    if (latest) {
+      root().innerHTML = page +
+        '<section class="roadmap-plan-toolbar" aria-label="Saved roadmap actions">' +
+          '<div class="roadmap-plan-toolbar-copy"><span class="section-kicker">YOUR SAVED PLAN</span><strong>Continue from the next move below</strong><small>Adjust the plan when your target role, skills, available time or market changes. Last updated ' + esc(fmtDate(latest.created_at)) + '.</small></div>' +
+          '<div class="roadmap-plan-toolbar-actions"><button class="button button-secondary" type="button" data-action="roadmap-adjust">Adjust roadmap</button><button class="button button-secondary" type="button" data-action="roadmap-print">Print / save PDF</button></div>' +
+        '</section>' +
+        roadmapHtml(latest, esc, fmtDate) +
+        '<details class="roadmap-adjust-panel panel"><summary><span><strong>Adjust roadmap inputs</strong><small>Change your target, starting point or weekly pace, then rebuild with current market evidence.</small></span><span aria-hidden="true">+</span></summary><div class="roadmap-adjust-body">' + editor + '</div></details>';
+    } else {
+      root().innerHTML = page + editor;
+    }
 
     const level = root().querySelector('#career-roadmap-form select[name="experience_level"]');
     if (level && latest && latest.input && latest.input.experience_level) level.value = latest.input.experience_level;
@@ -243,8 +253,29 @@
   });
 
   document.addEventListener('click', async event => {
-    const button = event.target.closest('[data-action="roadmap-checkout"]');
-    if (!button || !workspace) return;
+    const actionButton = event.target.closest?.('[data-action]');
+    const action = actionButton?.dataset.action || '';
+    if (!action || !workspace) return;
+
+    if (action === 'roadmap-adjust') {
+      event.preventDefault();
+      const panel = root()?.querySelector('.roadmap-adjust-panel');
+      if (!panel) return;
+      panel.open = true;
+      requestAnimationFrame(() => {
+        panel.scrollIntoView({ behavior:'smooth', block:'start' });
+        panel.querySelector('input[name="target_roles"]')?.focus({ preventScroll:true });
+      });
+      return;
+    }
+
+    if (action === 'roadmap-print') {
+      event.preventDefault();
+      window.print();
+      return;
+    }
+
+    if (action !== 'roadmap-checkout') return;
     try {
       await workspace.api('/billing/roadmap-checkout', { method: 'POST' });
     } catch (error) {

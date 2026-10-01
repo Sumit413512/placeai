@@ -100,3 +100,18 @@ def test_public_and_sign_in_copy_uses_user_language_not_platform_jargon():
     assert "Sign in to the workspace assigned to you." in app_index
     assert "Admin access is limited to approved accounts." in app_index
     assert "PlaceAI shows the same confirmation whether or not an account exists." in app_index
+
+
+def test_role_navigation_uses_progressive_disclosure_without_removing_tools():
+    app_js = _read("app/static/workspace-experience.js")
+    public_js = _read("public/static/workspace-experience.js")
+    app_css = _read("app/static/workspace-experience.css")
+
+    assert app_js == public_js
+    assert "ROLE_SECONDARY_VIEWS" in app_js
+    assert "platform_admin: new Set()" in app_js
+    assert "toggle-placeai-nav-more" in app_js
+    assert "placeaiMoreOpen" in app_js
+    assert "placeai_nav_more_" in app_js
+    assert '[data-placeai-more-open="false"]' in app_css
+    assert ".placeai-nav-more" in app_css
