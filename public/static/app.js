@@ -7,7 +7,8 @@
     '/static/api-errors.css',
     '/static/access-portal.css',
     '/static/ui-fixes.css',
-    '/static/account-security.css'
+    '/static/account-security.css',
+    '/static/workspace-experience.css'
   ];
   for (const href of styles) {
     if (document.querySelector(`link[href="${href}"]`)) continue;
@@ -27,6 +28,7 @@
     '/static/release-ux-fixes.js',
     '/static/integration-readiness.js',
     '/static/ai-readiness.js',
+    '/static/workspace-experience.js',
     '/static/legal-links.js',
     '/static/career-roadmap.js',
     '/static/app-core.js'

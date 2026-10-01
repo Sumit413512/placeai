@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 UPSTREAM_BASE = os.getenv("UPSTREAM_BASE", "https://placeai-rxpp.vercel.app").rstrip("/")
-ASSET_VERSION = os.getenv("ASSET_VERSION", "20261001-roadmap-1")
+ASSET_VERSION = os.getenv("ASSET_VERSION", "20261001-role-focus-1")
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "app" / "static"
 TEMPLATE_DIR = ROOT / "app" / "templates"
@@ -41,6 +41,7 @@ ASSET_INJECTION = (
     f'<link rel="stylesheet" href="/static/access-portal.css?v={ASSET_VERSION}">\n'
     f'<link rel="stylesheet" href="/static/ui-fixes.css?v={ASSET_VERSION}">\n'
     f'<link rel="stylesheet" href="/static/account-security.css?v={ASSET_VERSION}">\n'
+    f'<link rel="stylesheet" href="/static/workspace-experience.css?v={ASSET_VERSION}">\n'
     f'<script src="/static/workspace-runtime.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/api-errors.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/access-portal.js?v={ASSET_VERSION}" defer></script>\n'
@@ -50,6 +51,7 @@ ASSET_INJECTION = (
     f'<script src="/static/release-ux-fixes.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/integration-readiness.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/ai-readiness.js?v={ASSET_VERSION}" defer></script>\n'
+    f'<script src="/static/workspace-experience.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/career-roadmap.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/legal-links.js?v={ASSET_VERSION}" defer></script>\n'
 )
