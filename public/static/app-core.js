@@ -52,6 +52,7 @@
   navIcons.registrations = navIcons.students;
   navIcons.engagement = navIcons.analytics;
   navIcons.billing = navIcons.offers;
+  navIcons.roadmap = navIcons.readiness;
   const navIcon = id => `<span class="nav-icon">${navIcons[id] || navIcons.dashboard}</span>`;
 
   const state = {
@@ -63,6 +64,17 @@
     profile: null,
     studentAccess: null,
   };
+
+  const studentViewPlugins = new Map();
+  window.PlaceAIStudentViews = Object.freeze({
+    register(id, renderer) {
+      const key = String(id || '').trim();
+      if (!key || typeof renderer !== 'function') return false;
+      studentViewPlugins.set(key, renderer);
+      return true;
+    }
+  });
+  window.dispatchEvent(new CustomEvent('placeai:student-views-ready'));
 
   function telemetryId(storage, key) {
     try {
@@ -244,7 +256,7 @@
 
   const navByRole = {
     student: [
-      ['Workspace','dashboard','Dashboard'],['Workspace','opportunities','Opportunities'],['Workspace','applications','Applications'],['Campus','drives','Placement drives'],['Campus','interviews','Interviews'],['Campus','offers','Offers'],['Career','readiness','Readiness score'],['Career','mock-interview','Mock interview coach'],['Career','resume','Resume & AI'],['Career','documents','Document vault'],['Career','assistant','AI placement assistant'],['Planning','calendar','Placement calendar'],['Updates','announcements','Announcements'],['Updates','notifications','Notifications'],['Safety','incidents','Report an issue'],['Account','approvals','Profile approvals'],['Account','profile','Profile']
+      ['Workspace','dashboard','Dashboard'],['Workspace','opportunities','Opportunities'],['Workspace','applications','Applications'],['Campus','drives','Placement drives'],['Campus','interviews','Interviews'],['Campus','offers','Offers'],['Career','readiness','Readiness score'],['Career','roadmap','AI Career Roadmap'],['Career','mock-interview','Mock interview coach'],['Career','resume','Resume & AI'],['Career','documents','Document vault'],['Career','assistant','AI placement assistant'],['Planning','calendar','Placement calendar'],['Updates','announcements','Announcements'],['Updates','notifications','Notifications'],['Safety','incidents','Report an issue'],['Account','approvals','Profile approvals'],['Account','profile','Profile']
     ],
     recruiter: [
       ['Workspace','dashboard','Dashboard'],['Hiring','jobs','Jobs'],['Hiring','pipeline','Drive pipeline'],['Hiring','candidates','Candidates'],['Hiring','interviews','Interviews'],['Hiring','offers','Offers'],['Trust','verification','Company verification'],['Collaboration','communications','Placement office messages'],['Insights','analytics','Analytics'],['Insights','assistant','AI placement assistant'],['Updates','notifications','Notifications'],['Account','profile','Company profile']
@@ -260,7 +272,7 @@
   function mountNav() {
     let items = navByRole[state.me.role] || [];
     if (state.me.role === 'student' && state.studentAccess?.student_kind === 'independent') {
-      const allowed = new Set(['dashboard','opportunities','applications','interviews','offers','readiness','mock-interview','resume','documents','assistant','notifications','incidents','approvals','profile']);
+      const allowed = new Set(['dashboard','opportunities','applications','interviews','offers','readiness','roadmap','mock-interview','resume','documents','assistant','notifications','incidents','approvals','profile']);
       items = items.filter(([,id]) => allowed.has(id));
       items = [...items, ['Account','billing','Plan & billing']];
     }
@@ -404,6 +416,11 @@
   }
 
   async function renderStudent(view) {
+    const plugin = studentViewPlugins.get(view);
+    if (plugin) {
+      await plugin({ api, state, esc, toast, setPage, setContextAction, pageHead, emptyState, fmtDate, navigate });
+      return;
+    }
     if (view === 'billing') {
       setPage('Plan & billing','Independent student'); setContextAction();
       const access = state.studentAccess || await api('/billing/status');
