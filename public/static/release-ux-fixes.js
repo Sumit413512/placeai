@@ -39,8 +39,9 @@
       node.style.lineHeight = '1.4';
       cell.appendChild(node);
     }
-    node.textContent = text;
-    node.style.color = kind === 'error' ? '#9d2c2c' : '#526070';
+    if (node.textContent !== text) node.textContent = text;
+    const color = kind === 'error' ? '#9d2c2c' : '#526070';
+    if (node.style.color !== color) node.style.color = color;
   }
 
   function syncManagedProvisionedStatus(select) {
@@ -53,14 +54,15 @@
         option.textContent = 'provisioned';
         select.appendChild(option);
       }
-      select.value = 'provisioned';
-      select.disabled = true;
-      select.title = 'Provisioned is system-managed. Use the explicit recruiter setup action to resend a password setup link.';
+      if (select.value !== 'provisioned') select.value = 'provisioned';
+      if (!select.disabled) select.disabled = true;
+      const managedTitle = 'Provisioned is system-managed. Use the explicit recruiter setup action to resend a password setup link.';
+      if (select.title !== managedTitle) select.title = managedTitle;
       return;
     }
     option?.remove();
-    select.disabled = false;
-    select.removeAttribute('title');
+    if (select.disabled) select.disabled = false;
+    if (select.hasAttribute('title')) select.removeAttribute('title');
   }
 
   function decorateAccessRows(root = document) {
@@ -86,8 +88,12 @@
         button.style.marginTop = '8px';
         cell.appendChild(button);
       }
-      button.textContent = currentStatus === 'provisioned' ? 'Resend password setup link' : 'Provision recruiter';
-      button.title = 'Atomically creates or updates the approved Recruiter account, then emails a one-time password setup link. No administrator chooses the permanent password.';
+      const desiredLabel = currentStatus === 'provisioned' ? 'Resend password setup link' : 'Provision recruiter';
+      const desiredTitle = 'Atomically creates or updates the approved Recruiter account, then emails a one-time password setup link. No administrator chooses the permanent password.';
+      const busy = button.dataset.busy === 'true';
+      if (!busy && button.textContent !== desiredLabel) button.textContent = desiredLabel;
+      if (!busy && button.disabled) button.disabled = false;
+      if (button.title !== desiredTitle) button.title = desiredTitle;
     });
   }
 
@@ -147,6 +153,7 @@
 
     provisioning = true;
     const original = button.textContent;
+    button.dataset.busy = 'true';
     button.disabled = true;
     button.textContent = resend ? 'Sending setup link…' : 'Provisioning recruiter…';
     try {
@@ -166,9 +173,11 @@
     } catch (error) {
       statusMessage(cell, error?.message || 'Recruiter provisioning failed.', 'error');
       button.disabled = false;
-      button.textContent = original;
+      if (button.textContent !== original) button.textContent = original;
     } finally {
+      button.dataset.busy = 'false';
       provisioning = false;
+      if (button.isConnected) decorateAccessRows(row || document);
     }
   }
 
@@ -205,11 +214,17 @@
   function install() {
     apply(document);
     const observer = new MutationObserver(records => {
+      let relevant = false;
       for (const record of records) {
         record.addedNodes.forEach(node => {
-          if (node instanceof Element) apply(node);
+          if (node instanceof Element) {
+            relevant = true;
+            apply(node);
+          }
         });
+        if (record.removedNodes.length) relevant = true;
       }
+      if (!relevant) return;
       decorateAccessRows(document);
       addRecruiterLoginHelp(document);
     });
