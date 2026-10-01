@@ -53,3 +53,22 @@ def test_technical_integrations_stay_out_of_non_platform_navigation():
 
     integration_runtime = _read("app/static/integration-readiness.js")
     assert "if (title !== 'Integrations' || !root) return;" in integration_runtime
+
+
+def test_normal_user_copy_hides_operational_implementation_details():
+    core = _read("app/static/app.js")
+
+    assert "Notifications are stored in the PlaceAI database" not in core
+    assert "merchant/payment provider is selected and verified" not in core
+    assert "Candidate access in this deployment" not in core
+    assert "student database from becoming an open recruiter directory" not in core
+    assert "production delivery provider is configured" not in core
+
+    assert "Your placement updates, deadlines and required actions appear here in one place." in core
+    assert "You can view only candidates who have applied to your jobs." in core
+    assert "Email and other external alerts are not available yet." in core
+
+    # Operational detail remains intentionally available to Platform Admin.
+    assert "<small>Database</small>" in core
+    assert "<small>Brevo SMTP</small>" in core
+    assert "<small>Gemini</small>" in core
