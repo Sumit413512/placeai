@@ -57,7 +57,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title=f"{settings.app_name} API",
     description="AI-assisted campus placement operating system for students, recruiters, and institution teams.",
-    version="3.1.4",
+    version="3.2.0",
     docs_url=None if settings.is_production else "/docs",
     openapi_url=None if settings.is_production else "/openapi.json",
     redoc_url=None,
@@ -244,6 +244,7 @@ enterprise_secure = _import_router("enterprise_secure")
 student_workspace_v2 = _import_router("student_workspace_v2")
 telemetry = _import_router("telemetry")
 billing = _import_router("billing")
+career_roadmap = _import_router("career_roadmap")
 product_intelligence = _import_router("product_intelligence")
 
 ACCOUNT_SECURITY_REPLACEMENTS = {
@@ -307,6 +308,7 @@ _include_router(enterprise_secure, ENTERPRISE_SECURE_EXCLUSIONS)
 _include_router(student_workspace_v2)
 _include_router(telemetry)
 _include_router(billing)
+_include_router(career_roadmap)
 _include_router(product_intelligence)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -347,6 +349,7 @@ def root():
         '<script src="/static/release-ux-fixes.js" defer></script>\n'
         '<script src="/static/integration-readiness.js" defer></script>\n'
         '<script src="/static/ai-readiness.js" defer></script>\n'
+        '<script src="/static/career-roadmap.js" defer></script>\n'
         '<script src="/static/legal-links.js" defer></script>\n'
     )
     if "/static/access-portal.js" not in html:
@@ -409,7 +412,7 @@ def health_check():
             content={
                 "status": "degraded",
                 "service": service_name,
-                "version": "3.1.4",
+                "version": "3.2.0",
                 "database": "not_checked",
                 "configuration": "invalid",
                 "configuration_errors": runtime_readiness_errors,
@@ -429,7 +432,7 @@ def health_check():
     payload = {
         "status": "healthy" if database == "ok" else "degraded",
         "service": service_name,
-        "version": "3.1.4",
+        "version": "3.2.0",
         "database": database,
         "configuration": "ok",
         "transactional_email": "ok" if transactional_email_configured(settings) else "not_configured",
