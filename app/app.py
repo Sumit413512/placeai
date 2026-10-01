@@ -245,7 +245,7 @@ student_workspace_v2 = _import_router("student_workspace_v2")
 telemetry = _import_router("telemetry")
 billing = _import_router("billing")
 career_roadmap = _import_router("career_roadmap")
-product_intelligence = _import_router("product_intelligence")
+product_intelligence = _import_router("product_intelligence")\ncareer_roadmap = _import_router("career_roadmap")
 
 ACCOUNT_SECURITY_REPLACEMENTS = {
     ("/auth/change-password", "POST"),
@@ -309,7 +309,7 @@ _include_router(student_workspace_v2)
 _include_router(telemetry)
 _include_router(billing)
 _include_router(career_roadmap)
-_include_router(product_intelligence)
+_include_router(product_intelligence)\n_include_router(career_roadmap)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -350,7 +350,7 @@ def root():
         '<script src="/static/integration-readiness.js" defer></script>\n'
         '<script src="/static/ai-readiness.js" defer></script>\n'
         '<script src="/static/career-roadmap.js" defer></script>\n'
-        '<script src="/static/legal-links.js" defer></script>\n'
+        '<script src="/static/legal-links.js" defer></script>\n'\n        '<script src="/static/career-roadmap.js" defer></script>\n'
     )
     if "/static/access-portal.js" not in html:
         html = html.replace("</head>", f"{assets}</head>", 1)
