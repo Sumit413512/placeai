@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -311,9 +312,17 @@ def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
                         )
                         response.raise_for_status()
                         payload = response.json()
+                        if payload.get("status") == "incomplete":
+                            raise _MarketSearchFailure("CURRENT_MARKET_RESPONSE_INCOMPLETE")
                         text = _extract_text(payload)
                         if not text:
                             raise _MarketSearchFailure("CURRENT_MARKET_EMPTY_RESPONSE")
+                        try:
+                            parsed = json.loads(text)
+                        except (TypeError, json.JSONDecodeError) as exc:
+                            raise _MarketSearchFailure("CURRENT_MARKET_RESPONSE_INVALID") from exc
+                        if not isinstance(parsed, dict):
+                            raise _MarketSearchFailure("CURRENT_MARKET_RESPONSE_INVALID")
                         sources = _extract_sources(payload)
                         if not sources:
                             raise _MarketSearchFailure("CURRENT_MARKET_SOURCES_MISSING")
