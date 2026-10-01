@@ -1109,7 +1109,22 @@
   });
 
   // Ctrl/Cmd + K command palette for fast role-scoped navigation.
-  function openCommandPalette(){ const p=$('#command-palette');if(!p)return;p.classList.remove('hidden');const input=$('#command-search');input.value='';$('#command-results').innerHTML='<div class="command-hint">Search students, jobs, candidates or opportunities.</div>';setTimeout(()=>input.focus(),20); }
+  function commandPaletteCopy(){
+    const role=state.me?.role;
+    if(role==='student')return {placeholder:'Search opportunities, applications, interviews…',hint:'Search your opportunities, applications, interviews and placement activity.'};
+    if(role==='recruiter')return {placeholder:'Search jobs, candidates, interviews…',hint:'Search your jobs, authorized candidates, interviews and hiring activity.'};
+    if(role==='institution_admin')return {placeholder:'Search students, recruiters, jobs, drives…',hint:'Search authorized students, recruiters, campus jobs and placement drives.'};
+    if(role==='platform_admin')return {placeholder:'Search institutions, registrations, access requests…',hint:'Search platform records available to your admin workspace.'};
+    return {placeholder:'Search PlaceAI…',hint:'Search the records available in your workspace.'};
+  }
+  function renderCommandHint(){
+    const copy=commandPaletteCopy();
+    const input=$('#command-search');
+    if(input)input.placeholder=copy.placeholder;
+    const results=$('#command-results');
+    if(results)results.innerHTML=`<div class="command-hint">${esc(copy.hint)}</div>`;
+  }
+  function openCommandPalette(){ const p=$('#command-palette');if(!p)return;p.classList.remove('hidden');const input=$('#command-search');input.value='';renderCommandHint();setTimeout(()=>input.focus(),20); }
   function closeCommandPalette(){ $('#command-palette')?.classList.add('hidden'); }
   document.addEventListener('keydown',e=>{
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette();}
@@ -1121,7 +1136,7 @@
     }
   });
   document.addEventListener('click',e=>{if(e.target.closest('[data-action="open-command-palette"]'))openCommandPalette();if(e.target.closest('[data-action="close-command-palette"]'))closeCommandPalette();const hit=e.target.closest('[data-command-view]');if(hit){closeCommandPalette();navigate(hit.dataset.commandView);}});
-  let commandTimer=null;document.addEventListener('input',e=>{if(e.target.id!=='command-search')return;clearTimeout(commandTimer);commandTimer=setTimeout(async()=>{const q=e.target.value.trim();if(!q){$('#command-results').innerHTML='<div class="command-hint">Search students, jobs, candidates or opportunities.</div>';return;}try{const rows=await api(`/enterprise/search?q=${encodeURIComponent(q)}`);$('#command-results').innerHTML=rows.length?rows.map(x=>`<button class="command-result" data-command-view="${esc(x.view)}"><span class="command-result-icon">${esc((x.type||'?').slice(0,2).toUpperCase())}</span><span><strong>${esc(x.title)}</strong><small>${esc(x.subtitle||'')}</small></span><em>${esc(x.type||'record')}</em></button>`).join(''):'<div class="command-hint">No matching workspace records.</div>';}catch(err){$('#command-results').innerHTML=`<div class="command-hint">${esc(err.message)}</div>`;}},180);});
+  let commandTimer=null;document.addEventListener('input',e=>{if(e.target.id!=='command-search')return;clearTimeout(commandTimer);commandTimer=setTimeout(async()=>{const q=e.target.value.trim();if(!q){renderCommandHint();return;}try{const rows=await api(`/enterprise/search?q=${encodeURIComponent(q)}`);$('#command-results').innerHTML=rows.length?rows.map(x=>`<button class="command-result" data-command-view="${esc(x.view)}"><span class="command-result-icon">${esc((x.type||'?').slice(0,2).toUpperCase())}</span><span><strong>${esc(x.title)}</strong><small>${esc(x.subtitle||'')}</small></span><em>${esc(x.type||'record')}</em></button>`).join(''):'<div class="command-hint">No matching workspace records.</div>';}catch(err){$('#command-results').innerHTML=`<div class="command-hint">${esc(err.message)}</div>`;}},180);});
 
 
   async function handleResetToken(){const params=new URLSearchParams(location.search);const token=params.get('reset_token');if(!token)return false;const cleanUrl=new URL(location.href);cleanUrl.searchParams.delete('reset_token');history.replaceState({},'',cleanUrl.pathname+cleanUrl.search);showAuth('login');openModal(`<span class="section-kicker">Account recovery</span><h2>Set a new password</h2><form id="reset-password-form" class="form-stack"><input type="hidden" name="token" value="${esc(token)}"><label>New password<input type="password" name="new_password" minlength="12" required></label><button class="button button-primary button-full">Reset password</button></form>`);const form=$('#reset-password-form');form.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(form);try{await api('/auth/reset-password',{method:'POST',body:JSON.stringify(Object.fromEntries(fd.entries()))},false);closeModal();history.replaceState({},'',location.pathname);toast('Password reset','You can now sign in with the new password.');showAuth('login');}catch(err){apiErrors.applyToForm(form,err);toast('Reset failed',err.message,'error')}});return true;}
