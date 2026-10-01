@@ -21,7 +21,8 @@
       'CURRENT_MARKET_SOURCES_MISSING',
       'CURRENT_MARKET_RESPONSE_INVALID',
       'CURRENT_MARKET_RESPONSE_INCOMPLETE',
-      'CURRENT_MARKET_SEARCH_UNAVAILABLE'
+      'CURRENT_MARKET_SEARCH_UNAVAILABLE',
+      'CURRENT_MARKET_FALLBACK_UNAVAILABLE'
     ].includes(code)) {
       return 'Current-market research could not complete right now. Your roadmap was not generated from stale assumptions. Please try again shortly.';
     }
