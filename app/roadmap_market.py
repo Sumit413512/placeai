@@ -31,9 +31,8 @@ def _keys() -> list[str]:
 def _models() -> list[str]:
     candidates = [
         (os.getenv("OPENAI_WEB_SEARCH_MODEL") or "").strip(),
-        str(getattr(settings, "openai_model", "") or "").strip(),
-        "gpt-5.6",
         "gpt-5.5",
+        str(getattr(settings, "openai_model", "") or "").strip(),
     ]
     return list(dict.fromkeys(model for model in candidates if model))
 
