@@ -83,6 +83,25 @@ def upgrade() -> None:
         op.execute("REVOKE ALL ON TABLE public.student_feature_purchases FROM anon, authenticated")
         op.execute("REVOKE ALL ON TABLE public.career_roadmaps FROM anon, authenticated")
 
+        # The web/API clients never query these tables through PostgREST. The
+        # restricted Render runtime connects directly to Postgres, so it needs
+        # explicit DML grants plus an RLS policy. This preserves backend-only
+        # access without granting anon/authenticated any table privileges.
+        op.execute(
+            "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "
+            "public.student_feature_purchases TO placeai_render_runtime"
+        )
+        op.execute(
+            "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "
+            "public.career_roadmaps TO placeai_render_runtime"
+        )
+        for table_name in ("student_feature_purchases", "career_roadmaps"):
+            op.execute(f"DROP POLICY IF EXISTS placeai_backend_access ON public.{table_name}")
+            op.execute(
+                f"CREATE POLICY placeai_backend_access ON public.{table_name} "
+                "FOR ALL TO placeai_render_runtime USING (true) WITH CHECK (true)"
+            )
+
 
 def downgrade() -> None:
     bind = op.get_bind()
