@@ -213,9 +213,16 @@
   }
 
   function normalize(payload = {}, status = 0) {
+    const numericStatus = Number(status) || 0;
     const detail = payload && typeof payload === 'object' ? payload.detail : null;
     const fieldErrors = {};
     const summaries = [];
+
+    // Never render backend-provided 5xx detail into a user workspace. Operational
+    // diagnosis belongs in protected admin observability and server logs.
+    if (numericStatus >= 500) {
+      return {message: fallbackMessage(numericStatus), fieldErrors};
+    }
 
     if (typeof detail === 'string' && cleanMessage(detail)) {
       return {message: cleanMessage(detail), fieldErrors};
@@ -248,7 +255,7 @@
 
     const unique = [...new Set(summaries)];
     return {
-      message: unique.length ? unique.join(' ') : fallbackMessage(Number(status) || 0),
+      message: unique.length ? unique.join(' ') : fallbackMessage(numericStatus),
       fieldErrors,
     };
   }
