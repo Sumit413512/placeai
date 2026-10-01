@@ -48,67 +48,105 @@
   function builderForm(esc, latest) {
     const input = latest && latest.input ? latest.input : {};
     const join = values => Array.isArray(values) ? values.join(', ') : '';
-    return '<section class="form-panel">' +
-      '<div class="panel-head"><div><h2>Build your market-aligned roadmap</h2><p>Tell PlaceAI what you want to become. Current market research is performed when you generate the roadmap.</p></div></div>' +
+    return '<section class="form-panel roadmap-builder">' +
+      '<div class="panel-head"><div><span class="section-kicker">BUILD YOUR PLAN</span><h2>Create a roadmap around the role you actually want</h2><p>PlaceAI combines your current skills, available time and current market evidence into one practical learning path.</p></div></div>' +
       '<form id="career-roadmap-form" class="form-stack">' +
-        '<div class="form-two">' +
-          '<label>Career roles you are interested in<input name="target_roles" required maxlength="800" placeholder="Data Engineer, ML Engineer" value="' + esc(join(input.target_roles)) + '"></label>' +
-          '<label>Fields / domains<input name="target_fields" maxlength="800" placeholder="AI, Data, Cloud" value="' + esc(join(input.target_fields)) + '"></label>' +
+        '<div class="roadmap-form-section"><div class="roadmap-form-step"><span>1</span><div><strong>Choose your direction</strong><small>Tell us the role and domain you want to prepare for.</small></div></div>' +
+          '<div class="form-two">' +
+            '<label>Target roles<input name="target_roles" required maxlength="800" placeholder="Data Engineer, ML Engineer" value="' + esc(join(input.target_roles)) + '"></label>' +
+            '<label>Fields or domains<input name="target_fields" maxlength="800" placeholder="AI, Data, Cloud" value="' + esc(join(input.target_fields)) + '"></label>' +
+          '</div>' +
+          '<label>What interests you most?<input name="interests" maxlength="1000" placeholder="Building data products, automation, analytics" value="' + esc(join(input.interests)) + '"></label>' +
         '</div>' +
-        '<label>Your interests<input name="interests" maxlength="1000" placeholder="Building data products, automation, analytics" value="' + esc(join(input.interests)) + '"></label>' +
-        '<label>Skills you already know<input name="current_skills" maxlength="2000" placeholder="Python, SQL, React" value="' + esc(join(input.current_skills)) + '"></label>' +
-        '<div class="form-three">' +
-          '<label>Current level<select name="experience_level"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></label>' +
-          '<label>Market region<input name="market_region" required maxlength="120" value="' + esc(input.market_region || 'India') + '"></label>' +
-          '<label>Hours per week<input name="hours_per_week" type="number" min="1" max="80" value="' + esc(input.hours_per_week || 10) + '"></label>' +
+        '<div class="roadmap-form-section"><div class="roadmap-form-step"><span>2</span><div><strong>Set your starting point</strong><small>We use this to avoid recommending things you already know.</small></div></div>' +
+          '<label>Skills you already know<input name="current_skills" maxlength="2000" placeholder="Python, SQL, React" value="' + esc(join(input.current_skills)) + '"></label>' +
+          '<div class="form-two">' +
+            '<label>Current level<select name="experience_level"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></label>' +
+            '<label>Target job market<input name="market_region" required maxlength="120" value="' + esc(input.market_region || 'India') + '"></label>' +
+          '</div>' +
         '</div>' +
-        '<div class="form-two">' +
-          '<label>Preferred timeline in days <span class="optional">optional</span><input name="desired_timeline_days" type="number" min="14" max="730" value="' + esc(input.desired_timeline_days || '') + '" placeholder="120"></label>' +
-          '<label>Learning style <span class="optional">optional</span><input name="learning_style" maxlength="500" value="' + esc(input.learning_style || '') + '" placeholder="Project-first, visual, structured"></label>' +
+        '<div class="roadmap-form-section"><div class="roadmap-form-step"><span>3</span><div><strong>Make the plan realistic</strong><small>Choose a pace that fits around classes, exams and placement preparation.</small></div></div>' +
+          '<div class="form-three">' +
+            '<label>Hours per week<input name="hours_per_week" type="number" min="1" max="80" value="' + esc(input.hours_per_week || 10) + '"></label>' +
+            '<label>Preferred timeline <span class="optional">optional</span><input name="desired_timeline_days" type="number" min="14" max="730" value="' + esc(input.desired_timeline_days || '') + '" placeholder="120 days"></label>' +
+            '<label>Learning style <span class="optional">optional</span><input name="learning_style" maxlength="500" value="' + esc(input.learning_style || '') + '" placeholder="Project-first, visual, structured"></label>' +
+          '</div>' +
+          '<label>Goals or constraints <span class="optional">optional</span><textarea name="goals_constraints" rows="3" maxlength="2000" placeholder="Placement deadline, college schedule, weak areas, internship target...">' + esc(input.goals_constraints || '') + '</textarea></label>' +
         '</div>' +
-        '<label>Goals or constraints <span class="optional">optional</span><textarea name="goals_constraints" rows="3" maxlength="2000" placeholder="College schedule, placement deadline, weak areas...">' + esc(input.goals_constraints || '') + '</textarea></label>' +
-        '<div class="note-box"><strong>Current-market mode</strong><p>PlaceAI will research the live market for your selected region and cite the sources used. If current research is unavailable, it will not silently generate a stale-market roadmap.</p></div>' +
-        '<button class="button button-primary button-full" type="submit">' + (latest ? 'Regenerate with current market' : 'Generate my career roadmap') + '</button>' +
+        '<div class="roadmap-builder-footer"><p><strong>Market-aware by default.</strong> Your roadmap uses fresh evidence for the selected region and can be regenerated whenever your target changes.</p>' +
+        '<button class="button button-primary" type="submit">' + (latest ? 'Update my roadmap' : 'Build my roadmap') + '</button></div>' +
       '</form>' +
     '</section>';
+  }
+
+  function normalizeSkill(value) {
+    return String(value || '').trim().toLowerCase().replace(/[^a-z0-9+#.]+/g, ' ');
   }
 
   function roadmapHtml(data, esc, fmtDate) {
     if (!data) return '';
     const roadmap = data.roadmap || {};
     const market = data.market_snapshot || {};
+    const input = data.input || {};
     const pattern = roadmap.learning_pattern || {};
     const phases = Array.isArray(roadmap.phases) ? roadmap.phases : [];
     const sources = Array.isArray(data.sources) ? data.sources : [];
-    return '<section class="panel">' +
-      '<div class="panel-head"><div><span class="section-kicker">PERSONALIZED ROADMAP</span><h2>' + esc(data.title || 'Career Roadmap') + '</h2><p>Generated ' + esc(fmtDate(data.created_at)) + ' · Market snapshot ' + esc(market.as_of || '') + '</p></div></div>' +
-      '<div class="metric-grid">' +
-        '<article class="metric-card"><small>Estimated duration</small><strong>' + esc(data.estimated_days || '—') + '</strong><span>days</span></article>' +
-        '<article class="metric-card"><small>Weekly commitment</small><strong>' + esc(data.weekly_hours || '—') + '</strong><span>hours/week</span></article>' +
-        '<article class="metric-card"><small>Market</small><strong>' + esc(data.market_region || market.region || 'India') + '</strong><span>current research region</span></article>' +
-        '<article class="metric-card"><small>Evidence</small><strong>' + esc(sources.length) + '</strong><span>current web sources</span></article>' +
-      '</div>' +
-      '<div class="two-panel">' +
-        '<div class="ai-box"><div class="ai-box-head"><span>MARKET SIGNALS</span></div>' + listHtml(market.demand_signals, esc) + '</div>' +
-        '<div class="ai-box"><div class="ai-box-head"><span>IN-DEMAND SKILLS</span></div>' + listHtml(market.in_demand_skills, esc) + '</div>' +
-      '</div>' +
-      '<div class="two-panel">' +
-        '<div class="ai-box"><div class="ai-box-head"><span>TOOLS & TECHNOLOGIES</span></div>' + listHtml(market.tools_and_technologies, esc) + '</div>' +
-        '<div class="ai-box"><div class="ai-box-head"><span>ENTRY-LEVEL EXPECTATIONS</span></div>' + listHtml(market.entry_level_expectations, esc) + '</div>' +
-      '</div>' +
-      '<div class="ai-box"><div class="ai-box-head"><span>LEARNING PATTERN</span></div>' +
-        '<p><strong>Recommended style:</strong> ' + esc(pattern.recommended_style || 'Structured project-based learning') + '</p>' +
-        '<p><strong>Weekly cycle:</strong> ' + esc(pattern.weekly_cycle || '—') + '</p>' +
-        '<p><strong>Daily session:</strong> ' + esc(pattern.daily_session || '—') + '</p>' +
-        '<p><strong>Revision:</strong> ' + esc(pattern.revision_strategy || '—') + '</p>' +
+    const targets = Array.isArray(market.target_roles) && market.target_roles.length ? market.target_roles : (Array.isArray(input.target_roles) ? input.target_roles : []);
+    const target = targets[0] || data.title || 'Your target role';
+    const currentSkills = new Set((Array.isArray(input.current_skills) ? input.current_skills : []).map(normalizeSkill));
+    const priorityGaps = (Array.isArray(market.in_demand_skills) ? market.in_demand_skills : [])
+      .filter(skill => !currentSkills.has(normalizeSkill(skill)))
+      .slice(0, 8);
+    const firstPhase = phases[0] || {};
+    const firstProject = Array.isArray(firstPhase.projects) ? firstPhase.projects[0] : null;
+    const marketSignals = Array.isArray(market.demand_signals) ? market.demand_signals.slice(0, 5) : [];
+    const marketNotes = Array.isArray(market.market_notes) ? market.market_notes.slice(0, 4) : [];
+
+    return '<section class="roadmap-focus-panel">' +
+      '<div class="roadmap-focus-copy"><span class="section-kicker">YOUR NEXT MOVE</span><h2>' + esc(firstPhase.name || 'Start with your first learning phase') + '</h2>' +
+      '<p>' + esc(firstPhase.milestone || 'Follow the first phase, complete the practice tasks, and move forward only after you can demonstrate the milestone.') + '</p>' +
+      '<div class="roadmap-focus-actions"><span><strong>' + esc(firstPhase.days || '—') + '</strong> days in this phase</span>' +
+      (firstProject ? '<span><strong>1st project</strong> ' + esc(firstProject.title || 'Portfolio project') + '</span>' : '') + '</div></div>' +
+      '<div class="roadmap-target-card"><small>Target</small><strong>' + esc(target) + '</strong><span>' + esc(market.region || data.market_region || 'India') + '</span></div>' +
+    '</section>' +
+
+    '<div class="metric-grid roadmap-summary-grid">' +
+      '<article class="metric-card"><small>Total plan</small><strong>' + esc(data.estimated_days || '—') + '</strong><span>estimated days</span></article>' +
+      '<article class="metric-card"><small>Weekly pace</small><strong>' + esc(data.weekly_hours || '—') + '</strong><span>hours per week</span></article>' +
+      '<article class="metric-card"><small>Learning phases</small><strong>' + esc(phases.length) + '</strong><span>ordered milestones</span></article>' +
+      '<article class="metric-card"><small>Updated for market</small><strong>' + esc(market.as_of || 'Current') + '</strong><span>' + esc(market.region || data.market_region || 'selected region') + '</span></article>' +
+    '</div>' +
+
+    '<div class="two-panel roadmap-priority-grid">' +
+      '<section class="panel"><div class="panel-head"><div><span class="section-kicker">PRIORITY GAPS</span><h2>Skills to focus on next</h2><p>These market-relevant skills were not listed in your current skills.</p></div></div>' +
+        (priorityGaps.length ? '<div class="roadmap-chip-list">' + priorityGaps.map(skill => '<span>' + esc(skill) + '</span>').join('') + '</div>' : '<div class="note-box"><strong>You already cover the main listed skills.</strong><p>Use the project milestones below to prove depth and production ability.</p></div>') +
+      '</section>' +
+      '<section class="panel"><div class="panel-head"><div><span class="section-kicker">MARKET SNAPSHOT</span><h2>What employers are signalling</h2><p>Use these signals to understand why the plan prioritises certain skills and projects.</p></div></div>' +
+        listHtml(marketSignals, esc) +
+        (marketNotes.length ? '<div class="roadmap-market-notes"><strong>Worth knowing</strong>' + listHtml(marketNotes, esc) + '</div>' : '') +
+      '</section>' +
+    '</div>' +
+
+    '<section class="panel roadmap-learning-pattern"><div class="panel-head"><div><span class="section-kicker">HOW TO LEARN</span><h2>Your recommended learning rhythm</h2></div></div>' +
+      '<div class="roadmap-rhythm-grid">' +
+        '<div><small>Style</small><strong>' + esc(pattern.recommended_style || 'Structured project-based learning') + '</strong></div>' +
+        '<div><small>Weekly cycle</small><span>' + esc(pattern.weekly_cycle || 'Learn, practise, build and review every week.') + '</span></div>' +
+        '<div><small>Daily session</small><span>' + esc(pattern.daily_session || 'Use focused study blocks with hands-on practice.') + '</span></div>' +
+        '<div><small>Revision</small><span>' + esc(pattern.revision_strategy || 'Revisit weak skills through spaced practice and project refinement.') + '</span></div>' +
       '</div>' +
     '</section>' +
-    phases.map(phase => phaseHtml(phase, esc)).join('') +
+
+    '<section class="roadmap-path-head"><div><span class="section-kicker">YOUR ROADMAP</span><h2>' + esc(data.title || 'Career Roadmap') + '</h2><p>Complete each phase in order. Every phase ends with something you can demonstrate, not just something you have watched or read.</p></div><span class="roadmap-generated">Updated ' + esc(fmtDate(data.created_at)) + '</span></section>' +
+    '<div class="roadmap-phase-stack">' + phases.map(phase => phaseHtml(phase, esc)).join('') + '</div>' +
+
     '<div class="two-panel">' +
-      '<section class="panel"><h2>Advanced next steps</h2>' + listHtml(roadmap.advanced_next_steps, esc) + '<h2>Portfolio plan</h2>' + listHtml(roadmap.portfolio_plan, esc) + '</section>' +
-      '<section class="panel"><h2>Interview preparation</h2>' + listHtml(roadmap.interview_preparation, esc) + '<div class="note-box"><strong>Guidance, not a guarantee</strong><p>' + esc(data.disclaimer || roadmap.disclaimer || '') + '</p></div></section>' +
+      '<section class="panel"><h2>Portfolio plan</h2>' + listHtml(roadmap.portfolio_plan, esc) + '<h2>Advanced next steps</h2>' + listHtml(roadmap.advanced_next_steps, esc) + '</section>' +
+      '<section class="panel"><h2>Interview preparation</h2>' + listHtml(roadmap.interview_preparation, esc) + '<div class="note-box"><strong>Keep the roadmap adaptive</strong><p>' + esc(data.disclaimer || roadmap.disclaimer || '') + '</p></div></section>' +
     '</div>' +
-    '<section class="panel"><div class="panel-head"><div><h2>Current-market sources</h2><p>Open these sources to validate the market evidence used for this roadmap.</p></div></div><div class="card-grid">' + sources.map(source => sourceHtml(source, esc)).join('') + '</div></section>';
+
+    '<details class="roadmap-evidence panel"><summary><span><strong>Market evidence used for this roadmap</strong><small>View the current sources behind the recommendations</small></span><span aria-hidden="true">+</span></summary>' +
+      '<div class="card-grid roadmap-source-grid">' + (sources.length ? sources.map(source => sourceHtml(source, esc)).join('') : '<p class="muted-copy">No source links are available for this saved roadmap.</p>') + '</div>' +
+    '</details>';
   }
 
   async function render(context) {
@@ -133,7 +171,7 @@
         '<div class="two-panel"><div class="ai-box"><div class="ai-box-head"><span>₹20 ONE-TIME</span></div><p>Unlock only Career Roadmap on this student account. This does not unlock other PlaceAI Premium features.</p>' +
         (status.checkout_enabled ? '<button class="button button-primary" data-action="roadmap-checkout">Unlock for ₹20</button>' : '<button class="button button-primary" disabled aria-disabled="true">₹20 checkout awaiting payment gateway activation</button>') +
         '</div><div class="ai-box"><div class="ai-box-head"><span>PLACEAI PREMIUM</span></div><p>Career Roadmap is included with an active PlaceAI Premium student plan.</p><button class="button button-secondary" data-view="billing">View plan & billing</button></div></div>' +
-        '<div class="note-box"><strong>Access is enforced on the server.</strong><p>Changing browser code cannot bypass the free-trial restriction.</p></div>' +
+        '<div class="note-box"><strong>Choose the access that fits you.</strong><p>University-sponsored and paid student access include Career Roadmap. The free trial does not include roadmap generation.</p></div>' +
       '</section>';
       return;
     }
@@ -142,14 +180,9 @@
     if (status.latest_available) latest = await api('/roadmap/latest');
     root().innerHTML = pageHead(
       'AI Career Roadmap',
-      'Choose a destination. PlaceAI researches the current market, compares it with your profile, and builds a phased skills-and-project plan.'
+      'Turn your target role into a clear sequence of skills, projects and milestones based on your profile and the current market.'
     ) +
-    '<div class="metric-grid">' +
-      '<article class="metric-card"><small>Access</small><strong>' + esc(String(status.access_source || '').replaceAll('_', ' ')) + '</strong><span>Roadmap generation unlocked</span></article>' +
-      '<article class="metric-card"><small>Market research</small><strong>Live</strong><span>Fresh web research is required per generation</span></article>' +
-      '<article class="metric-card"><small>Roadmap history</small><strong>' + (status.latest_available ? 'Saved' : 'New') + '</strong><span>Your latest roadmap is stored securely</span></article>' +
-      '<article class="metric-card"><small>Price for your access</small><strong>' + (status.access_source === 'one_time_purchase' ? '₹20 paid' : 'Included') + '</strong><span>' + (status.access_source === 'institution' ? 'Institution-sponsored' : status.access_source === 'premium' ? 'Premium plan' : 'Roadmap-only unlock') + '</span></article>' +
-    '</div>' +
+
     builderForm(esc, latest) +
     roadmapHtml(latest, esc, fmtDate);
 
