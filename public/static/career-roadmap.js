@@ -125,7 +125,7 @@
       ) +
       '<div class="metric-grid">' +
         '<article class="metric-card"><small>Roadmap-only unlock</small><strong>₹' + esc(status.price_inr || 20) + '</strong><span>one-time feature access</span></article>' +
-        '<article class="metric-card"><small>Free trial</small><strong>Not included</strong><span>The 3-day trial cannot generate Career Roadmaps</span></article>' +
+        '<article class="metric-card"><small>Free trial</small><strong>Not included</strong><span>The 3-day free trial cannot generate Career Roadmaps</span></article>' +
         '<article class="metric-card"><small>PlaceAI Premium</small><strong>Included</strong><span>Active paid individual plan</span></article>' +
         '<article class="metric-card"><small>University students</small><strong>Included</strong><span>Institution-sponsored access</span></article>' +
       '</div>' +
