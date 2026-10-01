@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -229,3 +230,97 @@ def test_market_search_recovers_from_incomplete_response(monkeypatch):
     roadmap_market.search_current_market("research")
 
     assert len(calls) == 2
+
+
+
+def test_market_search_uses_grounded_gemini_fallback_after_openai_failure(monkeypatch):
+    monkeypatch.setattr(roadmap_market, "_keys", lambda: ["openai-key"])
+    monkeypatch.setattr(roadmap_market, "_models", lambda: ["gpt-5.6-terra"])
+    monkeypatch.setattr(roadmap_market, "_gemini_key", lambda: "gemini-key")
+    monkeypatch.setattr(roadmap_market, "_gemini_models", lambda: ["gemini-3.8-flash"])
+    monkeypatch.setattr(
+        roadmap_market.httpx,
+        "post",
+        lambda *args, **kwargs: _response(401, {"error": {"message": "openai unavailable"}}),
+    )
+
+    response = SimpleNamespace(
+        text=json.dumps({"phases": []}),
+        candidates=[
+            SimpleNamespace(
+                grounding_metadata=SimpleNamespace(
+                    grounding_chunks=[
+                        SimpleNamespace(
+                            web=SimpleNamespace(
+                                title="Grounded source",
+                                uri="https://example.org/grounded",
+                            )
+                        )
+                    ]
+                )
+            )
+        ],
+    )
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.models = SimpleNamespace(generate_content=lambda **kwargs: response)
+
+    fake_genai = SimpleNamespace(Client=FakeClient)
+    fake_types = SimpleNamespace(
+        GenerateContentConfig=lambda **kwargs: kwargs,
+        Tool=lambda **kwargs: kwargs,
+        GoogleSearch=lambda: {},
+    )
+    monkeypatch.setattr(roadmap_market, "genai", fake_genai)
+    monkeypatch.setattr(roadmap_market, "genai_types", fake_types)
+
+    text, sources, model = roadmap_market.search_current_market("research")
+
+    assert json.loads(text) == {"phases": []}
+    assert sources == [{"title": "Grounded source", "url": "https://example.org/grounded"}]
+    assert model == "gemini-3.8-flash"
+
+
+def test_market_search_can_use_grounded_gemini_when_openai_is_not_configured(monkeypatch):
+    monkeypatch.setattr(roadmap_market, "_keys", lambda: [])
+    monkeypatch.setattr(roadmap_market, "_gemini_key", lambda: "gemini-key")
+    monkeypatch.setattr(roadmap_market, "_gemini_models", lambda: ["gemini-3.8-flash"])
+
+    response = SimpleNamespace(
+        text=json.dumps({"phases": []}),
+        candidates=[
+            SimpleNamespace(
+                grounding_metadata=SimpleNamespace(
+                    grounding_chunks=[
+                        SimpleNamespace(
+                            web=SimpleNamespace(
+                                title="Grounded source",
+                                uri="https://example.org/grounded",
+                            )
+                        )
+                    ]
+                )
+            )
+        ],
+    )
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.models = SimpleNamespace(generate_content=lambda **kwargs: response)
+
+    monkeypatch.setattr(roadmap_market, "genai", SimpleNamespace(Client=FakeClient))
+    monkeypatch.setattr(
+        roadmap_market,
+        "genai_types",
+        SimpleNamespace(
+            GenerateContentConfig=lambda **kwargs: kwargs,
+            Tool=lambda **kwargs: kwargs,
+            GoogleSearch=lambda: {},
+        ),
+    )
+
+    _, sources, model = roadmap_market.search_current_market("research")
+
+    assert sources
+    assert model == "gemini-3.8-flash"
