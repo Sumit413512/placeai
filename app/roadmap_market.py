@@ -418,6 +418,7 @@ def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
 
     for key_slot, api_key in enumerate(keys, start=1):
         key_rejected = False
+        provider_unstable = False
         for model in _models():
             for structured in (True, False):
                 for attempt in range(2):
@@ -473,17 +474,22 @@ def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
                         if http_status in _AUTH_HTTP_STATUS:
                             key_rejected = True
                             break
-                        if _is_retryable(exc) and attempt == 0:
-                            time.sleep(_retry_delay(attempt))
-                            continue
+                        if isinstance(exc, _RETRYABLE_NETWORK_ERRORS):
+                            provider_unstable = True
+                            break
+                        if http_status in _RETRYABLE_HTTP_STATUS:
+                            if attempt == 0:
+                                time.sleep(_retry_delay(attempt))
+                                continue
+                            provider_unstable = True
+                            break
                         break
 
-                if key_rejected:
+                if key_rejected or provider_unstable:
                     break
-                # A format-specific 4xx can be recovered by falling back from strict
-                # Structured Outputs to JSON mode on the same model. For all other
-                # failures, trying the second format is harmless and bounded.
-            if key_rejected:
+                # Compatibility/content failures may recover by falling back from
+                # strict Structured Outputs to JSON mode on the same model.
+            if key_rejected or provider_unstable:
                 break
 
     if gemini_available:
