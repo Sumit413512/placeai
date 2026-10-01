@@ -24,3 +24,9 @@ def test_production_shell_loads_roadmap_module():
     loader = Path("public/static/app.js").read_text(encoding="utf-8")
     assert "/static/career-roadmap.js" in app_py
     assert "/static/career-roadmap.js" in loader
+
+
+def test_render_gateway_loads_roadmap_module():
+    gateway = Path("render_proxy.py").read_text(encoding="utf-8")
+    assert "/static/career-roadmap.js" in gateway
+    assert "20261001-roadmap-1" in gateway
