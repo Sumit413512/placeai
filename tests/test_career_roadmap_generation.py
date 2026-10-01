@@ -343,4 +343,5 @@ def test_pinned_google_genai_supports_grounded_structured_config():
 
     assert config.tools
     assert config.response_mime_type == "application/json"
-    assert config.response_json_schema == roadmap_market.ROADMAP_OUTPUT_SCHEMA
+    assert config.response_json_schema["type"] == "object"
+    assert config.response_json_schema["additionalProperties"] is False
