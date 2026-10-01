@@ -82,3 +82,19 @@ def test_server_failures_use_safe_user_facing_error_copy():
     assert "if (numericStatus >= 500)" in app_errors
     assert "Operational diagnosis belongs in protected admin observability" in app_errors
     assert "PlaceAI could not complete this request right now. Please try again." in app_errors
+
+
+def test_public_and_sign_in_copy_uses_user_language_not_platform_jargon():
+    app_index = _read("app/templates/index.html")
+    public_index = _read("public/index.html")
+
+    assert app_index == public_index
+    assert "Institution tenancy" not in app_index
+    assert "Tenant-scoped workflows" not in app_index
+    assert "backend authorization checks" not in app_index
+    assert "Privileged roles require authorized provisioning" not in app_index
+    assert "one-time server-side state" not in app_index
+
+    assert "Institution data boundaries" in app_index
+    assert "Sign in to the workspace assigned to you." in app_index
+    assert "Admin access is limited to approved accounts." in app_index
