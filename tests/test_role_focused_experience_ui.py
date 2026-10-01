@@ -37,3 +37,19 @@ def test_workspace_experience_assets_are_loaded_by_all_production_shells():
         assert asset in app_py
         assert asset in render_gateway
         assert asset in public_loader
+
+
+def test_technical_integrations_stay_out_of_non_platform_navigation():
+    core = _read("app/static/app.js")
+    student_nav = core.split("student: [", 1)[1].split("recruiter: [", 1)[0]
+    recruiter_nav = core.split("recruiter: [", 1)[1].split("institution_admin: [", 1)[0]
+    institution_nav = core.split("institution_admin: [", 1)[1].split("platform_admin: [", 1)[0]
+    platform_nav = core.split("platform_admin: [", 1)[1].split("};", 1)[0]
+
+    assert "integrations" not in student_nav
+    assert "integrations" not in recruiter_nav
+    assert "integrations" not in institution_nav
+    assert "['Platform','integrations','Integrations']" in platform_nav
+
+    integration_runtime = _read("app/static/integration-readiness.js")
+    assert "if (title !== 'Integrations' || !root) return;" in integration_runtime
