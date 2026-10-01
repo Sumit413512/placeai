@@ -94,7 +94,9 @@ def test_public_and_sign_in_copy_uses_user_language_not_platform_jargon():
     assert "backend authorization checks" not in app_index
     assert "Privileged roles require authorized provisioning" not in app_index
     assert "one-time server-side state" not in app_index
+    assert "when transactional email is configured" not in app_index
 
     assert "Institution data boundaries" in app_index
     assert "Sign in to the workspace assigned to you." in app_index
     assert "Admin access is limited to approved accounts." in app_index
+    assert "PlaceAI shows the same confirmation whether or not an account exists." in app_index
