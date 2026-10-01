@@ -340,6 +340,7 @@ def root():
         '<link rel="stylesheet" href="/static/access-portal.css">\n'
         '<link rel="stylesheet" href="/static/ui-fixes.css">\n'
         '<link rel="stylesheet" href="/static/account-security.css">\n'
+        '<link rel="stylesheet" href="/static/workspace-experience.css">\n'
         '<script src="/static/workspace-runtime.js" defer></script>\n'
         '<script src="/static/api-errors.js" defer></script>\n'
         '<script src="/static/access-portal.js" defer></script>\n'
@@ -349,6 +350,7 @@ def root():
         '<script src="/static/release-ux-fixes.js" defer></script>\n'
         '<script src="/static/integration-readiness.js" defer></script>\n'
         '<script src="/static/ai-readiness.js" defer></script>\n'
+        '<script src="/static/workspace-experience.js" defer></script>\n'
         '<script src="/static/career-roadmap.js" defer></script>\n'
         '<script src="/static/legal-links.js" defer></script>\n'
     )
