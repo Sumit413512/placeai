@@ -30,3 +30,16 @@ def test_render_gateway_loads_roadmap_module():
     gateway = Path("render_proxy.py").read_text(encoding="utf-8")
     assert "/static/career-roadmap.js" in gateway
     assert "20261001-role-focus-1" in gateway
+
+
+def test_returning_student_sees_saved_plan_before_adjustment_form():
+    roadmap = Path("app/static/career-roadmap.js").read_text(encoding="utf-8")
+    public_roadmap = Path("public/static/career-roadmap.js").read_text(encoding="utf-8")
+
+    assert roadmap == public_roadmap
+    assert "YOUR SAVED PLAN" in roadmap
+    assert "roadmap-plan-toolbar" in roadmap
+    assert "roadmap-adjust-panel" in roadmap
+    assert 'data-action="roadmap-adjust"' in roadmap
+    assert 'data-action="roadmap-print"' in roadmap
+    assert roadmap.index("roadmapHtml(latest, esc, fmtDate)") < roadmap.index("roadmap-adjust-panel")
