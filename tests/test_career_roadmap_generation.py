@@ -324,3 +324,23 @@ def test_market_search_can_use_grounded_gemini_when_openai_is_not_configured(mon
 
     assert sources
     assert model == "gemini-3.8-flash"
+
+
+
+def test_pinned_google_genai_supports_grounded_structured_config():
+    if roadmap_market.genai_types is None:
+        pytest.skip("google-genai is not installed in this test environment")
+
+    config = roadmap_market.genai_types.GenerateContentConfig(
+        tools=[
+            roadmap_market.genai_types.Tool(
+                google_search=roadmap_market.genai_types.GoogleSearch()
+            )
+        ],
+        response_mime_type="application/json",
+        response_json_schema=roadmap_market.ROADMAP_OUTPUT_SCHEMA,
+    )
+
+    assert config.tools
+    assert config.response_mime_type == "application/json"
+    assert config.response_json_schema == roadmap_market.ROADMAP_OUTPUT_SCHEMA
