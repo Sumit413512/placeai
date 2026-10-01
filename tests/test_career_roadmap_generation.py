@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+import json
+
+import httpx
+import pytest
+from fastapi import HTTPException
+
+from app import roadmap_market
 from app.roadmap_market import _extract_sources
 from app.roadmap_service import normalize_roadmap_payload
 
@@ -61,3 +68,124 @@ def test_web_search_source_extraction_deduplicates_and_rejects_unsafe_urls():
         {"title": "Employer careers", "url": "https://example.com/jobs"},
         {"title": "Report", "url": "https://example.org/report"},
     ]
+
+
+
+def _market_payload(text: str, *, with_sources: bool = True) -> dict:
+    output = []
+    if with_sources:
+        output.append({
+            "type": "web_search_call",
+            "action": {"sources": [{"title": "Market source", "url": "https://example.com/market"}]},
+        })
+    output.append({
+        "type": "message",
+        "content": [{"type": "output_text", "text": text, "annotations": []}],
+    })
+    return {"output_text": text, "output": output}
+
+
+def _response(status_code: int, payload: dict) -> httpx.Response:
+    return httpx.Response(
+        status_code,
+        json=payload,
+        request=httpx.Request("POST", "https://api.openai.com/v1/responses"),
+    )
+
+
+def test_market_search_uses_web_search_and_strict_structured_output(monkeypatch):
+    seen = []
+
+    monkeypatch.setattr(roadmap_market, "_keys", lambda: ["test-key"])
+    monkeypatch.setattr(roadmap_market, "_models", lambda: ["gpt-5.6-terra"])
+
+    def fake_post(*args, **kwargs):
+        seen.append(kwargs["json"])
+        return _response(200, _market_payload(json.dumps({"phases": []})))
+
+    monkeypatch.setattr(roadmap_market.httpx, "post", fake_post)
+    text, sources, model = roadmap_market.search_current_market("research")
+
+    assert json.loads(text) == {"phases": []}
+    assert sources == [{"title": "Market source", "url": "https://example.com/market"}]
+    assert model == "gpt-5.6-terra"
+    assert seen[0]["tools"] == [{"type": "web_search", "search_context_size": "medium"}]
+    assert seen[0]["tool_choice"] == "required"
+    assert seen[0]["include"] == ["web_search_call.action.sources"]
+    assert seen[0]["text"]["format"]["type"] == "json_schema"
+    assert seen[0]["text"]["format"]["strict"] is True
+    assert seen[0]["text"]["format"]["schema"]["additionalProperties"] is False
+
+
+def test_market_search_falls_back_to_json_mode_on_non_retryable_format_rejection(monkeypatch):
+    calls = []
+    monkeypatch.setattr(roadmap_market, "_keys", lambda: ["test-key"])
+    monkeypatch.setattr(roadmap_market, "_models", lambda: ["gpt-5.6-terra"])
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        if len(calls) == 1:
+            return _response(400, {"error": {"message": "request rejected"}})
+        return _response(200, _market_payload(json.dumps({"phases": []})))
+
+    monkeypatch.setattr(roadmap_market.httpx, "post", fake_post)
+    roadmap_market.search_current_market("research")
+
+    assert len(calls) == 2
+    assert calls[0]["text"]["format"]["type"] == "json_schema"
+    assert calls[1]["text"]["format"]["type"] == "json_object"
+
+
+def test_market_search_retries_transient_provider_failure_once(monkeypatch):
+    calls = []
+    monkeypatch.setattr(roadmap_market, "_keys", lambda: ["test-key"])
+    monkeypatch.setattr(roadmap_market, "_models", lambda: ["gpt-5.6-terra"])
+    monkeypatch.setattr(roadmap_market.time, "sleep", lambda *_: None)
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        if len(calls) == 1:
+            return _response(429, {"error": {"message": "busy"}})
+        return _response(200, _market_payload(json.dumps({"phases": []})))
+
+    monkeypatch.setattr(roadmap_market.httpx, "post", fake_post)
+    roadmap_market.search_current_market("research")
+
+    assert len(calls) == 2
+    assert all(call["text"]["format"]["type"] == "json_schema" for call in calls)
+
+
+def test_market_search_classifies_provider_auth_failure_without_leaking_response(monkeypatch):
+    monkeypatch.setattr(roadmap_market, "_keys", lambda: ["test-key"])
+    monkeypatch.setattr(roadmap_market, "_models", lambda: ["gpt-5.6-terra"])
+    monkeypatch.setattr(
+        roadmap_market.httpx,
+        "post",
+        lambda *args, **kwargs: _response(401, {"error": {"message": "sensitive provider detail"}}),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        roadmap_market.search_current_market("research")
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail["code"] == "CURRENT_MARKET_PROVIDER_AUTH"
+    assert "sensitive provider detail" not in str(exc.value.detail)
+
+
+def test_market_search_requires_verifiable_sources(monkeypatch):
+    monkeypatch.setattr(roadmap_market, "_keys", lambda: ["test-key"])
+    monkeypatch.setattr(roadmap_market, "_models", lambda: ["gpt-5.6-terra"])
+    monkeypatch.setattr(
+        roadmap_market.httpx,
+        "post",
+        lambda *args, **kwargs: _response(
+            200,
+            _market_payload(json.dumps({"phases": []}), with_sources=False),
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        roadmap_market.search_current_market("research")
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail["code"] == "CURRENT_MARKET_SOURCES_MISSING"
