@@ -29,7 +29,7 @@ def test_production_shell_loads_roadmap_module():
 def test_render_gateway_loads_roadmap_module():
     gateway = Path("render_proxy.py").read_text(encoding="utf-8")
     assert "/static/career-roadmap.js" in gateway
-    assert "20261001-role-focus-1" in gateway
+    assert "20261001-role-focus-2" in gateway
 
 
 def test_returning_student_sees_saved_plan_before_adjustment_form():
