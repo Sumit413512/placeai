@@ -12,7 +12,7 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade() -> None:
+def _create_student_feature_purchases() -> None:
     op.create_table(
         "student_feature_purchases",
         sa.Column("id", sa.String(), nullable=False),
@@ -40,6 +40,8 @@ def upgrade() -> None:
         ["student_id", "feature_code", "status"],
     )
 
+
+def _create_career_roadmaps() -> None:
     op.create_table(
         "career_roadmaps",
         sa.Column("id", sa.String(), nullable=False),
@@ -62,7 +64,19 @@ def upgrade() -> None:
     op.create_index("ix_career_roadmaps_student_id", "career_roadmaps", ["student_id"])
     op.create_index("ix_career_roadmaps_student_created", "career_roadmaps", ["student_id", "created_at"])
 
+
+def upgrade() -> None:
     bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
+    # Production Supabase is intentionally migrated before application rollout so
+    # Vercel never serves code that references missing tables. Render subsequently
+    # runs Alembic on startup; these existence checks make that ordered rollout safe.
+    if not inspector.has_table("student_feature_purchases"):
+        _create_student_feature_purchases()
+    if not inspector.has_table("career_roadmaps"):
+        _create_career_roadmaps()
+
     if bind.dialect.name == "postgresql":
         op.execute("ALTER TABLE public.student_feature_purchases ENABLE ROW LEVEL SECURITY")
         op.execute("ALTER TABLE public.career_roadmaps ENABLE ROW LEVEL SECURITY")
@@ -71,11 +85,15 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_career_roadmaps_student_created", table_name="career_roadmaps")
-    op.drop_index("ix_career_roadmaps_student_id", table_name="career_roadmaps")
-    op.drop_table("career_roadmaps")
-    op.drop_index("ix_student_feature_purchases_student_feature_status", table_name="student_feature_purchases")
-    op.drop_index("ix_student_feature_purchases_status", table_name="student_feature_purchases")
-    op.drop_index("ix_student_feature_purchases_feature_code", table_name="student_feature_purchases")
-    op.drop_index("ix_student_feature_purchases_student_id", table_name="student_feature_purchases")
-    op.drop_table("student_feature_purchases")
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if inspector.has_table("career_roadmaps"):
+        op.drop_index("ix_career_roadmaps_student_created", table_name="career_roadmaps")
+        op.drop_index("ix_career_roadmaps_student_id", table_name="career_roadmaps")
+        op.drop_table("career_roadmaps")
+    if inspector.has_table("student_feature_purchases"):
+        op.drop_index("ix_student_feature_purchases_student_feature_status", table_name="student_feature_purchases")
+        op.drop_index("ix_student_feature_purchases_status", table_name="student_feature_purchases")
+        op.drop_index("ix_student_feature_purchases_feature_code", table_name="student_feature_purchases")
+        op.drop_index("ix_student_feature_purchases_student_id", table_name="student_feature_purchases")
+        op.drop_table("student_feature_purchases")
