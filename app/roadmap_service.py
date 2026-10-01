@@ -294,10 +294,31 @@ Student and PlaceAI evidence:
 {json.dumps(evidence, ensure_ascii=False, indent=2)[:24_000]}
 """
     raw, sources, model = search_current_market(prompt)
-    parsed = extract_json_from_response(raw)
+    try:
+        parsed = extract_json_from_response(raw)
+    except HTTPException as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "CURRENT_MARKET_RESPONSE_INVALID",
+                "message": "Current-market research returned an invalid structured response. Please try again.",
+            },
+        ) from exc
     if not isinstance(parsed, dict):
-        raise HTTPException(status_code=502, detail="Career Roadmap research returned an invalid structure")
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "CURRENT_MARKET_RESPONSE_INVALID",
+                "message": "Current-market research returned an invalid structured response. Please try again.",
+            },
+        )
     normalized = normalize_roadmap_payload(parsed, request_data=request_data)
     if not normalized["phases"]:
-        raise HTTPException(status_code=502, detail="Career Roadmap research returned no actionable phases")
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "CURRENT_MARKET_RESPONSE_INCOMPLETE",
+                "message": "Current-market research did not return an actionable learning plan. Please try again.",
+            },
+        )
     return normalized, sources, model
