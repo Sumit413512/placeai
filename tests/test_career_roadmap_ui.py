@@ -56,4 +56,4 @@ def test_roadmap_failures_use_safe_actionable_codes():
     assert "CURRENT_MARKET_RESPONSE_INVALID" in roadmap
     assert "CURRENT_MARKET_SOURCES_MISSING" in roadmap
     assert "Your roadmap was not generated from stale assumptions." in roadmap
-    assert "error.message, 'error'" not in roadmap
+    assert "toast('Roadmap generation failed', error.message" not in roadmap
