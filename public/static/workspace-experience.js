@@ -146,15 +146,10 @@
     enhance(document);
 
     const observer = new MutationObserver(records => {
-      let firstAdded = null;
-      for (const record of records) {
-        for (const node of record.addedNodes) {
-          if (node instanceof Element) {
-            firstAdded = firstAdded || node;
-          }
-        }
-      }
-      schedule(firstAdded || document);
+      const hasElementChanges = records.some(record =>
+        [...record.addedNodes].some(node => node instanceof Element)
+      );
+      if (hasElementChanges) schedule(document);
     });
 
     observer.observe(document.body, {childList: true, subtree: true});
