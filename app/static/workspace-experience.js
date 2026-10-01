@@ -8,6 +8,13 @@
     platform_admin: {label: 'Platform operations', short: 'Platform Admin'}
   };
 
+  const ROLE_SECONDARY_VIEWS = Object.freeze({
+    student: new Set(['documents','assistant','calendar','announcements','notifications','incidents','approvals','profile']),
+    recruiter: new Set(['communications','analytics','assistant','notifications','profile']),
+    institution_admin: new Set(['institution-access-requests','verification','attendance','calendar','announcements','communications','policies','custom-fields','incidents','reports','notifications','audit']),
+    platform_admin: new Set()
+  });
+
   let scheduled = false;
 
   function normalizedRole() {
@@ -35,22 +42,99 @@
     chip.title = ROLE_META[role].label;
   }
 
+  function navPreferenceKey(role) {
+    return 'placeai_nav_more_' + role;
+  }
+
+  function readNavPreference(role) {
+    try { return sessionStorage.getItem(navPreferenceKey(role)) === '1'; }
+    catch { return false; }
+  }
+
+  function writeNavPreference(role, expanded) {
+    try { sessionStorage.setItem(navPreferenceKey(role), expanded ? '1' : '0'); }
+    catch {}
+  }
+
+  function setMoreButtonLabel(button, expanded) {
+    const label = expanded ? 'Show fewer' : 'More tools';
+    if (!button.firstChild) button.appendChild(document.createTextNode(label));
+    else if (button.firstChild.nodeType === Node.TEXT_NODE && button.firstChild.nodeValue !== label) button.firstChild.nodeValue = label;
+    button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    button.title = expanded ? 'Show fewer workspace tools' : 'Show all workspace tools';
+  }
+
   function decorateNavigation() {
     const shell = document.querySelector('#app-shell');
-    const active = document.querySelector('#app-nav button.active');
+    const nav = document.querySelector('#app-nav');
+    const active = nav?.querySelector('button.active[data-view]');
     const role = normalizedRole();
     if (shell && active?.dataset.view) shell.dataset.placeaiView = active.dataset.view;
+    if (!nav || !role) {
+      ensureRoleContext(role);
+      return;
+    }
 
-    document.querySelectorAll('#app-nav button[data-view]').forEach(button => {
+    const secondaryViews = ROLE_SECONDARY_VIEWS[role] || new Set();
+    const buttons = [...nav.querySelectorAll('button[data-view]')];
+    for (const button of buttons) {
       const selected = button.classList.contains('active');
       if (selected) button.setAttribute('aria-current', 'page');
       else button.removeAttribute('aria-current');
 
       const label = button.querySelector('.nav-label')?.textContent?.trim();
       if (label && !button.title) button.title = label;
-    });
+      button.dataset.placeaiSecondary = secondaryViews.has(button.dataset.view) ? 'true' : 'false';
+    }
+
+    let currentLabel = null;
+    let currentButtons = [];
+    const finishGroup = () => {
+      if (!currentLabel) return;
+      const allSecondary = currentButtons.length > 0 && currentButtons.every(button => button.dataset.placeaiSecondary === 'true');
+      currentLabel.dataset.placeaiSecondary = allSecondary ? 'true' : 'false';
+    };
+    for (const child of [...nav.children]) {
+      if (child.classList?.contains('placeai-nav-more')) continue;
+      if (child.classList?.contains('nav-group-label')) {
+        finishGroup();
+        currentLabel = child;
+        currentButtons = [];
+      } else if (child.matches?.('button[data-view]')) {
+        currentButtons.push(child);
+      }
+    }
+    finishGroup();
+
+    const secondaryCount = buttons.filter(button => button.dataset.placeaiSecondary === 'true').length;
+    let moreButton = nav.querySelector('.placeai-nav-more');
+    if (secondaryCount && role !== 'platform_admin') {
+      if (!moreButton) {
+        moreButton = document.createElement('button');
+        moreButton.type = 'button';
+        moreButton.className = 'placeai-nav-more';
+        moreButton.dataset.action = 'toggle-placeai-nav-more';
+        nav.appendChild(moreButton);
+      }
+      const expanded = readNavPreference(role);
+      nav.dataset.placeaiMoreOpen = expanded ? 'true' : 'false';
+      setMoreButtonLabel(moreButton, expanded);
+    } else {
+      nav.dataset.placeaiMoreOpen = 'true';
+      if (moreButton) moreButton.remove();
+    }
 
     ensureRoleContext(role);
+  }
+
+  function toggleNavigationMore(button) {
+    const nav = button?.closest?.('#app-nav');
+    const role = normalizedRole();
+    if (!nav || !role || role === 'platform_admin') return;
+    const expanded = nav.dataset.placeaiMoreOpen !== 'true';
+    nav.dataset.placeaiMoreOpen = expanded ? 'true' : 'false';
+    writeNavPreference(role, expanded);
+    setMoreButtonLabel(button, expanded);
   }
 
   function decorateTables(root = document) {
@@ -155,6 +239,12 @@
     observer.observe(document.body, {childList: true, subtree: true});
 
     document.addEventListener('click', event => {
+      const moreButton = event.target.closest?.('[data-action="toggle-placeai-nav-more"]');
+      if (moreButton) {
+        event.preventDefault();
+        toggleNavigationMore(moreButton);
+        return;
+      }
       if (event.target.closest?.('#app-nav button[data-view]')) schedule(document);
     });
 
