@@ -80,7 +80,7 @@ def test_server_failures_use_safe_user_facing_error_copy():
 
     assert app_errors == public_errors
     assert "if (numericStatus >= 500)" in app_errors
-    assert "Operational diagnosis belongs in protected admin observability" in app_errors
+    assert "Never render backend-provided 5xx detail into a user workspace." in app_errors
     assert "PlaceAI could not complete this request right now. Please try again." in app_errors
 
 
