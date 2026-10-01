@@ -189,3 +189,43 @@ def test_market_search_requires_verifiable_sources(monkeypatch):
 
     assert exc.value.status_code == 503
     assert exc.value.detail["code"] == "CURRENT_MARKET_SOURCES_MISSING"
+
+
+
+def test_market_search_recovers_from_invalid_success_payload(monkeypatch):
+    calls = []
+    monkeypatch.setattr(roadmap_market, "_keys", lambda: ["test-key"])
+    monkeypatch.setattr(roadmap_market, "_models", lambda: ["gpt-5.6-terra"])
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        if len(calls) == 1:
+            return _response(200, _market_payload("not-json"))
+        return _response(200, _market_payload(json.dumps({"phases": []})))
+
+    monkeypatch.setattr(roadmap_market.httpx, "post", fake_post)
+    text, _, _ = roadmap_market.search_current_market("research")
+
+    assert json.loads(text) == {"phases": []}
+    assert len(calls) == 2
+    assert calls[0]["text"]["format"]["type"] == "json_schema"
+    assert calls[1]["text"]["format"]["type"] == "json_object"
+
+
+def test_market_search_recovers_from_incomplete_response(monkeypatch):
+    calls = []
+    monkeypatch.setattr(roadmap_market, "_keys", lambda: ["test-key"])
+    monkeypatch.setattr(roadmap_market, "_models", lambda: ["gpt-5.6-terra"])
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        if len(calls) == 1:
+            payload = _market_payload(json.dumps({"phases": []}))
+            payload["status"] = "incomplete"
+            return _response(200, payload)
+        return _response(200, _market_payload(json.dumps({"phases": []})))
+
+    monkeypatch.setattr(roadmap_market.httpx, "post", fake_post)
+    roadmap_market.search_current_market("research")
+
+    assert len(calls) == 2
