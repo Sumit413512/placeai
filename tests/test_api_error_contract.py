@@ -78,3 +78,13 @@ def test_workspace_submit_handlers_apply_field_level_errors() -> None:
     assert "apiErrors.applyToForm(form, error" in access_js
     assert "apiErrors.applyToForm(form, err, error)" in security_js
     assert "apiErrors.applyToForm(form, error)" in mock_js
+
+
+def test_shared_error_contract_preserves_nested_safe_codes() -> None:
+    app_shared = (ROOT / "app/static/api-errors.js").read_text(encoding="utf-8")
+    public_shared = (ROOT / "public/static/api-errors.js").read_text(encoding="utf-8")
+
+    assert app_shared == public_shared
+    assert "nestedDetail?.code" in app_shared
+    assert "detail.message || detail.detail" in app_shared
+    assert "Never render backend-provided 5xx detail into a user workspace." in app_shared

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,6 +16,7 @@ from app.roadmap_models import CareerRoadmap
 from app.roadmap_service import generate_market_roadmap
 
 router = APIRouter(prefix="/roadmap", tags=["Career Roadmap"])
+LOGGER = logging.getLogger("placeai.roadmap")
 
 
 class CareerRoadmapRequest(BaseModel):
@@ -162,10 +164,36 @@ def generate_roadmap(
     access = ensure_roadmap_access(current_user, db)
     profile = _profile(current_user, db)
     request_data = request.model_dump()
-    roadmap, sources, model = generate_market_roadmap(
-        db=db,
-        profile=profile,
-        request_data=request_data,
+    LOGGER.info(
+        "Career roadmap generation started access_source=%s region=%s target_role_present=%s",
+        access["access_source"],
+        request.market_region,
+        bool(request.target_roles),
+    )
+    try:
+        roadmap, sources, model = generate_market_roadmap(
+            db=db,
+            profile=profile,
+            request_data=request_data,
+        )
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        code = str(detail.get("code") or "CAREER_ROADMAP_GENERATION_FAILED")
+        LOGGER.warning(
+            "Career roadmap generation stopped stage=market_research status_code=%s error_code=%s",
+            exc.status_code,
+            code,
+        )
+        raise
+    except Exception:
+        LOGGER.exception("Career roadmap generation stopped stage=market_research error_code=UNEXPECTED_FAILURE")
+        raise
+
+    LOGGER.info(
+        "Career roadmap market research completed model=%s source_count=%s phase_count=%s",
+        model,
+        len(sources),
+        len(roadmap.get("phases") or []),
     )
 
     row = CareerRoadmap(
@@ -201,4 +229,9 @@ def generate_roadmap(
     db.add(audit)
     db.commit()
     db.refresh(row)
+    LOGGER.info(
+        "Career roadmap generation completed model=%s source_count=%s",
+        model,
+        len(sources),
+    )
     return _serialize(row)

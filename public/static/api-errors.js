@@ -224,6 +224,11 @@
       return {message: fallbackMessage(numericStatus), fieldErrors};
     }
 
+    if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+      const nestedMessage = cleanMessage(detail.message || detail.detail || '');
+      if (nestedMessage) return {message: nestedMessage, fieldErrors};
+    }
+
     if (typeof detail === 'string' && cleanMessage(detail)) {
       return {message: cleanMessage(detail), fieldErrors};
     }
@@ -267,7 +272,10 @@
       this.name = 'PlaceAIApiError';
       this.status = Number(status) || 0;
       this.fieldErrors = normalized.fieldErrors;
-      this.code = payload && typeof payload === 'object' ? (payload.code || null) : null;
+      const nestedDetail = payload && typeof payload === 'object' && payload.detail && typeof payload.detail === 'object' && !Array.isArray(payload.detail)
+        ? payload.detail
+        : null;
+      this.code = payload && typeof payload === 'object' ? (payload.code || nestedDetail?.code || null) : null;
     }
   }
 

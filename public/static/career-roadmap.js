@@ -5,6 +5,32 @@
 
   const root = () => document.querySelector('#app-content');
   const splitList = value => String(value || '').split(',').map(item => item.trim()).filter(Boolean);
+
+  function roadmapFailureMessage(error) {
+    const code = String(error?.code || '');
+    if (code === 'CURRENT_MARKET_PROVIDER_BUSY' || Number(error?.status) === 429) {
+      return 'Current-market research is busy right now. Wait a moment and try again.';
+    }
+    if (['CURRENT_MARKET_PROVIDER_TIMEOUT', 'CURRENT_MARKET_PROVIDER_NETWORK'].includes(code)) {
+      return 'Current-market research could not connect reliably. Please try again in a moment.';
+    }
+    if ([
+      'CURRENT_MARKET_PROVIDER_AUTH',
+      'CURRENT_MARKET_PROVIDER_REJECTED',
+      'CURRENT_MARKET_EMPTY_RESPONSE',
+      'CURRENT_MARKET_SOURCES_MISSING',
+      'CURRENT_MARKET_RESPONSE_INVALID',
+      'CURRENT_MARKET_RESPONSE_INCOMPLETE',
+      'CURRENT_MARKET_SEARCH_UNAVAILABLE',
+      'CURRENT_MARKET_FALLBACK_UNAVAILABLE'
+    ].includes(code)) {
+      return 'Current-market research could not complete right now. Your roadmap was not generated from stale assumptions. Please try again shortly.';
+    }
+    if (code === 'DATABASE_UNAVAILABLE') {
+      return 'PlaceAI could not save your roadmap right now. Please try again shortly.';
+    }
+    return error?.message || 'PlaceAI could not complete the roadmap request. Please try again.';
+  }
   const safeUrl = value => {
     try {
       const url = new URL(String(value || ''));
@@ -244,7 +270,7 @@
       toast('Career roadmap created', 'Your current-market roadmap is ready and saved to your account.');
       await navigate('roadmap');
     } catch (error) {
-      toast('Roadmap generation failed', error.message, 'error');
+      toast('Roadmap generation failed', roadmapFailureMessage(error), 'error');
       if (submit) {
         submit.disabled = false;
         submit.textContent = original;

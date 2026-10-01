@@ -43,3 +43,17 @@ def test_returning_student_sees_saved_plan_before_adjustment_form():
     assert 'data-action="roadmap-adjust"' in roadmap
     assert 'data-action="roadmap-print"' in roadmap
     assert roadmap.index("roadmapHtml(latest, esc, fmtDate)") < roadmap.index("roadmap-adjust-panel")
+
+
+def test_roadmap_failures_use_safe_actionable_codes():
+    roadmap = Path("app/static/career-roadmap.js").read_text(encoding="utf-8")
+    public_roadmap = Path("public/static/career-roadmap.js").read_text(encoding="utf-8")
+
+    assert roadmap == public_roadmap
+    assert "roadmapFailureMessage" in roadmap
+    assert "CURRENT_MARKET_PROVIDER_BUSY" in roadmap
+    assert "CURRENT_MARKET_PROVIDER_AUTH" in roadmap
+    assert "CURRENT_MARKET_RESPONSE_INVALID" in roadmap
+    assert "CURRENT_MARKET_SOURCES_MISSING" in roadmap
+    assert "Your roadmap was not generated from stale assumptions." in roadmap
+    assert "toast('Roadmap generation failed', error.message" not in roadmap
