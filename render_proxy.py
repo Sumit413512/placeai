@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 UPSTREAM_BASE = os.getenv("UPSTREAM_BASE", "https://placeai-rxpp.vercel.app").rstrip("/")
-ASSET_VERSION = os.getenv("ASSET_VERSION", "20261001-role-focus-1")
+ASSET_VERSION = os.getenv("ASSET_VERSION", "20261001-role-focus-2")
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "app" / "static"
 TEMPLATE_DIR = ROOT / "app" / "templates"
