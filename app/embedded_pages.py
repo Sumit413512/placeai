@@ -75,7 +75,7 @@ INDEX_HTML = '''<!doctype html>
               <div><strong>Student</strong><span>Profile, eligibility, applications, documents and interview preparation.</span></div>
               <div><strong>Recruiter</strong><span>Approved jobs, applicant pipelines, interviews, offers and company verification.</span></div>
               <div><strong>Institution Admin</strong><span>Students, recruiters, drives, approvals, attendance, governance and reports.</span></div>
-              <div><strong>Platform Admin</strong><span>Institution provisioning, access review and platform operations.</span></div>
+              <div><strong>Platform Admin</strong><span>Institution setup, access review and platform operations.</span></div>
             </div>
           </div>
         </div>
@@ -119,10 +119,10 @@ INDEX_HTML = '''<!doctype html>
           <div class="dark-copy">
             <span class="section-kicker light">For placement teams</span>
             <h2>Operate placement workflows with institutional control.</h2>
-            <p>Provision authorized users, verify student records, review campus jobs, configure drives, manage attendance and export placement data without exposing candidate information as a public directory.</p>
+            <p>Add approved users, verify student records, review campus jobs, configure drives, manage attendance and export placement data while keeping candidate information private.</p>
             <ul class="check-list">
               <li>Institution-scoped student records and verification</li>
-              <li>Controlled recruiter provisioning and campus-job approval</li>
+              <li>Approved recruiter onboarding and campus-job approval</li>
               <li>Drive eligibility by configured academic criteria</li>
               <li>Application, interview, offer and placement outcome tracking</li>
               <li>Audit, policy, incident and reporting workflows</li>
@@ -130,7 +130,7 @@ INDEX_HTML = '''<!doctype html>
             <button class="button button-light button-large" data-open-access="request">Request institution access</button>
           </div>
           <div class="production-surface-card">
-            <div><span class="surface-kicker">Institution controls</span><h3>Tenant-scoped workflows by design.</h3><p>Institution administrators work inside their authorized organization. Recruiter access, jobs, students and placement records remain subject to backend authorization checks.</p></div>
+            <div><span class="surface-kicker">Institution controls</span><h3>Institution data stays separated by design.</h3><p>Each placement team works only with the students, recruiters, jobs and placement records authorized for its institution.</p></div>
           </div>
         </div>
       </section>
@@ -153,10 +153,10 @@ INDEX_HTML = '''<!doctype html>
           <span class="security-orbit"></span>
           <div><span class="section-kicker">Built for institutional trust</span><h2>Candidate data stays behind authenticated, role-aware controls.</h2><p>PlaceAI defaults to controlled access. Public visitors cannot browse student records, recruiter pipelines or institution operations.</p></div>
           <div class="security-grid">
-            <div><strong>Verified role selection</strong><span>The selected sign-in role must match the account's backend role.</span></div>
-            <div><strong>Institution tenancy</strong><span>Student and campus data is scoped to authorized organizations.</span></div>
-            <div><strong>Secure recovery</strong><span>Password reset uses one-time server-side state and does not enumerate accounts.</span></div>
-            <div><strong>AI fallback safety</strong><span>AI unavailability does not create fabricated candidate analysis.</span></div>
+            <div><strong>Verified workspace access</strong><span>PlaceAI opens the workspace assigned to each approved account.</span></div>
+            <div><strong>Institution data boundaries</strong><span>Student and campus information stays within authorized institution access.</span></div>
+            <div><strong>Secure account recovery</strong><span>Password reset uses a time-limited link without revealing whether an account exists.</span></div>
+            <div><strong>Reliable AI behavior</strong><span>If AI is unavailable, core workflows stay usable instead of showing invented analysis.</span></div>
           </div>
         </div>
       </section>
@@ -184,7 +184,7 @@ INDEX_HTML = '''<!doctype html>
   <div id="auth-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="auth-title" tabindex="-1">
     <div class="auth-modal">
       <button class="modal-close" data-action="close-auth" aria-label="Close">×</button>
-      <div class="auth-brand-panel"><a class="brand brand-light" href="#"><span class="brand-mark"><span></span><span></span><span></span></span><span>PlaceAI</span></a><div><span class="auth-panel-kicker">Controlled access</span><h2>One secure entry point for every PlaceAI workspace.</h2><p>Select the role assigned to your account. Privileged roles require authorized provisioning.</p></div><div class="auth-proof"><span>Role verification</span><span>Institution tenancy</span><span>Privacy-first candidate access</span></div></div>
+      <div class="auth-brand-panel"><a class="brand brand-light" href="#"><span class="brand-mark"><span></span><span></span><span></span></span><span>PlaceAI</span></a><div><span class="auth-panel-kicker">Secure access</span><h2>Sign in to the workspace assigned to you.</h2><p>Choose the role provided with your PlaceAI account. Admin access is limited to approved accounts.</p></div><div class="auth-proof"><span>Verified roles</span><span>Institution data boundaries</span><span>Privacy-first candidate access</span></div></div>
       <div class="auth-form-panel">
         <div id="login-view"><span class="section-kicker">Secure access</span><h2 id="auth-title">Sign in to PlaceAI</h2></div>
         <div id="signup-view" class="hidden"><span class="section-kicker">Account access</span><h2 id="auth-create-title">Create or request access</h2></div>
