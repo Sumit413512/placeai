@@ -28,6 +28,7 @@
     '/static/integration-readiness.js',
     '/static/ai-readiness.js',
     '/static/legal-links.js',
+    '/static/career-roadmap.js',
     '/static/app-core.js'
   ];
 
