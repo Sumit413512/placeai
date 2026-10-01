@@ -72,3 +72,13 @@ def test_normal_user_copy_hides_operational_implementation_details():
     assert "<small>Database</small>" in core
     assert "<small>Brevo SMTP</small>" in core
     assert "<small>Gemini</small>" in core
+
+
+def test_server_failures_use_safe_user_facing_error_copy():
+    app_errors = _read("app/static/api-errors.js")
+    public_errors = _read("public/static/api-errors.js")
+
+    assert app_errors == public_errors
+    assert "if (numericStatus >= 500)" in app_errors
+    assert "Operational diagnosis belongs in protected admin observability" in app_errors
+    assert "PlaceAI could not complete this request right now. Please try again." in app_errors
