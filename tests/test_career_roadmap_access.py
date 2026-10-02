@@ -147,6 +147,7 @@ def test_failed_roadmap_generation_records_safe_audit_metadata():
             status_code=503,
             primary_code="CURRENT_MARKET_PROVIDER_AUTH",
             fallback_code="CURRENT_MARKET_FALLBACK_REJECTED",
+            gateway_code="CURRENT_MARKET_GATEWAY_BUDGET",
         )
 
         event = (
@@ -167,6 +168,7 @@ def test_failed_roadmap_generation_records_safe_audit_metadata():
             "access_source": "institution",
             "primary_code": "CURRENT_MARKET_PROVIDER_AUTH",
             "fallback_code": "CURRENT_MARKET_FALLBACK_REJECTED",
+            "gateway_code": "CURRENT_MARKET_GATEWAY_BUDGET",
         }
         assert "prompt" not in event.details
         assert "response" not in event.details
@@ -175,6 +177,8 @@ def test_failed_roadmap_generation_records_safe_audit_metadata():
         db.close()
 
 
-def test_roadmap_provider_label_distinguishes_grounded_gemini():
+def test_roadmap_provider_label_distinguishes_grounded_fallbacks():
     source = open("app/routers/career_roadmap.py", encoding="utf-8").read()
-    assert 'ai_provider="gemini" if str(model).lower().startswith("gemini") else "openai"' in source
+    assert '"vercel_ai_gateway"' in source
+    assert '"gemini" if str(model).lower().startswith("gemini") else "openai"' in source
+    assert 'removeprefix("gateway:")' in source
