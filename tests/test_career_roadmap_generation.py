@@ -238,14 +238,15 @@ def test_market_search_uses_grounded_gemini_fallback_after_openai_failure(monkey
     monkeypatch.setattr(roadmap_market, "_models", lambda: ["gpt-5.6-terra"])
     monkeypatch.setattr(roadmap_market, "_gemini_key", lambda: "gemini-key")
     monkeypatch.setattr(roadmap_market, "_gemini_models", lambda: ["gemini-3.8-flash"])
+    monkeypatch.setattr(roadmap_market, "_gateway_token", lambda *_: "")
     monkeypatch.setattr(
         roadmap_market.httpx,
         "post",
         lambda *args, **kwargs: _response(401, {"error": {"message": "openai unavailable"}}),
     )
 
-    response = SimpleNamespace(
-        text=json.dumps({"phases": []}),
+    research_response = SimpleNamespace(
+        text="Grounded current-market evidence",
         candidates=[
             SimpleNamespace(
                 grounding_metadata=SimpleNamespace(
@@ -261,34 +262,45 @@ def test_market_search_uses_grounded_gemini_fallback_after_openai_failure(monkey
             )
         ],
     )
+    structured_response = SimpleNamespace(text=json.dumps({"phases": []}))
+    calls = []
 
     class FakeClient:
         def __init__(self, **kwargs):
-            self.models = SimpleNamespace(generate_content=lambda **kwargs: response)
+            def generate_content(**kwargs):
+                calls.append(kwargs)
+                return research_response if len(calls) == 1 else structured_response
+            self.models = SimpleNamespace(generate_content=generate_content)
 
-    fake_genai = SimpleNamespace(Client=FakeClient)
-    fake_types = SimpleNamespace(
-        GenerateContentConfig=lambda **kwargs: kwargs,
-        Tool=lambda **kwargs: kwargs,
-        GoogleSearch=lambda: {},
+    monkeypatch.setattr(roadmap_market, "genai", SimpleNamespace(Client=FakeClient))
+    monkeypatch.setattr(
+        roadmap_market,
+        "genai_types",
+        SimpleNamespace(
+            GenerateContentConfig=lambda **kwargs: kwargs,
+            Tool=lambda **kwargs: kwargs,
+            GoogleSearch=lambda: {},
+        ),
     )
-    monkeypatch.setattr(roadmap_market, "genai", fake_genai)
-    monkeypatch.setattr(roadmap_market, "genai_types", fake_types)
 
     text, sources, model = roadmap_market.search_current_market("research")
 
     assert json.loads(text) == {"phases": []}
     assert sources == [{"title": "Grounded source", "url": "https://example.org/grounded"}]
     assert model == "gemini-3.8-flash"
-
+    assert "tools" in calls[0]["config"]
+    assert "response_json_schema" not in calls[0]["config"]
+    assert "tools" not in calls[1]["config"]
+    assert calls[1]["config"]["response_json_schema"] == roadmap_market.ROADMAP_OUTPUT_SCHEMA
 
 def test_market_search_can_use_grounded_gemini_when_openai_is_not_configured(monkeypatch):
     monkeypatch.setattr(roadmap_market, "_keys", lambda: [])
     monkeypatch.setattr(roadmap_market, "_gemini_key", lambda: "gemini-key")
     monkeypatch.setattr(roadmap_market, "_gemini_models", lambda: ["gemini-3.8-flash"])
+    monkeypatch.setattr(roadmap_market, "_gateway_token", lambda *_: "")
 
-    response = SimpleNamespace(
-        text=json.dumps({"phases": []}),
+    research_response = SimpleNamespace(
+        text="Grounded current-market evidence",
         candidates=[
             SimpleNamespace(
                 grounding_metadata=SimpleNamespace(
@@ -304,10 +316,15 @@ def test_market_search_can_use_grounded_gemini_when_openai_is_not_configured(mon
             )
         ],
     )
+    structured_response = SimpleNamespace(text=json.dumps({"phases": []}))
+    calls = []
 
     class FakeClient:
         def __init__(self, **kwargs):
-            self.models = SimpleNamespace(generate_content=lambda **kwargs: response)
+            def generate_content(**kwargs):
+                calls.append(kwargs)
+                return research_response if len(calls) == 1 else structured_response
+            self.models = SimpleNamespace(generate_content=generate_content)
 
     monkeypatch.setattr(roadmap_market, "genai", SimpleNamespace(Client=FakeClient))
     monkeypatch.setattr(
@@ -324,29 +341,28 @@ def test_market_search_can_use_grounded_gemini_when_openai_is_not_configured(mon
 
     assert sources
     assert model == "gemini-3.8-flash"
+    assert len(calls) == 2
 
-
-
-def test_pinned_google_genai_supports_grounded_structured_config():
+def test_pinned_google_genai_supports_separate_grounding_and_structuring_configs():
     if roadmap_market.genai_types is None:
         pytest.skip("google-genai is not installed in this test environment")
 
-    config = roadmap_market.genai_types.GenerateContentConfig(
+    grounding = roadmap_market.genai_types.GenerateContentConfig(
         tools=[
             roadmap_market.genai_types.Tool(
                 google_search=roadmap_market.genai_types.GoogleSearch()
             )
         ],
+    )
+    structuring = roadmap_market.genai_types.GenerateContentConfig(
         response_mime_type="application/json",
         response_json_schema=roadmap_market.ROADMAP_OUTPUT_SCHEMA,
     )
 
-    assert config.tools
-    assert config.response_mime_type == "application/json"
-    assert config.response_json_schema["type"] == "object"
-    assert config.response_json_schema["additionalProperties"] is False
-
-
+    assert grounding.tools
+    assert structuring.response_mime_type == "application/json"
+    assert structuring.response_json_schema["type"] == "object"
+    assert structuring.response_json_schema["additionalProperties"] is False
 
 def test_market_search_stops_format_churn_after_repeated_transient_failure(monkeypatch):
     calls = []
@@ -426,11 +442,13 @@ def test_default_roadmap_model_fallbacks_include_search_capable_alternatives(mon
     monkeypatch.delenv("OPENAI_WEB_SEARCH_MODEL", raising=False)
     monkeypatch.delenv("GEMINI_WEB_SEARCH_MODEL", raising=False)
 
-    assert "gpt-5.5" in roadmap_market._models()
+    models = roadmap_market._models()
+    assert "gpt-6.1-sol" in models
+    assert "gpt-6-luna" in models
+    assert "gpt-5.4-mini" in models
+    assert "gpt-5.5" in models
     assert "gemini-3.7-flash" in roadmap_market._gemini_models()
     assert "gemini-3.5-flash" in roadmap_market._gemini_models()
-
-
 
 def test_market_search_recovers_through_vercel_gateway(monkeypatch):
     calls = []
