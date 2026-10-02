@@ -52,6 +52,9 @@ def test_roadmap_failures_use_safe_actionable_codes():
     assert roadmap == public_roadmap
     assert "roadmapFailureMessage" in roadmap
     assert "CURRENT_MARKET_PROVIDER_BUSY" in roadmap
+    assert "CURRENT_MARKET_PROVIDER_QUOTA" in roadmap
+    assert "CURRENT_MARKET_FALLBACK_BUSY" in roadmap
+    assert "CURRENT_MARKET_FALLBACK_QUOTA" in roadmap
     assert "CURRENT_MARKET_PROVIDER_AUTH" in roadmap
     assert "CURRENT_MARKET_RESPONSE_INVALID" in roadmap
     assert "CURRENT_MARKET_SOURCES_MISSING" in roadmap
