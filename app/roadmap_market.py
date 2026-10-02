@@ -176,6 +176,13 @@ def _gateway_token() -> str:
     return _usable_key(os.getenv("AI_GATEWAY_API_KEY") or os.getenv("VERCEL_OIDC_TOKEN"))
 
 
+def _resolve_gateway_token(runtime_oidc_token: str | None = None) -> str:
+    # Vercel Functions place the short-lived OIDC identity on the request header,
+    # while builds/local development may expose VERCEL_OIDC_TOKEN in the environment.
+    # Never persist or log either value.
+    return _usable_key(runtime_oidc_token) or _gateway_token()
+
+
 def _gateway_models() -> list[str]:
     candidates = [
         (os.getenv("VERCEL_AI_GATEWAY_ROADMAP_MODEL") or "").strip(),
@@ -492,8 +499,12 @@ def _gateway_request_payload(prompt: str, model: str) -> dict[str, Any]:
     }
 
 
-def _search_current_market_gateway(prompt: str) -> tuple[str, list[dict[str, str]], str]:
-    token = _gateway_token()
+def _search_current_market_gateway(
+    prompt: str,
+    *,
+    runtime_oidc_token: str | None = None,
+) -> tuple[str, list[dict[str, str]], str]:
+    token = _resolve_gateway_token(runtime_oidc_token)
     if not token:
         raise _MarketSearchFailure("CURRENT_MARKET_GATEWAY_UNAVAILABLE")
 
@@ -547,10 +558,14 @@ def _search_current_market_gateway(prompt: str) -> tuple[str, list[dict[str, str
     raise _MarketSearchFailure("CURRENT_MARKET_GATEWAY_UNAVAILABLE")
 
 
-def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
+def search_current_market(
+    prompt: str,
+    *,
+    runtime_oidc_token: str | None = None,
+) -> tuple[str, list[dict[str, str]], str]:
     keys = _keys()
     gemini_available = bool(_gemini_key() and genai is not None and genai_types is not None)
-    gateway_available = bool(_gateway_token())
+    gateway_available = bool(_resolve_gateway_token(runtime_oidc_token))
     if not keys and not gemini_available and not gateway_available:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -665,7 +680,7 @@ def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
     gateway_code: str | None = None
     if gateway_available:
         try:
-            return _search_current_market_gateway(prompt)
+            return _search_current_market_gateway(prompt, runtime_oidc_token=runtime_oidc_token)
         except Exception as exc:
             last_error = exc
             if isinstance(exc, _MarketSearchFailure):

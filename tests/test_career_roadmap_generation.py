@@ -495,3 +495,37 @@ def test_gateway_requires_sources_and_classifies_budget_without_leaking(monkeypa
 def test_gateway_default_models_are_live_web_search_catalog_models(monkeypatch):
     monkeypatch.delenv("VERCEL_AI_GATEWAY_ROADMAP_MODEL", raising=False)
     assert roadmap_market._gateway_models() == ["xai/grok-4.5", "xai/grok-4.3"]
+
+
+
+def test_runtime_oidc_header_token_takes_priority_over_environment(monkeypatch):
+    monkeypatch.setattr(roadmap_market, "_gateway_token", lambda: "environment-token")
+
+    assert roadmap_market._resolve_gateway_token("request-header-token") == "request-header-token"
+    assert roadmap_market._resolve_gateway_token(None) == "environment-token"
+
+
+def test_runtime_oidc_header_token_enables_gateway_fallback(monkeypatch):
+    calls = []
+    monkeypatch.setattr(roadmap_market, "_keys", lambda: [])
+    monkeypatch.setattr(roadmap_market, "_gemini_key", lambda: "")
+    monkeypatch.setattr(roadmap_market, "_gateway_token", lambda: "")
+    monkeypatch.setattr(roadmap_market, "_gateway_models", lambda: ["xai/grok-4.5"])
+
+    def fake_post(url, **kwargs):
+        calls.append((url, kwargs))
+        return httpx.Response(
+            200,
+            json=_market_payload(json.dumps({"phases": []})),
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(roadmap_market.httpx, "post", fake_post)
+    _, sources, model = roadmap_market.search_current_market(
+        "research",
+        runtime_oidc_token="request-header-token",
+    )
+
+    assert model == "gateway:xai/grok-4.5"
+    assert sources
+    assert calls[0][1]["headers"]["Authorization"] == "Bearer request-header-token"

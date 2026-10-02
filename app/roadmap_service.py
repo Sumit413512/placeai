@@ -223,6 +223,7 @@ def generate_market_roadmap(
     db: Session,
     profile: StudentProfile,
     request_data: dict[str, Any],
+    runtime_oidc_token: str | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, str]], str]:
     evidence = {
         "student": _profile_context(profile),
@@ -293,7 +294,7 @@ Return ONLY valid JSON with exactly this top-level structure:
 Student and PlaceAI evidence:
 {json.dumps(evidence, ensure_ascii=False, indent=2)[:24_000]}
 """
-    raw, sources, model = search_current_market(prompt)
+    raw, sources, model = search_current_market(prompt, runtime_oidc_token=runtime_oidc_token)
     try:
         parsed = extract_json_from_response(raw)
     except HTTPException as exc:
