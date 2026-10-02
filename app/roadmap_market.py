@@ -526,12 +526,25 @@ def _gateway_request_payload(prompt: str, model: str) -> dict[str, Any]:
     }
 
 
+def _gateway_auth(runtime_token: str | None = None) -> tuple[str, str]:
+    runtime_oidc = _usable_key(runtime_token)
+    if runtime_oidc:
+        return runtime_oidc, "oidc"
+    build_oidc = _usable_key(os.getenv("VERCEL_OIDC_TOKEN"))
+    if build_oidc:
+        return build_oidc, "oidc"
+    api_key = _usable_key(os.getenv("AI_GATEWAY_API_KEY"))
+    if api_key:
+        return api_key, "api-key"
+    return "", ""
+
+
 def _search_current_market_gateway(
     prompt: str,
     *,
     gateway_token: str | None = None,
 ) -> tuple[str, list[dict[str, str]], str]:
-    token = _gateway_token(gateway_token)
+    token, auth_method = _gateway_auth(gateway_token)
     if not token:
         raise _MarketSearchFailure("CURRENT_MARKET_GATEWAY_UNAVAILABLE")
 
@@ -543,6 +556,7 @@ def _search_current_market_gateway(
                 headers={
                     "Authorization": f"Bearer {token}",
                     "Content-Type": "application/json",
+                    "ai-gateway-auth-method": auth_method,
                 },
                 json=_gateway_request_payload(prompt, model),
                 timeout=httpx.Timeout(55.0, connect=5.0, read=55.0, write=8.0, pool=5.0),
