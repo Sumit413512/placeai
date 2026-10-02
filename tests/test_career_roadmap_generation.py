@@ -485,7 +485,11 @@ def test_market_search_recovers_through_vercel_gateway(monkeypatch):
     assert calls[0][1]["headers"]["ai-gateway-auth-method"] == "oidc"
 
 def test_gateway_requires_sources_and_classifies_budget_without_leaking(monkeypatch):
-    monkeypatch.setattr(roadmap_market, "_gateway_token", lambda runtime_token=None: runtime_token or "oidc-test-token")
+    monkeypatch.setattr(
+        roadmap_market,
+        "_gateway_auth",
+        lambda runtime_token=None: ((runtime_token or "oidc-test-token"), "oidc"),
+    )
     monkeypatch.setattr(roadmap_market, "_gateway_models", lambda: ["xai/grok-4.5"])
 
     def no_sources(url, **kwargs):
