@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
 
@@ -197,6 +197,7 @@ def roadmap_history(
 @router.post("/generate", dependencies=[Depends(student_ai_guard)])
 def generate_roadmap(
     request: CareerRoadmapRequest,
+    http_request: Request,
     current_user: User = Depends(require_student),
     db: Session = Depends(get_db),
 ):
@@ -214,6 +215,7 @@ def generate_roadmap(
             db=db,
             profile=profile,
             request_data=request_data,
+            gateway_token=http_request.headers.get("x-vercel-oidc-token"),
         )
     except HTTPException as exc:
         detail = exc.detail if isinstance(exc.detail, dict) else {}

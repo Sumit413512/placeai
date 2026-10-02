@@ -172,8 +172,12 @@ def _gemini_key() -> str:
     return _usable_key(os.getenv("GEMINI_API_KEY") or getattr(settings, "gemini_api_key", ""))
 
 
-def _gateway_token() -> str:
-    return _usable_key(os.getenv("AI_GATEWAY_API_KEY") or os.getenv("VERCEL_OIDC_TOKEN"))
+def _gateway_token(runtime_token: str | None = None) -> str:
+    return _usable_key(
+        os.getenv("AI_GATEWAY_API_KEY")
+        or runtime_token
+        or os.getenv("VERCEL_OIDC_TOKEN")
+    )
 
 
 def _gateway_models() -> list[str]:
@@ -492,8 +496,12 @@ def _gateway_request_payload(prompt: str, model: str) -> dict[str, Any]:
     }
 
 
-def _search_current_market_gateway(prompt: str) -> tuple[str, list[dict[str, str]], str]:
-    token = _gateway_token()
+def _search_current_market_gateway(
+    prompt: str,
+    *,
+    gateway_token: str | None = None,
+) -> tuple[str, list[dict[str, str]], str]:
+    token = _gateway_token(gateway_token)
     if not token:
         raise _MarketSearchFailure("CURRENT_MARKET_GATEWAY_UNAVAILABLE")
 
@@ -547,10 +555,14 @@ def _search_current_market_gateway(prompt: str) -> tuple[str, list[dict[str, str
     raise _MarketSearchFailure("CURRENT_MARKET_GATEWAY_UNAVAILABLE")
 
 
-def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
+def search_current_market(
+    prompt: str,
+    *,
+    gateway_token: str | None = None,
+) -> tuple[str, list[dict[str, str]], str]:
     keys = _keys()
     gemini_available = bool(_gemini_key() and genai is not None and genai_types is not None)
-    gateway_available = bool(_gateway_token())
+    gateway_available = bool(_gateway_token(gateway_token))
     if not keys and not gemini_available and not gateway_available:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -665,7 +677,7 @@ def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
     gateway_code: str | None = None
     if gateway_available:
         try:
-            return _search_current_market_gateway(prompt)
+            return _search_current_market_gateway(prompt, gateway_token=gateway_token)
         except Exception as exc:
             last_error = exc
             if isinstance(exc, _MarketSearchFailure):
