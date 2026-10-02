@@ -454,7 +454,11 @@ def test_market_search_recovers_through_vercel_gateway(monkeypatch):
     calls = []
     monkeypatch.setattr(roadmap_market, "_keys", lambda: [])
     monkeypatch.setattr(roadmap_market, "_gemini_key", lambda: "")
-    monkeypatch.setattr(roadmap_market, "_gateway_token", lambda runtime_token=None: runtime_token or "oidc-test-token")
+    monkeypatch.setattr(
+        roadmap_market,
+        "_gateway_auth",
+        lambda runtime_token=None: ((runtime_token or "oidc-test-token"), "oidc"),
+    )
     monkeypatch.setattr(roadmap_market, "_gateway_models", lambda: ["xai/grok-4.5"])
 
     def fake_post(url, **kwargs):
