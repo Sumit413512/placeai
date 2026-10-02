@@ -609,7 +609,7 @@ def search_current_market(
 ) -> tuple[str, list[dict[str, str]], str]:
     keys = _keys()
     gemini_available = bool(_gemini_key() and genai is not None and genai_types is not None)
-    gateway_available = bool(_gateway_token(gateway_token))
+    gateway_available = bool(_gateway_auth(gateway_token)[0])
     if not keys and not gemini_available and not gateway_available:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
