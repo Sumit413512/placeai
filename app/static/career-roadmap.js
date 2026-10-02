@@ -12,11 +12,18 @@
       'CURRENT_MARKET_PROVIDER_BUSY',
       'CURRENT_MARKET_PROVIDER_QUOTA',
       'CURRENT_MARKET_FALLBACK_BUSY',
-      'CURRENT_MARKET_FALLBACK_QUOTA'
+      'CURRENT_MARKET_FALLBACK_QUOTA',
+      'CURRENT_MARKET_GATEWAY_BUSY',
+      'CURRENT_MARKET_GATEWAY_BUDGET'
     ].includes(code) || Number(error?.status) === 429) {
       return 'Current-market research providers are temporarily at capacity. Please try again shortly.';
     }
-    if (['CURRENT_MARKET_PROVIDER_TIMEOUT', 'CURRENT_MARKET_PROVIDER_NETWORK'].includes(code)) {
+    if ([
+      'CURRENT_MARKET_PROVIDER_TIMEOUT',
+      'CURRENT_MARKET_PROVIDER_NETWORK',
+      'CURRENT_MARKET_GATEWAY_TIMEOUT',
+      'CURRENT_MARKET_GATEWAY_NETWORK'
+    ].includes(code)) {
       return 'Current-market research could not connect reliably. Please try again in a moment.';
     }
     if ([
@@ -27,7 +34,10 @@
       'CURRENT_MARKET_RESPONSE_INVALID',
       'CURRENT_MARKET_RESPONSE_INCOMPLETE',
       'CURRENT_MARKET_SEARCH_UNAVAILABLE',
-      'CURRENT_MARKET_FALLBACK_UNAVAILABLE'
+      'CURRENT_MARKET_FALLBACK_UNAVAILABLE',
+      'CURRENT_MARKET_GATEWAY_AUTH',
+      'CURRENT_MARKET_GATEWAY_REJECTED',
+      'CURRENT_MARKET_GATEWAY_UNAVAILABLE'
     ].includes(code)) {
       return 'Current-market research could not complete right now. Your roadmap was not generated from stale assumptions. Please try again shortly.';
     }
