@@ -172,6 +172,19 @@ def _gemini_key() -> str:
     return _usable_key(os.getenv("GEMINI_API_KEY") or getattr(settings, "gemini_api_key", ""))
 
 
+def _gateway_token() -> str:
+    return _usable_key(os.getenv("AI_GATEWAY_API_KEY") or os.getenv("VERCEL_OIDC_TOKEN"))
+
+
+def _gateway_models() -> list[str]:
+    candidates = [
+        (os.getenv("VERCEL_AI_GATEWAY_ROADMAP_MODEL") or "").strip(),
+        "xai/grok-4.5",
+        "xai/grok-4.3",
+    ]
+    return list(dict.fromkeys(model for model in candidates if model))
+
+
 def _gemini_models() -> list[str]:
     candidates = [
         (os.getenv("GEMINI_WEB_SEARCH_MODEL") or "").strip(),
@@ -440,10 +453,105 @@ def _search_current_market_gemini(prompt: str) -> tuple[str, list[dict[str, str]
     raise _MarketSearchFailure("CURRENT_MARKET_FALLBACK_UNAVAILABLE")
 
 
+def _gateway_failure_code(exc: Exception) -> str:
+    if isinstance(exc, _MarketSearchFailure):
+        return exc.code
+    code = _status_code(exc)
+    if code in _AUTH_HTTP_STATUS:
+        return "CURRENT_MARKET_GATEWAY_AUTH"
+    if code == 402:
+        return "CURRENT_MARKET_GATEWAY_BUDGET"
+    if code == 429:
+        return "CURRENT_MARKET_GATEWAY_BUSY"
+    if code in _REQUEST_REJECTED_HTTP_STATUS:
+        return "CURRENT_MARKET_GATEWAY_REJECTED"
+    if isinstance(exc, httpx.TimeoutException):
+        return "CURRENT_MARKET_GATEWAY_TIMEOUT"
+    if isinstance(exc, _RETRYABLE_NETWORK_ERRORS):
+        return "CURRENT_MARKET_GATEWAY_NETWORK"
+    return "CURRENT_MARKET_GATEWAY_UNAVAILABLE"
+
+
+def _gateway_request_payload(prompt: str, model: str) -> dict[str, Any]:
+    return {
+        "model": model,
+        "input": prompt,
+        "tools": [{"type": "web_search"}],
+        "tool_choice": "required",
+        "include": ["web_search_call.action.sources"],
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "placeai_career_roadmap",
+                "strict": True,
+                "schema": ROADMAP_OUTPUT_SCHEMA,
+            }
+        },
+        "max_output_tokens": 6500,
+        "store": False,
+    }
+
+
+def _search_current_market_gateway(prompt: str) -> tuple[str, list[dict[str, str]], str]:
+    token = _gateway_token()
+    if not token:
+        raise _MarketSearchFailure("CURRENT_MARKET_GATEWAY_UNAVAILABLE")
+
+    last_error: Exception | None = None
+    for model in _gateway_models():
+        try:
+            response = httpx.post(
+                "https://ai-gateway.vercel.sh/v1/responses",
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                json=_gateway_request_payload(prompt, model),
+                timeout=httpx.Timeout(55.0, connect=5.0, read=55.0, write=8.0, pool=5.0),
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if payload.get("status") == "incomplete":
+                raise _MarketSearchFailure("CURRENT_MARKET_RESPONSE_INCOMPLETE")
+            text = _extract_text(payload)
+            if not text:
+                raise _MarketSearchFailure("CURRENT_MARKET_EMPTY_RESPONSE")
+            try:
+                parsed = json.loads(text)
+            except (TypeError, json.JSONDecodeError) as exc:
+                raise _MarketSearchFailure("CURRENT_MARKET_RESPONSE_INVALID") from exc
+            if not isinstance(parsed, dict):
+                raise _MarketSearchFailure("CURRENT_MARKET_RESPONSE_INVALID")
+            sources = _extract_sources(payload)
+            if not sources:
+                raise _MarketSearchFailure("CURRENT_MARKET_SOURCES_MISSING")
+            LOGGER.warning(
+                "Career roadmap market search recovered provider=vercel_ai_gateway model=%s source_count=%s",
+                model,
+                len(sources),
+            )
+            return text, sources, f"gateway:{model}"
+        except Exception as exc:
+            last_error = exc
+            code = _gateway_failure_code(exc)
+            LOGGER.warning(
+                "Career roadmap AI Gateway fallback failed model=%s error_code=%s error_type=%s status_code=%s",
+                model,
+                code,
+                type(exc).__name__,
+                _status_code(exc),
+            )
+            if _status_code(exc) in _AUTH_HTTP_STATUS or _status_code(exc) == 402:
+                break
+            continue
+
+    if last_error is not None:
+        raise _MarketSearchFailure(_gateway_failure_code(last_error)) from last_error
+    raise _MarketSearchFailure("CURRENT_MARKET_GATEWAY_UNAVAILABLE")
+
+
 def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
     keys = _keys()
     gemini_available = bool(_gemini_key() and genai is not None and genai_types is not None)
-    if not keys and not gemini_available:
+    gateway_available = bool(_gateway_token())
+    if not keys and not gemini_available and not gateway_available:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
@@ -554,15 +662,30 @@ def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
                 fallback_code = _gemini_failure_code(exc)
                 last_code = fallback_code
 
+    gateway_code: str | None = None
+    if gateway_available:
+        try:
+            return _search_current_market_gateway(prompt)
+        except Exception as exc:
+            last_error = exc
+            if isinstance(exc, _MarketSearchFailure):
+                gateway_code = exc.code
+                last_code = exc.code
+            else:
+                gateway_code = _gateway_failure_code(exc)
+                last_code = gateway_code
+
     message = "Current-market research is temporarily unavailable. Please try again shortly."
     if last_code in {
         "CURRENT_MARKET_PROVIDER_BUSY",
         "CURRENT_MARKET_PROVIDER_QUOTA",
         "CURRENT_MARKET_FALLBACK_BUSY",
         "CURRENT_MARKET_FALLBACK_QUOTA",
+        "CURRENT_MARKET_GATEWAY_BUSY",
+        "CURRENT_MARKET_GATEWAY_BUDGET",
     }:
         message = "Current-market research providers are temporarily at capacity. Please try again shortly."
-    elif last_code == "CURRENT_MARKET_PROVIDER_AUTH":
+    elif last_code in {"CURRENT_MARKET_PROVIDER_AUTH", "CURRENT_MARKET_GATEWAY_AUTH"}:
         message = "Current-market research is temporarily unavailable while its provider connection is restored."
 
     raise HTTPException(
@@ -573,6 +696,7 @@ def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
             "diagnostics": {
                 "primary_code": primary_code,
                 "fallback_code": fallback_code,
+                "gateway_code": gateway_code,
             },
         },
     ) from last_error

@@ -55,6 +55,9 @@ def test_roadmap_failures_use_safe_actionable_codes():
     assert "CURRENT_MARKET_PROVIDER_QUOTA" in roadmap
     assert "CURRENT_MARKET_FALLBACK_BUSY" in roadmap
     assert "CURRENT_MARKET_FALLBACK_QUOTA" in roadmap
+    assert "CURRENT_MARKET_GATEWAY_BUSY" in roadmap
+    assert "CURRENT_MARKET_GATEWAY_BUDGET" in roadmap
+    assert "CURRENT_MARKET_GATEWAY_UNAVAILABLE" in roadmap
     assert "CURRENT_MARKET_PROVIDER_AUTH" in roadmap
     assert "CURRENT_MARKET_RESPONSE_INVALID" in roadmap
     assert "CURRENT_MARKET_SOURCES_MISSING" in roadmap

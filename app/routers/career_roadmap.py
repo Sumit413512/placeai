@@ -83,6 +83,7 @@ def _record_generation_failure(
     status_code: int,
     primary_code: str | None = None,
     fallback_code: str | None = None,
+    gateway_code: str | None = None,
 ) -> None:
     """Persist only safe operational metadata for failed roadmap generations."""
     try:
@@ -101,6 +102,7 @@ def _record_generation_failure(
             "access_source": access_source[:80],
             "primary_code": (primary_code or "")[:120] or None,
             "fallback_code": (fallback_code or "")[:120] or None,
+            "gateway_code": (gateway_code or "")[:120] or None,
         }
         db.add(audit)
         db.commit()
@@ -219,12 +221,15 @@ def generate_roadmap(
         code = str(detail.get("code") or "CAREER_ROADMAP_GENERATION_FAILED")
         primary_code = str(diagnostics.get("primary_code") or "") or None if isinstance(diagnostics, dict) else None
         fallback_code = str(diagnostics.get("fallback_code") or "") or None if isinstance(diagnostics, dict) else None
+        gateway_code = str(diagnostics.get("gateway_code") or "") or None if isinstance(diagnostics, dict) else None
         LOGGER.warning(
-            "Career roadmap generation stopped stage=market_research status_code=%s error_code=%s primary_code=%s fallback_code=%s",
+            "Career roadmap generation stopped stage=market_research status_code=%s error_code=%s "
+            "primary_code=%s fallback_code=%s gateway_code=%s",
             exc.status_code,
             code,
             primary_code,
             fallback_code,
+            gateway_code,
         )
         _record_generation_failure(
             db,
@@ -236,6 +241,7 @@ def generate_roadmap(
             status_code=exc.status_code,
             primary_code=primary_code,
             fallback_code=fallback_code,
+            gateway_code=gateway_code,
         )
         raise
     except Exception:
@@ -264,8 +270,12 @@ def generate_roadmap(
         target_role=request.target_roles[0] if request.target_roles else None,
         target_field=request.target_fields[0] if request.target_fields else None,
         market_region=request.market_region,
-        ai_provider="gemini" if str(model).lower().startswith("gemini") else "openai",
-        ai_model=model,
+        ai_provider=(
+            "vercel_ai_gateway"
+            if str(model).lower().startswith("gateway:")
+            else ("gemini" if str(model).lower().startswith("gemini") else "openai")
+        ),
+        ai_model=str(model).removeprefix("gateway:"),
     )
     row.request_input = request_data
     row.market_snapshot = roadmap["market_snapshot"]

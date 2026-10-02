@@ -429,3 +429,69 @@ def test_default_roadmap_model_fallbacks_include_search_capable_alternatives(mon
     assert "gpt-5.5" in roadmap_market._models()
     assert "gemini-3.7-flash" in roadmap_market._gemini_models()
     assert "gemini-3.5-flash" in roadmap_market._gemini_models()
+
+
+
+def test_market_search_recovers_through_vercel_gateway(monkeypatch):
+    calls = []
+    monkeypatch.setattr(roadmap_market, "_keys", lambda: [])
+    monkeypatch.setattr(roadmap_market, "_gemini_key", lambda: "")
+    monkeypatch.setattr(roadmap_market, "_gateway_token", lambda: "oidc-test-token")
+    monkeypatch.setattr(roadmap_market, "_gateway_models", lambda: ["xai/grok-4.5"])
+
+    def fake_post(url, **kwargs):
+        calls.append((url, kwargs))
+        return httpx.Response(
+            200,
+            json=_market_payload(json.dumps({"phases": []})),
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(roadmap_market.httpx, "post", fake_post)
+    text, sources, model = roadmap_market.search_current_market("research")
+
+    assert json.loads(text) == {"phases": []}
+    assert sources == [{"title": "Market source", "url": "https://example.com/market"}]
+    assert model == "gateway:xai/grok-4.5"
+    assert calls[0][0] == "https://ai-gateway.vercel.sh/v1/responses"
+    assert calls[0][1]["json"]["model"] == "xai/grok-4.5"
+    assert calls[0][1]["json"]["tools"] == [{"type": "web_search"}]
+    assert calls[0][1]["json"]["tool_choice"] == "required"
+    assert calls[0][1]["json"]["include"] == ["web_search_call.action.sources"]
+    assert calls[0][1]["json"]["text"]["format"]["type"] == "json_schema"
+    assert calls[0][1]["headers"]["Authorization"] == "Bearer oidc-test-token"
+
+
+def test_gateway_requires_sources_and_classifies_budget_without_leaking(monkeypatch):
+    monkeypatch.setattr(roadmap_market, "_gateway_token", lambda: "oidc-test-token")
+    monkeypatch.setattr(roadmap_market, "_gateway_models", lambda: ["xai/grok-4.5"])
+
+    def no_sources(url, **kwargs):
+        return httpx.Response(
+            200,
+            json=_market_payload(json.dumps({"phases": []}), with_sources=False),
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(roadmap_market.httpx, "post", no_sources)
+    with pytest.raises(roadmap_market._MarketSearchFailure) as exc:
+        roadmap_market._search_current_market_gateway("research")
+    assert exc.value.code == "CURRENT_MARKET_SOURCES_MISSING"
+
+    def budget_exhausted(url, **kwargs):
+        return httpx.Response(
+            402,
+            json={"error": {"message": "sensitive gateway billing detail"}},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(roadmap_market.httpx, "post", budget_exhausted)
+    with pytest.raises(roadmap_market._MarketSearchFailure) as exc:
+        roadmap_market._search_current_market_gateway("research")
+    assert exc.value.code == "CURRENT_MARKET_GATEWAY_BUDGET"
+    assert "sensitive gateway billing detail" not in str(exc.value)
+
+
+def test_gateway_default_models_are_live_web_search_catalog_models(monkeypatch):
+    monkeypatch.delenv("VERCEL_AI_GATEWAY_ROADMAP_MODEL", raising=False)
+    assert roadmap_market._gateway_models() == ["xai/grok-4.5", "xai/grok-4.3"]
