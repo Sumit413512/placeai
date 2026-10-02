@@ -173,10 +173,12 @@ def _gemini_key() -> str:
 
 
 def _gateway_token(runtime_token: str | None = None) -> str:
+    # Vercel Functions receive a fresh request-scoped OIDC token. Prefer it
+    # over build-time or static credentials so stale keys cannot poison auth.
     return _usable_key(
-        os.getenv("AI_GATEWAY_API_KEY")
-        or runtime_token
+        runtime_token
         or os.getenv("VERCEL_OIDC_TOKEN")
+        or os.getenv("AI_GATEWAY_API_KEY")
     )
 
 
@@ -204,9 +206,11 @@ def _models() -> list[str]:
     candidates = [
         (os.getenv("OPENAI_WEB_SEARCH_MODEL") or "").strip(),
         str(getattr(settings, "openai_model", "") or "").strip(),
+        "gpt-6.1-sol",
+        "gpt-6-luna",
         "gpt-5.6-terra",
         "gpt-5.5",
-        "gpt-5.6-luna",
+        "gpt-5.4-mini",
         "gpt-5.4",
     ]
     return list(dict.fromkeys(model for model in candidates if model))
@@ -394,68 +398,94 @@ def _gemini_failure_code(exc: Exception) -> str:
 
 
 def _search_current_market_gemini(prompt: str) -> tuple[str, list[dict[str, str]], str]:
+    """Run grounded research first, then structure it in a separate call.
+
+    Grounding metadata is most reliable when search is not simultaneously
+    constrained by a strict JSON schema. Separating the stages preserves
+    verifiable sources and prevents successful live research being discarded.
+    """
     api_key = _gemini_key()
     if not api_key or genai is None or genai_types is None:
         raise _MarketSearchFailure("CURRENT_MARKET_FALLBACK_UNAVAILABLE")
 
     last_error: Exception | None = None
     for model in _gemini_models():
-        for attempt in range(2):
+        try:
+            timeout_ms = int(
+                max(5.0, min(float(getattr(settings, "ai_request_timeout_seconds", 45) or 45), 55.0)) * 1000
+            )
+            client = genai.Client(
+                api_key=api_key,
+                http_options={"timeout": timeout_ms, "retry_options": {"attempts": 1}},
+            )
+
+            research_response = client.models.generate_content(
+                model=model,
+                contents=(
+                    prompt
+                    + "\n\nRESEARCH STAGE ONLY: Use Google Search now. "
+                    "Return a concise evidence memo covering current demand, required skills, "
+                    "tools/technologies, entry-level expectations and market caveats. "
+                    "Do not return the final JSON roadmap yet."
+                ),
+                config=genai_types.GenerateContentConfig(
+                    tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())],
+                ),
+            )
+            research_text = str(getattr(research_response, "text", "") or "").strip()
+            if not research_text:
+                raise _MarketSearchFailure("CURRENT_MARKET_EMPTY_RESPONSE")
+            sources = _extract_gemini_sources(research_response)
+            if not sources:
+                raise _MarketSearchFailure("CURRENT_MARKET_SOURCES_MISSING")
+
+            structured_response = client.models.generate_content(
+                model=model,
+                contents=(
+                    "The live-market research has already been completed in a separate grounded-search stage. "
+                    "Do not perform another web search. Use ONLY the grounded evidence below for current-market claims. "
+                    "Follow the planning brief and return the requested Career Roadmap JSON.\n\n"
+                    f"PLANNING BRIEF:\n{prompt}\n\n"
+                    f"GROUNDED LIVE-MARKET EVIDENCE:\n{research_text}"
+                ),
+                config=genai_types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_json_schema=ROADMAP_OUTPUT_SCHEMA,
+                ),
+            )
+            text = str(getattr(structured_response, "text", "") or "").strip()
+            if not text:
+                raise _MarketSearchFailure("CURRENT_MARKET_EMPTY_RESPONSE")
             try:
-                timeout_ms = int(max(5.0, min(float(getattr(settings, "ai_request_timeout_seconds", 45) or 45), 55.0)) * 1000)
-                client = genai.Client(
-                    api_key=api_key,
-                    http_options={"timeout": timeout_ms, "retry_options": {"attempts": 1}},
-                )
-                response = client.models.generate_content(
-                    model=model,
-                    contents=prompt,
-                    config=genai_types.GenerateContentConfig(
-                        tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())],
-                        response_mime_type="application/json",
-                        response_json_schema=ROADMAP_OUTPUT_SCHEMA,
-                    ),
-                )
-                text = str(getattr(response, "text", "") or "").strip()
-                if not text:
-                    raise _MarketSearchFailure("CURRENT_MARKET_EMPTY_RESPONSE")
-                try:
-                    parsed = json.loads(text)
-                except (TypeError, json.JSONDecodeError) as exc:
-                    raise _MarketSearchFailure("CURRENT_MARKET_RESPONSE_INVALID") from exc
-                if not isinstance(parsed, dict):
-                    raise _MarketSearchFailure("CURRENT_MARKET_RESPONSE_INVALID")
-                sources = _extract_gemini_sources(response)
-                if not sources:
-                    raise _MarketSearchFailure("CURRENT_MARKET_SOURCES_MISSING")
-                LOGGER.warning(
-                    "Career roadmap market search recovered with grounded fallback provider=gemini model=%s source_count=%s",
-                    model,
-                    len(sources),
-                )
-                return text, sources, model
-            except Exception as exc:
-                last_error = exc
-                code = _gemini_status_code(exc)
-                safe_code = _gemini_failure_code(exc)
-                LOGGER.warning(
-                    "Career roadmap grounded fallback failed provider=gemini model=%s attempt=%s "
-                    "error_code=%s error_type=%s status_code=%s",
-                    model,
-                    attempt + 1,
-                    safe_code,
-                    type(exc).__name__,
-                    code,
-                )
-                if code in {408, 409, 425, 429, 500, 502, 503, 504} and attempt == 0:
-                    time.sleep(_retry_delay(attempt))
-                    continue
-                break
+                parsed = json.loads(text)
+            except (TypeError, json.JSONDecodeError) as exc:
+                raise _MarketSearchFailure("CURRENT_MARKET_RESPONSE_INVALID") from exc
+            if not isinstance(parsed, dict):
+                raise _MarketSearchFailure("CURRENT_MARKET_RESPONSE_INVALID")
+
+            LOGGER.warning(
+                "Career roadmap market search recovered with two-stage grounded fallback "
+                "provider=gemini model=%s source_count=%s",
+                model,
+                len(sources),
+            )
+            return text, sources, model
+        except Exception as exc:
+            last_error = exc
+            safe_code = _gemini_failure_code(exc)
+            LOGGER.warning(
+                "Career roadmap two-stage grounded fallback failed provider=gemini model=%s "
+                "error_code=%s error_type=%s status_code=%s",
+                model,
+                safe_code,
+                type(exc).__name__,
+                _gemini_status_code(exc),
+            )
+            continue
 
     if last_error is not None:
         raise _MarketSearchFailure(_gemini_failure_code(last_error)) from last_error
     raise _MarketSearchFailure("CURRENT_MARKET_FALLBACK_UNAVAILABLE")
-
 
 def _gateway_failure_code(exc: Exception) -> str:
     if isinstance(exc, _MarketSearchFailure):
@@ -501,11 +531,9 @@ def _search_current_market_gateway(
     *,
     gateway_token: str | None = None,
 ) -> tuple[str, list[dict[str, str]], str]:
-    configured_api_key = _usable_key(os.getenv("AI_GATEWAY_API_KEY"))
     token = _gateway_token(gateway_token)
     if not token:
         raise _MarketSearchFailure("CURRENT_MARKET_GATEWAY_UNAVAILABLE")
-    auth_method = "api-key" if configured_api_key else "oidc"
 
     last_error: Exception | None = None
     for model in _gateway_models():
@@ -515,7 +543,6 @@ def _search_current_market_gateway(
                 headers={
                     "Authorization": f"Bearer {token}",
                     "Content-Type": "application/json",
-                    "ai-gateway-auth-method": auth_method,
                 },
                 json=_gateway_request_payload(prompt, model),
                 timeout=httpx.Timeout(55.0, connect=5.0, read=55.0, write=8.0, pool=5.0),
