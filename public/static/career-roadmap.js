@@ -8,8 +8,13 @@
 
   function roadmapFailureMessage(error) {
     const code = String(error?.code || '');
-    if (code === 'CURRENT_MARKET_PROVIDER_BUSY' || Number(error?.status) === 429) {
-      return 'Current-market research is busy right now. Wait a moment and try again.';
+    if ([
+      'CURRENT_MARKET_PROVIDER_BUSY',
+      'CURRENT_MARKET_PROVIDER_QUOTA',
+      'CURRENT_MARKET_FALLBACK_BUSY',
+      'CURRENT_MARKET_FALLBACK_QUOTA'
+    ].includes(code) || Number(error?.status) === 429) {
+      return 'Current-market research providers are temporarily at capacity. Please try again shortly.';
     }
     if (['CURRENT_MARKET_PROVIDER_TIMEOUT', 'CURRENT_MARKET_PROVIDER_NETWORK'].includes(code)) {
       return 'Current-market research could not connect reliably. Please try again in a moment.';

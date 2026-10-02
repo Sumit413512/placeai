@@ -368,3 +368,64 @@ def test_market_search_stops_format_churn_after_repeated_transient_failure(monke
     assert len(calls) == 2
     assert all(call["model"] == "gpt-5.6-terra" for call in calls)
     assert all(call["text"]["format"]["type"] == "json_schema" for call in calls)
+
+
+
+def test_market_search_moves_to_next_model_after_repeated_429(monkeypatch):
+    calls = []
+    monkeypatch.setattr(roadmap_market, "_keys", lambda: ["test-key"])
+    monkeypatch.setattr(roadmap_market, "_models", lambda: ["gpt-5.6-terra", "gpt-5.5"])
+    monkeypatch.setattr(roadmap_market, "_gemini_key", lambda: "")
+    monkeypatch.setattr(roadmap_market.time, "sleep", lambda *_: None)
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        if kwargs["json"]["model"] == "gpt-5.6-terra":
+            return _response(429, {"error": {"type": "rate_limit_error", "code": "rate_limit_exceeded"}})
+        return _response(200, _market_payload(json.dumps({"phases": []})))
+
+    monkeypatch.setattr(roadmap_market.httpx, "post", fake_post)
+    text, _, model = roadmap_market.search_current_market("research")
+
+    assert json.loads(text) == {"phases": []}
+    assert model == "gpt-5.5"
+    assert [call["model"] for call in calls] == [
+        "gpt-5.6-terra",
+        "gpt-5.6-terra",
+        "gpt-5.5",
+    ]
+
+
+def test_market_search_skips_retry_for_account_quota_and_moves_models(monkeypatch):
+    calls = []
+    monkeypatch.setattr(roadmap_market, "_keys", lambda: ["test-key"])
+    monkeypatch.setattr(roadmap_market, "_models", lambda: ["gpt-5.6-terra", "gpt-5.5"])
+    monkeypatch.setattr(roadmap_market, "_gemini_key", lambda: "")
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        if kwargs["json"]["model"] == "gpt-5.6-terra":
+            return _response(429, {"error": {"type": "insufficient_quota", "code": "insufficient_quota"}})
+        return _response(200, _market_payload(json.dumps({"phases": []})))
+
+    monkeypatch.setattr(roadmap_market.httpx, "post", fake_post)
+    _, _, model = roadmap_market.search_current_market("research")
+
+    assert model == "gpt-5.5"
+    assert [call["model"] for call in calls] == ["gpt-5.6-terra", "gpt-5.5"]
+    assert roadmap_market._failure_code(
+        httpx.HTTPStatusError(
+            "quota",
+            request=httpx.Request("POST", "https://api.openai.com/v1/responses"),
+            response=_response(429, {"error": {"type": "insufficient_quota", "code": "insufficient_quota"}}),
+        )
+    ) == "CURRENT_MARKET_PROVIDER_QUOTA"
+
+
+def test_default_roadmap_model_fallbacks_include_search_capable_alternatives(monkeypatch):
+    monkeypatch.delenv("OPENAI_WEB_SEARCH_MODEL", raising=False)
+    monkeypatch.delenv("GEMINI_WEB_SEARCH_MODEL", raising=False)
+
+    assert "gpt-5.5" in roadmap_market._models()
+    assert "gemini-3.7-flash" in roadmap_market._gemini_models()
+    assert "gemini-3.5-flash" in roadmap_market._gemini_models()

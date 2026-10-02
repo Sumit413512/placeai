@@ -177,6 +177,8 @@ def _gemini_models() -> list[str]:
         (os.getenv("GEMINI_WEB_SEARCH_MODEL") or "").strip(),
         str(getattr(settings, "gemini_model", "") or "").strip(),
         "gemini-3.8-flash",
+        "gemini-3.7-flash",
+        "gemini-3.5-flash",
     ]
     return list(dict.fromkeys(model for model in candidates if model))
 
@@ -186,8 +188,9 @@ def _models() -> list[str]:
         (os.getenv("OPENAI_WEB_SEARCH_MODEL") or "").strip(),
         str(getattr(settings, "openai_model", "") or "").strip(),
         "gpt-5.6-terra",
-        "gpt-5.6",
+        "gpt-5.5",
         "gpt-5.6-luna",
+        "gpt-5.4",
     ]
     return list(dict.fromkeys(model for model in candidates if model))
 
@@ -254,6 +257,22 @@ def _status_code(exc: Exception) -> int | None:
     return None
 
 
+def _openai_rate_limit_code(exc: Exception) -> str:
+    if not isinstance(exc, httpx.HTTPStatusError) or exc.response is None:
+        return "CURRENT_MARKET_PROVIDER_BUSY"
+    try:
+        payload = exc.response.json()
+    except Exception:
+        return "CURRENT_MARKET_PROVIDER_BUSY"
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if not isinstance(error, dict):
+        return "CURRENT_MARKET_PROVIDER_BUSY"
+    signature = " ".join(str(error.get(key) or "") for key in ("code", "type")).lower()
+    if any(token in signature for token in ("insufficient_quota", "quota", "billing", "usage_limit")):
+        return "CURRENT_MARKET_PROVIDER_QUOTA"
+    return "CURRENT_MARKET_PROVIDER_BUSY"
+
+
 def _failure_code(exc: Exception) -> str:
     if isinstance(exc, _MarketSearchFailure):
         return exc.code
@@ -261,7 +280,7 @@ def _failure_code(exc: Exception) -> str:
     if code in _AUTH_HTTP_STATUS:
         return "CURRENT_MARKET_PROVIDER_AUTH"
     if code == 429:
-        return "CURRENT_MARKET_PROVIDER_BUSY"
+        return _openai_rate_limit_code(exc)
     if code in _REQUEST_REJECTED_HTTP_STATUS:
         return "CURRENT_MARKET_PROVIDER_REJECTED"
     if isinstance(exc, httpx.TimeoutException):
@@ -346,6 +365,9 @@ def _gemini_failure_code(exc: Exception) -> str:
     if code in _AUTH_HTTP_STATUS:
         return "CURRENT_MARKET_FALLBACK_AUTH"
     if code == 429:
+        signature = str(exc).lower()
+        if any(token in signature for token in ("quota", "resource_exhausted", "billing", "usage limit")):
+            return "CURRENT_MARKET_FALLBACK_QUOTA"
         return "CURRENT_MARKET_FALLBACK_BUSY"
     if code in _REQUEST_REJECTED_HTTP_STATUS:
         return "CURRENT_MARKET_FALLBACK_REJECTED"
@@ -437,6 +459,7 @@ def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
         key_rejected = False
         provider_unstable = False
         for model in _models():
+            model_limited = False
             for structured in (True, False):
                 for attempt in range(2):
                     try:
@@ -494,6 +517,12 @@ def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
                         if isinstance(exc, _RETRYABLE_NETWORK_ERRORS):
                             provider_unstable = True
                             break
+                        if http_status == 429:
+                            if attempt == 0 and last_code == "CURRENT_MARKET_PROVIDER_BUSY":
+                                time.sleep(_retry_delay(attempt))
+                                continue
+                            model_limited = True
+                            break
                         if http_status in _RETRYABLE_HTTP_STATUS:
                             if attempt == 0:
                                 time.sleep(_retry_delay(attempt))
@@ -502,12 +531,14 @@ def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
                             break
                         break
 
-                if key_rejected or provider_unstable:
+                if key_rejected or provider_unstable or model_limited:
                     break
                 # Compatibility/content failures may recover by falling back from
                 # strict Structured Outputs to JSON mode on the same model.
             if key_rejected or provider_unstable:
                 break
+            if model_limited:
+                continue
 
     primary_code = last_code
     fallback_code: str | None = None
@@ -524,8 +555,13 @@ def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
                 last_code = fallback_code
 
     message = "Current-market research is temporarily unavailable. Please try again shortly."
-    if last_code == "CURRENT_MARKET_PROVIDER_BUSY":
-        message = "Current-market research is busy right now. Please wait a moment and try again."
+    if last_code in {
+        "CURRENT_MARKET_PROVIDER_BUSY",
+        "CURRENT_MARKET_PROVIDER_QUOTA",
+        "CURRENT_MARKET_FALLBACK_BUSY",
+        "CURRENT_MARKET_FALLBACK_QUOTA",
+    }:
+        message = "Current-market research providers are temporarily at capacity. Please try again shortly."
     elif last_code == "CURRENT_MARKET_PROVIDER_AUTH":
         message = "Current-market research is temporarily unavailable while its provider connection is restored."
 
