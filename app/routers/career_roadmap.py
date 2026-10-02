@@ -72,6 +72,39 @@ def _latest(profile: StudentProfile, db: Session) -> CareerRoadmap | None:
     )
 
 
+def _record_generation_failure(
+    db: Session,
+    *,
+    current_user: User,
+    profile: StudentProfile,
+    access_source: str,
+    market_region: str,
+    error_code: str,
+    status_code: int,
+) -> None:
+    """Persist only safe operational metadata for failed roadmap generations."""
+    try:
+        db.rollback()
+        audit = AuditEvent(
+            actor_user_id=current_user.id,
+            organization_id=profile.organization_id or current_user.organization_id,
+            action="career_roadmap.generation_failed",
+            entity_type="career_roadmap",
+        )
+        audit.details = {
+            "stage": "market_research",
+            "error_code": error_code[:120],
+            "status_code": int(status_code),
+            "market_region": market_region[:120],
+            "access_source": access_source[:80],
+        }
+        db.add(audit)
+        db.commit()
+    except Exception:
+        db.rollback()
+        LOGGER.exception("Career roadmap failure audit could not be persisted")
+
+
 def _serialize(row: CareerRoadmap) -> dict[str, Any]:
     roadmap = row.roadmap
     return {
@@ -184,9 +217,27 @@ def generate_roadmap(
             exc.status_code,
             code,
         )
+        _record_generation_failure(
+            db,
+            current_user=current_user,
+            profile=profile,
+            access_source=str(access["access_source"]),
+            market_region=request.market_region,
+            error_code=code,
+            status_code=exc.status_code,
+        )
         raise
     except Exception:
         LOGGER.exception("Career roadmap generation stopped stage=market_research error_code=UNEXPECTED_FAILURE")
+        _record_generation_failure(
+            db,
+            current_user=current_user,
+            profile=profile,
+            access_source=str(access["access_source"]),
+            market_region=request.market_region,
+            error_code="UNEXPECTED_FAILURE",
+            status_code=500,
+        )
         raise
 
     LOGGER.info(
@@ -202,7 +253,7 @@ def generate_roadmap(
         target_role=request.target_roles[0] if request.target_roles else None,
         target_field=request.target_fields[0] if request.target_fields else None,
         market_region=request.market_region,
-        ai_provider="openai",
+        ai_provider="gemini" if str(model).lower().startswith("gemini") else "openai",
         ai_model=model,
     )
     row.request_input = request_data
