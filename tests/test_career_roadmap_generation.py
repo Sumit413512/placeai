@@ -478,8 +478,7 @@ def test_market_search_recovers_through_vercel_gateway(monkeypatch):
     assert calls[0][1]["json"]["include"] == ["web_search_call.action.sources"]
     assert calls[0][1]["json"]["text"]["format"]["type"] == "json_schema"
     assert calls[0][1]["headers"]["Authorization"] == "Bearer oidc-test-token"
-    assert calls[0][1]["headers"]["ai-gateway-auth-method"] == "oidc"
-
+    assert "ai-gateway-auth-method" not in calls[0][1]["headers"]
 
 def test_gateway_requires_sources_and_classifies_budget_without_leaking(monkeypatch):
     monkeypatch.setattr(roadmap_market, "_gateway_token", lambda runtime_token=None: runtime_token or "oidc-test-token")
@@ -524,12 +523,12 @@ def test_gateway_token_accepts_runtime_vercel_oidc_header(monkeypatch):
     assert roadmap_market._gateway_token("runtime-oidc-token") == "runtime-oidc-token"
 
 
-def test_gateway_api_key_takes_precedence_over_runtime_oidc(monkeypatch):
+def test_gateway_runtime_oidc_takes_precedence_over_static_credentials(monkeypatch):
     monkeypatch.setenv("AI_GATEWAY_API_KEY", "configured-gateway-key")
     monkeypatch.setenv("VERCEL_OIDC_TOKEN", "build-time-oidc")
 
-    assert roadmap_market._gateway_token("runtime-oidc-token") == "configured-gateway-key"
-
+    assert roadmap_market._gateway_token("runtime-oidc-token") == "runtime-oidc-token"
+    assert roadmap_market._gateway_token(None) == "build-time-oidc"
 
 def test_search_forwards_runtime_oidc_token_to_gateway(monkeypatch):
     monkeypatch.setattr(roadmap_market, "_keys", lambda: [])
@@ -557,7 +556,7 @@ def test_search_forwards_runtime_oidc_token_to_gateway(monkeypatch):
 
 
 
-def test_gateway_marks_explicit_api_key_auth_method(monkeypatch):
+def test_gateway_uses_runtime_oidc_bearer_even_when_static_key_exists(monkeypatch):
     calls = []
     monkeypatch.setenv("AI_GATEWAY_API_KEY", "configured-gateway-key")
     monkeypatch.setattr(roadmap_market, "_gateway_models", lambda: ["xai/grok-4.5"])
@@ -573,38 +572,6 @@ def test_gateway_marks_explicit_api_key_auth_method(monkeypatch):
     monkeypatch.setattr(roadmap_market.httpx, "post", fake_post)
     roadmap_market._search_current_market_gateway("research", gateway_token="runtime-oidc-token")
 
-    assert calls[0]["headers"]["Authorization"] == "Bearer configured-gateway-key"
-    assert calls[0]["headers"]["ai-gateway-auth-method"] == "api-key"
+    assert calls[0]["headers"]["Authorization"] == "Bearer runtime-oidc-token"
+    assert "ai-gateway-auth-method" not in calls[0]["headers"]
 
-
-
-def test_gateway_runtime_oidc_overrides_stale_api_key(monkeypatch):
-    monkeypatch.setenv("AI_GATEWAY_API_KEY", "stale-api-key")
-    monkeypatch.setenv("VERCEL_OIDC_TOKEN", "stale-build-oidc")
-
-    assert roadmap_market._gateway_token("fresh-request-oidc") == "fresh-request-oidc"
-    assert roadmap_market._gateway_token(None) == "stale-build-oidc"
-
-
-def test_gateway_request_uses_only_documented_bearer_auth(monkeypatch):
-    calls = []
-    monkeypatch.setattr(roadmap_market, "_gateway_token", lambda *_: "fresh-request-oidc")
-    monkeypatch.setattr(roadmap_market, "_gateway_models", lambda: ["xai/grok-4.5"])
-
-    def fake_post(url, **kwargs):
-        calls.append((url, kwargs))
-        return httpx.Response(
-            200,
-            json=_market_payload(json.dumps({"phases": []})),
-            request=httpx.Request("POST", url),
-        )
-
-    monkeypatch.setattr(roadmap_market.httpx, "post", fake_post)
-    roadmap_market._search_current_market_gateway(
-        "research",
-        gateway_token="fresh-request-oidc",
-    )
-
-    headers = calls[0][1]["headers"]
-    assert headers["Authorization"] == "Bearer fresh-request-oidc"
-    assert "ai-gateway-auth-method" not in headers
