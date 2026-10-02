@@ -173,6 +173,7 @@ def test_failed_roadmap_generation_records_safe_audit_metadata():
         assert "prompt" not in event.details
         assert "response" not in event.details
         assert "api_key" not in event.details
+        assert "oidc_token" not in event.details
     finally:
         db.close()
 
@@ -182,3 +183,11 @@ def test_roadmap_provider_label_distinguishes_grounded_fallbacks():
     assert '"vercel_ai_gateway"' in source
     assert '"gemini" if str(model).lower().startswith("gemini") else "openai"' in source
     assert 'removeprefix("gateway:")' in source
+
+
+
+def test_roadmap_route_forwards_vercel_runtime_oidc_without_persisting_it():
+    source = open("app/routers/career_roadmap.py", encoding="utf-8").read()
+    assert 'http_request.headers.get("x-vercel-oidc-token")' in source
+    assert "runtime_oidc_token=" in source
+    assert '"oidc_token"' not in source
