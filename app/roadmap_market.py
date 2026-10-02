@@ -501,16 +501,22 @@ def _search_current_market_gateway(
     *,
     gateway_token: str | None = None,
 ) -> tuple[str, list[dict[str, str]], str]:
+    configured_api_key = _usable_key(os.getenv("AI_GATEWAY_API_KEY"))
     token = _gateway_token(gateway_token)
     if not token:
         raise _MarketSearchFailure("CURRENT_MARKET_GATEWAY_UNAVAILABLE")
+    auth_method = "api-key" if configured_api_key else "oidc"
 
     last_error: Exception | None = None
     for model in _gateway_models():
         try:
             response = httpx.post(
                 "https://ai-gateway.vercel.sh/v1/responses",
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                    "ai-gateway-auth-method": auth_method,
+                },
                 json=_gateway_request_payload(prompt, model),
                 timeout=httpx.Timeout(55.0, connect=5.0, read=55.0, write=8.0, pool=5.0),
             )
