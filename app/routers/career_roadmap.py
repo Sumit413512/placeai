@@ -81,6 +81,8 @@ def _record_generation_failure(
     market_region: str,
     error_code: str,
     status_code: int,
+    primary_code: str | None = None,
+    fallback_code: str | None = None,
 ) -> None:
     """Persist only safe operational metadata for failed roadmap generations."""
     try:
@@ -97,6 +99,8 @@ def _record_generation_failure(
             "status_code": int(status_code),
             "market_region": market_region[:120],
             "access_source": access_source[:80],
+            "primary_code": (primary_code or "")[:120] or None,
+            "fallback_code": (fallback_code or "")[:120] or None,
         }
         db.add(audit)
         db.commit()
@@ -211,11 +215,16 @@ def generate_roadmap(
         )
     except HTTPException as exc:
         detail = exc.detail if isinstance(exc.detail, dict) else {}
+        diagnostics = detail.pop("diagnostics", {}) if isinstance(detail, dict) else {}
         code = str(detail.get("code") or "CAREER_ROADMAP_GENERATION_FAILED")
+        primary_code = str(diagnostics.get("primary_code") or "") or None if isinstance(diagnostics, dict) else None
+        fallback_code = str(diagnostics.get("fallback_code") or "") or None if isinstance(diagnostics, dict) else None
         LOGGER.warning(
-            "Career roadmap generation stopped stage=market_research status_code=%s error_code=%s",
+            "Career roadmap generation stopped stage=market_research status_code=%s error_code=%s primary_code=%s fallback_code=%s",
             exc.status_code,
             code,
+            primary_code,
+            fallback_code,
         )
         _record_generation_failure(
             db,
@@ -225,6 +234,8 @@ def generate_roadmap(
             market_region=request.market_region,
             error_code=code,
             status_code=exc.status_code,
+            primary_code=primary_code,
+            fallback_code=fallback_code,
         )
         raise
     except Exception:
