@@ -273,11 +273,15 @@ def generate_roadmap(
         target_field=request.target_fields[0] if request.target_fields else None,
         market_region=request.market_region,
         ai_provider=(
-            "vercel_ai_gateway"
-            if str(model).lower().startswith("gateway:")
-            else ("gemini" if str(model).lower().startswith("gemini") else "openai")
+            "public_market_feed"
+            if str(model).lower().startswith("public_market:")
+            else (
+                "vercel_ai_gateway"
+                if str(model).lower().startswith("gateway:")
+                else ("gemini" if str(model).lower().startswith("gemini") else "openai")
+            )
         ),
-        ai_model=str(model).removeprefix("gateway:"),
+        ai_model=str(model).removeprefix("gateway:").removeprefix("public_market:"),
     )
     row.request_input = request_data
     row.market_snapshot = roadmap["market_snapshot"]

@@ -4,6 +4,7 @@ import json
 import re
 from collections import Counter
 from datetime import date
+import logging
 from typing import Any
 
 from fastapi import HTTPException
@@ -11,7 +12,10 @@ from sqlalchemy.orm import Session
 
 from app.models import ApprovalStatus, Job, StudentProfile
 from app.roadmap_market import search_current_market
+from app.roadmap_public_market import PublicMarketFallbackUnavailable, build_public_market_roadmap
 from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
+
+LOGGER = logging.getLogger("placeai.roadmap.service")
 
 ROADMAP_DISCLAIMER = (
     "This roadmap is personalized guidance based on your profile and a current-market research snapshot. "
@@ -294,7 +298,26 @@ Return ONLY valid JSON with exactly this top-level structure:
 Student and PlaceAI evidence:
 {json.dumps(evidence, ensure_ascii=False, indent=2)[:24_000]}
 """
-    raw, sources, model = search_current_market(prompt, gateway_token=gateway_token)
+    try:
+        raw, sources, model = search_current_market(prompt, gateway_token=gateway_token)
+    except HTTPException as provider_exc:
+        if provider_exc.status_code != 503:
+            raise
+        try:
+            public_payload, sources, model = build_public_market_roadmap(request_data)
+            normalized = normalize_roadmap_payload(public_payload, request_data=request_data)
+            if not normalized["phases"]:
+                raise PublicMarketFallbackUnavailable("Public market fallback returned no actionable phases")
+            LOGGER.warning(
+                "Career roadmap recovered with live public-market fallback source_count=%s phase_count=%s",
+                len(sources),
+                len(normalized["phases"]),
+            )
+            return normalized, sources, model
+        except PublicMarketFallbackUnavailable:
+            LOGGER.warning("Career roadmap live public-market fallback unavailable")
+            raise provider_exc
+
     try:
         parsed = extract_json_from_response(raw)
     except HTTPException as exc:
