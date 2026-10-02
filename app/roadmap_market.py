@@ -334,7 +334,24 @@ def _gemini_status_code(exc: Exception) -> int | None:
         value = getattr(exc, name, None)
         if isinstance(value, int):
             return value
+        if isinstance(value, str) and value.isdigit():
+            return int(value)
     return None
+
+
+def _gemini_failure_code(exc: Exception) -> str:
+    if isinstance(exc, _MarketSearchFailure):
+        return exc.code
+    code = _gemini_status_code(exc)
+    if code in _AUTH_HTTP_STATUS:
+        return "CURRENT_MARKET_FALLBACK_AUTH"
+    if code == 429:
+        return "CURRENT_MARKET_FALLBACK_BUSY"
+    if code in _REQUEST_REJECTED_HTTP_STATUS:
+        return "CURRENT_MARKET_FALLBACK_REJECTED"
+    if isinstance(exc, _RETRYABLE_NETWORK_ERRORS):
+        return "CURRENT_MARKET_FALLBACK_NETWORK"
+    return "CURRENT_MARKET_FALLBACK_UNAVAILABLE"
 
 
 def _search_current_market_gemini(prompt: str) -> tuple[str, list[dict[str, str]], str]:
@@ -381,7 +398,7 @@ def _search_current_market_gemini(prompt: str) -> tuple[str, list[dict[str, str]
             except Exception as exc:
                 last_error = exc
                 code = _gemini_status_code(exc)
-                safe_code = exc.code if isinstance(exc, _MarketSearchFailure) else "CURRENT_MARKET_FALLBACK_UNAVAILABLE"
+                safe_code = _gemini_failure_code(exc)
                 LOGGER.warning(
                     "Career roadmap grounded fallback failed provider=gemini model=%s attempt=%s "
                     "error_code=%s error_type=%s status_code=%s",
@@ -396,9 +413,9 @@ def _search_current_market_gemini(prompt: str) -> tuple[str, list[dict[str, str]
                     continue
                 break
 
-    if isinstance(last_error, _MarketSearchFailure):
-        raise last_error
-    raise _MarketSearchFailure("CURRENT_MARKET_FALLBACK_UNAVAILABLE") from last_error
+    if last_error is not None:
+        raise _MarketSearchFailure(_gemini_failure_code(last_error)) from last_error
+    raise _MarketSearchFailure("CURRENT_MARKET_FALLBACK_UNAVAILABLE")
 
 
 def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
@@ -492,15 +509,19 @@ def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
             if key_rejected or provider_unstable:
                 break
 
+    primary_code = last_code
+    fallback_code: str | None = None
     if gemini_available:
         try:
             return _search_current_market_gemini(prompt)
         except Exception as exc:
             last_error = exc
             if isinstance(exc, _MarketSearchFailure):
+                fallback_code = exc.code
                 last_code = exc.code
             else:
-                last_code = "CURRENT_MARKET_FALLBACK_UNAVAILABLE"
+                fallback_code = _gemini_failure_code(exc)
+                last_code = fallback_code
 
     message = "Current-market research is temporarily unavailable. Please try again shortly."
     if last_code == "CURRENT_MARKET_PROVIDER_BUSY":
@@ -510,5 +531,12 @@ def search_current_market(prompt: str) -> tuple[str, list[dict[str, str]], str]:
 
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail={"code": last_code, "message": message},
+        detail={
+            "code": last_code,
+            "message": message,
+            "diagnostics": {
+                "primary_code": primary_code,
+                "fallback_code": fallback_code,
+            },
+        },
     ) from last_error
