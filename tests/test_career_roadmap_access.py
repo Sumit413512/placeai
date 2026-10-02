@@ -7,7 +7,8 @@ import pytest
 
 from app.billing_models import StudentSubscription
 from app.database import Base, SessionLocal, engine
-from app.models import Organization, StudentProfile, User, UserRole, generate_uuid, utcnow
+from app.models import AuditEvent, Organization, StudentProfile, User, UserRole, generate_uuid, utcnow
+from app.routers.career_roadmap import _record_generation_failure
 from app.roadmap_access import (
     CAREER_ROADMAP_FEATURE_CODE,
     CAREER_ROADMAP_ONE_TIME_PRICE_PAISE,
@@ -119,3 +120,57 @@ def test_roadmap_only_purchase_does_not_escalate_to_premium():
         assert base["plan_code"] == "placeai_independent_monthly"
     finally:
         db.close()
+
+
+
+def test_failed_roadmap_generation_records_safe_audit_metadata():
+    db, user, profile = _student("failure-audit")
+    try:
+        org = Organization(
+            name=f"Roadmap Audit College {generate_uuid()[:8]}",
+            slug=f"roadmap-audit-{generate_uuid()[:8]}",
+            is_active=True,
+        )
+        db.add(org)
+        db.flush()
+        user.organization_id = org.id
+        profile.organization_id = org.id
+        db.commit()
+
+        _record_generation_failure(
+            db,
+            current_user=user,
+            profile=profile,
+            access_source="institution",
+            market_region="India",
+            error_code="CURRENT_MARKET_PROVIDER_AUTH",
+            status_code=503,
+        )
+
+        event = (
+            db.query(AuditEvent)
+            .filter(
+                AuditEvent.actor_user_id == user.id,
+                AuditEvent.action == "career_roadmap.generation_failed",
+            )
+            .order_by(AuditEvent.created_at.desc())
+            .first()
+        )
+        assert event is not None
+        assert event.details == {
+            "stage": "market_research",
+            "error_code": "CURRENT_MARKET_PROVIDER_AUTH",
+            "status_code": 503,
+            "market_region": "India",
+            "access_source": "institution",
+        }
+        assert "prompt" not in event.details
+        assert "response" not in event.details
+        assert "api_key" not in event.details
+    finally:
+        db.close()
+
+
+def test_roadmap_provider_label_distinguishes_grounded_gemini():
+    source = open("app/routers/career_roadmap.py", encoding="utf-8").read()
+    assert 'ai_provider="gemini" if str(model).lower().startswith("gemini") else "openai"' in source
