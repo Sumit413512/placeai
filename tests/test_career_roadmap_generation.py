@@ -436,7 +436,7 @@ def test_market_search_recovers_through_vercel_gateway(monkeypatch):
     calls = []
     monkeypatch.setattr(roadmap_market, "_keys", lambda: [])
     monkeypatch.setattr(roadmap_market, "_gemini_key", lambda: "")
-    monkeypatch.setattr(roadmap_market, "_gateway_token", lambda: "oidc-test-token")
+    monkeypatch.setattr(roadmap_market, "_gateway_token", lambda runtime_token=None: runtime_token or "oidc-test-token")
     monkeypatch.setattr(roadmap_market, "_gateway_models", lambda: ["xai/grok-4.5"])
 
     def fake_post(url, **kwargs):
@@ -463,7 +463,7 @@ def test_market_search_recovers_through_vercel_gateway(monkeypatch):
 
 
 def test_gateway_requires_sources_and_classifies_budget_without_leaking(monkeypatch):
-    monkeypatch.setattr(roadmap_market, "_gateway_token", lambda: "oidc-test-token")
+    monkeypatch.setattr(roadmap_market, "_gateway_token", lambda runtime_token=None: runtime_token or "oidc-test-token")
     monkeypatch.setattr(roadmap_market, "_gateway_models", lambda: ["xai/grok-4.5"])
 
     def no_sources(url, **kwargs):
@@ -495,3 +495,43 @@ def test_gateway_requires_sources_and_classifies_budget_without_leaking(monkeypa
 def test_gateway_default_models_are_live_web_search_catalog_models(monkeypatch):
     monkeypatch.delenv("VERCEL_AI_GATEWAY_ROADMAP_MODEL", raising=False)
     assert roadmap_market._gateway_models() == ["xai/grok-4.5", "xai/grok-4.3"]
+
+
+
+def test_gateway_token_accepts_runtime_vercel_oidc_header(monkeypatch):
+    monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
+    monkeypatch.delenv("VERCEL_OIDC_TOKEN", raising=False)
+
+    assert roadmap_market._gateway_token("runtime-oidc-token") == "runtime-oidc-token"
+
+
+def test_gateway_api_key_takes_precedence_over_runtime_oidc(monkeypatch):
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "configured-gateway-key")
+    monkeypatch.setenv("VERCEL_OIDC_TOKEN", "build-time-oidc")
+
+    assert roadmap_market._gateway_token("runtime-oidc-token") == "configured-gateway-key"
+
+
+def test_search_forwards_runtime_oidc_token_to_gateway(monkeypatch):
+    monkeypatch.setattr(roadmap_market, "_keys", lambda: [])
+    monkeypatch.setattr(roadmap_market, "_gemini_key", lambda: "")
+    monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
+    monkeypatch.delenv("VERCEL_OIDC_TOKEN", raising=False)
+    seen = {}
+
+    def gateway(prompt, *, gateway_token=None):
+        seen["prompt"] = prompt
+        seen["token"] = gateway_token
+        return "{}", [{"title": "Source", "url": "https://example.com"}], "gateway:xai/grok-4.5"
+
+    monkeypatch.setattr(roadmap_market, "_search_current_market_gateway", gateway)
+
+    text, sources, model = roadmap_market.search_current_market(
+        "research",
+        gateway_token="runtime-oidc-token",
+    )
+
+    assert text == "{}"
+    assert sources
+    assert model == "gateway:xai/grok-4.5"
+    assert seen == {"prompt": "research", "token": "runtime-oidc-token"}
