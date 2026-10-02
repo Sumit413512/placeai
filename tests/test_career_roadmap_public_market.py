@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -7,6 +10,39 @@ from fastapi import HTTPException
 
 from app import roadmap_public_market
 from app import roadmap_service
+
+
+@pytest.mark.parametrize("skill_count", [3, 7])
+@pytest.mark.parametrize("all_known", [False, True])
+def test_small_valid_skill_sample_terminates_without_inventing_skills(skill_count, all_known):
+    skills = ["SQL", "Python", "Excel", "Tableau", "Pandas", "NumPy", "Docker"][:skill_count]
+    request = _request()
+    request["current_skills"] = skills if all_known else []
+    jobs = [{
+        "title": "Data Analyst",
+        "description": " ".join(skills),
+        "url": f"https://example.com/jobs/{index}",
+        "source": "Test feed",
+        "location": "India",
+    } for index in range(3)]
+    # A subprocess deadline makes an infinite-loop regression fail rather than
+    # hanging the whole CI worker. The feed is replaced; no network is used.
+    result = subprocess.run(
+        [sys.executable, "-c", """
+import json, sys
+from app import roadmap_public_market as market
+data = json.load(sys.stdin)
+market._fetch_jobs = lambda request: data['jobs']
+payload, sources, _ = market.build_public_market_roadmap(data['request'])
+print(json.dumps({'phases': payload['phases'], 'sources': sources}))
+"""],
+        input=json.dumps({"request": request, "jobs": jobs}),
+        text=True, capture_output=True, timeout=10, check=True,
+    )
+    payload = json.loads(result.stdout)
+    assert len(payload["phases"]) == 4
+    assert len(payload["sources"]) == 3
+    assert {skill["name"] for phase in payload["phases"] for skill in phase["skills"]} <= set(skills)
 
 
 def _request() -> dict:
@@ -166,6 +202,11 @@ def test_generate_market_roadmap_recovers_from_all_provider_failure(monkeypatch)
                         "primary_code": "CURRENT_MARKET_PROVIDER_QUOTA",
                         "fallback_code": "CURRENT_MARKET_FALLBACK_QUOTA",
                         "gateway_code": "CURRENT_MARKET_GATEWAY_AUTH",
+                        "gateway_http_status": 403,
+                        "gateway_error_type": "customer_verification_required",
+                        "gateway_credential_source": "runtime_oidc",
+                        "response": "private upstream response",
+                        "token": "private upstream token",
                     },
                 },
             )
@@ -228,14 +269,23 @@ def test_generate_market_roadmap_recovers_from_all_provider_failure(monkeypatch)
         lambda request_data: (public_payload, public_sources, "public_market:remote_feeds_v1"),
     )
 
+    diagnostics = {}
     roadmap, sources, model = roadmap_service.generate_market_roadmap(
         db=db,
         profile=profile,
         request_data=request,
         gateway_token="test-oidc",
+        provider_diagnostics=diagnostics,
     )
 
     assert model == "public_market:remote_feeds_v1"
     assert roadmap["title"] == "Data Analyst Public Market Roadmap"
     assert len(roadmap["phases"]) == 2
     assert sources == public_sources
+    assert diagnostics == {
+        "gateway_http_status": 403,
+        "gateway_error_type": "customer_verification_required",
+        "gateway_credential_source": "runtime_oidc",
+    }
+    assert "gateway_http_status" not in roadmap
+    assert "private upstream" not in json.dumps(roadmap)

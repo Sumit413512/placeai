@@ -592,3 +592,55 @@ def test_gateway_uses_api_key_only_when_oidc_is_unavailable(monkeypatch):
     monkeypatch.setenv("AI_GATEWAY_API_KEY", "configured-gateway-key")
 
     assert roadmap_market._gateway_auth(None) == ("configured-gateway-key", "api-key")
+
+
+@pytest.mark.parametrize(("http_status", "error", "safe_type", "safe_code"), [
+    (401, {"type": "invalid_api_key"}, "invalid_api_key", "CURRENT_MARKET_GATEWAY_AUTH"),
+    (403, {"type": "customer_verification_required"}, "customer_verification_required",
+     "CURRENT_MARKET_GATEWAY_VERIFICATION_REQUIRED"),
+    (403, {"type": "invalid_request_error", "code": "customer_verification_required"},
+     "customer_verification_required", "CURRENT_MARKET_GATEWAY_VERIFICATION_REQUIRED"),
+    (403, {"type": "permission_denied"}, "permission_denied", "CURRENT_MARKET_GATEWAY_ACCESS_DENIED"),
+    (403, {"type": "private upstream content"}, "other", "CURRENT_MARKET_GATEWAY_ACCESS_DENIED"),
+    (402, {"type": "quota_for_entity_exceeded"}, "quota_for_entity_exceeded", "CURRENT_MARKET_GATEWAY_BUDGET"),
+])
+def test_gateway_failure_preserves_only_safe_diagnostics(monkeypatch, caplog, http_status, error, safe_type, safe_code):
+    monkeypatch.setattr(roadmap_market, "_keys", lambda: [])
+    monkeypatch.setattr(roadmap_market, "_gemini_key", lambda: "")
+    monkeypatch.setattr(roadmap_market, "_gateway_models", lambda: ["xai/grok-4.5", "xai/grok-4.3"])
+    calls = []
+
+    def reject(url, **kwargs):
+        calls.append(url)
+        return httpx.Response(
+            http_status,
+            json={"error": {**error, "message": "secret upstream response and prompt"}},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(roadmap_market.httpx, "post", reject)
+    with pytest.raises(HTTPException) as failure:
+        roadmap_market.search_current_market("private student prompt", gateway_token="private-oidc-token")
+    assert failure.value.detail["code"] == safe_code
+    assert failure.value.detail["diagnostics"] == {
+        "primary_code": "CURRENT_MARKET_SEARCH_UNAVAILABLE",
+        "fallback_code": None,
+        "gateway_code": safe_code,
+        "gateway_http_status": http_status,
+        "gateway_error_type": safe_type,
+        "gateway_credential_source": "runtime_oidc",
+    }
+    assert len(calls) == 1
+    recorded = str(failure.value.detail) + caplog.text
+    for secret in ("private student prompt", "private-oidc-token", "secret upstream", "private upstream content"):
+        assert secret not in recorded
+
+
+def test_gateway_diagnostics_reject_arbitrary_values():
+    assert roadmap_market.safe_gateway_diagnostics({
+        "gateway_http_status": "403 secret",
+        "gateway_error_type": ["customer_verification_required"],
+        "gateway_credential_source": "token-secret",
+        "response": "private response",
+    }) == {}
+    assert roadmap_market.safe_gateway_diagnostics(None) == {}

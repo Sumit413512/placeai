@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models import ApprovalStatus, Job, StudentProfile
-from app.roadmap_market import search_current_market
+from app.roadmap_market import safe_gateway_diagnostics, search_current_market
 from app.roadmap_public_market import PublicMarketFallbackUnavailable, build_public_market_roadmap
 from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
 
@@ -228,6 +228,7 @@ def generate_market_roadmap(
     profile: StudentProfile,
     request_data: dict[str, Any],
     gateway_token: str | None = None,
+    provider_diagnostics: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, str]], str]:
     evidence = {
         "student": _profile_context(profile),
@@ -308,6 +309,8 @@ Student and PlaceAI evidence:
             normalized = normalize_roadmap_payload(public_payload, request_data=request_data)
             if not normalized["phases"]:
                 raise PublicMarketFallbackUnavailable("Public market fallback returned no actionable phases")
+            if provider_diagnostics is not None and isinstance(provider_exc.detail, dict):
+                provider_diagnostics.update(safe_gateway_diagnostics(provider_exc.detail.get("diagnostics")))
             LOGGER.warning(
                 "Career roadmap recovered with live public-market fallback source_count=%s phase_count=%s",
                 len(sources),
