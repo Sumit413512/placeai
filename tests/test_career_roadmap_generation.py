@@ -454,7 +454,11 @@ def test_market_search_recovers_through_vercel_gateway(monkeypatch):
     calls = []
     monkeypatch.setattr(roadmap_market, "_keys", lambda: [])
     monkeypatch.setattr(roadmap_market, "_gemini_key", lambda: "")
-    monkeypatch.setattr(roadmap_market, "_gateway_token", lambda runtime_token=None: runtime_token or "oidc-test-token")
+    monkeypatch.setattr(
+        roadmap_market,
+        "_gateway_auth",
+        lambda runtime_token=None: ((runtime_token or "oidc-test-token"), "oidc"),
+    )
     monkeypatch.setattr(roadmap_market, "_gateway_models", lambda: ["xai/grok-4.5"])
 
     def fake_post(url, **kwargs):
@@ -478,10 +482,14 @@ def test_market_search_recovers_through_vercel_gateway(monkeypatch):
     assert calls[0][1]["json"]["include"] == ["web_search_call.action.sources"]
     assert calls[0][1]["json"]["text"]["format"]["type"] == "json_schema"
     assert calls[0][1]["headers"]["Authorization"] == "Bearer oidc-test-token"
-    assert "ai-gateway-auth-method" not in calls[0][1]["headers"]
+    assert calls[0][1]["headers"]["ai-gateway-auth-method"] == "oidc"
 
 def test_gateway_requires_sources_and_classifies_budget_without_leaking(monkeypatch):
-    monkeypatch.setattr(roadmap_market, "_gateway_token", lambda runtime_token=None: runtime_token or "oidc-test-token")
+    monkeypatch.setattr(
+        roadmap_market,
+        "_gateway_auth",
+        lambda runtime_token=None: ((runtime_token or "oidc-test-token"), "oidc"),
+    )
     monkeypatch.setattr(roadmap_market, "_gateway_models", lambda: ["xai/grok-4.5"])
 
     def no_sources(url, **kwargs):
@@ -529,6 +537,7 @@ def test_gateway_runtime_oidc_takes_precedence_over_static_credentials(monkeypat
 
     assert roadmap_market._gateway_token("runtime-oidc-token") == "runtime-oidc-token"
     assert roadmap_market._gateway_token(None) == "build-time-oidc"
+    assert roadmap_market._gateway_auth("runtime-oidc-token") == ("runtime-oidc-token", "oidc")
 
 def test_search_forwards_runtime_oidc_token_to_gateway(monkeypatch):
     monkeypatch.setattr(roadmap_market, "_keys", lambda: [])
@@ -573,5 +582,13 @@ def test_gateway_uses_runtime_oidc_bearer_even_when_static_key_exists(monkeypatc
     roadmap_market._search_current_market_gateway("research", gateway_token="runtime-oidc-token")
 
     assert calls[0]["headers"]["Authorization"] == "Bearer runtime-oidc-token"
-    assert "ai-gateway-auth-method" not in calls[0]["headers"]
+    assert calls[0]["headers"]["ai-gateway-auth-method"] == "oidc"
 
+
+
+
+def test_gateway_uses_api_key_only_when_oidc_is_unavailable(monkeypatch):
+    monkeypatch.delenv("VERCEL_OIDC_TOKEN", raising=False)
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "configured-gateway-key")
+
+    assert roadmap_market._gateway_auth(None) == ("configured-gateway-key", "api-key")
