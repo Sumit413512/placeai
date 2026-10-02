@@ -145,6 +145,8 @@ def test_failed_roadmap_generation_records_safe_audit_metadata():
             market_region="India",
             error_code="CURRENT_MARKET_PROVIDER_AUTH",
             status_code=503,
+            primary_code="CURRENT_MARKET_PROVIDER_AUTH",
+            fallback_code="CURRENT_MARKET_FALLBACK_REJECTED",
         )
 
         event = (
@@ -163,6 +165,8 @@ def test_failed_roadmap_generation_records_safe_audit_metadata():
             "status_code": 503,
             "market_region": "India",
             "access_source": "institution",
+            "primary_code": "CURRENT_MARKET_PROVIDER_AUTH",
+            "fallback_code": "CURRENT_MARKET_FALLBACK_REJECTED",
         }
         assert "prompt" not in event.details
         assert "response" not in event.details
