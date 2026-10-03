@@ -13,6 +13,7 @@ from app.dependencies import require_student
 from app.models import AuditEvent, StudentProfile, User
 from app.roadmap_access import ensure_roadmap_access, roadmap_access_status
 from app.roadmap_models import CareerRoadmap
+from app.roadmap_market import safe_gateway_diagnostics
 from app.roadmap_service import generate_market_roadmap
 
 router = APIRouter(prefix="/roadmap", tags=["Career Roadmap"])
@@ -84,6 +85,7 @@ def _record_generation_failure(
     primary_code: str | None = None,
     fallback_code: str | None = None,
     gateway_code: str | None = None,
+    gateway_diagnostics: dict[str, Any] | None = None,
 ) -> None:
     """Persist only safe operational metadata for failed roadmap generations."""
     try:
@@ -103,6 +105,7 @@ def _record_generation_failure(
             "primary_code": (primary_code or "")[:120] or None,
             "fallback_code": (fallback_code or "")[:120] or None,
             "gateway_code": (gateway_code or "")[:120] or None,
+            **safe_gateway_diagnostics(gateway_diagnostics),
         }
         db.add(audit)
         db.commit()
@@ -204,6 +207,7 @@ def generate_roadmap(
     access = ensure_roadmap_access(current_user, db)
     profile = _profile(current_user, db)
     request_data = request.model_dump()
+    provider_diagnostics: dict[str, Any] = {}
     LOGGER.info(
         "Career roadmap generation started access_source=%s region=%s target_role_present=%s",
         access["access_source"],
@@ -216,6 +220,7 @@ def generate_roadmap(
             profile=profile,
             request_data=request_data,
             gateway_token=http_request.headers.get("x-vercel-oidc-token"),
+            provider_diagnostics=provider_diagnostics,
         )
     except HTTPException as exc:
         detail = exc.detail if isinstance(exc.detail, dict) else {}
@@ -244,6 +249,7 @@ def generate_roadmap(
             primary_code=primary_code,
             fallback_code=fallback_code,
             gateway_code=gateway_code,
+            gateway_diagnostics=safe_gateway_diagnostics(diagnostics),
         )
         raise
     except Exception:
@@ -303,6 +309,7 @@ def generate_roadmap(
         "target_field": row.target_field,
         "source_count": len(sources),
         "access_source": access["access_source"],
+        **safe_gateway_diagnostics(provider_diagnostics),
     }
     db.add(audit)
     db.commit()

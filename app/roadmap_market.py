@@ -24,6 +24,12 @@ settings = get_settings()
 _RETRYABLE_HTTP_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
 _AUTH_HTTP_STATUS = {401, 403}
 _REQUEST_REJECTED_HTTP_STATUS = {400, 404, 422}
+_GATEWAY_ERROR_TYPES = frozenset({
+    "customer_verification_required", "quota_for_entity_exceeded",
+    "authentication_error", "invalid_api_key", "invalid_token",
+    "permission_denied", "invalid_request_error", "rate_limit_exceeded", "other",
+})
+_GATEWAY_CREDENTIAL_SOURCES = frozenset({"runtime_oidc", "env_oidc", "api_key"})
 _RETRYABLE_NETWORK_ERRORS = (
     httpx.TimeoutException,
     httpx.ConnectError,
@@ -147,10 +153,28 @@ ROADMAP_OUTPUT_SCHEMA: dict[str, Any] = {
 }
 
 
+def safe_gateway_diagnostics(value: Any) -> dict[str, Any]:
+    """Allow only fixed operational labels, never provider bodies or credentials."""
+    if not isinstance(value, dict):
+        return {}
+    safe: dict[str, Any] = {}
+    http_status = value.get("gateway_http_status")
+    if type(http_status) is int and 100 <= http_status <= 599:
+        safe["gateway_http_status"] = http_status
+    error_type = value.get("gateway_error_type")
+    if isinstance(error_type, str) and error_type in _GATEWAY_ERROR_TYPES:
+        safe["gateway_error_type"] = error_type
+    source = value.get("gateway_credential_source")
+    if isinstance(source, str) and source in _GATEWAY_CREDENTIAL_SOURCES:
+        safe["gateway_credential_source"] = source
+    return safe
+
+
 class _MarketSearchFailure(RuntimeError):
-    def __init__(self, code: str):
+    def __init__(self, code: str, *, diagnostics: dict[str, Any] | None = None):
         super().__init__(code)
         self.code = code
+        self.diagnostics = safe_gateway_diagnostics(diagnostics)
 
 
 def _usable_key(value: str | None) -> str:
@@ -487,12 +511,35 @@ def _search_current_market_gemini(prompt: str) -> tuple[str, list[dict[str, str]
         raise _MarketSearchFailure(_gemini_failure_code(last_error)) from last_error
     raise _MarketSearchFailure("CURRENT_MARKET_FALLBACK_UNAVAILABLE")
 
+def _gateway_error_type(exc: Exception) -> str:
+    if not isinstance(exc, httpx.HTTPStatusError) or exc.response is None:
+        return "other"
+    try:
+        payload = exc.response.json()
+    except (ValueError, UnicodeError):
+        return "other"
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if isinstance(error, dict):
+        for specific in ("customer_verification_required", "quota_for_entity_exceeded"):
+            if any(error.get(name) == specific for name in ("type", "code")):
+                return specific
+        for name in ("type", "code"):
+            value = error.get(name)
+            if isinstance(value, str) and value in _GATEWAY_ERROR_TYPES:
+                return value
+    return "other"
+
+
 def _gateway_failure_code(exc: Exception) -> str:
     if isinstance(exc, _MarketSearchFailure):
         return exc.code
     code = _status_code(exc)
-    if code in _AUTH_HTTP_STATUS:
+    if code == 401:
         return "CURRENT_MARKET_GATEWAY_AUTH"
+    if code == 403:
+        if _gateway_error_type(exc) == "customer_verification_required":
+            return "CURRENT_MARKET_GATEWAY_VERIFICATION_REQUIRED"
+        return "CURRENT_MARKET_GATEWAY_ACCESS_DENIED"
     if code == 402:
         return "CURRENT_MARKET_GATEWAY_BUDGET"
     if code == 429:
@@ -547,6 +594,11 @@ def _search_current_market_gateway(
     token, auth_method = _gateway_auth(gateway_token)
     if not token:
         raise _MarketSearchFailure("CURRENT_MARKET_GATEWAY_UNAVAILABLE")
+    credential_source = (
+        "runtime_oidc" if _usable_key(gateway_token)
+        else "env_oidc" if _usable_key(os.getenv("VERCEL_OIDC_TOKEN"))
+        else "api_key"
+    )
 
     last_error: Exception | None = None
     for model in _gateway_models():
@@ -587,18 +639,28 @@ def _search_current_market_gateway(
             last_error = exc
             code = _gateway_failure_code(exc)
             LOGGER.warning(
-                "Career roadmap AI Gateway fallback failed model=%s error_code=%s error_type=%s status_code=%s",
+                "Career roadmap AI Gateway fallback failed model=%s error_code=%s error_type=%s "
+                "status_code=%s gateway_error_type=%s credential_source=%s",
                 model,
                 code,
                 type(exc).__name__,
                 _status_code(exc),
+                _gateway_error_type(exc),
+                credential_source,
             )
             if _status_code(exc) in _AUTH_HTTP_STATUS or _status_code(exc) == 402:
                 break
             continue
 
     if last_error is not None:
-        raise _MarketSearchFailure(_gateway_failure_code(last_error)) from last_error
+        raise _MarketSearchFailure(
+            _gateway_failure_code(last_error),
+            diagnostics={
+                "gateway_http_status": _status_code(last_error),
+                "gateway_error_type": _gateway_error_type(last_error),
+                "gateway_credential_source": credential_source,
+            },
+        ) from last_error
     raise _MarketSearchFailure("CURRENT_MARKET_GATEWAY_UNAVAILABLE")
 
 
@@ -722,6 +784,7 @@ def search_current_market(
                 last_code = fallback_code
 
     gateway_code: str | None = None
+    gateway_diagnostics: dict[str, Any] = {}
     if gateway_available:
         try:
             return _search_current_market_gateway(prompt, gateway_token=gateway_token)
@@ -730,6 +793,7 @@ def search_current_market(
             if isinstance(exc, _MarketSearchFailure):
                 gateway_code = exc.code
                 last_code = exc.code
+                gateway_diagnostics = safe_gateway_diagnostics(exc.diagnostics)
             else:
                 gateway_code = _gateway_failure_code(exc)
                 last_code = gateway_code
@@ -756,6 +820,7 @@ def search_current_market(
                 "primary_code": primary_code,
                 "fallback_code": fallback_code,
                 "gateway_code": gateway_code,
+                **gateway_diagnostics,
             },
         },
     ) from last_error

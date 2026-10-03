@@ -300,13 +300,9 @@ def build_public_market_roadmap(request_data: dict[str, Any]) -> tuple[dict[str,
 
     known = _known_skills(request_data)
     gaps = [skill for skill in market_skills if skill.casefold().replace(" ", "") not in known]
-    priority = gaps or market_skills[:8]
-    while len(priority) < 8:
-        for skill in market_skills:
-            if skill not in priority:
-                priority.append(skill)
-            if len(priority) >= 8:
-                break
+    # A valid sample may contain only three to seven distinct skills. Never
+    # wait for eight or invent extra signals to fill the plan.
+    priority = list(dict.fromkeys([*gaps, *market_skills]))[:8]
 
     target = _role_phrase(request_data)
     region = _clean_text(request_data.get("market_region"), 120) or "the selected market"

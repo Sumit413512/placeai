@@ -148,6 +148,13 @@ def test_failed_roadmap_generation_records_safe_audit_metadata():
             primary_code="CURRENT_MARKET_PROVIDER_AUTH",
             fallback_code="CURRENT_MARKET_FALLBACK_REJECTED",
             gateway_code="CURRENT_MARKET_GATEWAY_BUDGET",
+            gateway_diagnostics={
+                "gateway_http_status": 402,
+                "gateway_error_type": "quota_for_entity_exceeded",
+                "gateway_credential_source": "runtime_oidc",
+                "response": "sensitive provider response",
+                "token": "secret-token",
+            },
         )
 
         event = (
@@ -169,6 +176,9 @@ def test_failed_roadmap_generation_records_safe_audit_metadata():
             "primary_code": "CURRENT_MARKET_PROVIDER_AUTH",
             "fallback_code": "CURRENT_MARKET_FALLBACK_REJECTED",
             "gateway_code": "CURRENT_MARKET_GATEWAY_BUDGET",
+            "gateway_http_status": 402,
+            "gateway_error_type": "quota_for_entity_exceeded",
+            "gateway_credential_source": "runtime_oidc",
         }
         assert "prompt" not in event.details
         assert "response" not in event.details
