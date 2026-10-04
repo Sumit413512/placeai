@@ -215,7 +215,7 @@ INDEX_HTML = '''<!doctype html>
 </html>
 '''
 
-PRIVACY_HTML = '''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="PlaceAI Privacy Policy"><title>Privacy Policy — PlaceAI</title><link rel="icon" type="image/svg+xml" href="/static/placeai-icon.svg"><link rel="stylesheet" href="/static/legal.css"></head><body><div class="legal-shell"><header class="legal-top"><a class="legal-brand" href="/">PlaceAI</a><nav class="legal-nav" aria-label="Legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/acceptable-use">Acceptable Use</a><a href="/">Back to PlaceAI</a></nav></header><section class="legal-hero"><span class="legal-kicker">Legal & privacy</span><h1>Privacy Policy</h1><p>This policy explains how PlaceAI handles personal and institutional information when providing campus placement operations, applicant workflows, recruiter tools and AI-assisted features.</p><div class="legal-meta">Effective: 12 September 2026</div></section><main class="legal-card"><div class="legal-note">PlaceAI is designed for controlled institutional use. Institution-specific contractual or data-processing terms may provide additional protections and take precedence where applicable.</div><h2>1. Information we process</h2><p>Depending on your role and the features your institution enables, PlaceAI may process account and identity information; academic and student profile information; resumes and supporting documents; job applications, eligibility results, interviews, attendance and offers; recruiter and company verification information; communications, audit events and security logs; and technical information necessary to operate and secure the service.</p><h2>2. Why we process information</h2><p>We use information to authenticate users, provide role-based placement workflows, manage institution and recruiter operations, evaluate configured eligibility criteria, support interview and application workflows, send account and security communications, prevent abuse, maintain auditability, diagnose service issues and provide authorized AI-assisted analysis.</p><h2>3. Institutions and authorized users</h2><p>For institution-managed records, the relevant institution may determine why and how student or placement information is used. PlaceAI processes that information to provide the service and according to the institution's authorized configuration, applicable agreements and law. Users must only access information they are authorized to handle.</p><h2>4. AI-assisted features</h2><p>PlaceAI may send the minimum information necessary for a requested AI feature to configured AI service providers. OpenAI is the primary AI provider and Google Gemini may be used as a fallback when configured. AI output is decision support only and is intended for authorized human review. PlaceAI does not represent AI output as a guaranteed hiring, placement or eligibility decision.</p><h2>5. Service providers and international processing</h2><p>PlaceAI uses infrastructure and communications providers to host the application, database, transactional email and AI functionality. These providers may process information in jurisdictions outside the user's location. PlaceAI limits provider access to what is necessary to deliver and secure the service.</p><h2>6. Cookies and session information</h2><p>PlaceAI uses essential authentication and security mechanisms required to sign users in, maintain authorized sessions and protect accounts. PlaceAI does not require advertising cookies to operate the placement workspace.</p><h2>7. Retention</h2><p>Information is retained for as long as required to provide the service, satisfy institutional instructions, preserve legitimate security and audit records, meet contractual obligations or comply with applicable law. Retention requirements may vary by institution and record type.</p><h2>8. Security</h2><p>PlaceAI uses role-based authorization, institution scoping, encrypted HTTPS transport, secure password handling, session controls, audit records, rate limiting, security headers, dependency scanning and production health checks. No online service can guarantee absolute security, so suspected security incidents should be reported promptly through the authorized PlaceAI support channel.</p><h2>9. Your choices and rights</h2><p>Users may request access, correction or other action concerning personal information through their institution where the institution manages that information, or through the PlaceAI support/access channel for platform-managed information. Requests are handled subject to identity verification, institutional responsibilities and applicable law.</p><h2>10. Student and age considerations</h2><p>PlaceAI is intended primarily for higher-education placement operations. Institutions are responsible for ensuring that accounts and student information are collected and used with the appropriate authority, notice or consent required by applicable law.</p><h2>11. Changes to this policy</h2><p>We may update this policy when the service, providers, legal requirements or data practices change. The effective date above will be updated when material revisions are published.</p><h2>12. Contact</h2><p>For privacy or data-handling questions, use the PlaceAI access/support channel or the support contact supplied by your institution. Security vulnerabilities should be reported through the process described in PlaceAI's Security Policy.</p></main><footer class="legal-footer"><span>© 2026 PlaceAI</span><span><a href="/terms">Terms</a> · <a href="/acceptable-use">Acceptable Use</a></span></footer></div></body></html>'''
+PRIVACY_HTML = '''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="PlaceAI Privacy Policy"><title>Privacy Policy — PlaceAI</title><link rel="icon" type="image/svg+xml" href="/static/placeai-icon.svg"><link rel="stylesheet" href="/static/legal.css"></head><body><div class="legal-shell"><header class="legal-top"><a class="legal-brand" href="/">PlaceAI</a><nav class="legal-nav" aria-label="Legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/acceptable-use">Acceptable Use</a><a href="/">Back to PlaceAI</a></nav></header><section class="legal-hero"><span class="legal-kicker">Legal & privacy</span><h1>Privacy Policy</h1><p>This policy explains how PlaceAI handles personal and institutional information when providing campus placement operations, applicant workflows, recruiter tools and AI-assisted features.</p><div class="legal-meta">Effective: 4 October 2026</div></section><main class="legal-card"><div class="legal-note">PlaceAI is designed for controlled institutional use. Institution-specific contractual or data-processing terms may provide additional protections and take precedence where applicable.</div><h2>1. Information we process</h2><p>Depending on your role and the features your institution enables, PlaceAI may process account and identity information; academic and student profile information; resumes and supporting documents; job applications, eligibility results, interviews, attendance and offers; recruiter and company verification information; communications, audit events and security logs; and technical information necessary to operate and secure the service.</p><h2>2. Why we process information</h2><p>We use information to authenticate users, provide role-based placement workflows, manage institution and recruiter operations, evaluate configured eligibility criteria, support interview and application workflows, send account and security communications, prevent abuse, maintain auditability, diagnose service issues and provide authorized AI-assisted analysis.</p><h2>3. Institutions and authorized users</h2><p>For institution-managed records, the relevant institution may determine why and how student or placement information is used. PlaceAI processes that information to provide the service and according to the institution\'s authorized configuration, applicable agreements and law. Users must only access information they are authorized to handle.</p><h2>4. AI-assisted features</h2><p>PlaceAI may send the minimum information necessary for a requested AI feature to configured AI service providers. OpenAI is the primary AI provider and Google Gemini may be used as a fallback when configured. AI output is decision support only and is intended for authorized human review. PlaceAI does not represent AI output as a guaranteed hiring, placement or eligibility decision.</p><h3>Recorded HR practice</h3><p>With explicit consent before the assessment, PlaceAI records one camera-and-microphone video of the HR answers and sends the video, voice and answers to Google Gemini for answer-quality, communication and English-fluency coaching. The student and authorized staff in the same institution may review the private recording. Playback access expires after 30 days, and scheduled cleanup removes expired recording bytes. Assessment reports and feedback may remain. PlaceAI requests deletion of the uploaded Gemini copy after analysis; if deletion cannot complete, Google\'s Files API expires the copy after 48 hours. The report is practice feedback for human review, not a hiring or misconduct decision.</p><h2>5. Service providers and international processing</h2><p>PlaceAI uses infrastructure and communications providers to host the application, database, transactional email and AI functionality. These providers may process information in jurisdictions outside the user\'s location. PlaceAI limits provider access to what is necessary to deliver and secure the service.</p><h2>6. Cookies and session information</h2><p>PlaceAI uses essential authentication and security mechanisms required to sign users in, maintain authorized sessions and protect accounts. PlaceAI does not require advertising cookies to operate the placement workspace.</p><p>If you choose Google sign-in, PlaceAI receives a verified Google account identifier, email and name to authenticate and link your account. Google sign-in does not grant PlaceAI access to Gmail messages or Drive files and does not change your assigned role.</p><h2>7. Retention</h2><p>Information is retained for as long as required to provide the service, satisfy institutional instructions, preserve legitimate security and audit records, meet contractual obligations or comply with applicable law. Retention requirements may vary by institution and record type.</p><h2>8. Security</h2><p>PlaceAI uses role-based authorization, institution scoping, encrypted HTTPS transport, secure password handling, session controls, audit records, rate limiting, security headers, dependency scanning and production health checks. No online service can guarantee absolute security, so suspected security incidents should be reported promptly through the authorized PlaceAI support channel.</p><h2>9. Your choices and rights</h2><p>Users may request access, correction or other action concerning personal information through their institution where the institution manages that information, or through the PlaceAI support/access channel for platform-managed information. Requests are handled subject to identity verification, institutional responsibilities and applicable law.</p><h2>10. Student and age considerations</h2><p>PlaceAI is intended primarily for higher-education placement operations. Institutions are responsible for ensuring that accounts and student information are collected and used with the appropriate authority, notice or consent required by applicable law.</p><h2>11. Changes to this policy</h2><p>We may update this policy when the service, providers, legal requirements or data practices change. The effective date above will be updated when material revisions are published.</p><h2>12. Contact</h2><p>For privacy or data-handling questions, use the PlaceAI access/support channel or the support contact supplied by your institution. Security vulnerabilities should be reported through the process described in PlaceAI\'s Security Policy.</p></main><footer class="legal-footer"><span>© 2026 PlaceAI</span><span><a href="/terms">Terms</a> · <a href="/acceptable-use">Acceptable Use</a></span></footer></div></body></html>'''
 
 TERMS_HTML = '''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="PlaceAI Terms of Use"><title>Terms of Use — PlaceAI</title><link rel="icon" type="image/svg+xml" href="/static/placeai-icon.svg"><link rel="stylesheet" href="/static/legal.css"></head><body><div class="legal-shell"><header class="legal-top"><a class="legal-brand" href="/">PlaceAI</a><nav class="legal-nav" aria-label="Legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/acceptable-use">Acceptable Use</a><a href="/">Back to PlaceAI</a></nav></header><section class="legal-hero"><span class="legal-kicker">Legal & service terms</span><h1>Terms of Use</h1><p>These terms govern access to PlaceAI unless a separate written agreement with an institution or customer applies.</p><div class="legal-meta">Effective: 12 September 2026</div></section><main class="legal-card"><div class="legal-note">A signed institution or enterprise agreement may contain additional or different terms. If there is a conflict, the signed agreement controls for that customer.</div><h2>1. The service</h2><p>PlaceAI provides software for campus placement operations, student readiness, recruiter workflows, placement drives, interviews, offers, reporting, account administration and AI-assisted decision support.</p><h2>2. Authorized access</h2><p>You may use PlaceAI only through an account and role you are authorized to use. You must provide accurate information, protect credentials, comply with your institution's policies and promptly report suspected unauthorized access. Privileged accounts may be provisioned only by authorized administrators.</p><h2>3. Institution and recruiter responsibilities</h2><p>Institutions and recruiters are responsible for the lawfulness, accuracy and appropriateness of information they submit, the permissions they grant, and employment or placement decisions they make. PlaceAI provides workflow and decision-support tooling; it does not act as an employer, placement agency or guarantor of employment.</p><h2>4. AI-assisted features</h2><p>AI-generated summaries, rankings, recommendations, interview assistance and other outputs can be incomplete or inaccurate. Authorized users must independently review material outputs before relying on them. PlaceAI must not be used to make prohibited or unlawful automated decisions about individuals.</p><h2>5. Acceptable use</h2><p>You must comply with the PlaceAI Acceptable Use Policy. You may not attempt to bypass authorization controls, scrape restricted candidate information, interfere with the service, upload malicious content, impersonate another person or organization, or use PlaceAI in violation of applicable law.</p><h2>6. User and customer content</h2><p>Users and customers retain rights they hold in information they submit. They grant PlaceAI the limited rights necessary to host, process, transmit, secure and display that information to provide the service and satisfy authorized instructions.</p><h2>7. Intellectual property</h2><p>PlaceAI, its software, interfaces, branding and platform materials are protected by applicable intellectual-property laws. Except for rights expressly granted to use the service, no ownership rights are transferred.</p><h2>8. Availability and changes</h2><p>PlaceAI may modify, improve or temporarily suspend parts of the service for maintenance, security, provider outages or operational reasons. Commercial availability commitments, support levels and service-level terms apply only when stated in a separate written agreement.</p><h2>9. Account suspension</h2><p>PlaceAI may restrict or suspend access when reasonably necessary to protect users, institutions, data or infrastructure; investigate abuse; comply with law; or address material violations of these terms. Where appropriate, affected customers will be given notice and a reasonable opportunity to resolve the issue.</p><h2>10. Disclaimers</h2><p>To the extent permitted by applicable law, the service is provided on an "as available" basis unless a separate written agreement states otherwise. PlaceAI does not guarantee placement outcomes, employment offers, candidate suitability, recruiter legitimacy or uninterrupted operation.</p><h2>11. Liability</h2><p>Any liability limitations, indemnities or commercial remedies applicable to an institutional customer should be defined in that customer's signed agreement. Nothing in these public terms excludes rights or liabilities that cannot legally be excluded.</p><h2>12. Governing requirements</h2><p>Use of PlaceAI is subject to applicable law, including applicable privacy, employment, education, cybersecurity and data-protection requirements. Customer-specific governing-law and dispute-resolution terms may be set in signed commercial agreements.</p><h2>13. Changes</h2><p>We may update these terms as PlaceAI evolves. Material changes will be reflected by a revised effective date and, where required, additional notice.</p><h2>14. Contact</h2><p>Questions about these terms should be raised through the PlaceAI access/support channel or the support contact supplied by your institution.</p></main><footer class="legal-footer"><span>© 2026 PlaceAI</span><span><a href="/privacy">Privacy</a> · <a href="/acceptable-use">Acceptable Use</a></span></footer></div></body></html>'''
 
@@ -226,66 +226,338 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="PlaceAI Mock Interview Coach for student placement preparation.">
+  <meta name="description" content="PlaceAI Secure Placement Assessment — role-aligned, proctored campus assessment with section controls, integrity monitoring and question-level performance analysis.">
   <meta name="theme-color" content="#071f45">
-  <title>PlaceAI — Mock Interview Coach</title>
+  <title>PlaceAI — Secure Placement Assessment</title>
   <link rel="icon" type="image/svg+xml" href="/static/placeai-icon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/api-errors.css">
-  <link rel="stylesheet" href="/static/mock-interview.css">
+  <link rel="stylesheet" href="/static/mock-interview.css?v=20260921-coding2">
   <link rel="stylesheet" href="/static/brand.css">
+  <link rel="stylesheet" href="/static/ui-fixes.css">
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="/"><span class="brand-mark"><i></i><i></i><i></i></span><span>PlaceAI</span></a>
-    <div class="top-actions"><span class="secure">Student coaching workspace</span><a href="/">Back to PlaceAI</a></div>
-  </header>
+<header class="topbar">
+  <a class="brand" href="/"><span class="brand-mark"><i></i><i></i><i></i></span><span>PlaceAI</span></a>
+  <div class="top-actions">
+    <span class="secure"><span class="secure-dot"></span> Interview Intelligence</span>
+    <a href="/">Back to PlaceAI</a>
+  </div>
+</header>
 
-  <main class="shell">
-    <section class="hero">
-      <div>
-        <span class="eyebrow">AI-assisted preparation</span>
-        <h1>Mock Interview Coach</h1>
-        <p>Practice against a real PlaceAI opportunity with role-specific, non-repeating questions. After each round, receive question-by-question analysis, missing concepts, stronger answer structures, example solutions and a targeted next-practice plan.</p>
+<main class="shell">
+  <section class="hero assessment-hero">
+    <div class="hero-copy">
+      <span class="eyebrow">Secure Placement Assessment</span>
+      <h1>Placement Assessment &amp; Interview Simulation</h1><span class="hidden" aria-hidden="true">Mock Interview Coach</span>
+      <p>A role-aligned assessment environment for campus placement preparation, combining aptitude, reasoning, communication, technical knowledge, coding, resume defence and behavioural evaluation under structured proctoring controls.</p>
+      <div class="hero-meta">
+        <span>Role-based blueprint</span><span>Section timers</span><span>Forward-only flow</span><span>Secure browser controls</span><span>AI-assisted proctoring</span>
       </div>
-      <div class="guardrail"><strong>Text-only coaching</strong><span>Scores are preparation signals. They do not measure accent, spoken fluency, personality or employability.</span></div>
+    </div>
+    <aside class="hero-score-card assessment-standard-card">
+      <span class="card-kicker">Assessment standard</span>
+      <strong>Institution-grade simulation</strong>
+      <p>Coverage, difficulty, timing and integrity controls are defined by the assessment blueprint. Students complete the assigned structure without reducing or bypassing sections.</p>
+      <div class="mini-stats"><div><b>10</b><span>Sections</span></div><div><b>Proctored</b><span>Environment</span></div><div><b>AI + Rules</b><span>Evaluation</span></div></div>
+    </aside>
+  </section>
+
+  <div id="preview-banner" class="preview-banner hidden"><strong>Review environment</strong><span>This Render build uses sample assessment data. Camera, screen-share and on-device proctoring checks run when you grant permission; no biometric identity matching is performed.</span></div>
+  <div id="auth-state" class="notice">Checking your student session…</div>
+
+  <section id="setup-panel" class="panel hidden">
+    <div class="panel-head">
+      <div><span class="step">01 · Assessment setup</span><h2>Prepare your placement assessment</h2><p>PlaceAI builds the assessment from the selected opportunity, role requirements and the institution's standardized placement blueprint.</p></div>
+      <span class="status-pill">Standardized blueprint</span>
+    </div>
+
+    <div class="setup-layout">
+      <div>
+        <form id="setup-form" class="setup-form"><input type="hidden" value="15" data-legacy-practice-max aria-hidden="true"><input type="hidden" name="difficulty" value="mixed" aria-hidden="true">
+          <label>Target opportunity
+            <select id="job-select" name="job_id" required><option value="">Loading opportunities…</option></select>
+          </label>
+          <div class="locked-setting">
+            <span>Assessment configuration</span>
+            <strong>Standardized placement assessment</strong>
+            <small>Coverage, section sequence, difficulty and timing are controlled by the assigned assessment blueprint.</small>
+          </div>
+          <button class="button primary button-wide" type="submit">Continue to secure system check</button>
+        </form>
+
+        <div class="assessment-policy">
+          <strong>Secure assessment rules</strong>
+          <ul>
+            <li>Questions are delivered one at a time and cannot be revisited after moving forward.</li>
+            <li>Question content is protected and candidate-watermarked during the assessment.</li>
+            <li>Copy/paste, tab switching, full-screen exits, screen-share interruption and supported multi-monitor signals are monitored.</li>
+            <li>Camera proctoring checks candidate presence, multiple-person events and visible mobile-phone signals.</li>
+            <li>Repeated confirmed integrity warnings can automatically submit the assessment for institutional review.</li>
+          </ul>
+        </div>
+      </div>
+
+      <aside class="blueprint-card">
+        <div class="blueprint-title"><span>Assessment map</span><strong>Section-based structure</strong></div>
+        <div id="blueprint-list" class="blueprint-list"></div>
+        <div class="blueprint-total"><span>Coverage is standardized by role and assessment blueprint.</span><b>10 sections</b></div>
+      </aside>
+    </div>
+  </section>
+
+  <section id="system-panel" class="panel hidden">
+    <div class="panel-head">
+      <div><span class="step">02 · Secure preflight</span><h2>System &amp; proctoring check</h2><p>Camera, microphone, entire-screen sharing, on-device proctoring, active presence and secure-browser controls must pass before the assessment can begin.</p></div>
+      <span id="system-status-pill" class="status-pill neutral">Not checked</span>
+    </div>
+
+    <div class="system-grid">
+      <div>
+        <div class="camera-card">
+          <video id="camera-preview" playsinline muted></video>
+          <div id="camera-placeholder" class="camera-placeholder"><span>Camera preview</span><small>Your camera feed appears here after permission is granted.</small></div>
+          <div class="camera-footer"><span id="device-label">No media access yet</span><span class="live-indicator hidden" id="camera-live">LIVE</span></div>
+        </div>
+        <div class="liveness-card">
+          <div><span class="card-kicker">Active liveness</span><strong id="liveness-title">Not started</strong><small id="liveness-help">Run the system check first. PlaceAI will then verify one-person presence and live movement before entry.</small></div>
+          <button id="run-liveness" class="button secondary" type="button" disabled>Run liveness check</button>
+        </div>
+      </div>
+
+      <div class="checks-card">
+        <div class="check-row" data-check="browser"><span class="check-icon">1</span><div><strong>Supported browser</strong><small>Required secure-browser capabilities</small></div><b>Checking</b></div>
+        <div class="check-row" data-check="camera"><span class="check-icon">2</span><div><strong>Camera access</strong><small>Continuous candidate and object monitoring</small></div><b>Required</b></div>
+        <div class="check-row" data-check="microphone"><span class="check-icon">3</span><div><strong>Microphone access</strong><small>Required for interview and monitored stages</small></div><b>Required</b></div>
+        <div class="check-row" data-check="screen"><span class="check-icon">4</span><div><strong>Entire-screen sharing</strong><small>Screen-share interruption is an integrity event</small></div><b>Required</b></div>
+        <div class="check-row" data-check="proctor"><span class="check-icon">5</span><div><strong>On-device proctor model</strong><small>Person-count and mobile-phone object detection</small></div><b>Required</b></div>
+        <div class="check-row" data-check="liveness"><span class="check-icon">6</span><div><strong>Active presence check</strong><small>Candidate presence plus live movement challenge</small></div><b>Required</b></div>
+        <div class="check-row" data-check="fullscreen"><span class="check-icon">7</span><div><strong>Full-screen mode</strong><small>Full-screen exits generate warnings</small></div><b>Required</b></div>
+        <div class="check-row" data-check="monitor"><span class="check-icon">8</span><div><strong>Single-monitor check</strong><small>Blocks known extended-display configurations where supported</small></div><b>Checking</b></div>
+        <div class="check-row" data-check="clipboard"><span class="check-icon">9</span><div><strong>Clipboard control</strong><small>Copy, paste and context-menu actions are restricted</small></div><b>Enabled</b></div>
+        <div class="check-row" data-check="visibility"><span class="check-icon">10</span><div><strong>Focus monitoring</strong><small>Tab and window changes are recorded</small></div><b>Enabled</b></div>
+      </div>
+    </div>
+
+    <div class="consent-row">
+      <label class="consent"><input id="consent-check" type="checkbox"><span>I understand that this proctored assessment uses camera, microphone, entire-screen sharing, full-screen/focus monitoring and on-device object detection for integrity signals. Confirmed warnings are recorded for institutional review. I consent to one camera-and-microphone recording of the HR section and sending my face, voice and spoken answers to Google Gemini for communication and answer-quality feedback. PlaceAI keeps the private recording for 30 days for me and authorized institution staff. The complete result appears together after analysis; it is practice feedback for human review.</span></label>
+      <div class="system-actions"><button id="run-check" class="button secondary" type="button">Run system check</button><button id="start-assessment" class="button primary" type="button" disabled>Start proctored assessment</button></div>
+    </div>
+  </section>
+
+  <section id="interview-panel" class="assessment-shell hidden">
+    <aside class="assessment-sidebar">
+      <div class="proctor-header">
+        <div><span class="proctor-dot"></span><strong>PROCTORED TEST</strong></div>
+        <span id="integrity-warning-badge">0 / 4 warnings</span>
+      </div>
+
+      <div class="assessment-brand">
+        <span class="eyebrow">Live assessment</span>
+        <strong id="interview-title">Placement simulation</strong>
+        <small id="interview-context"></small>
+      </div>
+
+      <div class="timer-card compact-timer">
+        <div><span>Total remaining</span><strong id="total-timer">01:45:00</strong></div>
+        <div class="progress-track"><i id="total-progress"></i></div>
+      </div>
+
+      <div class="assessment-camera-card">
+        <video id="assessment-camera" playsinline muted></video>
+        <div class="assessment-camera-meta">
+          <span><i class="camera-status-dot"></i> Camera live</span>
+          <b id="camera-proctor-status">Presence monitoring</b>
+        </div>
+      </div>
+
+      <div class="palette-head">
+        <div><strong>Question navigator</strong><small>Forward-only assessment</small></div>
+        <span id="palette-progress">0 / 50</span>
+      </div>
+      <nav id="section-nav" class="section-nav question-navigator" aria-label="Assessment question status"></nav>
+      <div class="palette-legend" aria-label="Question status legend">
+        <span><i class="legend-dot attempted"></i>Attempted</span>
+        <span><i class="legend-dot current"></i>Current</span>
+        <span><i class="legend-dot unattempted"></i>Not attempted</span>
+      </div>
+
+      <div class="integrity-summary">
+        <span><i class="integrity-dot"></i> Secure monitoring active</span>
+        <small id="integrity-count">0 integrity events</small>
+      </div>
+    </aside>
+
+    <div class="assessment-main">
+      <div id="proctor-warning-banner" class="proctor-warning-banner hidden" role="alert" aria-live="assertive">
+        <div><span>Integrity warning</span><strong id="proctor-warning-title">Proctoring event detected</strong><small id="proctor-warning-detail"></small></div>
+        <b id="proctor-warning-count">1 / 4</b>
+      </div>
+
+      <div class="assessment-toolbar">
+        <div><span id="section-label">Section</span><strong id="question-progress">Question 1 of 50</strong></div>
+        <div class="toolbar-right">
+          <div class="section-clock"><small>Section</small><span id="section-timer">12:00</span></div>
+          <span class="forward-badge">Forward-only</span>
+          <span class="proctor-live-badge">LIVE PROCTOR</span>
+        </div>
+      </div>
+
+      <div class="question-stage">
+        <div class="question-badges"><span id="question-section" class="category"></span><span id="question-difficulty" class="category"></span><span class="category secure-question">Protected question</span></div>
+        <div id="question-canvas-wrap" class="protected-question">
+          <canvas id="question-canvas" width="1200" height="300"></canvas>
+        </div>
+        <p id="question-guidance" class="question-guidance">Question text is rendered to canvas and watermarked. Save the current response, then use Save &amp; Next to permanently move forward.</p>
+        <div id="answer-area" class="answer-area"></div>
+      </div>
+
+      <div class="assessment-actionbar">
+        <div>
+          <span id="autosave-state">Response not saved</span>
+          <small>Once you move forward, this question cannot be reopened.</small>
+        </div>
+        <div class="assessment-action-buttons">
+          <button id="save-question" class="button secondary" type="button">Save answer</button>
+          <button id="next-question" class="button primary" type="button">Save &amp; Next</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="analysis-panel" class="panel analysis-panel hidden">
+    <div class="analysis-head">
+      <div class="analysis-spinner" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div><span class="step">03 · Deep answer analysis</span><h2>PlaceAI is grading every response</h2><p id="analysis-message">Checking system-graded answers and preparing question-level AI evaluation.</p></div>
+    </div>
+    <div class="analysis-steps">
+      <div class="analysis-step active" data-analysis-step="objective"><span>01</span><div><strong>Objective grading</strong><small>Compare MCQ responses with protected server-side answer keys.</small></div><b>Running</b></div>
+      <div class="analysis-step" data-analysis-step="subjective"><span>02</span><div><strong>AI answer evaluation</strong><small>Score each open-ended response for correctness, relevance, reasoning and completeness.</small></div><b>Queued</b></div>
+      <div class="analysis-step" data-analysis-step="sections"><span>03</span><div><strong>Section analytics</strong><small>Aggregate question scores without hiding weak sections behind a single average.</small></div><b>Queued</b></div>
+      <div class="analysis-step" data-analysis-step="plan"><span>04</span><div><strong>Coaching report</strong><small>Build corrections, ideal approaches, weak-topic diagnosis and next-practice actions.</small></div><b>Queued</b></div>
+    </div>
+    <div class="analysis-note"><strong>No instant guessed score.</strong><span>All section results appear together after answer grading and HR video analysis are complete. If AI evaluation fails, PlaceAI withholds the final score instead of fabricating one.</span></div>
+    <div class="form-actions"><button id="retry-analysis" class="button secondary hidden" type="button">Retry AI analysis</button></div>
+  </section>
+
+  <section id="result-panel" class="panel result-panel hidden">
+    <div class="panel-head result-head">
+      <div><span class="step">04 · Assessment intelligence</span><h2>Complete performance report</h2><p>Answer-key correctness, sandbox-executed coding, AI-evaluated descriptive answers and integrity signals are shown separately.</p></div>
+      <div class="score-badge"><strong id="overall-score">—</strong><span>/100 IRI</span></div>
+    </div>
+
+    <div id="analysis-status-banner" class="result-alert hidden"></div>
+
+    <section id="hr-video-report" class="result-section hidden">
+      <div class="result-section-head"><div><span class="card-kicker">Recorded HR answers</span><h3>Your communication and answer feedback</h3></div></div>
+      <p id="hr-video-summary"></p>
+      <p id="hr-playback-status" class="disclaimer" role="status"></p>
+      <button id="load-hr-recording" type="button" class="button secondary">Load private recording</button>
+      <video id="hr-result-video" class="hidden" controls playsinline preload="none" aria-label="Your private HR answer recording" style="width:100%;max-height:480px"></video>
     </section>
 
-    <div id="auth-state" class="notice">Checking your student session…</div>
+    <div class="result-hero-grid">
+      <article class="report-card performance">
+        <span>Interview Readiness Index</span>
+        <strong id="report-iri">—</strong>
+        <p id="overall-feedback">Complete the assessment to generate evidence-based coaching.</p>
+        <div class="grading-method"><span>Grading</span><b id="grading-method-label">Answer key + sandbox + question-level AI</b></div>
+      </article>
+      <article class="report-card integrity">
+        <span>Assessment integrity</span>
+        <strong id="integrity-status">Review ready</strong>
+        <p id="integrity-summary-text">Integrity events are surfaced for human review and are not treated as proof of misconduct.</p>
+        <div class="integrity-result-meta"><span>Warnings</span><b id="result-warning-count">0 / 4</b></div>
+      </article>
+    </div>
 
-    <section id="setup-panel" class="panel hidden">
-      <div class="panel-head"><div><span class="step">01</span><h2>Configure the practice round</h2><p>Choose the role, focus, difficulty and round length. PlaceAI avoids questions used in your recent attempts for the same role.</p></div></div>
-      <form id="setup-form" class="setup-grid">
-        <label>Opportunity<select id="job-select" name="job_id" required><option value="">Loading opportunities…</option></select></label>
-        <label>Interview focus<select name="focus"><option value="balanced">Balanced</option><option value="technical">Technical</option><option value="behavioral">Behavioral</option><option value="hr">HR / communication</option></select></label>
-        <label>Difficulty<select name="difficulty"><option value="mixed" selected>Mixed progression</option><option value="easy">Foundation</option><option value="medium">Intermediate</option><option value="hard">Advanced</option></select></label>
-        <label>Mode<select name="mode"><option value="practice" selected>Practice + coaching</option><option value="assessment">Assessment simulation</option></select></label>
-        <label>Questions<select name="question_count"><option value="5">5 questions</option><option value="8" selected>8 questions</option><option value="10">10 questions</option><option value="12">12 questions</option><option value="15">15 questions</option></select></label>
-        <button class="button primary" type="submit">Generate new interview</button>
-      </form>
+    <div class="score-summary-grid">
+      <article class="score-stat"><span>Total</span><strong id="summary-total">—</strong><small>questions</small></article>
+      <article class="score-stat"><span>Correct / strong</span><strong id="summary-correct">—</strong><small>responses</small></article>
+      <article class="score-stat partial"><span>Partial / acceptable</span><strong id="summary-partial">—</strong><small>responses</small></article>
+      <article class="score-stat wrong"><span>Incorrect / weak</span><strong id="summary-incorrect">—</strong><small>responses</small></article>
+      <article class="score-stat insufficient"><span>Unanswered / insufficient</span><strong id="summary-insufficient">—</strong><small>responses</small></article>
+      <article class="score-stat"><span>Objective accuracy</span><strong id="summary-objective">—</strong><small>system graded</small></article>
+      <article class="score-stat"><span>Open-ended average</span><strong id="summary-subjective">—</strong><small>AI + relevance gate</small></article>
+      <article class="score-stat"><span>Coding tests</span><strong id="summary-coding">—</strong><small>passed / total</small></article>
+    </div>
+
+    <section id="integrity-report-panel" class="result-section integrity-report-section">
+      <div class="result-section-head">
+        <div><span class="card-kicker">Proctoring evidence</span><h3>Integrity timeline</h3><p>Browser, camera and AI-vision signals are recorded separately from academic performance.</p></div>
+        <div class="integrity-institution"><span>Institution</span><strong id="integrity-institution-name">—</strong></div>
+      </div>
+      <div id="integrity-termination-note" class="integrity-termination-note hidden"></div>
+      <div id="integrity-event-list" class="integrity-event-list"></div>
     </section>
 
-    <section id="interview-panel" class="panel hidden">
-      <div class="panel-head"><div><span class="step">02</span><h2 id="interview-title">Answer the interview</h2><p id="interview-context"></p></div><span class="status-pill">Human practice · AI coaching</span></div>
-      <form id="interview-form"><div id="question-list" class="question-list"></div><div class="form-actions"><button type="button" class="button secondary" id="restart-button">Start over</button><button class="button primary" type="submit">Finish & analyse answers</button></div></form>
+    <section class="result-section">
+      <div class="result-section-head"><div><span class="card-kicker">Section performance</span><h3>Where the score came from</h3></div><p>No section is hidden behind the overall score.</p></div>
+      <div class="section-table-wrap">
+        <table class="section-table">
+          <thead><tr><th>Section</th><th>Score</th><th>Correct/Strong</th><th>Partial</th><th>Wrong/Weak</th><th>Insufficient</th><th>Evaluated</th></tr></thead>
+          <tbody id="section-performance"></tbody>
+        </table>
+      </div>
     </section>
 
-    <section id="result-panel" class="panel hidden">
-      <div class="panel-head"><div><span class="step">03</span><h2>Your interview analysis</h2><p>Use the evidence below to improve the next attempt.</p></div><div class="score-badge"><strong id="overall-score">—</strong><span>/100</span></div></div>
-      <p id="overall-feedback" class="overall-feedback"></p>
+    <section class="result-section">
+      <div class="result-section-head"><div><span class="card-kicker">Competency profile</span><h3>Section score distribution</h3></div></div>
       <div id="dimension-grid" class="dimension-grid"></div>
-      <div class="two-col"><article class="feedback-box good"><h3>Strengths</h3><ul id="strength-list"></ul></article><article class="feedback-box"><h3>Highest-value improvements</h3><ul id="improvement-list"></ul></article></div>
-      <div class="two-col"><article class="feedback-box"><h3>Weak topics to revise</h3><ul id="weak-topic-list"></ul></article><article class="feedback-box good"><h3>Next practice plan</h3><ol id="practice-plan-list"></ol></article></div>
-      <div id="answer-feedback" class="answer-feedback"></div><p id="result-disclaimer" class="disclaimer"></p><div class="form-actions"><button class="button primary" id="practice-again" type="button">Generate another fresh round</button></div>
     </section>
 
-    <section id="history-panel" class="panel hidden"><div class="panel-head"><div><span class="step">History</span><h2>Previous attempts</h2><p>Your recent evaluated rounds are also used to avoid repeating questions for the same role.</p></div></div><div id="history-list" class="history-list"></div></section>
-  </main>
+    <div class="two-col result-coaching">
+      <article class="feedback-box good"><h3>Strongest areas</h3><ul id="strength-list"></ul></article>
+      <article class="feedback-box"><h3>Highest-value improvements</h3><ul id="improvement-list"></ul></article>
+    </div>
+    <div class="two-col">
+      <article class="feedback-box"><h3>Weak topics to revise</h3><ul id="weak-topic-list"></ul></article>
+      <article class="feedback-box good"><h3>Next practice plan</h3><ol id="practice-plan-list"></ol></article>
+    </div>
 
-  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-  <script src="/static/api-errors.js" defer></script>
-  <script src="/static/mock-interview.js" defer></script>
+    <section class="result-section question-review-section">
+      <div class="result-section-head">
+        <div><span class="card-kicker">Question-level report</span><h3>Review every answer</h3><p>See your response, verdict, score, correct answer or AI reasoning, missing points and a stronger approach.</p></div>
+        <div class="review-filters" id="review-filters">
+          <button class="review-filter active" type="button" data-review-filter="all">All</button>
+          <button class="review-filter" type="button" data-review-filter="correct">Correct / strong</button>
+          <button class="review-filter" type="button" data-review-filter="partial">Partial</button>
+          <button class="review-filter" type="button" data-review-filter="incorrect">Wrong / weak</button>
+          <button class="review-filter" type="button" data-review-filter="insufficient">Insufficient</button>
+        </div>
+      </div>
+      <div id="answer-feedback" class="answer-feedback detailed-feedback"></div>
+    </section>
+
+    <p id="result-disclaimer" class="disclaimer"></p>
+    <div class="form-actions result-actions">
+      <button id="retry-analysis-result" class="button secondary hidden" type="button">Retry incomplete AI analysis</button>
+      <button class="button primary" id="practice-again" type="button">Return to assessment setup</button>
+    </div>
+  </section>
+
+  <section id="history-panel" class="panel hidden">
+    <div class="panel-head"><div><span class="step">Progress</span><h2>Previous attempts</h2><p>Track improvement across role-specific simulations.</p></div></div>
+    <div id="history-list" class="history-list"></div>
+  </section>
+</main>
+
+<div id="integrity-overlay" class="integrity-overlay hidden" role="dialog" aria-modal="true">
+  <div class="integrity-dialog">
+    <span class="card-kicker">Assessment paused</span>
+    <h2 id="integrity-overlay-title">Secure full-screen was interrupted</h2>
+    <p id="integrity-overlay-text">This event has been added to the integrity timeline. Restore the secure environment to continue.</p>
+    <div class="integrity-warning-meter">Warning <strong id="overlay-warning-number">1</strong> of <strong>4</strong></div>
+    <button id="restore-secure-mode" class="button primary" type="button">Restore secure mode</button>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+<script src="/static/api-errors.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.es2017.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js" defer></script>
+<script src="/static/mock-interview.js?v=20260921-coding2" defer></script>
 </body>
 </html>'''

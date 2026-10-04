@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -220,69 +221,22 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/google-config")
-def google_config():
-    return {"enabled": bool(settings.google_client_id), "client_id": settings.google_client_id if settings.google_client_id else None}
+def google_config(response: Response):
+    from app.google_login import challenge
+    return challenge(response)
 
 
 @router.post("/google", response_model=TokenSchema)
 def google_auth(payload: GoogleAuthRequest, request: Request, response: Response, db: Session = Depends(get_db)):
-    enforce_rate_limit(db, request, scope="google-auth", limit=30, window_seconds=600, block_seconds=900)
-    if not settings.google_client_id:
-        raise HTTPException(status_code=503, detail="Google Sign-In is not configured")
-    credential = payload.credential
-    requested_role = payload.role
-    if requested_role == "recruiter" and not settings.public_recruiter_signup:
-        raise HTTPException(
-            status_code=403,
-            detail="Recruiter self-registration is disabled. Request an invite from an institution or platform administrator.",
-        )
+    from app.google_login import authenticate
     try:
-        from google.auth.transport import requests as google_requests
-        from google.oauth2 import id_token
-        info = id_token.verify_oauth2_token(credential, google_requests.Request(), settings.google_client_id)
-    except Exception:
-        raise HTTPException(status_code=401, detail="Google authentication failed")
-
-    email = str(info.get("email", "")).lower()
-    if not email:
-        raise HTTPException(status_code=400, detail="Google account did not provide an email address")
-    if info.get("email_verified") is not True:
-        raise HTTPException(status_code=403, detail="Google account email must be verified")
-    user = db.query(User).filter(User.email == email).first()
-    if user:
-        if user.role in {UserRole.institution_admin, UserRole.platform_admin}:
-            raise HTTPException(
-                status_code=403,
-                detail="Google sign-in is not enabled for privileged administrator accounts",
-            )
-        if user.role.value != requested_role:
-            raise HTTPException(status_code=403, detail="Google sign-in role does not match this account")
-    if not user:
-        username_base = email.split("@")[0].replace(".", "_").replace("-", "_")[:65]
-        username = username_base
-        i = 1
-        while db.query(User).filter(User.username == username).first():
-            i += 1
-            username = f"{username_base}_{i}"
-        role = UserRole.recruiter if requested_role == "recruiter" else UserRole.student
-        user = User(
-            email=email,
-            username=username,
-            hashed_password=get_hashed_password(generate_reset_token()),
-            role=role,
-            email_verified=True,
-        )
-        db.add(user)
-        db.flush()
-        if role == UserRole.student:
-            db.add(StudentProfile(user_id=user.id, full_name=info.get("name")))
-        else:
-            db.add(RecruiterProfile(user_id=user.id, full_name=info.get("name"), is_verified=False))
-        db.commit()
-        db.refresh(user)
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="Account is inactive")
-    return _token_response(user, response, db)
+        user = authenticate(payload, request, response, db)
+        return _token_response(user, response, db)
+    except IntegrityError as exc:
+        # A concurrent first sign-in can win either unique account binding. Never
+        # switch identities or issue a session from the losing transaction.
+        db.rollback()
+        raise HTTPException(409, "Google account linking changed. Please sign in again.") from exc
 
 
 def _send_reset_email(recipient: str, link: str) -> tuple[str, str | None]:

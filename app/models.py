@@ -112,6 +112,14 @@ class RefreshSession(Base):
     created_at = Column(DateTime, nullable=False, default=utcnow)
 
 
+class GoogleIdentity(Base):
+    __tablename__ = "google_identities"
+
+    subject = Column(String(255), primary_key=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+
 class StoredFile(Base):
     __tablename__ = "stored_files"
 
@@ -445,6 +453,39 @@ class MockInterview(Base):
 
     student = relationship("StudentProfile", back_populates="mock_interviews")
     job = relationship("Job")
+
+
+class HRRecording(Base):
+    __tablename__ = "hr_recordings"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    interview_id = Column(String, ForeignKey("mock_interviews.id", ondelete="CASCADE"), nullable=False, unique=True)
+    status = Column(String(30), nullable=False, default="ready")
+    mime_type = Column(String(80), nullable=True)
+    exam_started_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    deadline_at = Column(DateTime, nullable=True)
+    consent_at = Column(DateTime, nullable=True)
+    sealed_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    size_bytes = Column(Integer, nullable=False, default=0)
+    chunk_count = Column(Integer, nullable=False, default=0)
+    segments_json = Column(Text, nullable=False, default="[]")
+    analysis_json = Column(Text, nullable=True)
+    analysis_lease_until = Column(DateTime, nullable=True)
+    evaluation_lease_until = Column(DateTime, nullable=True)
+    submission_json = Column(Text, nullable=True)
+    provider_file_name = Column(String(200), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+
+class HRVideoChunk(Base):
+    __tablename__ = "hr_video_chunks"
+
+    recording_id = Column(String, ForeignKey("hr_recordings.id", ondelete="CASCADE"), primary_key=True)
+    sequence = Column(Integer, primary_key=True)
+    sha256 = Column(String(64), nullable=False)
+    data = Column(LargeBinary, nullable=False)
 
 
 class AuditEvent(Base):
