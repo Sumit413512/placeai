@@ -67,6 +67,8 @@
       await loadGoogleLibrary();
       if (!area.isConnected) return;
       area.textContent = '';
+      let resizeObserver;
+      let linking = false;
       const signIn = async (credential, role, password) => {
         try {
           await requestJson('/auth/google', {method:'POST', body:JSON.stringify({credential, role, ...(password ? {password} : {})})});
@@ -75,6 +77,8 @@
           const errorArea = $('#role-login-error', view);
           if (errorArea) errorArea.textContent = error.message;
           if (error.code === 'GOOGLE_LINK_PASSWORD_REQUIRED') {
+            linking = true;
+            resizeObserver?.disconnect();
             area.textContent = '';
             const link = document.createElement('button');
             link.type = 'button'; link.className = 'button button-secondary button-full';
@@ -87,7 +91,21 @@
       };
       window.google.accounts.id.initialize({client_id:config.client_id, nonce:config.nonce, auto_select:false,
         callback:result => signIn(result.credential, loginRole)});
-      window.google.accounts.id.renderButton(area, {type:'standard', theme:'outline', size:'large', text:'signin_with', width:Math.min(400, area.clientWidth || Math.max(200, window.innerWidth - 96))});
+      let renderedWidth = 0;
+      const renderButton = () => {
+        if (!area.isConnected) { resizeObserver?.disconnect(); return; }
+        if (linking) return;
+        const width = Math.round(Math.min(400, area.clientWidth || Math.max(200, window.innerWidth - 96)));
+        if (width === renderedWidth) return;
+        renderedWidth = width;
+        area.replaceChildren();
+        window.google.accounts.id.renderButton(area, {type:'standard', theme:'outline', size:'large', text:'signin_with', width});
+      };
+      renderButton();
+      if (window.ResizeObserver) {
+        resizeObserver = new ResizeObserver(renderButton);
+        resizeObserver.observe(area);
+      }
     } catch (error) { if (area.isConnected) area.textContent = error.message; }
   }
 
