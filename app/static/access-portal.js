@@ -87,7 +87,7 @@
       };
       window.google.accounts.id.initialize({client_id:config.client_id, nonce:config.nonce, auto_select:false,
         callback:result => signIn(result.credential, loginRole)});
-      window.google.accounts.id.renderButton(area, {type:'standard', theme:'outline', size:'large', text:'signin_with', width:Math.min(400, area.clientWidth || 280)});
+      window.google.accounts.id.renderButton(area, {type:'standard', theme:'outline', size:'large', text:'signin_with', width:Math.min(400, area.clientWidth || Math.max(200, window.innerWidth - 96))});
     } catch (error) { if (area.isConnected) area.textContent = error.message; }
   }
 
