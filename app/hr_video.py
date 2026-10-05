@@ -298,12 +298,21 @@ is the final recorded segment's end. Do not credit speech outside the question's
             else:
                 processing = True
                 raise RuntimeError("VIDEO_PROCESSING")
-        response = client.models.generate_content(
-            model=get_settings().gemini_model,
-            contents=[types.Part.from_uri(file_uri=uploaded.uri, mime_type=row.mime_type), prompt],
-            config=types.GenerateContentConfig(response_mime_type="application/json", response_json_schema=VideoAnalysis.model_json_schema(),
-                                               temperature=0.2, max_output_tokens=8000),
-        )
+        # One bounded retry for temporary provider failures, reusing the uploaded
+        # media. Validation and authentication failures must not be retried here.
+        for attempt in range(2):
+            try:
+                response = client.models.generate_content(
+                    model=get_settings().gemini_model,
+                    contents=[types.Part.from_uri(file_uri=uploaded.uri, mime_type=row.mime_type), prompt],
+                    config=types.GenerateContentConfig(response_mime_type="application/json", response_json_schema=VideoAnalysis.model_json_schema(),
+                                                       temperature=0.2, max_output_tokens=8000),
+                )
+                break
+            except Exception as exc:
+                if attempt or getattr(exc, "code", None) not in (500, 502, 503, 504):
+                    raise
+                time.sleep(2)
         analysis = VideoAnalysis.model_validate_json(response.text or "")
         return _validate_analysis(analysis, row, questions)
     finally:
@@ -368,7 +377,13 @@ def analyze_recording(db, row, interview):
     except Exception as exc:
         status = getattr(exc, "code", None)
         safe_status = status if isinstance(status, int) and 400 <= status <= 599 else None
-        LOGGER.warning("HR analysis pending error_type=%s upstream_status=%s", type(exc).__name__, safe_status)
-        raise HTTPException(503, "Your exam is saved. Video analysis is still pending; retry to receive all results together.") from exc
+        known_codes = {"VIDEO_PROVIDER_UNAVAILABLE", "VIDEO_PROCESSING_FAILED", "VIDEO_PROCESSING",
+                       "VIDEO_STORAGE_INCOMPLETE", "VIDEO_EVIDENCE_OUTSIDE_ANSWER", "VIDEO_ANALYSIS_INCOMPLETE",
+                       "VIDEO_SEGMENTS_INVALID", "VIDEO_UNRECORDED_ANSWER"}
+        code = str(exc) if isinstance(exc, RuntimeError) and str(exc) in known_codes else "VIDEO_ANALYSIS_PENDING"
+        if safe_status in (500, 502, 503, 504):
+            code = "VIDEO_PROVIDER_BUSY"
+        LOGGER.warning("HR analysis pending code=%s error_type=%s upstream_status=%s", code, type(exc).__name__, safe_status)
+        raise HTTPException(503, {"code": code, "message": "Your exam is saved. Video analysis could not finish yet. Retry later to receive all section results together."}) from exc
     finally:
         release_lease(db, row, "analysis_lease_until", lease)

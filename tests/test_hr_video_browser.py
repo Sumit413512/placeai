@@ -6,6 +6,48 @@ from datetime import datetime, timedelta, timezone
 from test_browser_smoke import BASE_URL, ROOT, browser, local_server  # noqa: F401
 
 
+def test_saved_pending_attempt_never_hijacks_lab_entry_and_history_does_not_retry(browser):
+    page = browser.new_page()
+    requests = []
+    page.add_init_script("sessionStorage.setItem('placeai-assessment-result:student', 'saved')")
+    page.route("**/auth/refresh", lambda route: route.fulfill(json={"access_token": "test-token"}))
+    page.route("**/auth/me", lambda route: route.fulfill(json={"id": "student", "role": "student"}))
+    page.route("**/mock-interview/jobs", lambda route: route.fulfill(json=[]))
+    page.route("**/mock-interview/history", lambda route: route.fulfill(json=[{
+        "id": "saved", "job_title": "Analyst", "overall_score": None, "analysis_status": "pending"}]))
+    def pending(route):
+        requests.append(route.request.method)
+        route.fulfill(json={"status": "pending", "queued": False})
+    page.route("**/mock-interview/saved/result", pending)
+    page.route("**/mock-interview/saved/retry", lambda route: requests.append("UNEXPECTED_RETRY"))
+    page.goto(f"{BASE_URL}/mock-interview", wait_until="domcontentloaded")
+    page.locator('[data-saved-result="saved"]').wait_for()
+    assert page.locator("#setup-panel").is_visible()
+    assert page.locator("#analysis-panel").is_hidden()
+    assert requests == []
+    page.locator('[data-saved-result="saved"]').click()
+    page.locator("#retry-analysis").wait_for(state="visible")
+    assert requests == ["GET"]
+    assert "report is pending" in page.locator("#analysis-message").inner_text()
+    assert page.locator(".analysis-step.done").count() == 0
+    page.locator("#return-to-setup").click()
+    assert page.locator("#setup-panel").is_visible()
+    assert page.locator("#analysis-panel").is_hidden()
+    page.locator('[data-saved-result="saved"]').click()
+    page.locator("#retry-analysis").wait_for(state="visible")
+    page.route("**/mock-interview/saved/retry", lambda route: route.fulfill(json={"queued": True}, status=202))
+    page.clock.install()
+    page.locator("#retry-analysis").click()
+    page.wait_for_function("() => document.querySelector('#analysis-message').textContent.includes('saved securely')")
+    page.locator("#return-to-setup").click()
+    prior_reads = len(requests)
+    page.clock.fast_forward(15000)
+    assert page.locator("#setup-panel").is_visible()
+    assert page.locator("#analysis-panel").is_hidden()
+    assert len(requests) == prior_reads
+    page.close()
+
+
 def test_continuous_hr_video_auto_submits_and_withholds_partial_results(browser):
     page = browser.new_page()
     script = (ROOT / "app/static/mock-interview.js").read_text(encoding="utf-8")
