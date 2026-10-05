@@ -1,0 +1,33 @@
+# Reviewable worker-only Blueprint. Paid creation requires a budget approval.
+# Existing placeai-production is managed separately; this file does not duplicate it.
+services:
+  - type: worker
+    name: placeai-assessment-worker
+    runtime: python
+    region: singapore
+    plan: 1c-2g
+    branch: main
+    numInstances: 2
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.assessment_worker
+    maxShutdownDelaySeconds: 300
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: ENABLE_ASSESSMENT_QUEUE
+        value: "true"
+      - key: ASSESSMENT_QUEUE_CONCURRENCY
+        value: "4"
+      - key: ASSESSMENT_QUEUE_STARTS_PER_MINUTE
+        value: "12"
+      - key: DATABASE_POOL_SIZE
+        value: "3"
+      - key: DATABASE_MAX_OVERFLOW
+        value: "0"
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.ai_rate_limit import student_ai_guard
 from app.database import get_db
 from app.dependencies import require_student
-from app.models import ApprovalStatus, HRRecording, Job, MockInterview, StudentProfile, User
+from app.models import AssessmentJob, ApprovalStatus, HRRecording, Job, MockInterview, StudentProfile, User
 from app.placement_access import job_is_visible_to_student
 from app.routers.ai import PROMPT_GUARDRAIL, call_gemini, extract_json_from_response, get_gemini_client
 from app.trial_demo_access import trial_demo_access_state
@@ -328,9 +328,15 @@ def mock_interview_history(
     db: Session = Depends(get_db),
 ):
     profile = _profile(current_user, db)
-    rows = db.query(MockInterview).outerjoin(HRRecording, HRRecording.interview_id == MockInterview.id).filter(
+    query = db.query(MockInterview).outerjoin(HRRecording, HRRecording.interview_id == MockInterview.id)
+    from app.config import get_settings
+    submitted = [MockInterview.overall_score.isnot(None), HRRecording.submission_json.isnot(None)]
+    if get_settings().assessment_queue_enabled:
+        query = query.outerjoin(AssessmentJob, AssessmentJob.interview_id == MockInterview.id)
+        submitted.append(AssessmentJob.interview_id.isnot(None))
+    rows = query.filter(
         MockInterview.student_id == profile.id,
-        or_(MockInterview.overall_score.isnot(None), HRRecording.submission_json.isnot(None)),
+        or_(*submitted),
     ).order_by(MockInterview.created_at.desc()).limit(50).all()
     result = []
     for row in rows:

@@ -55,7 +55,7 @@
     const area = document.createElement('div');
     area.className = 'google-sign-in';
     area.setAttribute('aria-live', 'polite');
-    view.querySelector('form').after(area);
+    view.querySelector('.access-login-methods').append(area);
     area.textContent = 'Loading Google sign-in…';
     try {
       const config = await requestJson('/auth/google-config');
@@ -87,12 +87,12 @@
       };
       window.google.accounts.id.initialize({client_id:config.client_id, nonce:config.nonce, auto_select:false,
         callback:result => signIn(result.credential, loginRole)});
-      window.google.accounts.id.renderButton(area, {type:'standard', theme:'outline', size:'large', text:'signin_with', width:Math.min(360, view.clientWidth || 280)});
+      window.google.accounts.id.renderButton(area, {type:'standard', theme:'outline', size:'large', text:'signin_with', width:Math.min(400, area.clientWidth || 280)});
     } catch (error) { if (area.isConnected) area.textContent = error.message; }
   }
 
   function roleCards(selected, mode) {
-    return `<div class="access-role-grid" role="tablist" aria-label="${mode === 'login' ? 'Sign-in role' : 'Account access role'}">${roleOrder.map(key => {
+    return `<div class="access-role-grid ${mode === 'login' ? 'access-login-roles' : ''}" role="tablist" aria-label="${mode === 'login' ? 'Sign-in role' : 'Account access role'}">${roleOrder.map(key => {
       const role = roles[key];
       return `<button type="button" class="access-role-card ${selected === key ? 'is-selected' : ''}" data-access-role="${key}" data-access-role-mode="${mode}" role="tab" aria-selected="${selected === key ? 'true' : 'false'}"><strong>${role.label}</strong><span>${role.description}</span><em>${role.access}</em></button>`;
     }).join('')}</div>`;
@@ -106,7 +106,7 @@
     const view = $('#login-view');
     if (!view) return;
     const role = roles[loginRole];
-    view.innerHTML = `${modeTabs('login')}<span class="section-kicker">Secure workspace access</span><h2 id="auth-title">Choose your role and sign in</h2><p class="form-intro">Select the workspace assigned to your account. The backend verifies that the selected role matches your actual account permissions.</p>${roleCards(loginRole, 'login')}<div class="access-selection-summary"><span class="access-role-dot" aria-hidden="true"></span><div><b data-access-summary-label>${role.label}</b><span data-access-summary-short>${role.short}</span></div></div><form id="role-login-form" class="form-stack"><input type="hidden" name="role" value="${loginRole}"><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@organization.com"></label><label>Password<div class="password-wrap"><input type="password" name="password" autocomplete="current-password" required maxlength="128" placeholder="Enter your password"><button type="button" data-access-toggle-password>Show</button></div></label><div id="role-login-error" class="access-form-error" role="alert"></div><div class="form-row-between"><span></span><button type="button" class="text-button" data-action="forgot-password">Forgot password?</button></div><button class="button button-primary button-full" type="submit">Continue to ${role.label}</button></form><div class="access-security-note"><strong>Account security:</strong> Recruiter, Institution Admin and Platform Admin accounts cannot be created publicly. They must be provisioned or approved by an authorized administrator.</div>`;
+    view.innerHTML = `${modeTabs('login')}<span class="section-kicker">Secure workspace access</span><h2 id="auth-title">Choose your role and sign in</h2><p class="form-intro">Select your workspace to continue securely.</p>${roleCards(loginRole, 'login')}<div class="access-selection-summary"><span class="access-role-dot" aria-hidden="true"></span><div><b data-access-summary-label>${role.label}</b><span data-access-summary-short>${role.short}</span></div></div><div id="role-login-error" class="access-form-error" role="alert"></div><div class="access-login-methods"></div><div class="access-method-divider">or continue with email</div><form id="role-login-form" class="form-stack"><input type="hidden" name="role" value="${loginRole}"><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@organization.com"></label><label>Password<div class="password-wrap"><input type="password" name="password" autocomplete="current-password" required maxlength="128" placeholder="Enter your password"><button type="button" data-access-toggle-password>Show</button></div></label><div class="form-row-between"><span></span><button type="button" class="text-button" data-action="forgot-password">Forgot password?</button></div><button class="button button-primary button-full" type="submit">Continue to ${role.label}</button></form><div class="access-security-note"><strong>Account security:</strong> Recruiter, Institution Admin and Platform Admin accounts cannot be created publicly. They must be provisioned or approved by an authorized administrator.</div>`;
     renderGoogleSignIn(view);
   }
 

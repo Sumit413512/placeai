@@ -319,3 +319,15 @@
   #auth-overlay.modal-overlay{padding:4px}
   #auth-overlay .auth-form-panel{padding:44px 10px 20px;scrollbar-gutter:auto}
 }
+
+/* Keep both sign-in methods visible without changing access-request cards. */
+#auth-overlay .access-login-roles { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:14px 0; }
+#auth-overlay .access-login-roles .access-role-card { min-height:48px; padding:12px; }
+#auth-overlay .access-login-roles .access-role-card span,
+#auth-overlay .access-login-roles .access-role-card em { display:none; }
+#auth-overlay .access-login-methods { width:100%; margin:16px 0; }
+#auth-overlay .google-sign-in { display:flex; justify-content:center; width:100%; min-height:44px; font-size:13px; text-align:center; }
+#auth-overlay .access-method-divider { display:flex; align-items:center; gap:12px; color:#64748b; font-size:12px; margin:18px 0; }
+#auth-overlay .access-method-divider::before,
+#auth-overlay .access-method-divider::after { content:""; flex:1; height:1px; background:#e2e8f0; }
+#auth-overlay .access-form-error:empty { display:none; }

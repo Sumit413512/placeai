@@ -113,7 +113,7 @@ def build_engine_kwargs(settings):
     is_sqlite = settings.database_url.startswith("sqlite")
     connect_args = {"check_same_thread": False} if is_sqlite else {}
 
-    if settings.running_on_vercel and not is_sqlite:
+    if not is_sqlite:
         connect_args.update(
             {
                 "prepare_threshold": None,
@@ -128,6 +128,11 @@ def build_engine_kwargs(settings):
     }
     if settings.running_on_vercel and not is_sqlite:
         engine_kwargs["poolclass"] = NullPool
+    elif not is_sqlite:
+        engine_kwargs.update(pool_size=getattr(settings, "database_pool_size", 3),
+                             max_overflow=getattr(settings, "database_max_overflow", 0),
+                             pool_timeout=getattr(settings, "database_pool_timeout", 10),
+                             pool_recycle=300)
     return engine_kwargs
 
 

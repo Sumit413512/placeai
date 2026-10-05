@@ -15,6 +15,20 @@ class _SqlStateError(RuntimeError):
         self.sqlstate = sqlstate
 
 
+def test_persistent_servers_have_a_fixed_connection_budget(monkeypatch):
+    monkeypatch.delenv("VERCEL", raising=False)
+    monkeypatch.delenv("VERCEL_ENV", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:password@db.example.invalid:6543/postgres")
+    monkeypatch.setenv("DATABASE_POOL_SIZE", "2")
+    monkeypatch.setenv("DATABASE_MAX_OVERFLOW", "0")
+    kwargs = build_engine_kwargs(Settings())
+    assert kwargs["pool_size"] == 2
+    assert kwargs["max_overflow"] == 0
+    assert kwargs["pool_timeout"] == 10
+    assert kwargs["connect_args"]["prepare_threshold"] is None
+    assert kwargs["connect_args"]["sslmode"] == "require"
+
+
 def test_supabase_transaction_pooler_metadata_is_safe_and_recognized(monkeypatch):
     monkeypatch.setenv("VERCEL", "1")
     monkeypatch.setenv("VERCEL_ENV", "production")

@@ -20,8 +20,10 @@ from app.ai_provider import call_ai_text, call_ai_vision_text, current_ai_model,
 from app.ai_rate_limit import code_execution_guard, student_ai_guard
 from app.database import get_db
 from app.dependencies import require_institution_admin, require_student
-from app.models import ApprovalStatus, AuditEvent, HRRecording, Job, MockInterview, StudentProfile, User, utcnow
-from app import hr_video
+from app.models import AssessmentJob, ApprovalStatus, AuditEvent, HRRecording, Job, MockInterview, StudentProfile, User, utcnow
+from app import hr_video, assessment_queue
+from app.config import get_settings
+from fastapi.responses import JSONResponse
 from app.placement_access import job_is_visible_to_student
 from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
 from app.student_entitlements import require_student_premium_access
@@ -2035,6 +2037,33 @@ def evaluate_mock_interview_v2(
     current_user: User = Depends(require_student),
     db: Session = Depends(get_db),
 ):
+    if not get_settings().assessment_queue_enabled:
+        return evaluate_inline(body, current_user, db)
+    profile = _profile(current_user, db)
+    interview = db.query(MockInterview).filter_by(id=body.interview_id, student_id=profile.id).with_for_update().first()
+    if not interview:
+        raise HTTPException(404, "Mock interview not found")
+    if interview.overall_score is not None:
+        return {"interview_id": interview.id, **json.loads(interview.evaluation_json)}
+    issued = _issued_questions(interview)
+    ids = [answer.question_id for answer in body.answers]
+    if len(ids) != len(set(ids)) or set(ids) != {item["question_id"] for item in issued}:
+        raise HTTPException(422, "Answers must match the server-issued interview question set")
+    if any(item["answer_type"] == "video" for item in issued):
+        recording, _ = hr_video.owned_recording(db, current_user, interview.id, lock=True)
+        if recording.submission_json:
+            body = MockInterviewEvaluationV2.model_validate_json(recording.submission_json)
+        else:
+            recording.submission_json = body.model_dump_json()
+    return JSONResponse(assessment_queue.enqueue(db, interview, current_user, body), status_code=202,
+                        headers={"Retry-After": "10"})
+
+
+def evaluate_inline(
+    body: MockInterviewEvaluationV2,
+    current_user: User = Depends(require_student),
+    db: Session = Depends(get_db),
+):
     profile = _profile(current_user, db)
     interview = db.query(MockInterview).filter(
         MockInterview.id == body.interview_id,
@@ -2043,7 +2072,7 @@ def evaluate_mock_interview_v2(
     if not interview:
         raise HTTPException(status_code=404, detail="Mock interview not found")
     if interview.overall_score is not None:
-        if not hr_video.hr_questions(interview):
+        if not db.info.get("assessment_lease") and not hr_video.hr_questions(interview):
             raise HTTPException(status_code=409, detail="This mock interview has already been evaluated")
         return {"interview_id": interview.id, **json.loads(interview.evaluation_json)}
 
@@ -2082,6 +2111,11 @@ def evaluate_mock_interview_v2(
 
 
 def _evaluate_saved_answers(db, current_user, profile, interview, job, issued, submitted_by_id, body, recording):
+    # Worker sessions retain loaded values across commit. Release the database
+    # connection before video/provider/code execution, which may take minutes.
+    if db.info.get("assessment_lease"):
+        _ = profile.institution
+        db.commit()
     video_result = None
     video_by_id = {}
     if recording and recording.started_at:
@@ -2212,6 +2246,8 @@ def _evaluate_saved_answers(db, current_user, profile, interview, job, issued, s
 
         subjective_items.append({**item, "answer": answer})
 
+    if db.info.get("assessment_lease"):
+        db.commit()
     subjective_evaluations, ai_meta = _evaluate_subjective_with_ai(
         profile=profile,
         job=job,
@@ -2277,6 +2313,7 @@ def _evaluate_saved_answers(db, current_user, profile, interview, job, issued, s
                               "rubric_weights": {"answer_correctness": 70, "communication_clarity": 20, "english_fluency": 10}}
 
 
+    assessment_queue.assert_lease(db)
     interview.answers_json = json.dumps(answers_payload)
     interview.evaluation_json = json.dumps(
         {"analysis_status": "pending"} if recording and result["analysis_status"] != "complete" else result,
@@ -2327,10 +2364,13 @@ def saved_interview_result(
     if not interview:
         raise HTTPException(404, "Mock interview not found")
     recording = db.query(HRRecording).filter(HRRecording.interview_id == interview_id).first()
+    queued = db.get(AssessmentJob, interview_id) if get_settings().assessment_queue_enabled else None
     complete = interview.overall_score is not None
     result = {"interview_id": interview.id, **json.loads(interview.evaluation_json)} if complete else None
     return {"interview_id": interview.id,
-            "status": "complete" if complete else "pending" if recording and recording.submission_json else "awaiting_submission",
+            "status": "complete" if complete else "pending" if queued or recording and recording.submission_json else "awaiting_submission",
+            "queued": bool(queued), "queue_status": queued.state if queued else None,
+            "retry_after_seconds": 10, "error_code": queued.error_code if queued else None,
             "result": result}
 
 
@@ -2340,6 +2380,16 @@ def retry_saved_interview(
     current_user: User = Depends(require_student),
     db: Session = Depends(get_db),
 ):
+    if get_settings().assessment_queue_enabled:
+        profile = _profile(current_user, db)
+        interview = db.query(MockInterview).filter_by(id=interview_id, student_id=profile.id).first()
+        if not interview:
+            raise HTTPException(404, "Mock interview not found")
+        queued = db.query(AssessmentJob).filter_by(interview_id=interview_id).with_for_update().first()
+        if not queued:
+            raise HTTPException(409, "Submit this assessment before requesting analysis")
+        # Repeated retries cannot reset attempts or bypass the global admission budget.
+        return JSONResponse(assessment_queue.pending(queued), status_code=202)
     recording, _ = hr_video.owned_recording(db, current_user, interview_id)
     if not recording.submission_json:
         raise HTTPException(409, "Submit this assessment before requesting analysis")
