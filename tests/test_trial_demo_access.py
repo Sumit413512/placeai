@@ -72,13 +72,13 @@ def _fixture(tag: str):
     return db, student_user, student, job
 
 
-def test_new_independent_student_gets_exactly_one_free_demo_attempt():
+def test_active_trial_student_can_repeat_demo_without_an_attempt_cap():
     db, user, profile, job = _fixture("free")
     try:
         before = trial_demo_access_state(user, profile, job, db)
         assert before["access_mode"] == "trial"
         assert before["can_start"] is True
-        assert before["free_attempts_remaining"] == 1
+        assert before["free_attempts_remaining"] is None
 
         db.add(MockInterview(
             student_id=profile.id,
@@ -89,14 +89,16 @@ def test_new_independent_student_gets_exactly_one_free_demo_attempt():
         db.commit()
 
         after = trial_demo_access_state(user, profile, job, db)
-        assert after["can_start"] is False
+        assert after["can_start"] is True
         assert after["attempts_used"] == 1
-        assert after["free_attempts_remaining"] == 0
-
+        assert after["free_attempts_remaining"] is None
+        assert enforce_trial_demo_start(user, profile, job, db)["can_start"] is True
+        user.created_at = utcnow() - timedelta(days=5)
+        db.commit()
         with pytest.raises(HTTPException) as exc:
             enforce_trial_demo_start(user, profile, job, db)
         assert exc.value.status_code == 402
-        assert exc.value.detail["code"] == "TECHNOVA_DEMO_ATTEMPT_USED"
+        assert exc.value.detail["code"] == "PREMIUM_REQUIRED"
     finally:
         db.close()
 

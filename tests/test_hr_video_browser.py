@@ -77,7 +77,12 @@ def test_continuous_hr_video_auto_submits_and_withholds_partial_results(browser)
         document.querySelector('#interview-panel').classList.remove('hidden');
         hrTest.renderQuestion();hrTest.startTimer();
     }""")
+    assert "/mock-interview/synthetic/hr/start" not in events
+    assert page.locator("#hr-answer-preview").is_visible()
+    assert page.locator("#next-question").is_disabled()
+    page.locator("#start-hr-recording").click()
     page.wait_for_function("() => hrTest.state.hr?.recorder?.state === 'recording'")
+    assert page.locator("#repeat-hr-question").is_disabled()
     page.evaluate("window.firstRecorder=hrTest.state.hr.recorder")
     for question in range(4):
         page.wait_for_function("q=>hrTest.state.current===q && !hrTest.state.hr.transitioning", arg=question)

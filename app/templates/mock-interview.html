@@ -146,7 +146,7 @@
         <video id="assessment-camera" playsinline muted></video>
         <div class="assessment-camera-meta">
           <span><i class="camera-status-dot"></i> Camera live</span>
-          <b id="camera-proctor-status">Presence monitoring</b>
+
         </div>
       </div>
 
@@ -178,16 +178,16 @@
         <div class="toolbar-right">
           <div class="section-clock"><small>Section</small><span id="section-timer">12:00</span></div>
           <span class="forward-badge">Forward-only</span>
-          <span class="proctor-live-badge">LIVE PROCTOR</span>
+          <span class="proctor-live-badge" title="Camera and exam activity monitoring"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg> <b id="camera-proctor-status">Monitoring active</b></span>
         </div>
       </div>
 
       <div class="question-stage">
         <div class="question-badges"><span id="question-section" class="category"></span><span id="question-difficulty" class="category"></span><span class="category secure-question">Protected question</span></div>
         <div id="question-canvas-wrap" class="protected-question">
-          <canvas id="question-canvas" width="1200" height="300"></canvas>
+          <p id="question-text" class="readable-question"></p><small id="question-watermark" class="question-watermark"></small>
         </div>
-        <p id="question-guidance" class="question-guidance">Question text is rendered to canvas and watermarked. Save the current response, then use Save &amp; Next to permanently move forward.</p>
+        <p id="question-guidance" class="question-guidance">Read the question and choose your answer. Save the current response, then use Save &amp; Next to permanently move forward.</p>
         <div id="answer-area" class="answer-area"></div>
       </div>
 

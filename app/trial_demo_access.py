@@ -8,7 +8,6 @@ from app.student_entitlements import student_access_status
 
 TRIAL_DEMO_COMPANY_NAME = "TechNova Solutions — Demo"
 TRIAL_DEMO_JOB_TITLE = "PlaceAI TechNova Demo Assessment"
-TRIAL_DEMO_FREE_ATTEMPTS = 1
 
 
 def is_trial_demo_job(job: Job | None) -> bool:
@@ -59,18 +58,17 @@ def trial_demo_access_state(
             "access_note": "Included with your paid or institution-sponsored PlaceAI access.",
         }
 
-    remaining = max(0, TRIAL_DEMO_FREE_ATTEMPTS - attempts) if access["access_mode"] == "trial" else 0
-    can_start = access["access_mode"] == "trial" and remaining > 0
+    can_start = bool(access["premium_access"])
     note = (
-        "1 complimentary TechNova demo assessment attempt is available during your 3-day trial."
+        "Repeat demo assessments are included during your active trial."
         if can_start
-        else "Your complimentary TechNova demo attempt is used or your trial has ended. Purchase PlaceAI or join through an institution contract to continue."
+        else "Your trial has ended. Purchase PlaceAI or join through an institution contract to continue."
     )
     return {
         "is_trial_demo": True,
         "can_start": can_start,
         "attempts_used": attempts,
-        "free_attempts_remaining": remaining,
+        "free_attempts_remaining": None if can_start else 0,
         "access_mode": access["access_mode"],
         "access_note": note,
     }
@@ -93,10 +91,9 @@ def enforce_trial_demo_start(
     raise HTTPException(
         status_code=402,
         detail={
-            "code": "TECHNOVA_DEMO_ATTEMPT_USED",
+            "code": "PREMIUM_REQUIRED",
             "message": (
-                "Your one complimentary TechNova Solutions demo assessment attempt has been used, "
-                "or your 3-day trial has ended. Purchase a PlaceAI student plan or continue through "
+                "Your trial has ended. Purchase a PlaceAI student plan or continue through "
                 "an institution-sponsored PlaceAI contract to unlock further attempts."
             ),
             "attempts_used": state["attempts_used"],

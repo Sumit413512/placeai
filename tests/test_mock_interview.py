@@ -298,13 +298,14 @@ def test_institution_results_requires_institution_authentication():
     assert response.status_code in {401, 403}
 
 
-def test_full_mock_rejects_malformed_objective_ai_items_and_falls_back_to_valid_mcq(monkeypatch):
+@pytest.mark.parametrize("section", ["quantitative", "technical", "programming"])
+def test_full_mock_rejects_malformed_objective_ai_items_and_falls_back_to_valid_mcq(monkeypatch, section):
     payload = {
         "questions": [
             {
                 "question": "Malformed aptitude item with no selectable options",
-                "section": "quantitative",
-                "category": "quantitative",
+                "section": section,
+                "category": section,
                 "difficulty": "easy",
                 "answer_type": "mcq",
                 "options": [],
@@ -329,12 +330,23 @@ def test_full_mock_rejects_malformed_objective_ai_items_and_falls_back_to_valid_
     assert len(questions) == 50
     objective = [
         item for item in questions
-        if item["section"] in {"quantitative", "logical", "communication"}
+        if item["section"] in {"quantitative", "logical", "communication", "technical", "programming"}
     ]
-    assert len(objective) == 22
+    assert len(objective) == 36
     assert all(item["answer_type"] == "mcq" for item in objective)
     assert all(len(item["options"]) == 4 for item in objective)
     assert all(item["correct_answer"] in item["options"] for item in objective)
+
+
+def test_screenshot_keyboard_mashing_receives_zero_without_ai_credit():
+    item = {"question_id": 1, "question": "Explain your contribution to a project.", "section": "resume"}
+    for answer in ["VKJX VKJS KL LKVDX VL KSVKLNLK", ",XV ,LXVKL LK"]:
+        reason = mock_interview_v2._obvious_answer_failure(item, answer)
+        assert reason
+        result = mock_interview_v2._invalid_text_evaluation(item, answer, reason)
+        assert result["score"] == 0
+        assert all(score == 0 for score in result["rubric"].values())
+    assert mock_interview_v2._obvious_answer_failure(item, "I built a SQL reporting pipeline and verified row counts against source records.") is None
 
 
 def test_integrity_event_model_accepts_on_device_and_screen_sources():

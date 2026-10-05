@@ -156,7 +156,7 @@
     state.jobs = jobs;
     const select = $('#job-select');
     select.innerHTML = `<option value="">Select an opportunity…</option>${jobs.map(j=>{
-      const demoLabel = j.is_trial_demo ? (j.can_start ? ' · 1 FREE TRIAL ATTEMPT' : ' · FREE ATTEMPT USED — UPGRADE / COLLEGE ACCESS') : '';
+      const demoLabel = j.is_trial_demo ? (j.can_start ? ' · REPEAT PRACTICE AVAILABLE' : ' · STUDENT ACCESS REQUIRED') : '';
       const disabled = j.is_trial_demo && !j.can_start ? ' disabled' : '';
       return `<option value="${esc(j.id)}"${disabled}>${esc(j.title)}${j.company_name ? ` · ${esc(j.company_name)}` : ''}${demoLabel}</option>`;
     }).join('')}`;
@@ -481,14 +481,13 @@
           const letter=String.fromCharCode(65+i);
           return '<button class="option-button" type="button" role="radio" aria-checked="false" aria-label="Option '+letter+': '+esc(option)+'" data-option-index="'+i+'">'
             +'<span class="option-key">'+letter+'</span>'
-            +'<canvas class="option-canvas" aria-hidden="true"></canvas>'
+            +'<span class="option-text">'+esc(option)+'</span>'
             +'<span class="option-select-indicator" aria-hidden="true"></span>'
             +'</button>';
         }).join('')
         +'</div>';
 
       $$('.option-button',area).forEach(function(button,i){
-        drawOptionCanvas(button.querySelector('canvas'),options[i],state.candidateLabel);
         if(state.selectedOption===i){
           button.classList.add('selected');
           button.setAttribute('aria-checked','true');
@@ -657,11 +656,14 @@
         track.addEventListener('mute',muted);
         hr.trackListeners.push([track,'ended',ended],[track,'mute',muted]);
       });
+      if(window.speechSynthesis)speechSynthesis.cancel();
       recorder.start(4000);
+      hrStatus('Recording · camera and microphone on · answers saved privately');
       hr.retryTimer=setInterval(uploadHRChunks,5000);
       setHRQuestionDeadline(response);
       $('#next-question').disabled=false;
-      speakHRQuestion();
+      $('#start-hr-recording')?.classList.add('hidden');
+      if($('#repeat-hr-question'))$('#repeat-hr-question').disabled=true;
     } catch(error) {
       hr.error=error.message;
       if(hr.recorder?.state==='inactive')hr.recorder=null;
@@ -683,7 +685,7 @@
   }
 
   function speakHRQuestion() {
-    if(!window.speechSynthesis || state.questions[state.current]?.answer_type!=='video')return;
+    if(!window.speechSynthesis || state.hr?.recorder?.state==='recording' || state.questions[state.current]?.answer_type!=='video')return;
     speechSynthesis.cancel();
     const speech=new SpeechSynthesisUtterance(state.questions[state.current].question);
     speech.lang='en-IN';speech.rate=0.95;
@@ -745,12 +747,21 @@
         : 'Respond using clear reasoning and evidence. After submission this question is permanently closed.';
     const stage=$('.question-stage');
     if(stage) stage.scrollTop=0;
-    drawTextCanvas($('#question-canvas'),q.question,`${state.candidateLabel} · Q${state.current+1}`);
+    $('#question-text').textContent=q.question;
+    $('#question-watermark').textContent=`${state.candidateLabel} · Q${state.current+1}`;
     if(q.answer_type==='video') {
-      $('#answer-area').innerHTML='<div class="answer-field"><strong>HR video answer</strong><p>Answer aloud in English. One private video captures all four HR answers. Each answer has up to 2 minutes 30 seconds; the next question opens automatically when its time expires.</p><p id="hr-recording-status" role="status">Starting private recording...</p><button type="button" id="repeat-hr-question" class="button secondary">Read question aloud</button><button type="button" id="retry-hr-recording" class="button secondary hidden">Retry recording setup</button></div>';
+      $('#answer-area').innerHTML='<div class="answer-field"><strong>HR video answer</strong><p>Answer aloud in English. One private video captures all four HR answers. Each answer has up to 2 minutes 30 seconds; the next question opens automatically when its time expires.</p><video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video><p id="hr-recording-status" role="status">Camera and microphone ready. Read the question, then start your answer.</p><button type="button" id="start-hr-recording" class="button primary">Start HR recording</button><button type="button" id="repeat-hr-question" class="button secondary">Read question aloud</button><button type="button" id="retry-hr-recording" class="button secondary hidden">Retry recording setup</button></div>';
       $('#repeat-hr-question').onclick=speakHRQuestion;
       $('#retry-hr-recording').onclick=beginHRVideo;
-      if(!state.hr?.recorder)beginHRVideo();else speakHRQuestion();
+      const preview=$('#hr-answer-preview');
+      preview.srcObject=state.mediaStream;
+      preview.play().catch(()=>{});
+      const recording=state.hr?.recorder?.state==='recording';
+      if(recording)hrStatus('Recording · camera and microphone on · answer timer continues');
+      $('#start-hr-recording').classList.toggle('hidden',recording);
+      $('#start-hr-recording').onclick=beginHRVideo;
+      $('#repeat-hr-question').disabled=recording;
+      $('#next-question').disabled=!recording;
       $('#save-question').disabled=true;
     } else renderAnswerArea(q);
     renderSectionNav();
@@ -1888,7 +1899,7 @@
   function renderSectionPerformance(rows) {
     rows = rows || [];
     $('#section-performance').innerHTML = rows.map(function(row){
-      return '<tr><td><strong>'+esc(row.label||row.key)+'</strong></td><td class="section-score">'+(row.score??'—')+'/100</td><td class="good-count">'+(row.correct??0)+'</td><td class="partial-count">'+(row.partial??0)+'</td><td class="bad-count">'+(row.incorrect??0)+'</td><td>'+(row.insufficient??0)+'</td><td>'+(row.questions??0)+'</td></tr>';
+      return '<tr><td><strong>'+esc(row.label||row.key)+'</strong><small class="section-practice-note">'+esc(Number(row.score)>=75?'Strong performance · maintain with practice':Number(row.score)>=50?'Developing · review missed questions':'Focus area · revisit fundamentals and retry')+'</small></td><td class="section-score">'+(row.score??'—')+'/100</td><td class="good-count">'+(row.correct??0)+'</td><td class="partial-count">'+(row.partial??0)+'</td><td class="bad-count">'+(row.incorrect??0)+'</td><td>'+(row.insufficient??0)+'</td><td>'+(row.questions??0)+'</td></tr>';
     }).join('') || '<tr><td colspan="7">No section results available.</td></tr>';
   }
 
@@ -1958,7 +1969,7 @@
       const rubricEntries=Object.entries(rubric).filter(function(entry){return entry[1]!==null&&entry[1]!==undefined;});
       const expected=item.correct_answer||item.ideal_answer||'';
       let html='<article class="answer-review review-'+bucket+'"><header class="answer-review-header"><div><div class="question-meta-line">';
-      html+='<span class="review-chip '+bucket+'">'+esc((item.verdict||bucket).replaceAll('_',' '))+'</span>';
+      html+='<span class="review-chip '+bucket+'">'+esc(item.answer_type==='mcq' ? (bucket==='correct'?'✓ Correct':bucket==='insufficient'?'– Not answered':'✕ Incorrect') : (bucket==='correct'?'✓ Strong response':bucket==='partial'?'◐ Developing':bucket==='insufficient'?'– Insufficient evidence':'↗ Needs practice'))+'</span>';
       html+='<span class="review-chip">'+esc((item.section||'interview').replaceAll('_',' '))+'</span>';
       html+='<span class="review-chip">'+esc(item.grading_method==='system'?'System graded':item.grading_method==='code_execution'?'Sandbox graded':item.grading_method==='system_relevance_gate'?'Relevance gate':item.grading_method==='ai_video'?'HR video analysis':item.grading_method==='ai'?'AI graded':'Preview graded')+'</span>';
       html+='</div><h4>Q'+item.question_id+'. '+esc(item.question||'')+'</h4></div><div class="answer-score-box"><strong>'+(item.score??'—')+'</strong><small>/100</small></div></header>';
@@ -1970,7 +1981,7 @@
       html+='<div class="answer-comparison"><div class="answer-pane"><span>Your answer</span>'+answerBody+'</div>';
       html+='<div class="answer-pane correct-pane"><span>'+(item.answer_type==='mcq'?'Correct answer':item.answer_type==='code'?'Execution result':'Strong answer / reference')+'</span><p>'+esc(item.answer_type==='code'?(item.feedback||'See execution evidence below.'):(expected||'See detailed feedback below.'))+'</p></div></div>';
       html+='<p class="review-feedback"><strong>Assessment:</strong> '+esc(item.feedback||'No detailed feedback returned.')+'</p>';
-      if(rubricEntries.length){
+      if(rubricEntries.length && item.answer_type!=='mcq'){
         html+='<div class="rubric-grid">'+rubricEntries.map(function(entry){return '<div class="rubric-item"><span>'+esc(entry[0].replaceAll('_',' '))+'</span><strong>'+entry[1]+'/100</strong></div>';}).join('')+'</div>';
       }
       html+='<div class="review-details">'+reviewDetailsList('What worked',item.strengths||[])+reviewDetailsList('Errors / gaps',[].concat(item.issues||[],item.missing_points||[]))+'</div>';
