@@ -12,8 +12,8 @@
     {key:'quantitative', label:'Quantitative Aptitude', count:8, minutes:12, kind:'mcq'},
     {key:'logical', label:'Logical & Analytical Reasoning', count:8, minutes:12, kind:'mcq'},
     {key:'communication', label:'Verbal & Communication', count:6, minutes:10, kind:'mcq'},
-    {key:'technical', label:'Technical Assessment · Fundamentals', count:8, minutes:14, kind:'mixed'},
-    {key:'programming', label:'Technical Assessment · Programming & Debugging', count:6, minutes:14, kind:'mixed'},
+    {key:'technical', label:'Technical Assessment · Fundamentals', count:8, minutes:14, kind:'mcq'},
+    {key:'programming', label:'Technical Assessment · Programming & Debugging', count:6, minutes:14, kind:'mcq'},
     {key:'coding', label:'Technical Assessment · Coding Editor', count:2, minutes:24, kind:'code'},
     {key:'resume', label:'Resume & Project Defence', count:4, minutes:10, kind:'text'},
     {key:'behavioral', label:'Behavioural & HR', count:4, minutes:10, kind:'video'},
@@ -750,7 +750,7 @@
     $('#question-text').textContent=q.question;
     $('#question-watermark').textContent=`${state.candidateLabel} · Q${state.current+1}`;
     if(q.answer_type==='video') {
-      $('#answer-area').innerHTML='<div class="answer-field"><strong>HR video answer</strong><p>Answer aloud in English. One private video captures all four HR answers. Each answer has up to 2 minutes 30 seconds; the next question opens automatically when its time expires.</p><video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video><p id="hr-recording-status" role="status">Camera and microphone ready. Read the question, then start your answer.</p><button type="button" id="start-hr-recording" class="button primary">Start HR recording</button><button type="button" id="repeat-hr-question" class="button secondary">Read question aloud</button><button type="button" id="retry-hr-recording" class="button secondary hidden">Retry recording setup</button></div>';
+      $('#answer-area').innerHTML='<div class="answer-field"><strong>HR video answer</strong><p>Answer aloud in English. One private video captures all four HR answers. Each answer has up to 2 minutes 30 seconds; the next question opens automatically when its time expires.</p><p id="hr-recording-status" role="status">Camera and microphone ready. Read the question, then start your answer.</p><button type="button" id="start-hr-recording" class="button primary">Start HR recording</button><button type="button" id="repeat-hr-question" class="button secondary">Read question aloud</button><button type="button" id="retry-hr-recording" class="button secondary hidden">Retry recording setup</button><video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video></div>';
       $('#repeat-hr-question').onclick=speakHRQuestion;
       $('#retry-hr-recording').onclick=beginHRVideo;
       const preview=$('#hr-answer-preview');

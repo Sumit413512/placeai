@@ -14,8 +14,8 @@ def test_continuous_hr_video_auto_submits_and_withholds_partial_results(browser)
     page.route("**/static/mock-interview.js*", lambda route: route.fulfill(body=script, content_type="application/javascript"))
     page.route("**/auth/refresh", lambda route: route.fulfill(json={"access_token": "test-token"}))
     page.route("**/auth/me", lambda route: route.fulfill(json={"id": "synthetic-student", "role": "student"}))
-    page.route("**/mock-interview/jobs", lambda route: route.fulfill(json=[]))
-    page.route("**/mock-interview/history", lambda route: route.fulfill(json=[]))
+    page.route("**/mock-interview/jobs", lambda route: route.fulfill(body="[]", content_type="application/json"))
+    page.route("**/mock-interview/history", lambda route: route.fulfill(body="[]", content_type="application/json"))
     events, chunks, ready = [], [], {"value": False}
 
     def clock(status="recording"):
@@ -129,8 +129,14 @@ def test_google_sign_in_uses_selected_role_and_password_link_challenge(browser):
     page.goto(BASE_URL, wait_until="domcontentloaded")
     page.locator('.hero button[data-open-auth="login"]').click()
     page.locator('#login-view [data-access-role="institution_admin"]').click()
-    google_box = page.get_by_text("Test Google sign-in", exact=True).bounding_box()
-    email_box = page.locator('#role-login-form [name="email"]').bounding_box()
+    page.get_by_text("Test Google sign-in", exact=True).wait_for(state="visible")
+    page.evaluate("async () => { await document.fonts.ready; }")
+    # Measure one layout frame: role selection can scroll the dialog and load
+    # fonts between two separate browser calls, producing a false inversion.
+    google_box, email_box = page.evaluate("""() => [
+        document.querySelector('.google-sign-in button').getBoundingClientRect().toJSON(),
+        document.querySelector('#role-login-form [name="email"]').getBoundingClientRect().toJSON()
+    ]""")
     assert google_box["y"] < email_box["y"]
     for width in (390, 320, 1440):
         page.set_viewport_size({"width": width, "height": 900})
