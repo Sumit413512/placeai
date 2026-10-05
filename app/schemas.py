@@ -103,7 +103,8 @@ class LoginJSON(BaseModel):
 
 class GoogleAuthRequest(BaseModel):
     credential: str = Field(min_length=20, max_length=8192)
-    role: str = Field(default="student", pattern="^(student|recruiter)$")
+    role: str = Field(default="student", pattern="^(student|recruiter|institution_admin|platform_admin)$")
+    password: Optional[str] = Field(default=None, min_length=1, max_length=128)
 
 
 class StudentProfileCreate(BaseModel):

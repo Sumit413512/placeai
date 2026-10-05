@@ -6,12 +6,13 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.ai_rate_limit import student_ai_guard
 from app.database import get_db
 from app.dependencies import require_student
-from app.models import ApprovalStatus, Job, MockInterview, StudentProfile, User
+from app.models import ApprovalStatus, HRRecording, Job, MockInterview, StudentProfile, User
 from app.placement_access import job_is_visible_to_student
 from app.routers.ai import PROMPT_GUARDRAIL, call_gemini, extract_json_from_response, get_gemini_client
 from app.trial_demo_access import trial_demo_access_state
@@ -327,9 +328,9 @@ def mock_interview_history(
     db: Session = Depends(get_db),
 ):
     profile = _profile(current_user, db)
-    rows = db.query(MockInterview).filter(
+    rows = db.query(MockInterview).outerjoin(HRRecording, HRRecording.interview_id == MockInterview.id).filter(
         MockInterview.student_id == profile.id,
-        MockInterview.overall_score.isnot(None),
+        or_(MockInterview.overall_score.isnot(None), HRRecording.submission_json.isnot(None)),
     ).order_by(MockInterview.created_at.desc()).limit(50).all()
     result = []
     for row in rows:
@@ -340,12 +341,13 @@ def mock_interview_history(
             evaluation = {}
         result.append({
             "id": row.id,
+            "analysis_status": "complete" if row.overall_score is not None else "pending",
             "job_id": row.job_id,
             "job_title": row.job.title if row.job else "Role",
             "company_name": row.job.recruiter.company_name if row.job and row.job.recruiter else None,
             "overall_score": row.overall_score,
-            "dimensions": evaluation.get("dimensions", {}) if isinstance(evaluation, dict) else {},
-            "overall_feedback": row.overall_feedback,
+            "dimensions": evaluation.get("dimensions", {}) if row.overall_score is not None and isinstance(evaluation, dict) else {},
+            "overall_feedback": row.overall_feedback if row.overall_score is not None else "Your exam is saved. Analysis is pending.",
             "created_at": row.created_at.isoformat() if row.created_at else None,
         })
     return result

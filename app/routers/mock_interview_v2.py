@@ -9,6 +9,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
 from typing import Any
+from datetime import timedelta
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,13 +20,15 @@ from app.ai_provider import call_ai_text, call_ai_vision_text, current_ai_model,
 from app.ai_rate_limit import code_execution_guard, student_ai_guard
 from app.database import get_db
 from app.dependencies import require_institution_admin, require_student
-from app.models import ApprovalStatus, AuditEvent, Job, MockInterview, StudentProfile, User
+from app.models import ApprovalStatus, AuditEvent, HRRecording, Job, MockInterview, StudentProfile, User, utcnow
+from app import hr_video
 from app.placement_access import job_is_visible_to_student
 from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
 from app.student_entitlements import require_student_premium_access
 from app.trial_demo_access import enforce_trial_demo_start
 
 router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])
+
 LOGGER = logging.getLogger("placeai.mock_interview")
 
 FULL_MOCK_QUESTION_COUNT = 50
@@ -955,6 +958,10 @@ def start_mock_interview_v2(
         count=body.question_count,
         previous=previous,
     )
+    if body.mode == "assessment":
+        for question in questions:
+            if question.get("section") == "behavioral":
+                question["answer_type"] = "video"
     interview = MockInterview(
         student_id=profile.id,
         job_id=job.id,
@@ -965,6 +972,9 @@ def start_mock_interview_v2(
         overall_feedback=None,
     )
     db.add(interview)
+    db.flush()
+    if any(q.get("answer_type") == "video" for q in questions):
+        db.add(HRRecording(interview_id=interview.id, expires_at=utcnow() + timedelta(days=hr_video.RETENTION_DAYS)))
     db.commit()
     db.refresh(interview)
     client_questions = [_client_question(item) for item in questions]
@@ -1643,7 +1653,7 @@ def _build_assessment_result(
             counts[_verdict_bucket(item.get("verdict", "insufficient"))] += 1
             if item.get("grading_method") in {"system", "system_relevance_gate"}:
                 system_graded += 1
-            elif item.get("grading_method") == "ai":
+            elif item.get("grading_method") in {"ai", "ai_video"}:
                 ai_graded += 1
             elif item.get("grading_method") == "code_execution":
                 code_graded += 1
@@ -1698,7 +1708,7 @@ def _build_assessment_result(
     ]
 
     objective_items = [item for item in evaluations if item.get("grading_method") == "system"]
-    subjective_items = [item for item in evaluations if item.get("grading_method") in {"ai", "system_relevance_gate"}]
+    subjective_items = [item for item in evaluations if item.get("grading_method") in {"ai", "ai_video", "system_relevance_gate"}]
     objective_accuracy = (
         round(100 * sum(item["score"] == 100 for item in objective_items) / len(objective_items))
         if objective_items else None
@@ -1997,6 +2007,8 @@ def institution_mock_interview_results_v2(
             evaluation = json.loads(row.evaluation_json or "{}")
         except json.JSONDecodeError:
             evaluation = {}
+        if row.overall_score is None:
+            evaluation = {}
         output.append({
             "interview_id": row.id,
             "student_id": row.student_id,
@@ -2031,7 +2043,9 @@ def evaluate_mock_interview_v2(
     if not interview:
         raise HTTPException(status_code=404, detail="Mock interview not found")
     if interview.overall_score is not None:
-        raise HTTPException(status_code=409, detail="This mock interview has already been evaluated")
+        if not hr_video.hr_questions(interview):
+            raise HTTPException(status_code=409, detail="This mock interview has already been evaluated")
+        return {"interview_id": interview.id, **json.loads(interview.evaluation_json)}
 
     job = db.query(Job).filter(Job.id == interview.job_id).first()
     if not job:
@@ -2044,6 +2058,35 @@ def evaluate_mock_interview_v2(
         raise HTTPException(status_code=422, detail="Duplicate interview answers are not allowed")
     if set(submitted_by_id) != set(expected_by_id):
         raise HTTPException(status_code=422, detail="Answers must match the server-issued interview question set")
+
+    recording = None
+    if any(q["answer_type"] == "video" for q in issued):
+        recording, _ = hr_video.owned_recording(db, current_user, interview.id, lock=True)
+        db.refresh(interview)
+        if interview.overall_score is not None:
+            return {"interview_id": interview.id, **json.loads(interview.evaluation_json)}
+        if recording.submission_json:
+            body = MockInterviewEvaluationV2.model_validate_json(recording.submission_json)
+            submitted_by_id = {item.question_id: item for item in body.answers}
+        else:
+            recording.submission_json = body.model_dump_json()
+            # Persist all answers before any external analysis so retries cannot lose them.
+            interview.answers_json = json.dumps([item.model_dump() for item in body.answers])
+            db.commit()
+    lease = hr_video.acquire_lease(db, recording, "evaluation_lease_until", minutes=10) if recording else None
+    try:
+        return _evaluate_saved_answers(db, current_user, profile, interview, job, issued, submitted_by_id, body, recording)
+    finally:
+        if recording and lease:
+            hr_video.release_lease(db, recording, "evaluation_lease_until", lease)
+
+
+def _evaluate_saved_answers(db, current_user, profile, interview, job, issued, submitted_by_id, body, recording):
+    video_result = None
+    video_by_id = {}
+    if recording and recording.started_at:
+        video_result = hr_video.analyze_recording(db, recording, interview)
+        video_by_id = {item["question_id"]: item for item in video_result["answers"]}
 
     started = time.perf_counter()
     answers_payload: list[dict[str, Any]] = []
@@ -2062,6 +2105,23 @@ def evaluate_mock_interview_v2(
             "answer_type": item.get("answer_type"),
             "answer": answer,
         })
+        if item["answer_type"] == "video" and qid in video_by_id:
+            spoken = video_by_id[qid]
+            score = round(spoken["answer_correctness"] * 0.7 + spoken["communication_clarity"] * 0.2 + spoken["english_fluency"] * 0.1)
+            evaluations.append({
+                "question_id": qid, "question": item["question"], "section": item["section"],
+                "category": item["category"], "difficulty": item["difficulty"], "answer_type": "video",
+                "answer": spoken["transcript"], "score": score,
+                "verdict": "strong" if score >= 75 else "acceptable" if score >= 55 else "weak" if score >= 20 else "insufficient",
+                "grading_method": "ai_video", "feedback": spoken["feedback"],
+                "rubric": {key: spoken[key] for key in ("answer_correctness", "communication_clarity", "english_fluency")},
+                "strengths": spoken["strengths"], "issues": spoken["improvements"],
+                "evidence": spoken["evidence"], "missing_points": [], "key_points": [],
+                "better_answer_outline": "", "ideal_answer": "",
+            })
+            continue
+        if item["answer_type"] == "video":
+            answer = "[No response submitted before assessment ended]"
         if answer.startswith("[No response submitted"):
             evaluations.append({
                 "question_id": qid,
@@ -2210,9 +2270,17 @@ def evaluate_mock_interview_v2(
         ),
     }
     result["integrity_report"] = integrity_report
+    if video_result:
+        result["hr_video"] = {"summary": video_result["summary"], "retention_days": hr_video.RETENTION_DAYS,
+                              "recording_url": f"/mock-interview/{interview.id}/hr/recording",
+                              "size_bytes": recording.size_bytes, "mime_type": recording.mime_type,
+                              "rubric_weights": {"answer_correctness": 70, "communication_clarity": 20, "english_fluency": 10}}
+
 
     interview.answers_json = json.dumps(answers_payload)
-    interview.evaluation_json = json.dumps(result)
+    interview.evaluation_json = json.dumps(
+        {"analysis_status": "pending"} if recording and result["analysis_status"] != "complete" else result,
+    )
     if result["analysis_status"] == "complete":
         interview.overall_score = result["overall_score"]
         interview.overall_feedback = result["overall_feedback"]
@@ -2224,6 +2292,8 @@ def evaluate_mock_interview_v2(
     db.commit()
     db.refresh(interview)
 
+    if recording and result["analysis_status"] != "complete":
+        raise HTTPException(503, "Your exam is saved. Some answers are still being analyzed; retry to receive all results together.")
     evaluation_ms = int((time.perf_counter() - started) * 1000)
     LOGGER.info(
         "Mock interview evaluated status=%s objective=%s subjective=%s latency_ms=%s provider=%s model=%s",
@@ -2242,3 +2312,36 @@ def evaluate_mock_interview_v2(
         "evaluation_mode": "hybrid_question_level",
         "evaluation_ms": evaluation_ms,
     }
+
+
+@router.get("/{interview_id}/result")
+def saved_interview_result(
+    interview_id: str,
+    current_user: User = Depends(require_student),
+    db: Session = Depends(get_db),
+):
+    profile = _profile(current_user, db)
+    interview = db.query(MockInterview).filter(
+        MockInterview.id == interview_id, MockInterview.student_id == profile.id,
+    ).first()
+    if not interview:
+        raise HTTPException(404, "Mock interview not found")
+    recording = db.query(HRRecording).filter(HRRecording.interview_id == interview_id).first()
+    complete = interview.overall_score is not None
+    result = {"interview_id": interview.id, **json.loads(interview.evaluation_json)} if complete else None
+    return {"interview_id": interview.id,
+            "status": "complete" if complete else "pending" if recording and recording.submission_json else "awaiting_submission",
+            "result": result}
+
+
+@router.post("/{interview_id}/retry", dependencies=[Depends(student_ai_guard)])
+def retry_saved_interview(
+    interview_id: str,
+    current_user: User = Depends(require_student),
+    db: Session = Depends(get_db),
+):
+    recording, _ = hr_video.owned_recording(db, current_user, interview_id)
+    if not recording.submission_json:
+        raise HTTPException(409, "Submit this assessment before requesting analysis")
+    body = MockInterviewEvaluationV2.model_validate_json(recording.submission_json)
+    return evaluate_mock_interview_v2(body, current_user, db)

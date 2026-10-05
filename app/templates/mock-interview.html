@@ -119,7 +119,7 @@
     </div>
 
     <div class="consent-row">
-      <label class="consent"><input id="consent-check" type="checkbox"><span>I understand that this proctored assessment uses camera, microphone, entire-screen sharing, full-screen/focus monitoring and on-device object detection for integrity signals. Confirmed warnings are recorded for institutional review.</span></label>
+      <label class="consent"><input id="consent-check" type="checkbox"><span>I understand that this proctored assessment uses camera, microphone, entire-screen sharing, full-screen/focus monitoring and on-device object detection for integrity signals. Confirmed warnings are recorded for institutional review. I consent to one camera-and-microphone recording of the HR section and sending my face, voice and spoken answers to Google Gemini for communication and answer-quality feedback. PlaceAI keeps the private recording for 30 days for me and authorized institution staff. The complete result appears together after analysis; it is practice feedback for human review.</span></label>
       <div class="system-actions"><button id="run-check" class="button secondary" type="button">Run system check</button><button id="start-assessment" class="button primary" type="button" disabled>Start proctored assessment</button></div>
     </div>
   </section>
@@ -215,7 +215,7 @@
       <div class="analysis-step" data-analysis-step="sections"><span>03</span><div><strong>Section analytics</strong><small>Aggregate question scores without hiding weak sections behind a single average.</small></div><b>Queued</b></div>
       <div class="analysis-step" data-analysis-step="plan"><span>04</span><div><strong>Coaching report</strong><small>Build corrections, ideal approaches, weak-topic diagnosis and next-practice actions.</small></div><b>Queued</b></div>
     </div>
-    <div class="analysis-note"><strong>No instant guessed score.</strong><span>The report appears only after question-level grading is complete. If AI evaluation fails, PlaceAI withholds the final score instead of fabricating one.</span></div>
+    <div class="analysis-note"><strong>No instant guessed score.</strong><span>All section results appear together after answer grading and HR video analysis are complete. If AI evaluation fails, PlaceAI withholds the final score instead of fabricating one.</span></div>
     <div class="form-actions"><button id="retry-analysis" class="button secondary hidden" type="button">Retry AI analysis</button></div>
   </section>
 
@@ -226,6 +226,14 @@
     </div>
 
     <div id="analysis-status-banner" class="result-alert hidden"></div>
+
+    <section id="hr-video-report" class="result-section hidden">
+      <div class="result-section-head"><div><span class="card-kicker">Recorded HR answers</span><h3>Your communication and answer feedback</h3></div></div>
+      <p id="hr-video-summary"></p>
+      <p id="hr-playback-status" class="disclaimer" role="status"></p>
+      <button id="load-hr-recording" type="button" class="button secondary">Load private recording</button>
+      <video id="hr-result-video" class="hidden" controls playsinline preload="none" aria-label="Your private HR answer recording" style="width:100%;max-height:480px"></video>
+    </section>
 
     <div class="result-hero-grid">
       <article class="report-card performance">

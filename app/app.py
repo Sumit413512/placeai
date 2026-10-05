@@ -129,19 +129,23 @@ async def security_headers(request: Request, call_next):
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data: https:; "
             "connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com; "
+            "media-src 'self' blob:; "
             "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
         )
     else:
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        google_script = " https://accounts.google.com/gsi/client" if path == "/" else ""
+        google_style = " https://accounts.google.com/gsi/style" if path == "/" else ""
+        google_frames = "frame-src https://accounts.google.com/gsi/; connect-src 'self' https://accounts.google.com/gsi/; " if path == "/" else ""
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self'; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            f"script-src 'self'{google_script}; "
+            f"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com{google_style}; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data: https:; "
-            "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+            f"{google_frames}object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
         )
-    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups" if path == "/" else "same-origin"
     if path == "/health" or path.startswith("/auth/") or path in {
         "/", "/mock-interview", "/privacy", "/terms", "/acceptable-use"
     }:
@@ -235,6 +239,7 @@ ai = _import_router("ai")
 ai_experience = _import_router("ai_experience")
 mock_interview = _import_router("mock_interview")
 mock_interview_v2 = _import_router("mock_interview_v2")
+hr_recording = _import_router("hr_recording")
 institutions = _import_router("institutions")
 institution_secure = _import_router("institution_secure")
 institution_access = _import_router("institution_access")
@@ -299,6 +304,7 @@ _include_router(ai, AI_REPLACEMENTS)
 _include_router(ai_experience)
 _include_router(mock_interview, MOCK_INTERVIEW_REPLACEMENTS)
 _include_router(mock_interview_v2)
+_include_router(hr_recording)
 _include_router(institutions, INSTITUTION_REPLACEMENTS)
 _include_router(institution_secure)
 _include_router(institution_access)
