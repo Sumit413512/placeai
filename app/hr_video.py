@@ -224,10 +224,20 @@ def _validate_analysis(analysis, row, questions):
     segments = _validated_segments(row, questions)
     if {a.question_id for a in analysis.answers} != {q["question_id"] for q in questions} or len(analysis.answers) != len(questions):
         raise RuntimeError("VIDEO_ANALYSIS_INCOMPLETE")
-    if not analysis.audio_usable or not analysis.video_usable:
-        raise RuntimeError("VIDEO_MEDIA_UNUSABLE")
     by_id = {segment["question_id"]: segment for segment in segments}
     last_end = segments[-1]["end"]
+    if not analysis.audio_usable or not analysis.video_usable:
+        feedback = "This recording cannot support an assessment of spoken answers. Check camera and microphone playback, then practice again with clear, audible answers. Fluency and communication were not assessed."
+        analysis.summary = feedback
+        for answer in analysis.answers:
+            segment = by_id.get(answer.question_id)
+            answer.transcript = ""
+            answer.answer_correctness = answer.communication_clarity = answer.english_fluency = 0
+            answer.feedback = feedback
+            answer.strengths = []
+            answer.improvements = ["Check the recorded camera and microphone before your next assessment."]
+            answer.evidence = [Evidence(at_seconds=segment["start"] if segment else last_end,
+                                        observation="Usable recording evidence was unavailable; speaking skills were not assessed.")]
     for answer in analysis.answers:
         segment = by_id.get(answer.question_id)
         start, end = (segment["start"], segment["end"]) if segment else (last_end, last_end)
@@ -291,7 +301,7 @@ is the final recorded segment's end. Do not credit speech outside the question's
         response = client.models.generate_content(
             model=get_settings().gemini_model,
             contents=[types.Part.from_uri(file_uri=uploaded.uri, mime_type=row.mime_type), prompt],
-            config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=VideoAnalysis,
+            config=types.GenerateContentConfig(response_mime_type="application/json", response_json_schema=VideoAnalysis.model_json_schema(),
                                                temperature=0.2, max_output_tokens=8000),
         )
         analysis = VideoAnalysis.model_validate_json(response.text or "")
@@ -356,7 +366,9 @@ def analyze_recording(db, row, interview):
         db.commit()
         return result
     except Exception as exc:
-        LOGGER.warning("HR analysis pending error_type=%s", type(exc).__name__)
+        status = getattr(exc, "code", None)
+        safe_status = status if isinstance(status, int) and 400 <= status <= 599 else None
+        LOGGER.warning("HR analysis pending error_type=%s upstream_status=%s", type(exc).__name__, safe_status)
         raise HTTPException(503, "Your exam is saved. Video analysis is still pending; retry to receive all results together.") from exc
     finally:
         release_lease(db, row, "analysis_lease_until", lease)

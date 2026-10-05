@@ -228,7 +228,7 @@ def test_lease_is_atomic_and_stale_worker_cannot_clear_new_lease(exam):
     assert exam.recording.analysis_lease_until == fresh
 
 
-@pytest.mark.parametrize("mutation", ["outside_segment", "duplicate_question", "unusable_audio", "unusable_video", "invented_answer"])
+@pytest.mark.parametrize("mutation", ["outside_segment", "duplicate_question", "invented_answer"])
 def test_video_analysis_requires_valid_question_evidence(exam, mutation):
     seal(exam)
     value = analysis(exam)
@@ -236,10 +236,6 @@ def test_video_analysis_requires_valid_question_evidence(exam, mutation):
         value["answers"][0]["evidence"][0]["at_seconds"] = 55
     elif mutation == "duplicate_question":
         value["answers"][0]["question_id"] = 2
-    elif mutation == "unusable_audio":
-        value["audio_usable"] = False
-    elif mutation == "unusable_video":
-        value["video_usable"] = False
     else:
         exam.recording.segments_json = json.dumps(json.loads(exam.recording.segments_json)[:3])
         value["answers"][3]["evidence"][0]["at_seconds"] = 30
@@ -253,6 +249,54 @@ def test_no_speech_cannot_receive_fluency_or_correctness_points(exam):
     value["answers"][0]["transcript"] = ""
     result = hr_video._validate_analysis(hr_video.VideoAnalysis.model_validate(value), exam.recording, exam.questions)
     assert result["answers"][0]["answer_correctness"] == result["answers"][0]["english_fluency"] == 0
+
+
+@pytest.mark.parametrize("flag", ["audio_usable", "video_usable"])
+def test_unusable_media_finishes_with_evidence_limit_and_no_invented_scores(exam, flag):
+    seal(exam)
+    value = analysis(exam)
+    value[flag] = False
+    result = hr_video._validate_analysis(hr_video.VideoAnalysis.model_validate(value), exam.recording, exam.questions)
+    assert result[flag] is False
+    assert len(result["answers"]) == len(exam.questions)
+    for answer in result["answers"]:
+        assert answer["transcript"] == ""
+        assert answer["answer_correctness"] == answer["communication_clarity"] == answer["english_fluency"] == 0
+        assert "not assessed" in answer["feedback"]
+        assert answer["strengths"] == []
+        assert answer["improvements"]
+
+
+def test_video_schema_reaches_google_as_json_schema_without_legacy_conversion(exam, monkeypatch):
+    from google import genai
+    from google.genai import types
+
+    seal(exam)
+    client = genai.Client(api_key="unit-test-only")
+    captured = []
+    def request(method, path, request_dict, *args, **kwargs):
+        captured.append(request_dict)
+        raise RuntimeError("No network in schema regression test")
+    monkeypatch.setattr(client._api_client, "request", request)
+    with pytest.raises(RuntimeError, match="No network"):
+        client.models.generate_content(model="gemini-3.8-flash", contents="synthetic test",
+            config=types.GenerateContentConfig(response_mime_type="application/json",
+                response_json_schema=hr_video.VideoAnalysis.model_json_schema()))
+    client.close()
+    config = captured[0]["generationConfig"]
+    assert "responseSchema" not in config
+    assert config["responseJsonSchema"] == hr_video.VideoAnalysis.model_json_schema()
+    # The real video path must choose the same configuration when analyzing media.
+    provider_file = SimpleNamespace(name="files/test", uri="https://example.com/test", state=SimpleNamespace(name="ACTIVE"))
+    def generate(**kwargs):
+        assert kwargs["config"].response_schema is None
+        assert kwargs["config"].response_json_schema == config["responseJsonSchema"]
+        return SimpleNamespace(text=json.dumps(analysis(exam)))
+    fake = SimpleNamespace(files=SimpleNamespace(upload=lambda **kwargs: provider_file, delete=lambda **kwargs: None),
+                           models=SimpleNamespace(generate_content=generate), close=lambda: None)
+    monkeypatch.setattr(genai, "Client", lambda **kwargs: fake)
+    monkeypatch.setattr(hr_video, "_gemini_key", lambda: "unit-test-only")
+    hr_video._analyze_video(b"synthetic", exam.recording, exam.questions, lambda name: None)
 
 
 def test_failed_provider_preserves_submission_and_retry_uses_original_answers(exam, monkeypatch):
