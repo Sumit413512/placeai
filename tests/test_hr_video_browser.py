@@ -124,6 +124,14 @@ def test_google_sign_in_uses_selected_role_and_password_link_challenge(browser):
     page.goto(BASE_URL, wait_until="domcontentloaded")
     page.locator('.hero button[data-open-auth="login"]').click()
     page.locator('#login-view [data-access-role="institution_admin"]').click()
+    google_box = page.get_by_text("Test Google sign-in", exact=True).bounding_box()
+    email_box = page.locator('#role-login-form [name="email"]').bounding_box()
+    assert google_box["y"] < email_box["y"]
+    for width in (390, 320, 1440):
+        page.set_viewport_size({"width": width, "height": 900})
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        cards = page.locator('#login-view .access-role-card')
+        assert cards.nth(0).bounding_box()["y"] == cards.nth(1).bounding_box()["y"]
     page.get_by_text("Test Google sign-in", exact=True).click()
     page.get_by_text("Link Google account and sign in", exact=True).wait_for()
     assert calls[-1]["role"] == "institution_admin"

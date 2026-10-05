@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app import hr_video
 from app.database import get_db
@@ -48,7 +49,10 @@ def advance(interview_id: str, body: RecordingAdvance, user: User = Depends(requ
 
 @router.put("/{interview_id}/hr/chunks/{sequence}")
 async def upload(interview_id: str, sequence: int, request: Request, user: User = Depends(require_student), db: Session = Depends(get_db)):
-    hr_video.owned_recording(db, user, interview_id)
+    # Database calls are synchronous. Never block the event loop while hundreds
+    # of students stream recordings; release the read transaction before upload.
+    await run_in_threadpool(hr_video.owned_recording, db, user, interview_id)
+    await run_in_threadpool(db.rollback)
     if not 0 <= sequence < hr_video.MAX_CHUNKS:
         raise HTTPException(413, "Recording chunk exceeds the allowed size")
     data = bytearray()
@@ -56,8 +60,10 @@ async def upload(interview_id: str, sequence: int, request: Request, user: User 
         if len(data) + len(chunk) > hr_video.CHUNK_BYTES:
             raise HTTPException(413, "Recording chunk exceeds the allowed size")
         data.extend(chunk)
-    row, interview = hr_video.owned_recording(db, user, interview_id, lock=True)
-    return hr_video.save_chunk(db, row, interview, sequence, bytes(data))
+    def persist():
+        row, interview = hr_video.owned_recording(db, user, interview_id, lock=True)
+        return hr_video.save_chunk(db, row, interview, sequence, bytes(data))
+    return await run_in_threadpool(persist)
 
 
 @router.post("/{interview_id}/hr/submit")

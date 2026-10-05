@@ -5,7 +5,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -18,6 +18,28 @@ def generate_uuid() -> str:
 def utcnow() -> datetime:
     """Return naive UTC for database DateTime columns without deprecated utcnow()."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+class AssessmentJob(Base):
+    __tablename__ = "assessment_jobs"
+    __table_args__ = (Index("ix_assessment_jobs_state_lease", "state", "lease_until"),)
+    interview_id = Column(String, ForeignKey("mock_interviews.id", ondelete="CASCADE"), primary_key=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    payload_json = Column(Text, nullable=False)
+    state = Column(String(20), nullable=False, default="queued")
+    attempts = Column(Integer, nullable=False, default=0)
+    available_at = Column(DateTime, nullable=False, default=utcnow, index=True)
+    lease_until = Column(DateTime)
+    lease_token = Column(String(36))
+    error_code = Column(String(40))
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+
+class AssessmentQueueControl(Base):
+    __tablename__ = "assessment_queue_control"
+    id = Column(Integer, primary_key=True)
+    window_started_at = Column(DateTime, nullable=False, default=utcnow)
+    starts_in_window = Column(Integer, nullable=False, default=0)
 
 
 class UserRole(str, enum.Enum):

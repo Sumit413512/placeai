@@ -1783,6 +1783,21 @@
     await runResultAnalysis(false);
   }
 
+  async function waitForQueuedResult() {
+    clearAnalysisTimers();
+    $('#analysis-message').textContent='Your exam is saved securely. Preparing every section of your report; you can also return to it from exam history.';
+    const interviewId=state.session.interview_id;
+    const deadline=Date.now()+10*60*1000;
+    while(Date.now()<deadline && state.session.interview_id===interviewId){
+      // Jitter prevents students finishing together from polling together.
+      await new Promise(resolve=>setTimeout(resolve,(document.hidden?20000:8000)+Math.random()*4000));
+      const saved=await api(`/mock-interview/${interviewId}/result`);
+      if(saved.status==='complete')return saved.result;
+      if(saved.queue_status==='failed')throw new Error('Your exam is saved. Analysis needs support to resume; contact your institution.');
+    }
+    throw new Error('Your exam is saved. Return to exam history to view the report when it is ready.');
+  }
+
   async function runResultAnalysis(auto) {
     showAnalysisPanel();
     try {
@@ -1799,7 +1814,7 @@
             if(state.submissionSaved || attempt>0){
               const saved=await api(`/mock-interview/${state.session.interview_id}/result`);
               if(saved.status==='complete'){result=saved.result;break;}
-              if(saved.status==='pending')state.submissionSaved=true;
+              if(saved.status==='pending'){state.submissionSaved=true;if(saved.queued){result=await waitForQueuedResult();break;}}
               else{
                 state.submissionSaved=false;
                 if(!state.answers.length)throw new Error('This exam has not been submitted. Return to the original exam tab to finish uploading and submit.');
@@ -1814,6 +1829,7 @@
                 integrity_termination_reason:state.integrityTerminationReason||null
               })});
             state.submissionSaved=true;
+            if(result.queued){result=await waitForQueuedResult();break;}
             if(result.analysis_status==='complete')break;
             throw new Error('Your exam is saved. Analysis is still processing.');
           }catch(error){
