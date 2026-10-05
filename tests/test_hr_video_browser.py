@@ -109,7 +109,7 @@ def test_google_sign_in_uses_selected_role_and_password_link_challenge(browser):
         "enabled": True, "client_id": "test.apps.googleusercontent.com", "nonce": "test-nonce"}))
     page.route("https://accounts.google.com/gsi/client", lambda route: route.fulfill(
         content_type="application/javascript", body="""
-        window.google={accounts:{id:{initialize(config){window.googleConfig=config;},renderButton(area){
+        window.google={accounts:{id:{initialize(config){window.googleConfig=config;},renderButton(area, options){window.googleButtonWidth=options.width;
           const button=document.createElement('button');button.textContent='Test Google sign-in';
           button.onclick=()=>window.googleConfig.callback({credential:'synthetic-google-token'});area.append(button);
         }}}};"""))
@@ -130,6 +130,7 @@ def test_google_sign_in_uses_selected_role_and_password_link_challenge(browser):
     for width in (390, 320, 1440):
         page.set_viewport_size({"width": width, "height": 900})
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        page.wait_for_function("() => googleButtonWidth <= document.querySelector('.google-sign-in').clientWidth")
         cards = page.locator('#login-view .access-role-card')
         assert cards.nth(0).bounding_box()["y"] == cards.nth(1).bounding_box()["y"]
     page.get_by_text("Test Google sign-in", exact=True).click()
