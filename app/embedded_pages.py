@@ -439,7 +439,7 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
       <div class="analysis-step" data-analysis-step="plan"><span>04</span><div><strong>Coaching report</strong><small>Build corrections, ideal approaches, weak-topic diagnosis and next-practice actions.</small></div><b>Queued</b></div>
     </div>
     <div class="analysis-note"><strong>No instant guessed score.</strong><span>All section results appear together after answer grading and HR video analysis are complete. If AI evaluation fails, PlaceAI withholds the final score instead of fabricating one.</span></div>
-    <div class="form-actions"><button id="retry-analysis" class="button secondary hidden" type="button">Retry AI analysis</button></div>
+    <div class="form-actions"><button id="retry-analysis" class="button secondary hidden" type="button">Retry analysis</button><button id="return-to-setup" class="button secondary hidden" type="button">Return to assessment setup</button></div>
   </section>
 
   <section id="result-panel" class="panel result-panel hidden">

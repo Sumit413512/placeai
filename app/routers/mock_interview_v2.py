@@ -2391,8 +2391,16 @@ def saved_interview_result(
         raise HTTPException(404, "Mock interview not found")
     recording = db.query(HRRecording).filter(HRRecording.interview_id == interview_id).first()
     queued = db.get(AssessmentJob, interview_id) if get_settings().assessment_queue_enabled else None
-    complete = interview.overall_score is not None
-    result = {"interview_id": interview.id, **json.loads(interview.evaluation_json)} if complete else None
+    result = None
+    if interview.overall_score is not None:
+        try:
+            evaluation = json.loads(interview.evaluation_json or "null")
+        except (ValueError, TypeError):
+            evaluation = None
+        if not isinstance(evaluation, dict) or evaluation.get("analysis_status", "complete") != "complete":
+            raise HTTPException(503, {"code": "SAVED_REPORT_UNAVAILABLE", "message": "Your saved report needs support to recover. Please contact your institution with the assessment reference."})
+        result = {**evaluation, "interview_id": interview.id, "analysis_status": "complete"}
+    complete = result is not None
     return {"interview_id": interview.id,
             "status": "complete" if complete else "pending" if queued or recording and recording.submission_json else "awaiting_submission",
             "queued": bool(queued), "queue_status": queued.state if queued else None,

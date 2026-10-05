@@ -400,3 +400,49 @@ def test_processing_retry_reuses_provider_file_and_deletes_after_analysis(exam, 
     assert hr_video.analyze_recording(exam.db, exam.recording, exam.interview)["audio_usable"]
     assert counts == {"uploads": 1, "deletes": 1, "generations": 1}
     assert exam.recording.provider_file_name is None
+
+
+def test_completed_legacy_report_has_explicit_status_and_bad_report_is_safe(exam):
+    exam.interview.overall_score = 75
+    exam.interview.evaluation_json = json.dumps({"overall_score": 75, "dimensions": {"behavioral": 75}})
+    exam.db.commit()
+    saved = exams.saved_interview_result("interview", exam.user, exam.db)
+    assert saved["status"] == "complete"
+    assert saved["result"]["analysis_status"] == "complete"
+    for invalid in (None, "{broken", "[]", '{"analysis_status":"pending"}'):
+        exam.interview.evaluation_json = invalid
+        exam.db.commit()
+        with pytest.raises(HTTPException) as error:
+            exams.saved_interview_result("interview", exam.user, exam.db)
+        assert error.value.status_code == 503
+        assert error.value.detail["code"] == "SAVED_REPORT_UNAVAILABLE"
+
+
+@pytest.mark.parametrize("status,expected_calls", [(503, 2), (401, 1), (429, 1)])
+def test_provider_retry_is_bounded_and_reuses_private_upload(exam, monkeypatch, status, expected_calls):
+    from google import genai
+
+    seal(exam)
+    counts = {"uploads": 0, "generations": 0, "deletes": 0}
+    class ProviderError(Exception):
+        code = status
+    def upload(**kwargs):
+        counts["uploads"] += 1
+        return SimpleNamespace(name="files/test", uri="https://example.com/video", state=SimpleNamespace(name="ACTIVE"))
+    def generate(**kwargs):
+        counts["generations"] += 1
+        raise ProviderError("private upstream details must not escape")
+    def delete(**kwargs):
+        counts["deletes"] += 1
+    fake = SimpleNamespace(files=SimpleNamespace(upload=upload, delete=delete),
+                           models=SimpleNamespace(generate_content=generate), close=lambda: None)
+    monkeypatch.setattr(genai, "Client", lambda **kwargs: fake)
+    monkeypatch.setattr(hr_video, "_gemini_key", lambda: "unit-test-only")
+    monkeypatch.setattr(hr_video.time, "sleep", lambda value: None)
+    with pytest.raises(HTTPException) as error:
+        hr_video.analyze_recording(exam.db, exam.recording, exam.interview)
+    assert counts == {"uploads": 1, "generations": expected_calls, "deletes": 1}
+    assert "private upstream" not in str(error.value.detail)
+    exam.db.refresh(exam.recording)
+    assert exam.recording.analysis_lease_until is None
+    assert exam.recording.analysis_json is None

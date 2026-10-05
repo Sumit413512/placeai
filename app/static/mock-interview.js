@@ -60,6 +60,7 @@
     lastResult:null,
     reviewFilter:'all',
     analysisTimers:[],
+    analysisGeneration:0,
     integrityWarnings:0,
     integrityWarningLimit:4,
     lastWarningAt:0,
@@ -172,7 +173,10 @@
       ] : await api('/mock-interview/history');
       panel.classList.remove('hidden');
       $('#history-list').innerHTML = rows.length ? rows.map(row=>`<article class="history-item"><div><strong>${esc(row.job_title)}</strong><span>${esc(row.company_name || 'Company')} · ${row.created_at ? new Date(row.created_at).toLocaleString('en-IN') : 'Saved attempt'}</span>${row.id?`<button type="button" class="button secondary" data-saved-result="${esc(row.id)}">${row.overall_score===null?'Complete analysis':'View complete result'}</button>`:''}</div><div class="history-score">${row.overall_score ?? 'Pending'}</div></article>`).join('') : '<p class="disclaimer">No saved attempts yet.</p>';
-    } catch (_) {}
+    } catch (_) {
+      panel.classList.remove('hidden');
+      $('#history-list').textContent='Saved reports could not load. Refresh this page to try again.';
+    }
   }
 
   const sampleBank = {
@@ -1734,32 +1738,17 @@
     state.analysisTimers = [];
   }
 
-  function setAnalysisPhase(index) {
-    const rows = $$('.analysis-step');
-    rows.forEach(function(row,i){
-      row.classList.toggle('done', i < index);
-      row.classList.toggle('active', i === index);
-      const b = row.querySelector('b');
-      if (b) b.textContent = i < index ? 'Done' : i === index ? 'Running' : 'Queued';
-    });
-    const messages = [
-      'Checking objective answers against protected server-side answer keys.',
-      'AI is evaluating every open-ended answer against the exact question and scoring rubric.',
-      'Building section-level accuracy, strengths, gaps and readiness scores from question results.',
-      'Generating corrections, ideal approaches and the next-practice plan.'
-    ];
-    $('#analysis-message').textContent = messages[Math.min(index,3)];
-  }
-
   function showAnalysisPanel() {
     clearAnalysisTimers();
     $('#result-panel').classList.add('hidden');
     $('#analysis-panel').classList.remove('hidden');
     $('#retry-analysis').classList.add('hidden');
-    setAnalysisPhase(0);
-    state.analysisTimers.push(setTimeout(function(){setAnalysisPhase(1);},700));
-    state.analysisTimers.push(setTimeout(function(){setAnalysisPhase(2);},5000));
-    state.analysisTimers.push(setTimeout(function(){setAnalysisPhase(3);},10000));
+    $$('.analysis-step').forEach(row=>{
+      row.classList.remove('done','active');
+      row.querySelector('b').textContent='Pending';
+    });
+    $('#analysis-message').textContent='Preparing your complete report. All section scores appear together after grading and HR video analysis finish.';
+    $('#return-to-setup').classList.toggle('hidden',!state.submissionSaved || !!(state.hr?.recorder && !state.hr.submitted));
     $('#analysis-panel').scrollIntoView({behavior:'smooth',block:'start'});
   }
 
@@ -1785,24 +1774,48 @@
   async function openSavedResult(interviewId) {
     if(state.assessmentActive || state.finishing)return;
     if(state.hr?.recorder && !state.hr.submitted){toast('Finish submitting the current recording before opening another result.','error');return;}
+    const generation=++state.analysisGeneration;
     state.session={interview_id:interviewId};
     state.submissionSaved=true;
     state.answers=[];
     state.hr=null;
     state.finishing=true;
     $('#setup-panel').classList.add('hidden');
-    await runResultAnalysis(false);
+    showAnalysisPanel();
+    try{
+      const saved=await api(`/mock-interview/${interviewId}/result`);
+      if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
+      state.finishing=false;
+      if(saved.status==='complete'){
+        $('#analysis-panel').classList.add('hidden');
+        state.lastResult=saved.result;
+        renderResult(saved.result,false);
+      }else{
+        $('#analysis-message').textContent=saved.status==='pending'
+          ? 'Your submitted exam is saved. Its complete report is pending. Retry analysis or return to setup to start another assessment.'
+          : 'This assessment has not been submitted. Finish it in the original exam tab.';
+        $('#retry-analysis').classList.toggle('hidden',saved.status!=='pending');
+      }
+    }catch(error){
+      if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
+      state.finishing=false;
+      $('#analysis-message').textContent=error.message || 'Your saved report could not load. Please try again.';
+      $('#retry-analysis').classList.remove('hidden');
+    }
   }
 
-  async function waitForQueuedResult() {
+  async function waitForQueuedResult(generation) {
     clearAnalysisTimers();
     $('#analysis-message').textContent='Your exam is saved securely. Preparing every section of your report; you can also return to it from exam history.';
+    $('#return-to-setup').classList.remove('hidden');
     const interviewId=state.session.interview_id;
     const deadline=Date.now()+10*60*1000;
-    while(Date.now()<deadline && state.session.interview_id===interviewId){
+    while(Date.now()<deadline && state.analysisGeneration===generation && state.session?.interview_id===interviewId){
       // Jitter prevents students finishing together from polling together.
       await new Promise(resolve=>setTimeout(resolve,(document.hidden?20000:8000)+Math.random()*4000));
+      if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
       const saved=await api(`/mock-interview/${interviewId}/result`);
+      if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
       if(saved.status==='complete')return saved.result;
       if(saved.queue_status==='failed')throw new Error('Your exam is saved. Analysis needs support to resume; contact your institution.');
     }
@@ -1810,6 +1823,8 @@
   }
 
   async function runResultAnalysis(auto) {
+    const generation=++state.analysisGeneration;
+    const interviewId=state.session?.interview_id;
     showAnalysisPanel();
     try {
       let result;
@@ -1818,14 +1833,16 @@
         result=buildPreviewResult();
       }else{
         await submitHRVideo();
+        if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
         rememberSubmittedAttempt();
         // Save once. Subsequent requests re-analyze the immutable submitted exam.
-        for(let attempt=0;attempt<4;attempt++){
+        for(let attempt=0;attempt<2;attempt++){
           try {
             if(state.submissionSaved || attempt>0){
               const saved=await api(`/mock-interview/${state.session.interview_id}/result`);
+              if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
               if(saved.status==='complete'){result=saved.result;break;}
-              if(saved.status==='pending'){state.submissionSaved=true;if(saved.queued){result=await waitForQueuedResult();break;}}
+              if(saved.status==='pending'){state.submissionSaved=true;if(saved.queued){result=await waitForQueuedResult(generation);break;}}
               else{
                 state.submissionSaved=false;
                 if(!state.answers.length)throw new Error('This exam has not been submitted. Return to the original exam tab to finish uploading and submit.');
@@ -1839,18 +1856,22 @@
                 integrity_auto_submitted:state.autoSubmittedIntegrity,
                 integrity_termination_reason:state.integrityTerminationReason||null
               })});
+            if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
             state.submissionSaved=true;
-            if(result.queued){result=await waitForQueuedResult();break;}
+            if(result.queued){result=await waitForQueuedResult(generation);break;}
             if(result.analysis_status==='complete')break;
             throw new Error('Your exam is saved. Analysis is still processing.');
           }catch(error){
-            if(attempt===3 || [400,401,403,404,410,413,422].includes(error.status) || !state.answers.length && !state.submissionSaved)throw error;
+            if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
+            if(attempt===1 || [400,401,403,404,410,413,422].includes(error.status) || !state.answers.length && !state.submissionSaved)throw error;
             clearAnalysisTimers();
             $('#analysis-message').textContent='Finishing the complete report, including spoken HR answers. All scores will appear together when analysis is ready.';
             await new Promise(resolve=>setTimeout(resolve,[2000,5000,10000][attempt]));
+            if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
           }
         }
       }
+      if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
       if(result?.analysis_status!=='complete' && !previewMode)throw new Error('Your exam is saved. Analysis is still pending; retry to receive all results together.');
       markAnalysisComplete();
       state.lastResult=result;
@@ -1858,11 +1879,13 @@
       $('#analysis-panel').classList.add('hidden');
       renderResult(result,!!auto);
     }catch(error){
+      if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
       clearAnalysisTimers();
       state.finishing=false;
-      $('#analysis-message').textContent=state.submissionSaved
-        ? 'Your submitted exam is saved. The complete report is not ready yet. Retry analysis to receive every section together.'
-        : error.message || 'Submission could not complete. Keep this page open and retry to save your answers.';
+      $('#analysis-message').textContent=error.message || (state.submissionSaved
+        ? 'Your submitted exam is saved. The complete report is pending. Retry analysis later.'
+        : 'Submission could not complete. Keep this page open and retry to save your answers.');
+      $('#return-to-setup').classList.toggle('hidden',!state.submissionSaved || !!(state.hr?.recorder && !state.hr.submitted));
       $('#retry-analysis').classList.remove('hidden');
       toast(state.submissionSaved?'All scores remain hidden until the complete report is ready.':'Keep this page open and retry submission.','error');
     }
@@ -2087,6 +2110,7 @@
   }
 
   function resetAssessment() {
+    state.analysisGeneration++;
     clearInterval(state.timerId);
     clearInterval(state.faceTimer);
     clearInterval(state.localProctorTimer);
@@ -2155,6 +2179,11 @@
   $('#next-question')?.addEventListener('click',submitAndContinue);
   $('#restore-secure-mode')?.addEventListener('click',restoreSecureMode);
   $('#practice-again')?.addEventListener('click',resetAssessment);
+  $('#return-to-setup')?.addEventListener('click',()=>{
+    if(!state.submissionSaved || state.hr?.recorder && !state.hr.submitted)return;
+    resetAssessment();
+    loadHistory();
+  });
   $('#load-hr-recording')?.addEventListener('click',()=>loadHRPlayback());
   $('#answer-feedback')?.addEventListener('click',event=>{const button=event.target.closest('[data-recording-second]');if(button)loadHRPlayback(Number(button.dataset.recordingSecond));});
   $('#history-list')?.addEventListener('click',event=>{const button=event.target.closest('[data-saved-result]');if(button)openSavedResult(button.dataset.savedResult);});
@@ -2219,9 +2248,7 @@
       state.candidateLabel=(state.me.full_name || state.me.username || 'Candidate').toUpperCase().slice(0,40);
       $('#auth-state').classList.add('hidden'); $('#setup-panel').classList.remove('hidden');
       await Promise.all([loadJobs(),loadHistory()]);
-      let savedId=null;
-      try{savedId=savedAttemptKey() && sessionStorage.getItem(savedAttemptKey());}catch{}
-      if(savedId)await openSavedResult(savedId);
+      // Entry always opens setup. Saved reports are an explicit history action.
     } catch(error){ $('#auth-state').textContent=error.message; toast(error.message,'error'); }
   })();
 })();
