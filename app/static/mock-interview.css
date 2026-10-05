@@ -458,3 +458,23 @@ select:focus,textarea:focus{
   .hero h1{font-size:36px}
   .panel{padding:18px 15px}
 }
+
+/* Readable questions and a dedicated spoken-answer workspace. */
+.protected-question { min-height: 0; max-height: none; padding: 24px; position: relative; }
+.readable-question { margin: 0; font-size: clamp(18px, 1.3vw, 22px); line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; color: #17243b; }
+.question-watermark { display: block; margin-top: 16px; color: #687991; font-size: 11px; }
+.option-text { flex: 1; text-align: left; font-size: 17px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.assessment-camera-card { position: absolute; width: 160px; height: 120px; overflow: hidden; opacity: 0; pointer-events: none; }
+#hr-answer-preview { display: block; width: min(100%, 540px); max-height: 34vh; aspect-ratio: 16/9; background: #0c1728; border-radius: 14px; object-fit: contain; margin: 16px 0; }
+.answer-field p { text-transform: none; letter-spacing: normal; line-height: 1.6; }
+.secure-textarea { min-height: 180px; }
+.section-practice-note { display: block; margin-top: 6px; font-size: 12px; font-weight: normal; line-height: 1.5; color: #52627a; }
+.proctor-live-badge { gap: 6px; background: #e7f5ef; color: #146d52!important; font-size: 12px!important; letter-spacing: normal!important; }
+.proctor-live-badge svg { flex-shrink: 0; }
+#camera-proctor-status { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: inherit; }
+@media (max-width: 760px) {
+  .forward-badge { display: none!important; }
+  .proctor-live-badge { display: inline-flex!important; max-width: 135px; font-size: 10px!important; }
+  #camera-proctor-status { max-width: 95px; }
+  .protected-question { padding: 18px; }
+}

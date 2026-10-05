@@ -282,7 +282,7 @@ def _question_prompt(
 {PROMPT_GUARDRAIL}
 
 You are a senior interviewer preparing a realistic campus interview for the exact role below.
-{("Generate exactly 48 NEW AI-authored primary assessment items for a standardized full campus-placement mock. PlaceAI injects 2 server-owned executable coding-editor questions separately, so DO NOT generate coding-section items. Use this exact AI-authored section blueprint: quantitative 8; logical 8; communication 6; technical 8; programming 6; resume 4; behavioral 4; role 2; situational 2. Technical, programming and the 2 server-owned coding-editor questions together form the candidate-facing Technical Assessment. Difficulty must progress from foundational to intermediate and then challenging within each section. At least half of technical/programming/resume/role items must directly test the role description, required skills or candidate's relevant experience. For quantitative, logical and communication items, prefer objective multiple-choice questions with exactly four plausible options. For technical and programming, mix objective and applied questions. Resume, behavioral, role and situational items should normally be applied-response questions." if count == FULL_MOCK_QUESTION_COUNT else f"Generate exactly {count} NEW role-specific practice interview questions. {focus_instruction} Difficulty: {difficulty}. Prefer applied technical reasoning, debugging, design, behavioral evidence, situational judgment and role fit over trivia.")}
+{("Generate exactly 48 NEW AI-authored primary assessment items for a standardized full campus-placement mock. PlaceAI injects 2 server-owned executable coding-editor questions separately, so DO NOT generate coding-section items. Use this exact AI-authored section blueprint: quantitative 8; logical 8; communication 6; technical 8; programming 6; resume 4; behavioral 4; role 2; situational 2. Technical, programming and the 2 server-owned coding-editor questions together form the candidate-facing Technical Assessment. Difficulty must progress from foundational to intermediate and then challenging within each section. At least half of technical/programming/resume/role items must directly test the role description, required skills or candidate's relevant experience. Quantitative, logical, communication, technical and programming items MUST be objective multiple-choice questions with exactly four distinct plausible options and exactly one correct answer. Technical and programming must test applied knowledge through MCQs, never essays; coding is tested separately in the executable editor. Resume, behavioral, role and situational items should normally be applied-response questions." if count == FULL_MOCK_QUESTION_COUNT else f"Generate exactly {count} NEW role-specific practice interview questions. {focus_instruction} Difficulty: {difficulty}. Prefer applied technical reasoning, debugging, design, behavioral evidence, situational judgment and role fit over trivia.")}
 Questions must be concise, non-discriminatory and suitable for campus placement preparation.
 Use ONLY facts present in ROLE and CANDIDATE CONTEXT. Do not invent company processes, technologies, projects,
 metrics, responsibilities, achievements or candidate experience. If a fact is not provided, ask a generic
@@ -723,6 +723,27 @@ def _fallback_questions(
         ],
     }
 
+    # Reviewed baseline knowledge items keep provider outages from changing
+    # technical knowledge into essays. Executable coding remains separate.
+    objective["technical"] = [
+        ("Which SQL clause filters grouped aggregate results?", ["WHERE", "HAVING", "ORDER BY", "LIMIT"], "HAVING"),
+        ("Which database constraint uniquely identifies each row?", ["DEFAULT", "CHECK", "PRIMARY KEY", "FOREIGN KEY"], "PRIMARY KEY"),
+        ("Which HTTP method is intended to retrieve a resource without changing it?", ["POST", "PATCH", "DELETE", "GET"], "GET"),
+        ("Which data structure follows first-in, first-out ordering?", ["Stack", "Queue", "Tree", "Set"], "Queue"),
+        ("What is the worst-case time complexity of binary search on a sorted array of n items?", ["O(1)", "O(log n)", "O(n)", "O(n squared)"], "O(log n)"),
+        ("Which property of a database transaction means it completes entirely or has no effect?", ["Atomicity", "Durability", "Availability", "Replication"], "Atomicity"),
+        ("Which practice best prevents SQL injection when inserting user-supplied values?", ["Concatenating strings", "Hiding error messages", "Using parameterized queries", "Removing spaces"], "Using parameterized queries"),
+        ("Which test checks that a change has not broken previously working behavior?", ["Regression test", "Load test", "Usability test", "Smoke alarm"], "Regression test"),
+    ]
+    objective["programming"] = [
+        ("A loop visits each of n items once and performs constant work per item. What is its time complexity?", ["O(1)", "O(log n)", "O(n)", "O(n squared)"], "O(n)"),
+        ("An array has n elements and uses zero-based indexing. Which is its final valid index?", ["n", "n - 1", "n + 1", "1"], "n - 1"),
+        ("Which condition is essential for a recursive function to terminate?", ["A global variable", "A reachable base case", "A print statement", "Two nested loops"], "A reachable base case"),
+        ("A function should reject a negative quantity. Which boundary inputs best exercise that condition?", ["Only 100", "Only 1", "-1, 0 and 1", "Only very large positive values"], "-1, 0 and 1"),
+        ("Which debugging step best distinguishes a reproducible defect from an assumption?", ["Rewrite everything", "Create a minimal failing test", "Ignore the logs", "Change several settings together"], "Create a minimal failing test"),
+        ("Two workers read and update the same counter simultaneously and an increment is lost. What is this problem called?", ["Syntax error", "Race condition", "Dead code", "Type inference"], "Race condition"),
+    ]
+
     applied_templates = {
         "technical": [
             "For the {role} role, explain a practical use of {skill} and how you would validate the result.",
@@ -868,12 +889,12 @@ def _generate_unique_questions(
                 options = [option for option in options if option]
                 raw_correct = str(item.get("correct_answer", ""))[:1000]
                 resolved_correct = _resolve_correct_option(options, raw_correct) if len(options) == 4 else ""
-                objective_section = count == FULL_MOCK_QUESTION_COUNT and section in {"quantitative", "logical", "communication"}
+                objective_section = count == FULL_MOCK_QUESTION_COUNT and section in {"quantitative", "logical", "communication", "technical", "programming"}
 
                 # Objective sections are contractually MCQ-only. Reject malformed AI items
                 # instead of silently degrading them to a text box; deterministic fallback
                 # will fill the missing quota with four-option, server-keyed questions.
-                if objective_section and (len(options) != 4 or not resolved_correct):
+                if objective_section and (len(options) != 4 or len({option.casefold().strip() for option in options}) != 4 or not resolved_correct):
                     continue
 
                 answer_type = "mcq" if count == FULL_MOCK_QUESTION_COUNT and len(options) == 4 and resolved_correct else "text"
@@ -1219,6 +1240,11 @@ def _obvious_answer_failure(item: dict[str, Any], answer: str) -> str | None:
         return "The response is a placeholder or explicit non-answer."
     if len(words) <= 2:
         return "The response is too short to address the question."
+    # Consonant-only keyboard mashing is not evidence; do not apply this
+    # English-specific check to responses containing non-ASCII letters.
+    letters = re.sub(r"[^a-z]", "", normalized)
+    if len(words) >= 3 and len(letters) >= 8 and not re.search(r"[aeiouy]", letters) and normalized.isascii():
+        return "The response contains no meaningful answer to the question."
     if len(words) >= 4 and len(set(words)) / len(words) < 0.35:
         return "The response is predominantly repetitive and does not provide meaningful evidence."
     filler = {"anything", "whatever", "something", "stuff", "things", "random", "test", "okay", "ok"}

@@ -27,7 +27,8 @@ def test_interview_intelligence_secure_ui_is_mirrored():
     assert app_html == public_html
     assert app_css == public_css
     assert app_js == public_js
-    assert 'id="question-canvas"' in app_html
+    assert 'id="question-text"' in app_html
+    assert "$('#question-text').textContent=q.question" in app_js
     assert 'id="integrity-overlay"' in app_html
     assert 'id="run-liveness"' in app_html
     assert "TOTAL_QUESTIONS" in app_js
