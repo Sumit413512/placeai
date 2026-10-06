@@ -91,6 +91,55 @@ def test_bad_camera_does_not_erase_supported_spoken_answers(exam, monkeypatch):
     assert all(answer["answer_correctness"] == 80 and "spoken answer only" in answer["feedback"] for answer in result["answers"])
 
 
+def test_groq_vision_failure_is_cached_and_spoken_grading_continues(exam, monkeypatch):
+    seal(exam)
+    calls = {"vision": 0, "grade": 0}
+    monkeypatch.setattr(free_provider, "transcribe", lambda *a: transcript())
+    monkeypatch.setattr(
+        free_assessment,
+        "sample_frames",
+        lambda data, start, end: [{"at_seconds": start + 1, "image": "data:image/jpeg;base64,c3ludGhldGlj"}],
+    )
+
+    def text(prompt, **kwargs):
+        if kwargs.get("images"):
+            calls["vision"] += 1
+            raise free_provider.ProviderError("FREE_PROVIDER_REJECTED", 429)
+        calls["grade"] += 1
+        qid = json.loads(prompt[prompt.index('{'):])["question"]["question_id"]
+        return json.dumps(analysis(exam)["answers"][qid - 1])
+
+    persisted = []
+    def persist(value):
+        persisted.append(json.loads(json.dumps(value)))
+        exam.recording.analysis_json = json.dumps(value)
+        exam.db.commit()
+
+    monkeypatch.setattr(free_provider, "text", text)
+    result = free_assessment.analyze(b"synthetic", exam.recording, exam.questions, persist)
+
+    assert result["video_usable"] is False
+    assert calls == {"vision": 1, "grade": 4}
+    assert all(answer["answer_correctness"] == 80 for answer in result["answers"])
+    assert all("spoken answer only" in answer["feedback"] for answer in result["answers"])
+    assert persisted[-1]["camera_unavailable"] is True
+    assert persisted[-1]["observations"] == {"1": [], "2": [], "3": [], "4": []}
+
+    # A retry must reuse cached camera-unavailable state and never retry Qwen.
+    exam.recording.analysis_json = json.dumps({
+        "analysis_status": "partial",
+        "provider": "groq",
+        "transcription": transcript(),
+        "answers": [],
+        "observations": persisted[-1]["observations"],
+        "camera_unavailable": True,
+    })
+    exam.db.commit()
+    again = free_assessment.analyze(b"synthetic", exam.recording, exam.questions, persist)
+    assert calls["vision"] == 1
+    assert len(again["answers"]) == 4
+
+
 def test_thumbnail_decoder_handles_synthetic_video_in_isolation():
     import av
     from PIL import Image
