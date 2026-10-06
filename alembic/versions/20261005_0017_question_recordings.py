@@ -41,6 +41,8 @@ def upgrade():
             op.execute(f"REVOKE ALL ON public.{table} FROM anon, authenticated")
         op.execute("""DO $$ BEGIN
           IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'placeai_render_runtime') THEN
+            -- Existing default privileges must not broaden the approved scope.
+            REVOKE ALL ON public.answer_recordings, public.answer_recording_chunks FROM placeai_render_runtime;
             GRANT SELECT, INSERT, UPDATE, DELETE ON public.answer_recordings TO placeai_render_runtime;
             GRANT SELECT, INSERT, DELETE ON public.answer_recording_chunks TO placeai_render_runtime;
             CREATE POLICY render_private_answer_access ON public.answer_recordings
