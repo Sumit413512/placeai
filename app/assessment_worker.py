@@ -49,7 +49,7 @@ def process(item):
             complete = result.get("analysis_status") == "complete"
     except Exception as error:
         detail = getattr(error, "detail", None)
-        if isinstance(detail, dict) and detail.get("code") in {"VIDEO_PROVIDER_CAPACITY", "VIDEO_PROVIDER_ACCESS", "VIDEO_PROVIDER_MODEL", "VIDEO_PROVIDER_UNAVAILABLE"}:
+        if isinstance(detail, dict) and detail.get("code") in {"VIDEO_PROVIDER_CAPACITY", "VIDEO_PROVIDER_ACCESS", "VIDEO_PROVIDER_MODEL", "VIDEO_PROVIDER_UNAVAILABLE", "AI_PROVIDER_CAPACITY", "AI_PROVIDER_UNAVAILABLE"}:
             error_code = detail["code"]
         LOGGER.warning("Assessment deferred error_type=%s", type(error).__name__)
     finally:

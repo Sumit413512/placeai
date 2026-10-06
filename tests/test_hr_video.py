@@ -77,7 +77,18 @@ def analysis(exam):
                          "feedback": "Give a measurable outcome.", "strengths": ["Relevant example"],
                          "improvements": ["Explain the outcome"],
                          "evidence": [{"at_seconds": (number - 1) * 10 + 1, "observation": "Explains an example."}]}
-                        for number in range(1, 5)]}
+                         for number in range(1, 5)]}
+
+
+def test_device_loss_before_first_chunk_produces_no_response_not_infinite_pending(exam, monkeypatch):
+    begin(exam)
+    hr_video.seal_recording(exam.db, exam.recording, 0)
+    monkeypatch.setattr(hr_video, "_analyze_video", lambda *a, **k: pytest.fail("Empty media must not be exported"))
+    monkeypatch.setattr(exams, "_evaluate_subjective_with_ai", lambda **kwargs: ([], {}))
+    result = exams.evaluate_mock_interview_v2(body(exam), exam.user, exam.db)
+    assert result["analysis_status"] == "complete"
+    assert result["overall_score"] == 0
+    assert all(answer["verdict"] == "insufficient" for answer in result["evaluations"])
 
 
 def body(exam, answer="[HR video response recorded]"):

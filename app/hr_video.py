@@ -6,6 +6,7 @@ import io
 import json
 import logging
 import math
+import os
 import time
 from datetime import timedelta
 from typing import Annotated
@@ -162,7 +163,7 @@ def seal_recording(db, row, expected_chunks):
         return recording_status(row)
     if row.expires_at <= utcnow():
         raise HTTPException(410, "This HR recording has expired")
-    if row.status not in {"recording", "recorded"} or not row.started_at or not row.chunk_count or row.chunk_count != expected_chunks:
+    if row.status not in {"recording", "recorded"} or not row.started_at or row.chunk_count != expected_chunks:
         raise HTTPException(409, "Wait for every recording chunk to upload before submission")
     segments = json.loads(row.segments_json)
     if segments and segments[-1]["end"] is None:
@@ -354,7 +355,9 @@ def release_lease(db, row, field_name, until):
 
 def analyze_recording(db, row, interview, *, chunk_model=HRVideoChunk, questions=None, audio_only=False):
     if row.analysis_json:
-        return json.loads(row.analysis_json)
+        cached = json.loads(row.analysis_json)
+        if cached.get("analysis_status") != "partial":
+            return cached
     if not row.sealed_at:
         raise HTTPException(409, "Submit the HR recording before requesting the exam result")
     if row.expires_at <= utcnow():
@@ -374,7 +377,16 @@ def analyze_recording(db, row, interview, *, chunk_model=HRVideoChunk, questions
             db.commit()
 
         question_set = questions if questions is not None else hr_questions(interview)
-        if audio_only:
+        if os.getenv("HR_AI_PROVIDER", "").lower() == "groq":
+            from app import free_assessment, recording_policy, free_provider
+            recording_policy.require(db, interview)
+            if not free_provider.configured():
+                raise RuntimeError("VIDEO_PROVIDER_UNAVAILABLE")
+            def persist_progress(value):
+                row.analysis_json = json.dumps(value)
+                db.commit()
+            result = free_assessment.analyze(data, row, question_set, persist_progress, audio_only=audio_only)
+        elif audio_only:
             result = _analyze_video(data, row, question_set, persist_provider_file, audio_only=True)
         else:
             result = _analyze_video(data, row, question_set, persist_provider_file)
@@ -382,6 +394,8 @@ def analyze_recording(db, row, interview, *, chunk_model=HRVideoChunk, questions
         row.status = "analyzed"
         db.commit()
         return result
+    except HTTPException:
+        raise
     except Exception as exc:
         status = getattr(exc, "code", None)
         safe_status = status if isinstance(status, int) and 400 <= status <= 599 else None

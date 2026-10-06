@@ -5,7 +5,7 @@ from datetime import timedelta
 from fastapi import HTTPException
 from sqlalchemy import func
 
-from app import hr_video
+from app import hr_video, recording_policy
 from app.models import AnswerRecording, AnswerRecordingChunk, utcnow
 
 AUDIO_BYTES = 2 * 1024 * 1024
@@ -24,6 +24,7 @@ def owned(db, user, interview_id, question_id, *, lock=False, reviewer=False):
 
 def begin(db, user, interview_id, question_id, mime_type, consent):
     root, interview, question, row = owned(db, user, interview_id, question_id, lock=True)
+    recording_policy.require(db, interview)
     permitted = {"audio/webm", "audio/mp4"} if question["response_mode"] == "audio" else hr_video.MIME_TYPES
     if not consent or mime_type not in permitted:
         raise HTTPException(422, "Consent and a supported recording format are required")

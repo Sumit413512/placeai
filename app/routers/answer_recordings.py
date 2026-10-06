@@ -6,9 +6,8 @@ from starlette.concurrency import run_in_threadpool
 from app import answer_recording, hr_video
 from app.database import get_db
 from app.dependencies import get_current_user, require_student
-from app.models import AnswerRecordingChunk, User, utcnow
+from app.models import AnswerRecordingChunk, User
 from app.routers.hr_recording import recording_response
-import json
 
 router = APIRouter(prefix="/mock-interview", tags=["Spoken answers"])
 
@@ -51,13 +50,7 @@ def submit(interview_id: str, question_id: int, body: Submit,
     root, _, _, row = answer_recording.owned(db, user, interview_id, question_id, lock=True)
     if not row or root.submission_json and not row.sealed_at:
         raise HTTPException(409, "Recording cannot be submitted")
-    if body.chunks == 0 and not row.chunk_count and not row.sealed_at:
-        row.status = "submitted"
-        row.sealed_at = utcnow()
-        row.segments_json = json.dumps([{"question_id": question_id, "start": 0, "end": 0}])
-        db.commit()
-    else:
-        hr_video.seal_recording(db, row, body.chunks)
+    hr_video.seal_recording(db, row, body.chunks)
     return answer_recording.status(row)
 
 

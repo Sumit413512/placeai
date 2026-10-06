@@ -21,7 +21,7 @@ from app.ai_rate_limit import code_execution_guard, student_ai_guard
 from app.database import get_db
 from app.dependencies import require_institution_admin, require_student
 from app.models import AnswerRecording, AssessmentJob, ApprovalStatus, AuditEvent, HRRecording, Job, MockInterview, StudentProfile, User, utcnow
-from app import hr_video, assessment_queue, answer_recording
+from app import hr_video, assessment_queue, answer_recording, recording_policy
 from app.config import get_settings
 from fastapi.responses import JSONResponse
 from app.placement_access import job_is_visible_to_student
@@ -1957,6 +1957,11 @@ def analyze_proctor_frame_v2(
     if not body.image_data_url.startswith("data:image/jpeg;base64,"):
         raise HTTPException(status_code=422, detail="Proctor frame must be a compressed JPEG data URL")
 
+    if recording_policy.groq_selected():
+        raise HTTPException(503, "On-device monitoring is active; remote frame checks are unavailable in this pilot.")
+    if os.getenv("VISION_AI_PROVIDER", "").lower() == "groq":
+        recording_policy.require(db, interview)
+
     prompt = """
 Analyze this single webcam frame only for assessment-integrity signals.
 Return ONLY valid JSON:
@@ -2153,7 +2158,7 @@ def _evaluate_saved_answers(db, current_user, profile, interview, job, issued, s
         db.commit()
     video_result = None
     video_by_id = {}
-    if recording and recording.started_at:
+    if recording and recording.started_at and recording.chunk_count:
         video_result = hr_video.analyze_recording(db, recording, interview)
         video_by_id = {item["question_id"]: item for item in video_result["answers"]}
     if any(q.get("response_mode") for q in issued):
@@ -2418,12 +2423,14 @@ def saved_interview_result(
     if any(q.get("response_mode") for q in json.loads(interview.questions_json)):
         clips = db.query(AnswerRecording).filter_by(interview_id=interview_id).all()
         recorded = [clip for clip in clips if clip.sealed_at and clip.chunk_count]
-        spoken_progress = {"recorded": len(recorded), "analyzed": sum(bool(clip.analysis_json) for clip in recorded)}
+        spoken_progress = {"recorded": len(recorded), "analyzed": sum(clip.status == "analyzed" for clip in recorded)}
     return {"interview_id": interview.id,
             "status": "complete" if complete else "pending" if queued or recording and recording.submission_json else "awaiting_submission",
             "queued": bool(queued), "queue_status": queued.state if queued else None,
             "retry_after_seconds": 10, "error_code": queued.error_code if queued else None,
             "spoken_progress": spoken_progress,
+            "requires_recording_consent": bool(recording_policy.groq_selected() and recording
+                                                and not complete and not recording_policy.consented(db, interview)),
             "result": result}
 
 

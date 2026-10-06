@@ -103,7 +103,7 @@ def finish(db, interview_id, token, complete, error_code=None):
         return
     job.state = "complete" if complete else "failed" if job.attempts >= MAX_ATTEMPTS else "retrying"
     job.error_code = None if complete else "ANALYSIS_RETRY_LIMIT" if job.state == "failed" else error_code or "ANALYSIS_TEMPORARILY_UNAVAILABLE"
-    delay = 900 if error_code == "VIDEO_PROVIDER_CAPACITY" else min(300, 15 * 2 ** (job.attempts - 1))
+    delay = 900 if error_code in {"VIDEO_PROVIDER_CAPACITY", "AI_PROVIDER_CAPACITY"} else min(300, 15 * 2 ** (job.attempts - 1))
     job.available_at = utcnow() + timedelta(seconds=delay)
     job.lease_until = None
     job.lease_token = None
