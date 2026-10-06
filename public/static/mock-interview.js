@@ -688,6 +688,118 @@
     state.sectionRemaining=Math.max(0,Math.ceil((state.sectionDeadline-now)/1000));
   }
 
+  function cancelQuestionReading() {
+    state.narrationGeneration=(state.narrationGeneration || 0)+1;
+    if(window.speechSynthesis)speechSynthesis.cancel();
+  }
+
+  async function readQuestionBeforeAnswer(q, record) {
+    cancelQuestionReading();
+    const generation=state.narrationGeneration;
+    const spec=q.coding_spec || {};
+    const examples=(spec.sample_tests || []).map((sample,i)=>'Example '+(i+1)+'. Input. '+sample.input+'. Expected output. '+sample.output).join(' ');
+    const text='Reading question. '+q.question+(q.options?.length?' Options. '+q.options.map((v,i)=>'Option '+(i+1)+'. '+v).join(' '):'')+' '+(spec.constraints || []).join('. ')+' '+examples+'. '+(record?'Record your answer.':'You may answer now.');
+    if(!window.speechSynthesis)throw new Error('Question reading is unavailable in this browser. Read the displayed question, then select Start answer.');
+    // Short utterances avoid browser truncation of long questions. Every
+    // character is included, and the microphone recorder starts only on end.
+    for(let pos=0;pos<text.length;){
+      if(state.narrationGeneration!==generation || !state.assessmentActive)return;
+      let end=Math.min(text.length,pos+180);
+      if(end<text.length){const space=text.lastIndexOf(' ',end);if(space>pos)end=space+1;}
+      const chunk=text.slice(pos,end);pos=end;
+      await new Promise((resolve,reject)=>{
+        const utterance=new SpeechSynthesisUtterance(chunk);utterance.lang='en-IN';utterance.rate=0.95;
+        const timer=setTimeout(()=>{if(state.narrationGeneration!==generation){resolve();return;}speechSynthesis.cancel();reject(new Error('Question reading was interrupted. Read the displayed question, then select Start answer.'));},60000);
+        utterance.onend=()=>{clearTimeout(timer);resolve();};
+        utterance.onerror=()=>{clearTimeout(timer);if(state.narrationGeneration!==generation){resolve();return;}reject(new Error('Question reading was interrupted. Read the displayed question, then select Start answer.'));};
+        speechSynthesis.speak(utterance);
+      });
+    }
+    if(record && state.narrationGeneration===generation && state.assessmentActive)await beginQuestionAnswer(q);
+  }
+
+  async function uploadQuestionAnswer(clip) {
+    if(clip.uploading)return clip.uploading;
+    clip.uploading=(async()=>{
+      while(clip.uploaded<clip.chunks.length){
+        const sequence=clip.uploaded;
+        await api(`/mock-interview/${clip.interviewId}/answers/${clip.questionId}/chunks/${sequence}`,{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:clip.chunks[sequence]});
+        clip.chunks[sequence]=null;clip.uploaded++;
+      }
+    })().finally(()=>{clip.uploading=null;});
+    return clip.uploading;
+  }
+
+  function beginQuestionAnswer(q) {
+    if(state.answerStartTask)return state.answerStartTask;
+    state.answerStartTask=startQuestionRecorder(q).finally(()=>{state.answerStartTask=null;});
+    return state.answerStartTask;
+  }
+
+  async function startQuestionRecorder(q) {
+    if(state.answerClip?.questionId===q.question_id || state.answerStarting || !state.assessmentActive)return;
+    state.answerStarting=true;
+    try {
+      cancelQuestionReading();
+      const audioOnly=q.response_mode==='audio';
+      const tracks=state.mediaStream?.getTracks().filter(t=>!audioOnly || t.kind==='audio') || [];
+      if(!tracks.some(t=>t.kind==='audio' && t.readyState==='live') || !audioOnly && !tracks.some(t=>t.kind==='video' && t.readyState==='live'))throw new Error('Camera or microphone is unavailable. Restore your devices to record.');
+      const formats=audioOnly?['audio/webm;codecs=opus','audio/webm','audio/mp4']:['video/webm;codecs=vp8,opus','video/webm','video/mp4'];
+      const mime=formats.find(t=>MediaRecorder.isTypeSupported(t));
+      if(!mime)throw new Error('This browser cannot record this answer. Use a supported browser.');
+      const recorder=new MediaRecorder(new MediaStream(tracks),{mimeType:mime,audioBitsPerSecond:48000,...(!audioOnly?{videoBitsPerSecond:250000}:{})});
+      const server=await api(`/mock-interview/${state.session.interview_id}/answers/${q.question_id}/start`,{method:'POST',body:JSON.stringify({mime_type:mime.split(';')[0],consent:$('#consent-check').checked})});
+      if(server.status!=='recording')throw new Error('This answer has already been submitted.');
+      const clip={questionId:q.question_id,interviewId:state.session.interview_id,recorder,chunks:[],uploaded:0,bytes:0,submitted:false,
+        deadline:Date.now()+Math.max(0,Date.parse(server.question_deadline_at)-Date.parse(server.server_time))};
+      state.answerClip=clip;
+      recorder.ondataavailable=event=>{
+        if(!event.data.size)return;
+        clip.bytes+=event.data.size;
+        if(clip.bytes>server.max_bytes){clip.error='The answer reached its recording size limit. Finish this answer now.';if(recorder.state!=='inactive')recorder.stop();return;}
+        for(let pos=0;pos<event.data.size;pos+=512*1024)clip.chunks.push(event.data.slice(pos,pos+512*1024));
+        uploadQuestionAnswer(clip).catch(error=>{clip.error=error.message;});
+      };
+      recorder.onerror=()=>{clip.error='Recording was interrupted. Finish this answer to preserve captured media.';};
+      recorder.start(4000);
+      $('#spoken-answer-status').textContent='Recording your answer · microphone on'+(audioOnly?'':' · camera on');
+      $('#start-spoken-answer').classList.add('hidden');
+      $('#next-question').disabled=false;
+    }catch(error){$('#spoken-answer-status').textContent=error.message;$('#start-spoken-answer')?.classList.remove('hidden');}
+    finally{state.answerStarting=false;}
+  }
+
+  async function finishQuestionAnswer() {
+    cancelQuestionReading();
+    if(state.answerStartTask)await state.answerStartTask;
+    const clip=state.answerClip;
+    if(!clip || clip.submitted)return;
+    if(clip.finishing)return clip.finishing;
+    clip.finishing=(async()=>{
+      if(clip.recorder.state!=='inactive')await new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>reject(new Error('The recording is still closing. Keep this page open and retry.')),10000);
+        clip.recorder.addEventListener('stop',()=>{clearTimeout(timer);resolve();},{once:true});clip.recorder.stop();
+      });
+      await uploadQuestionAnswer(clip);
+      await api(`/mock-interview/${clip.interviewId}/answers/${clip.questionId}/submit`,{method:'POST',body:JSON.stringify({chunks:clip.uploaded})});
+      clip.submitted=true;
+      state.answers[clip.questionId-1]={question_id:clip.questionId,answer:clip.uploaded?'[Spoken answer submitted]':'[No response submitted: no recording captured]'};
+    })().finally(()=>{clip.finishing=null;});
+    return clip.finishing;
+  }
+
+  function renderSpokenAnswer(q) {
+    state.answerClip=null;
+    $('#answer-area').innerHTML='<div class="answer-field"><strong>'+(q.response_mode==='video'?'HR camera and voice answer':'Spoken answer')+'</strong><p>Listen to the question, then answer aloud. This question has its own private recording and up to 2 minutes 30 seconds of answer time.</p><p id="spoken-answer-status" role="status">Reading question…</p><button id="start-spoken-answer" type="button" class="button secondary hidden">Start answer</button>'+(q.response_mode==='video'?'<video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video>':'')+'</div>';
+    const preview=$('#hr-answer-preview');if(preview){preview.srcObject=state.mediaStream;preview.play().catch(()=>{});}
+    $('#start-spoken-answer').onclick=()=>beginQuestionAnswer(q);
+    $('#save-question').disabled=true;$('#next-question').disabled=true;
+    readQuestionBeforeAnswer(q,true).catch(error=>{
+      if(state.questions[state.current]?.question_id!==q.question_id || !state.assessmentActive)return;
+      $('#spoken-answer-status').textContent=error.message;$('#start-spoken-answer').classList.remove('hidden');
+    });
+  }
+
   function speakHRQuestion() {
     if(!window.speechSynthesis || state.hr?.recorder?.state==='recording' || state.questions[state.current]?.answer_type!=='video')return;
     speechSynthesis.cancel();
@@ -753,7 +865,8 @@
     if(stage) stage.scrollTop=0;
     $('#question-text').textContent=q.question;
     $('#question-watermark').textContent=`${state.candidateLabel} · Q${state.current+1}`;
-    if(q.answer_type==='video') {
+    if(q.response_mode)renderSpokenAnswer(q);
+    else if(q.answer_type==='video') {
       $('#answer-area').innerHTML='<div class="answer-field"><strong>HR video answer</strong><p>Answer aloud in English. One private video captures all four HR answers. Each answer has up to 2 minutes 30 seconds; the next question opens automatically when its time expires.</p><p id="hr-recording-status" role="status">Camera and microphone ready. Read the question, then start your answer.</p><button type="button" id="start-hr-recording" class="button primary">Start HR recording</button><button type="button" id="repeat-hr-question" class="button secondary">Read question aloud</button><button type="button" id="retry-hr-recording" class="button secondary hidden">Retry recording setup</button><video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video></div>';
       $('#repeat-hr-question').onclick=speakHRQuestion;
       $('#retry-hr-recording').onclick=beginHRVideo;
@@ -767,10 +880,13 @@
       $('#repeat-hr-question').disabled=recording;
       $('#next-question').disabled=!recording;
       $('#save-question').disabled=true;
-    } else renderAnswerArea(q);
+    } else {
+      renderAnswerArea(q);
+      if(q.narration_enabled)readQuestionBeforeAnswer(q,false).catch(()=>{if(state.assessmentActive)toast('Question reading is unavailable. Use the full question displayed on screen.','error');});
+    }
     renderSectionNav();
     $('#autosave-state').textContent=isAttemptedAnswer(state.answers[q.question_id-1])?'Answer saved':'Response not saved';
-    $('#next-question').textContent=q.answer_type==='video'?'Finish answer & Next':state.current===state.questions.length-1?'Save & Submit':'Save & Next';
+    $('#next-question').textContent=q.response_mode || q.answer_type==='video'?'Finish answer & Next':state.current===state.questions.length-1?'Save & Submit':'Save & Next';
     const sectionFirst=state.questions.findIndex(x=>x.section===q.section);
     if(state.current===sectionFirst || state.sectionRemaining<=0){
       state.sectionRemaining=info.minutes*60;
@@ -782,7 +898,10 @@
   function answerCurrentQuestion() {
     const q=state.questions[state.current];
     let answer='';
-    if(q.answer_type==='video') {
+    if(q.response_mode){
+      if(!state.answerClip){toast('Wait for the question reading and recording to start.','error');return false;}
+      answer='[Spoken answer submitted]';
+    } else if(q.answer_type==='video') {
       if(!state.hr?.recorder){toast('The HR recording has not started.','error');return false;}
       answer='[HR video response submitted]';
     } else if(q.answer_type==='mcq') {
@@ -826,7 +945,8 @@
     if(state.advancing || state.finishing)return;
     state.advancing=true;
     try {
-    if(state.questions[state.current]?.answer_type==='video'){answerCurrentQuestion();await stopHRVideo();}
+    if(state.questions[state.current]?.response_mode)await finishQuestionAnswer();
+    else if(state.questions[state.current]?.answer_type==='video'){answerCurrentQuestion();await stopHRVideo();}
     const currentQuestion=state.questions[state.current];
     if(!currentQuestion){finishAssessment(true);return;}
     const section=currentQuestion.section;
@@ -859,6 +979,7 @@
         finishAssessment(true);
         return;
       }
+      if(state.answerClip && !state.answerClip.submitted && Date.now()>=state.answerClip.deadline && !state.advancing){submitAndContinue().catch(error=>toast(error.message,'error'));return;}
       if(state.sectionRemaining<=0 && !state.hr?.transitioning){
         logIntegrity('section_time_expired','Section time expired; remaining unanswered items in this section were closed automatically.');
         expireCurrentSection();
@@ -1592,12 +1713,14 @@
     state.advancing=true;
     try {
     if(!answerCurrentQuestion()) return;
-    if(state.questions[state.current].answer_type==='video' && !await advanceHRQuestion())return;
+    if(state.questions[state.current].response_mode)await finishQuestionAnswer();
+    else if(state.questions[state.current].answer_type==='video' && !await advanceHRQuestion())return;
+    cancelQuestionReading();
     if(state.finishing)return;
     if(state.current>=state.questions.length-1){await finishAssessment(false);return;}
     state.current++;
     renderQuestion();
-    } finally {state.advancing=false;}
+    } catch(error){toast(error.message,'error');} finally {state.advancing=false;}
   }
 
 
@@ -1792,7 +1915,7 @@
         renderResult(saved.result,false);
       }else{
         $('#analysis-message').textContent=saved.status==='pending'
-          ? 'Your submitted exam is saved. Its complete report is pending. Retry analysis or return to setup to start another assessment.'
+          ? (saved.queued?'Your submitted exam is saved. Every section is being analyzed in the background. Return to exam history later for the complete report.':'Your submitted exam is saved. Its complete report is pending. Retry analysis or return to setup to start another assessment.')
           : 'This assessment has not been submitted. Finish it in the original exam tab.';
         $('#retry-analysis').classList.toggle('hidden',saved.status!=='pending');
       }
@@ -1818,6 +1941,8 @@
       if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
       if(saved.status==='complete')return saved.result;
       if(saved.queue_status==='failed')throw new Error('Your exam is saved. Analysis needs support to resume; contact your institution.');
+      if(saved.error_code==='VIDEO_PROVIDER_CAPACITY')$('#analysis-message').textContent='Your exam is saved. Analysis is waiting for available capacity. You can leave this page and return to exam history later; your complete report appears after every section is ready.';
+      else if(saved.spoken_progress)$('#analysis-message').textContent=`Your exam is saved. ${saved.spoken_progress.analyzed} of ${saved.spoken_progress.recorded} recorded answers analyzed. The complete report appears after every section is ready; you can return from exam history later.`;
     }
     throw new Error('Your exam is saved. Return to exam history to view the report when it is ready.');
   }
@@ -1832,6 +1957,7 @@
         await new Promise(resolve=>setTimeout(resolve,1400));
         result=buildPreviewResult();
       }else{
+        await finishQuestionAnswer();
         await submitHRVideo();
         if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
         rememberSubmittedAttempt();
@@ -1863,7 +1989,16 @@
             throw new Error('Your exam is saved. Analysis is still processing.');
           }catch(error){
             if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
-            if(attempt===1 || [400,401,403,404,410,413,422].includes(error.status) || !state.answers.length && !state.submissionSaved)throw error;
+            const supportRequired=['VIDEO_PROVIDER_CAPACITY','VIDEO_PROVIDER_ACCESS','VIDEO_PROVIDER_MODEL','VIDEO_PROVIDER_UNAVAILABLE'].includes(error.code);
+            if(supportRequired && !state.submissionSaved){
+              try{
+                const saved=await api(`/mock-interview/${interviewId}/result`);
+                if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
+                state.submissionSaved=['pending','complete'].includes(saved.status);
+                if(saved.status==='complete'){result=saved.result;break;}
+              }catch{ /* Preserve the original safe error when confirmation is unavailable. */ }
+            }
+            if(attempt===1 || supportRequired || [400,401,403,404,410,413,422].includes(error.status) || !state.answers.length && !state.submissionSaved)throw error;
             clearAnalysisTimers();
             $('#analysis-message').textContent='Finishing the complete report, including spoken HR answers. All scores will appear together when analysis is ready.';
             await new Promise(resolve=>setTimeout(resolve,[2000,5000,10000][attempt]));
@@ -1892,6 +2027,7 @@
   }
 
   async function finishAssessment(auto) {
+    cancelQuestionReading();
     // Lock synchronously: expiry, device loss and a final click may arrive together.
     if(state.finishing || !state.assessmentActive)return;
     state.finishing=true;
@@ -1903,7 +2039,7 @@
     clearInterval(state.proctorVisionTimer);
     clearInterval(state.mediaWatchTimer);
     clearTimeout(state.proctorBannerTimer);
-    try{await stopHRVideo();}catch(error){hrStatus(error.message);}
+    try{await finishQuestionAnswer();await stopHRVideo();}catch(error){toast(error.message,'error');}
     fillUnansweredResponses(auto?'[No response submitted before assessment ended]':'[No response submitted]');
     state.ignoreFullscreen=true;
     try{if(document.fullscreenElement)await document.exitFullscreen();}catch{}
@@ -1982,6 +2118,7 @@
   }
 
   function renderQuestionReviews(filter) {
+    (state.answerPlaybackUrls || []).forEach(url=>URL.revokeObjectURL(url));state.answerPlaybackUrls=[];
     filter = filter || 'all';
     state.reviewFilter=filter;
     const result=state.lastResult||{};
@@ -1994,7 +2131,7 @@
       let html='<article class="answer-review review-'+bucket+'"><header class="answer-review-header"><div><div class="question-meta-line">';
       html+='<span class="review-chip '+bucket+'">'+esc(item.answer_type==='mcq' ? (bucket==='correct'?'✓ Correct':bucket==='insufficient'?'– Not answered':'✕ Incorrect') : (bucket==='correct'?'✓ Strong response':bucket==='partial'?'◐ Developing':bucket==='insufficient'?'– Insufficient evidence':'↗ Needs practice'))+'</span>';
       html+='<span class="review-chip">'+esc((item.section||'interview').replaceAll('_',' '))+'</span>';
-      html+='<span class="review-chip">'+esc(item.grading_method==='system'?'System graded':item.grading_method==='code_execution'?'Sandbox graded':item.grading_method==='system_relevance_gate'?'Relevance gate':item.grading_method==='ai_video'?'HR video analysis':item.grading_method==='ai'?'AI graded':'Preview graded')+'</span>';
+      html+='<span class="review-chip">'+esc(item.grading_method==='system'?'System graded':item.grading_method==='code_execution'?'Code tests':item.grading_method==='system_relevance_gate'?'Relevance check':item.grading_method==='ai_video'?'HR video analysis':item.grading_method==='ai_audio'?'Spoken answer analysis':item.grading_method==='ai'?'AI graded':'Preview graded')+'</span>';
       html+='</div><h4>Q'+item.question_id+'. '+esc(item.question||'')+'</h4></div><div class="answer-score-box"><strong>'+(item.score??'—')+'</strong><small>/100</small></div></header>';
       let answerBody='<p>'+esc(item.answer||'No answer')+'</p>';
       if(item.answer_type==='code'){
@@ -2008,8 +2145,8 @@
         html+='<div class="rubric-grid">'+rubricEntries.map(function(entry){return '<div class="rubric-item"><span>'+esc(entry[0].replaceAll('_',' '))+'</span><strong>'+entry[1]+'/100</strong></div>';}).join('')+'</div>';
       }
       html+='<div class="review-details">'+reviewDetailsList('What worked',item.strengths||[])+reviewDetailsList('Errors / gaps',[].concat(item.issues||[],item.missing_points||[]))+'</div>';
-      if(item.answer_type==='video' && Array.isArray(item.evidence)){
-        html+='<div class="review-detail-box"><h5>Recording evidence</h5><ul>'+item.evidence.map(e=>'<li><button type="button" class="button secondary" data-recording-second="'+Number(e.at_seconds || 0)+'">'+esc(formatTime(e.at_seconds))+'</button> '+esc(e.observation)+'</li>').join('')+'</ul></div>';
+      if(['audio','video'].includes(item.answer_type) && Array.isArray(item.evidence)){
+        html+='<div class="review-detail-box"><h5>Recording evidence</h5><ul>'+item.evidence.map(e=>'<li><button type="button" class="button secondary" '+(item.recording_url?'data-answer-recording="'+Number(item.question_id)+'" ':'')+'data-recording-second="'+Number(e.at_seconds || 0)+'">'+esc(formatTime(e.at_seconds))+'</button> '+esc(e.observation)+'</li>').join('')+'</ul>'+(item.recording_url?'<p role="status" id="answer-playback-status-'+Number(item.question_id)+'"></p><'+(item.answer_type==='audio'?'audio':'video')+' id="answer-playback-'+Number(item.question_id)+'" class="hidden" controls playsinline preload="none" style="max-width:100%"></'+(item.answer_type==='audio'?'audio':'video')+'>':'')+'</div>';
       }
       if(item.better_answer_outline)html+='<div class="ideal-answer-box"><strong>Better answer structure</strong><p>'+esc(item.better_answer_outline)+'</p></div>';
       html+='</article>';
@@ -2110,6 +2247,9 @@
   }
 
   function resetAssessment() {
+    (state.answerPlaybackUrls || []).forEach(url=>URL.revokeObjectURL(url));state.answerPlaybackUrls=[];
+    cancelQuestionReading();
+    state.answerClip=null;
     state.analysisGeneration++;
     clearInterval(state.timerId);
     clearInterval(state.faceTimer);
@@ -2185,7 +2325,32 @@
     loadHistory();
   });
   $('#load-hr-recording')?.addEventListener('click',()=>loadHRPlayback());
-  $('#answer-feedback')?.addEventListener('click',event=>{const button=event.target.closest('[data-recording-second]');if(button)loadHRPlayback(Number(button.dataset.recordingSecond));});
+  async function loadAnswerPlayback(questionId,atSeconds) {
+    const item=state.lastResult?.evaluations?.find(answer=>answer.question_id===questionId);
+    const media=$('#answer-playback-'+questionId),status=$('#answer-playback-status-'+questionId);
+    if(!item || !media || !status)return;
+    if(media.src){media.currentTime=Math.max(0,atSeconds);media.play().catch(()=>{});return;}
+    const size=Number(item.recording_size_bytes);
+    if(!Number.isInteger(size) || size<=0 || size>7*1024*1024)return;
+    status.textContent='Loading your private answer…';
+    try {
+      const parts=[];
+      for(let start=0;start<size;){
+        const end=Math.min(size-1,start+3*1024*1024-1);
+        const response=await api(`/mock-interview/${state.lastResult.interview_id}/answers/${questionId}/recording`,{headers:{Range:`bytes=${start}-${end}`},rawResponse:true});
+        if(response.status!==206 || response.headers.get('Content-Range')!==`bytes ${start}-${end}/${size}`)throw new Error('The answer could not be loaded completely. Try again.');
+        const part=await response.blob();if(part.size!==end-start+1)throw new Error('Answer playback was interrupted. Try again.');
+        parts.push(part);start+=part.size;
+      }
+      if(!media.isConnected)return;
+      const url=URL.createObjectURL(new Blob(parts,{type:item.recording_mime_type}));
+      (state.answerPlaybackUrls || (state.answerPlaybackUrls=[])).push(url);media.src=url;media.classList.remove('hidden');
+      media.addEventListener('loadedmetadata',()=>{media.currentTime=Math.max(0,atSeconds);},{once:true});
+      status.textContent='Private answer recording · available during the 30-day retention period.';media.play().catch(()=>{});
+    }catch(error){status.textContent=error.status===410?'This recording has expired. Your feedback remains available.':error.message;}
+  }
+
+  $('#answer-feedback')?.addEventListener('click',event=>{const button=event.target.closest('[data-recording-second]');if(button){if(button.dataset.answerRecording)loadAnswerPlayback(Number(button.dataset.answerRecording),Number(button.dataset.recordingSecond));else loadHRPlayback(Number(button.dataset.recordingSecond));}});
   $('#history-list')?.addEventListener('click',event=>{const button=event.target.closest('[data-saved-result]');if(button)openSavedResult(button.dataset.savedResult);});
   $('#retry-analysis')?.addEventListener('click',function(){if(state.finishing)return;state.finishing=true;runResultAnalysis(false);});
   $('#retry-analysis-result')?.addEventListener('click',function(){if(state.finishing)return;state.finishing=true;runResultAnalysis(false);});

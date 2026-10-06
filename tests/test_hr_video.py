@@ -418,8 +418,10 @@ def test_completed_legacy_report_has_explicit_status_and_bad_report_is_safe(exam
         assert error.value.detail["code"] == "SAVED_REPORT_UNAVAILABLE"
 
 
-@pytest.mark.parametrize("status,expected_calls", [(503, 2), (401, 1), (429, 1)])
-def test_provider_retry_is_bounded_and_reuses_private_upload(exam, monkeypatch, status, expected_calls):
+@pytest.mark.parametrize("status,expected_calls,code", [(503, 2, "VIDEO_PROVIDER_BUSY"), (401, 1, "VIDEO_PROVIDER_ACCESS"),
+                                                     (403, 1, "VIDEO_PROVIDER_ACCESS"), (404, 1, "VIDEO_PROVIDER_MODEL"),
+                                                     (429, 1, "VIDEO_PROVIDER_CAPACITY")])
+def test_provider_retry_is_bounded_and_reuses_private_upload(exam, monkeypatch, status, expected_calls, code):
     from google import genai
 
     seal(exam)
@@ -443,6 +445,7 @@ def test_provider_retry_is_bounded_and_reuses_private_upload(exam, monkeypatch, 
         hr_video.analyze_recording(exam.db, exam.recording, exam.interview)
     assert counts == {"uploads": 1, "generations": expected_calls, "deletes": 1}
     assert "private upstream" not in str(error.value.detail)
+    assert error.value.detail["code"] == code
     exam.db.refresh(exam.recording)
     assert exam.recording.analysis_lease_until is None
     assert exam.recording.analysis_json is None

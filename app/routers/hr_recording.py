@@ -81,6 +81,10 @@ def status(interview_id: str, user: User = Depends(require_student), db: Session
 @router.get("/{interview_id}/hr/recording")
 def recording(interview_id: str, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     row, _ = hr_video.owned_recording(db, user, interview_id, reviewer=True)
+    return recording_response(db, row, request)
+
+
+def recording_response(db, row, request, chunk_model=HRVideoChunk):
     if row.expires_at <= hr_video.utcnow():
         raise HTTPException(410, "This HR recording has expired")
     if not row.sealed_at:
@@ -105,9 +109,9 @@ def recording(interview_id: str, request: Request, user: User = Depends(get_curr
         end = min(end, start + hr_video.PLAYBACK_BYTES - 1)
     # Read only chunks intersecting this bounded response. Full recordings can exceed
     # the serverless response limit, and must never be assembled into one response.
-    sizes = db.query(HRVideoChunk.sequence, func.length(HRVideoChunk.data)).filter(
-        HRVideoChunk.recording_id == row.id,
-    ).order_by(HRVideoChunk.sequence).all()
+    sizes = db.query(chunk_model.sequence, func.length(chunk_model.data)).filter(
+        chunk_model.recording_id == row.id,
+    ).order_by(chunk_model.sequence).all()
     if len(sizes) != row.chunk_count or sum(size for _, size in sizes) != total:
         raise HTTPException(409, "The saved HR recording is incomplete")
     data, offset = bytearray(), 0
@@ -115,7 +119,7 @@ def recording(interview_id: str, request: Request, user: User = Depends(get_curr
         if sequence != index or not 0 < size <= hr_video.CHUNK_BYTES:
             raise HTTPException(409, "The saved HR recording is incomplete")
         if offset <= end and offset + size > start:
-            chunk = db.get(HRVideoChunk, (row.id, sequence))
+            chunk = db.get(chunk_model, (row.id, sequence))
             data.extend(chunk.data[max(0, start-offset):min(size, end-offset+1)])
         offset += size
     headers = {"Cache-Control": "private, no-store", "Content-Disposition": "inline",

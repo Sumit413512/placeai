@@ -3,7 +3,9 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 import importlib
 import logging
+import os
 from pathlib import Path
+from threading import Event, Thread
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,6 +41,7 @@ if engine_initialization_error_code and engine_initialization_error_code not in 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    worker_stop, worker_thread = Event(), None
     if runtime_readiness_errors:
         for code in runtime_readiness_errors:
             logger.error("PlaceAI runtime readiness blocked: %s", code)
@@ -51,7 +54,17 @@ async def lifespan(_: FastAPI):
         logger.error(
             "PlaceAI transactional email is not configured: password recovery and operational alerts are unavailable"
         )
-    yield
+    if (not runtime_readiness_errors and settings.assessment_queue_enabled and settings.assessment_worker_in_process
+            and os.getenv("RENDER") and not settings.running_on_vercel):
+        from app.assessment_worker import run
+        worker_thread = Thread(target=run, args=(worker_stop,), daemon=True, name="assessment-worker")
+        worker_thread.start()
+    try:
+        yield
+    finally:
+        worker_stop.set()
+        if worker_thread:
+            worker_thread.join(timeout=5)
 
 
 app = FastAPI(
@@ -240,6 +253,7 @@ ai_experience = _import_router("ai_experience")
 mock_interview = _import_router("mock_interview")
 mock_interview_v2 = _import_router("mock_interview_v2")
 hr_recording = _import_router("hr_recording")
+answer_recordings = _import_router("answer_recordings")
 institutions = _import_router("institutions")
 institution_secure = _import_router("institution_secure")
 institution_access = _import_router("institution_access")
@@ -305,6 +319,7 @@ _include_router(ai_experience)
 _include_router(mock_interview, MOCK_INTERVIEW_REPLACEMENTS)
 _include_router(mock_interview_v2)
 _include_router(hr_recording)
+_include_router(answer_recordings)
 _include_router(institutions, INSTITUTION_REPLACEMENTS)
 _include_router(institution_secure)
 _include_router(institution_access)

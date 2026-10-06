@@ -127,11 +127,11 @@ def advance_question(db, row, interview, question_id):
     return recording_status(row)
 
 
-def save_chunk(db, row, interview, sequence, data):
+def save_chunk(db, row, interview, sequence, data, *, chunk_model=HRVideoChunk):
     if not 0 <= sequence < MAX_CHUNKS or not 0 < len(data) <= CHUNK_BYTES:
         raise HTTPException(413, "Recording chunk exceeds the allowed size")
     digest = hashlib.sha256(data).hexdigest()
-    existing = db.get(HRVideoChunk, (row.id, sequence))
+    existing = db.get(chunk_model, (row.id, sequence))
     if existing:
         if existing.sha256 != digest:
             raise HTTPException(409, "A different recording chunk already occupies this position")
@@ -145,10 +145,10 @@ def save_chunk(db, row, interview, sequence, data):
     if row.size_bytes + len(data) > MAX_BYTES:
         raise HTTPException(413, "The HR recording exceeds its size limit")
     if sequence == 0:
-        valid = data.startswith(b"\x1a\x45\xdf\xa3") if row.mime_type == "video/webm" else data[4:8] == b"ftyp"
+        valid = data.startswith(b"\x1a\x45\xdf\xa3") if row.mime_type in {"video/webm", "audio/webm"} else data[4:8] == b"ftyp"
         if not valid:
             raise HTTPException(415, "The uploaded data is not the selected video format")
-    db.add(HRVideoChunk(recording_id=row.id, sequence=sequence, sha256=digest, data=data))
+    db.add(chunk_model(recording_id=row.id, sequence=sequence, sha256=digest, data=data))
     row.chunk_count += 1
     row.size_bytes += len(data)
     db.commit()
@@ -220,13 +220,13 @@ def _validated_segments(row, questions):
     return segments
 
 
-def _validate_analysis(analysis, row, questions):
+def _validate_analysis(analysis, row, questions, *, audio_only=False):
     segments = _validated_segments(row, questions)
     if {a.question_id for a in analysis.answers} != {q["question_id"] for q in questions} or len(analysis.answers) != len(questions):
         raise RuntimeError("VIDEO_ANALYSIS_INCOMPLETE")
     by_id = {segment["question_id"]: segment for segment in segments}
     last_end = segments[-1]["end"]
-    if not analysis.audio_usable or not analysis.video_usable:
+    if not analysis.audio_usable or (not audio_only and not analysis.video_usable):
         feedback = "This recording cannot support an assessment of spoken answers. Check camera and microphone playback, then practice again with clear, audible answers. Fluency and communication were not assessed."
         analysis.summary = feedback
         for answer in analysis.answers:
@@ -250,7 +250,7 @@ def _validate_analysis(analysis, row, questions):
     return analysis.model_dump()
 
 
-def _analyze_video(data, row, questions, persist_provider_file):
+def _analyze_video(data, row, questions, persist_provider_file, *, audio_only=False):
     from google import genai
     from google.genai import types
     key = _gemini_key()
@@ -273,6 +273,8 @@ Evidence for a recorded question must fall within its segment. Questions with no
 segment were not answered; their transcript is empty, scores zero, and evidence timestamp
 is the final recorded segment's end. Do not credit speech outside the question's segment.
 """ + json.dumps({"questions": questions, "segments": _validated_segments(row, questions)})
+    if audio_only:
+        prompt += "\nThis is an audio-only answer. Set video_usable false; assess actual speech only. Never invent visual observations."
     client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=55000))
     uploaded = None
     processing = False
@@ -314,7 +316,7 @@ is the final recorded segment's end. Do not credit speech outside the question's
                     raise
                 time.sleep(2)
         analysis = VideoAnalysis.model_validate_json(response.text or "")
-        return _validate_analysis(analysis, row, questions)
+        return _validate_analysis(analysis, row, questions, audio_only=audio_only)
     finally:
         if uploaded and uploaded.name and not processing:
             try:
@@ -327,11 +329,12 @@ is the final recorded segment's end. Do not credit speech outside the question's
 
 def acquire_lease(db, row, field_name, *, minutes):
     """A conditional UPDATE remains atomic after the caller releases its row lock."""
-    field = getattr(HRRecording, field_name)
+    model = type(row)
+    field = getattr(model, field_name)
     now = utcnow()
     until = now + timedelta(minutes=minutes)
-    updated = db.query(HRRecording).filter(
-        HRRecording.id == row.id, or_(field.is_(None), field <= now),
+    updated = db.query(model).filter(
+        model.id == row.id, or_(field.is_(None), field <= now),
     ).update({field_name: until}, synchronize_session=False)
     db.commit()
     if not updated:
@@ -341,14 +344,15 @@ def acquire_lease(db, row, field_name, *, minutes):
 
 
 def release_lease(db, row, field_name, until):
-    field = getattr(HRRecording, field_name)
-    db.query(HRRecording).filter(HRRecording.id == row.id, field == until).update(
+    model = type(row)
+    field = getattr(model, field_name)
+    db.query(model).filter(model.id == row.id, field == until).update(
         {field_name: None}, synchronize_session=False,
     )
     db.commit()
 
 
-def analyze_recording(db, row, interview):
+def analyze_recording(db, row, interview, *, chunk_model=HRVideoChunk, questions=None, audio_only=False):
     if row.analysis_json:
         return json.loads(row.analysis_json)
     if not row.sealed_at:
@@ -357,7 +361,7 @@ def analyze_recording(db, row, interview):
         raise HTTPException(410, "This HR recording has expired")
     lease = acquire_lease(db, row, "analysis_lease_until", minutes=5)
     try:
-        chunks = db.query(HRVideoChunk).filter(HRVideoChunk.recording_id == row.id).order_by(HRVideoChunk.sequence).all()
+        chunks = db.query(chunk_model).filter(chunk_model.recording_id == row.id).order_by(chunk_model.sequence).all()
         if (len(chunks) != row.chunk_count or not 0 < row.size_bytes <= MAX_BYTES
                 or any(chunk.sequence != index or len(chunk.data) > CHUNK_BYTES
                        or hashlib.sha256(chunk.data).hexdigest() != chunk.sha256 for index, chunk in enumerate(chunks))):
@@ -369,7 +373,11 @@ def analyze_recording(db, row, interview):
             row.provider_file_name = name
             db.commit()
 
-        result = _analyze_video(data, row, hr_questions(interview), persist_provider_file)
+        question_set = questions if questions is not None else hr_questions(interview)
+        if audio_only:
+            result = _analyze_video(data, row, question_set, persist_provider_file, audio_only=True)
+        else:
+            result = _analyze_video(data, row, question_set, persist_provider_file)
         row.analysis_json = json.dumps(result)
         row.status = "analyzed"
         db.commit()
@@ -383,7 +391,18 @@ def analyze_recording(db, row, interview):
         code = str(exc) if isinstance(exc, RuntimeError) and str(exc) in known_codes else "VIDEO_ANALYSIS_PENDING"
         if safe_status in (500, 502, 503, 504):
             code = "VIDEO_PROVIDER_BUSY"
+        elif safe_status == 429:
+            code = "VIDEO_PROVIDER_CAPACITY"
+        elif safe_status in (401, 403):
+            code = "VIDEO_PROVIDER_ACCESS"
+        elif safe_status == 404:
+            code = "VIDEO_PROVIDER_MODEL"
         LOGGER.warning("HR analysis pending code=%s error_type=%s upstream_status=%s", code, type(exc).__name__, safe_status)
-        raise HTTPException(503, {"code": code, "message": "Your exam is saved. Video analysis could not finish yet. Retry later to receive all section results together."}) from exc
+        message = "Your exam is saved. Video analysis could not finish yet. Retry later to receive all section results together."
+        if code == "VIDEO_PROVIDER_CAPACITY":
+            message = "Your exam and recording are saved. Analysis capacity is currently unavailable. Your complete report will remain pending until capacity is restored; repeated retries will not speed it up."
+        elif code in {"VIDEO_PROVIDER_ACCESS", "VIDEO_PROVIDER_MODEL", "VIDEO_PROVIDER_UNAVAILABLE"}:
+            message = "Your exam and recording are saved. Analysis needs support to resume. Contact your institution with the assessment reference; your answers do not need to be recorded again."
+        raise HTTPException(503, {"code": code, "message": message}) from exc
     finally:
         release_lease(db, row, "analysis_lease_until", lease)

@@ -105,3 +105,17 @@ def test_provider_failure_has_bounded_retries_and_retains_answers(queued):
     assert job.payload_json and queued.interview.answers_json
     assert queued.interview.overall_score is None
     assert queue.claim(queued.db, 4, 100) is None
+
+
+def test_capacity_rejection_defers_saved_exam_without_rapid_retries(queued):
+    queue.enqueue(queued.db, queued.interview, queued.user, body(queued))
+    item = queue.claim(queued.db, 1, 1)
+    before = utcnow()
+    queue.finish(queued.db, item[0], item[3], False, error_code="VIDEO_PROVIDER_CAPACITY")
+    job = queued.db.get(AssessmentJob, queued.interview.id)
+    queued.db.refresh(job)
+    assert job.available_at >= before + timedelta(minutes=15)
+    assert job.state == "retrying" and job.error_code == "VIDEO_PROVIDER_CAPACITY"
+    assert queue.claim(queued.db, 1, 100) is None
+    assert job.payload_json and queued.interview.answers_json
+    assert queued.interview.overall_score is None
