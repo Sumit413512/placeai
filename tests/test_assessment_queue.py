@@ -54,6 +54,33 @@ def test_enqueue_rejects_foreign_exam_and_changed_question_set(queued, monkeypat
     assert queued.db.query(AssessmentJob).count() == 0
 
 
+def test_claim_restores_missing_queue_control_row(queued):
+    queued.db.query(AssessmentQueueControl).delete()
+    interview = MockInterview(
+        id="exam-bootstrap",
+        student_id=queued.profile.id,
+        job_id=queued.job.id,
+        questions_json="[]",
+        answers_json="[]",
+    )
+    queued.db.add(interview)
+    queued.db.flush()
+    queued.db.add(AssessmentJob(
+        interview_id=interview.id,
+        user_id=queued.user.id,
+        payload_json="{}",
+    ))
+    queued.db.commit()
+
+    assert queued.db.get(AssessmentQueueControl, 1) is None
+    item = queue.claim(queued.db, 1, 2)
+    assert item and item[0] == interview.id
+
+    control = queued.db.get(AssessmentQueueControl, 1)
+    assert control is not None
+    assert control.starts_in_window == 1
+
+
 def test_global_concurrency_and_start_budget(queued):
     for number in range(3):
         interview = MockInterview(id=f"exam-{number}", student_id=queued.profile.id,
