@@ -26,6 +26,7 @@
   const state = {
     token:'',
     me:null,
+    recordingPolicy:null,
     jobs:[],
     session:null,
     questions:[],
@@ -620,7 +621,7 @@
       if(!mime)throw new Error('No supported video recording format is available.');
       // Prepare the recorder before starting the server clock. A failed request is safe to retry.
       const recorder=new MediaRecorder(state.mediaStream,{mimeType:mime,videoBitsPerSecond:240000,audioBitsPerSecond:32000});
-      const response=await api(`/mock-interview/${state.session.interview_id}/hr/start`,{method:'POST',body:JSON.stringify({mime_type:mime.split(';')[0],consent:$('#consent-check').checked})});
+      const response=await api(`/mock-interview/${state.session.interview_id}/hr/start`,{method:'POST',body:JSON.stringify({mime_type:mime.split(';')[0],consent:$('#consent-check').checked,processor:state.recordingPolicy?.processor || 'google'})});
       if(response.status!=='recording' || response.chunk_count)throw new Error('This recording has already started in another session. Keep its original exam tab open to finish uploading.');
       if(state.finishing)return;
       hr.server=response;
@@ -827,7 +828,7 @@
     if(!hr?.recorder || hr.submitted)return;
     await stopHRVideo();
     await uploadHRChunks();
-    if(hr.uploaded!==hr.chunks.length || !hr.uploaded)throw new Error(hr.uploadError || 'The HR recording has not finished uploading. Keep this page open and retry.');
+    if(hr.uploaded!==hr.chunks.length)throw new Error(hr.uploadError || 'The HR recording has not finished uploading. Keep this page open and retry.');
     await api(`/mock-interview/${state.session.interview_id}/hr/submit`,{method:'POST',body:JSON.stringify({chunks:hr.uploaded})});
     hr.submitted=true;
     clearInterval(hr.retryTimer);
@@ -1556,7 +1557,7 @@
       await $('#interview-panel').requestFullscreen();
       let remaining=TOTAL_SECONDS*1000;
       if(!previewMode){
-        const clock=await api(`/mock-interview/${state.session.interview_id}/hr/exam-start`,{method:'POST',body:'{}'});
+        const clock=await api(`/mock-interview/${state.session.interview_id}/hr/exam-start`,{method:'POST',body:JSON.stringify({processor:state.recordingPolicy?.processor || 'google',consent:$('#consent-check').checked})});
         remaining=Math.max(0,Date.parse(clock.exam_deadline_at)-Date.parse(clock.server_time));
         if(!Number.isFinite(remaining))throw new Error('The assessment timer could not synchronize. Try again.');
       }
@@ -1590,7 +1591,7 @@
   }
 
   async function runVisionProctorCheck() {
-    if(previewMode||!state.assessmentActive||state.proctorVisionBusy||document.hidden||!state.session?.interview_id)return;
+    if(previewMode||!state.assessmentActive||state.recordingPolicy?.remote_proctoring===false||state.proctorVisionBusy||document.hidden||!state.session?.interview_id)return;
     const image=captureProctorFrame();
     if(!image)return;
     state.proctorVisionBusy=true;
@@ -1968,6 +1969,13 @@
               const saved=await api(`/mock-interview/${state.session.interview_id}/result`);
               if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
               if(saved.status==='complete'){result=saved.result;break;}
+              if(saved.requires_recording_consent){
+                if(!window.confirm('PlaceAI can resume your saved report using Groq. Do you consent to sending your voice, HR camera recordings and sampled frames to Groq for transcription and practice coaching with Zero Data Retention? Your recordings remain private in PlaceAI for 30 days.')){
+                  const cancelled=new Error('Your exam stays saved. Approve the updated recording notice when you are ready to resume.');cancelled.status=409;throw cancelled;
+                }
+                await api(`/mock-interview/${interviewId}/hr/processor-consent`,{method:'POST',body:JSON.stringify({processor:'groq',consent:true})});
+                if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
+              }
               if(saved.status==='pending'){state.submissionSaved=true;if(saved.queued){result=await waitForQueuedResult(generation);break;}}
               else{
                 state.submissionSaved=false;
@@ -1989,7 +1997,7 @@
             throw new Error('Your exam is saved. Analysis is still processing.');
           }catch(error){
             if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
-            const supportRequired=['VIDEO_PROVIDER_CAPACITY','VIDEO_PROVIDER_ACCESS','VIDEO_PROVIDER_MODEL','VIDEO_PROVIDER_UNAVAILABLE'].includes(error.code);
+            const supportRequired=['VIDEO_PROVIDER_CAPACITY','VIDEO_PROVIDER_ACCESS','VIDEO_PROVIDER_MODEL','VIDEO_PROVIDER_UNAVAILABLE','AI_PROVIDER_CAPACITY','AI_PROVIDER_UNAVAILABLE','VIDEO_PROCESSOR_CONSENT_REQUIRED'].includes(error.code);
             if(supportRequired && !state.submissionSaved){
               try{
                 const saved=await api(`/mock-interview/${interviewId}/result`);
@@ -1998,7 +2006,7 @@
                 if(saved.status==='complete'){result=saved.result;break;}
               }catch{ /* Preserve the original safe error when confirmation is unavailable. */ }
             }
-            if(attempt===1 || supportRequired || [400,401,403,404,410,413,422].includes(error.status) || !state.answers.length && !state.submissionSaved)throw error;
+            if(attempt===1 || supportRequired || [400,401,403,404,409,410,413,422].includes(error.status) || !state.answers.length && !state.submissionSaved)throw error;
             clearAnalysisTimers();
             $('#analysis-message').textContent='Finishing the complete report, including spoken HR answers. All scores will appear together when analysis is ready.';
             await new Promise(resolve=>setTimeout(resolve,[2000,5000,10000][attempt]));
@@ -2410,6 +2418,10 @@
       }
       state.me=await api('/auth/me');
       if(state.me.role!=='student'){ $('#auth-state').textContent='Interview Intelligence is available to student accounts only.'; return; }
+      state.recordingPolicy=await api('/mock-interview/recording-policy').catch(()=>null);
+      if(state.recordingPolicy?.processor==='groq'){
+        $('#consent-check').closest('label').querySelector('span').textContent='I understand that this proctored practice assessment uses camera, microphone, screen sharing and browser monitoring for integrity signals reviewed by institution staff. I consent to sending my spoken answers, HR camera recordings and selected video frames to Groq for transcription and practice coaching, with Zero Data Retention enabled. PlaceAI keeps recordings private for 30 days for me and authorized institution staff. Speech-recognition and sampled-frame feedback cannot assess pronunciation or continuous-video behavior. All section results appear together after analysis finishes. These are practice insights for human review, not hiring decisions.';
+      }
       state.candidateLabel=(state.me.full_name || state.me.username || 'Candidate').toUpperCase().slice(0,40);
       $('#auth-state').classList.add('hidden'); $('#setup-panel').classList.remove('hidden');
       await Promise.all([loadJobs(),loadHistory()]);

@@ -124,6 +124,7 @@ def test_continuous_hr_video_auto_submits_and_withholds_partial_results(browser)
     assert page.locator("#next-question").is_disabled()
     page.locator("#start-hr-recording").click()
     page.wait_for_function("() => hrTest.state.hr?.recorder?.state === 'recording'")
+    page.wait_for_function("() => hrTest.state.hr.chunks.length > 0")
     assert page.locator("#repeat-hr-question").is_disabled()
     page.evaluate("window.firstRecorder=hrTest.state.hr.recorder")
     for question in range(4):

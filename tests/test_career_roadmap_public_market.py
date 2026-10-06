@@ -289,3 +289,18 @@ def test_generate_market_roadmap_recovers_from_all_provider_failure(monkeypatch)
     }
     assert "gateway_http_status" not in roadmap
     assert "private upstream" not in json.dumps(roadmap)
+
+
+def test_explicit_no_billing_research_skips_all_ai_providers(monkeypatch):
+    monkeypatch.setenv("ROADMAP_RESEARCH_PROVIDER", "public")
+    monkeypatch.setattr(roadmap_service, "search_current_market", lambda *a, **k: pytest.fail("No paid research fallback"))
+    monkeypatch.setattr(roadmap_public_market, "_fetch_jobs", lambda request: [{
+        "title": "Data Analyst", "description": "Python SQL Excel", "location": "India",
+        "url": f"https://example.com/current/{n}", "source": "Test feed"} for n in range(3)])
+    result, sources, model = roadmap_service.generate_market_roadmap(db=None, profile=None, request_data=_request())
+    assert result["phases"] and len(sources) == 3 and "public" in model
+    monkeypatch.setattr(roadmap_public_market, "_fetch_jobs", lambda request: [])
+    with pytest.raises(HTTPException) as error:
+        roadmap_service.generate_market_roadmap(db=None, profile=None, request_data=_request())
+    assert error.value.status_code == 503
+    assert error.value.detail["code"] == "CURRENT_MARKET_RESEARCH_UNAVAILABLE"

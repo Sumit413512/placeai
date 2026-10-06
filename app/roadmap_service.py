@@ -5,6 +5,7 @@ import re
 from collections import Counter
 from datetime import date
 import logging
+import os
 from typing import Any
 
 from fastapi import HTTPException
@@ -230,6 +231,16 @@ def generate_market_roadmap(
     gateway_token: str | None = None,
     provider_diagnostics: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, str]], str]:
+    if os.getenv("ROADMAP_RESEARCH_PROVIDER", "").lower() == "public":
+        try:
+            payload, sources, model = build_public_market_roadmap(request_data)
+            normalized = normalize_roadmap_payload(payload, request_data=request_data)
+            if not normalized["phases"]:
+                raise PublicMarketFallbackUnavailable("No actionable phases")
+            return normalized, sources, model
+        except PublicMarketFallbackUnavailable as error:
+            raise HTTPException(503, {"code": "CURRENT_MARKET_RESEARCH_UNAVAILABLE",
+                                     "message": "Fresh public-market evidence is insufficient for this role and region. Try another target or retry later; no unsupported demand claims were generated."}) from error
     evidence = {
         "student": _profile_context(profile),
         "student_input": request_data,

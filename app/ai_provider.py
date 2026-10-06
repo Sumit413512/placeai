@@ -202,6 +202,9 @@ def _safe_failure_metadata(exc: Exception) -> tuple[str, int | None]:
 
 
 def ai_status_payload() -> dict[str, object]:
+    if os.getenv("TEXT_AI_PROVIDER", "").lower() == "groq":
+        from app import free_provider
+        return {"configured": free_provider.configured(), "sdk_available": True, "model": free_provider.TEXT_MODEL}
     openai_ready = bool(_openai_keys())
     gemini_ready = bool(_gemini_key())
     if openai_ready:
@@ -220,6 +223,8 @@ def current_ai_provider() -> str:
     provider = _LAST_AI_PROVIDER.get().strip()
     if provider:
         return provider
+    if os.getenv("TEXT_AI_PROVIDER", "").lower() == "groq":
+        return "groq" if ai_status_payload()["configured"] else "unavailable"
     if _openai_keys():
         return "openai"
     if _gemini_key():
@@ -243,6 +248,16 @@ def call_ai_vision_text(
     """
     if not image_data_url.startswith("data:image/"):
         raise ValueError("Vision input must be an image data URL")
+    if os.getenv("VISION_AI_PROVIDER", "").lower() == "groq":
+        from app import free_provider
+        try:
+            result = free_provider.text(prompt, images=[image_data_url], max_output_tokens=max_output_tokens,
+                                        timeout=timeout_seconds)
+            _LAST_AI_MODEL.set(free_provider.VISION_MODEL)
+            _LAST_AI_PROVIDER.set("groq")
+            return result
+        except free_provider.ProviderError as error:
+            raise HTTPException(503, "Vision analysis is temporarily unavailable.") from error
     keys = _openai_keys()
     if not keys:
         raise HTTPException(
@@ -309,6 +324,18 @@ def call_ai_text(
     Interactive callers can supply a task-specific model, timeout, and retry count so a
     temporary provider problem cannot stall a user-facing workflow for tens of seconds.
     """
+    if os.getenv("TEXT_AI_PROVIDER", "").lower() == "groq":
+        from app import free_provider
+        try:
+            result = free_provider.text(prompt, max_output_tokens=max_output_tokens or 3000,
+                                        timeout=timeout_seconds or 45)
+            _LAST_AI_MODEL.set(free_provider.TEXT_MODEL)
+            _LAST_AI_PROVIDER.set("groq")
+            return result
+        except free_provider.ProviderError as error:
+            LOGGER.warning("AI pilot deferred code=%s status=%s", str(error), error.code)
+            raise HTTPException(503, {"code": "AI_PROVIDER_CAPACITY" if error.code == 429 else "AI_PROVIDER_UNAVAILABLE",
+                                     "message": "Analysis is temporarily unavailable. Your saved answers can be analyzed when capacity is available."}) from error
     attempted = False
     for slot, api_key in enumerate(_openai_keys(), start=1):
         attempted = True

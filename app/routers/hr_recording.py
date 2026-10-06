@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from app import hr_video
+from app import hr_video, recording_policy
 from app.database import get_db
 from app.dependencies import get_current_user, require_student
 from app.models import HRVideoChunk, User
@@ -19,6 +19,26 @@ router = APIRouter(prefix="/mock-interview", tags=["HR video"])
 class RecordingStart(BaseModel):
     mime_type: str = Field(pattern="^video/(webm|mp4)$")
     consent: bool
+    processor: str | None = None
+
+
+class ProcessorConsent(BaseModel):
+    processor: str | None = None
+    consent: bool = False
+
+
+@router.get("/recording-policy")
+def policy(user: User = Depends(require_student)):
+    return {"processor": "groq" if recording_policy.groq_selected() else "google", "notice_version": 1,
+            "remote_proctoring": not recording_policy.groq_selected()}
+
+
+@router.post("/{interview_id}/hr/processor-consent")
+def processor_consent(interview_id: str, body: ProcessorConsent,
+                      user: User = Depends(require_student), db: Session = Depends(get_db)):
+    _, interview = hr_video.owned_recording(db, user, interview_id, lock=True)
+    recording_policy.record(db, user, interview, body.processor, body.consent)
+    return {"recorded": True}
 
 
 class RecordingAdvance(BaseModel):
@@ -26,18 +46,21 @@ class RecordingAdvance(BaseModel):
 
 
 class RecordingSubmit(BaseModel):
-    chunks: int = Field(ge=1, le=hr_video.MAX_CHUNKS)
+    chunks: int = Field(ge=0, le=hr_video.MAX_CHUNKS)
 
 
 @router.post("/{interview_id}/hr/exam-start")
-def exam_start(interview_id: str, user: User = Depends(require_student), db: Session = Depends(get_db)):
+def exam_start(interview_id: str, user: User = Depends(require_student), db: Session = Depends(get_db), body: ProcessorConsent | None = None):
     row, interview = hr_video.owned_recording(db, user, interview_id, lock=True)
+    if recording_policy.groq_selected():
+        recording_policy.record(db, user, interview, body.processor if body else None, body.consent if body else False)
     return hr_video.start_exam(db, row, interview)
 
 
 @router.post("/{interview_id}/hr/start")
 def start(interview_id: str, body: RecordingStart, user: User = Depends(require_student), db: Session = Depends(get_db)):
     row, interview = hr_video.owned_recording(db, user, interview_id, lock=True)
+    recording_policy.record(db, user, interview, body.processor, body.consent)
     return hr_video.begin_recording(db, row, interview, body.mime_type, body.consent)
 
 
