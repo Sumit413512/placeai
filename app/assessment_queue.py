@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.models import AssessmentJob, AssessmentQueueControl, utcnow
 
-MAX_ATTEMPTS = 8
+MAX_ATTEMPTS = 24
 LEASE_SECONDS = 180
 
 
@@ -96,14 +96,15 @@ def assert_lease(db):
         raise HTTPException(409, "Analysis lease expired; your submission remains saved")
 
 
-def finish(db, interview_id, token, complete):
+def finish(db, interview_id, token, complete, error_code=None):
     job = db.query(AssessmentJob).filter_by(interview_id=interview_id).with_for_update().one()
     if job.state != "running" or job.lease_token != token:
         db.rollback()
         return
     job.state = "complete" if complete else "failed" if job.attempts >= MAX_ATTEMPTS else "retrying"
-    job.error_code = None if complete else "ANALYSIS_RETRY_LIMIT" if job.state == "failed" else "ANALYSIS_TEMPORARILY_UNAVAILABLE"
-    job.available_at = utcnow() + timedelta(seconds=min(300, 15 * 2 ** (job.attempts - 1)))
+    job.error_code = None if complete else "ANALYSIS_RETRY_LIMIT" if job.state == "failed" else error_code or "ANALYSIS_TEMPORARILY_UNAVAILABLE"
+    delay = 900 if error_code == "VIDEO_PROVIDER_CAPACITY" else min(300, 15 * 2 ** (job.attempts - 1))
+    job.available_at = utcnow() + timedelta(seconds=delay)
     job.lease_until = None
     job.lease_token = None
     db.commit()

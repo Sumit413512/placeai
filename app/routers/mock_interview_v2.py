@@ -20,8 +20,8 @@ from app.ai_provider import call_ai_text, call_ai_vision_text, current_ai_model,
 from app.ai_rate_limit import code_execution_guard, student_ai_guard
 from app.database import get_db
 from app.dependencies import require_institution_admin, require_student
-from app.models import AssessmentJob, ApprovalStatus, AuditEvent, HRRecording, Job, MockInterview, StudentProfile, User, utcnow
-from app import hr_video, assessment_queue
+from app.models import AnswerRecording, AssessmentJob, ApprovalStatus, AuditEvent, HRRecording, Job, MockInterview, StudentProfile, User, utcnow
+from app import hr_video, assessment_queue, answer_recording
 from app.config import get_settings
 from fastapi.responses import JSONResponse
 from app.placement_access import job_is_visible_to_student
@@ -191,6 +191,8 @@ def _issued_questions(row: MockInterview) -> list[dict[str, Any]]:
                 "category": str(item.get("category", "interview")).strip().lower(),
                 "difficulty": str(item.get("difficulty", "mixed")).strip().lower(),
                 "answer_type": str(item.get("answer_type", "text")).strip().lower(),
+                "response_mode": item.get("response_mode"),
+                "narration_enabled": bool(item.get("narration_enabled")),
                 "options": [str(x)[:1000] for x in (item.get("options") or [])[:4]],
                 "correct_answer": str(item.get("correct_answer", ""))[:1000],
                 "coding_spec": item.get("coding_spec") if isinstance(item.get("coding_spec"), dict) else {},
@@ -983,8 +985,11 @@ def start_mock_interview_v2(
     )
     if body.mode == "assessment":
         for question in questions:
+            question["narration_enabled"] = get_settings().question_recordings_enabled
             if question.get("section") == "behavioral":
                 question["answer_type"] = "video"
+            if get_settings().question_recordings_enabled and question.get("answer_type") in {"text", "video"}:
+                question["response_mode"] = "video" if question["answer_type"] == "video" else "audio"
     interview = MockInterview(
         student_id=profile.id,
         job_id=job.id,
@@ -996,7 +1001,7 @@ def start_mock_interview_v2(
     )
     db.add(interview)
     db.flush()
-    if any(q.get("answer_type") == "video" for q in questions):
+    if any(q.get("answer_type") == "video" or q.get("response_mode") for q in questions):
         db.add(HRRecording(interview_id=interview.id, expires_at=utcnow() + timedelta(days=hr_video.RETENTION_DAYS)))
     db.commit()
     db.refresh(interview)
@@ -1681,7 +1686,7 @@ def _build_assessment_result(
             counts[_verdict_bucket(item.get("verdict", "insufficient"))] += 1
             if item.get("grading_method") in {"system", "system_relevance_gate"}:
                 system_graded += 1
-            elif item.get("grading_method") in {"ai", "ai_video"}:
+            elif item.get("grading_method") in {"ai", "ai_video", "ai_audio"}:
                 ai_graded += 1
             elif item.get("grading_method") == "code_execution":
                 code_graded += 1
@@ -1736,7 +1741,7 @@ def _build_assessment_result(
     ]
 
     objective_items = [item for item in evaluations if item.get("grading_method") == "system"]
-    subjective_items = [item for item in evaluations if item.get("grading_method") in {"ai", "ai_video", "system_relevance_gate"}]
+    subjective_items = [item for item in evaluations if item.get("grading_method") in {"ai", "ai_video", "ai_audio", "system_relevance_gate"}]
     objective_accuracy = (
         round(100 * sum(item["score"] == 100 for item in objective_items) / len(objective_items))
         if objective_items else None
@@ -2075,8 +2080,10 @@ def evaluate_mock_interview_v2(
     ids = [answer.question_id for answer in body.answers]
     if len(ids) != len(set(ids)) or set(ids) != {item["question_id"] for item in issued}:
         raise HTTPException(422, "Answers must match the server-issued interview question set")
-    if any(item["answer_type"] == "video" for item in issued):
+    if any(item["answer_type"] == "video" or item.get("response_mode") for item in issued):
         recording, _ = hr_video.owned_recording(db, current_user, interview.id, lock=True)
+        if any(item.get("response_mode") for item in issued):
+            answer_recording.sealed_answers(db, interview, issued, {item.question_id: item for item in body.answers})
         if recording.submission_json:
             body = MockInterviewEvaluationV2.model_validate_json(recording.submission_json)
         else:
@@ -2115,8 +2122,10 @@ def evaluate_inline(
         raise HTTPException(status_code=422, detail="Answers must match the server-issued interview question set")
 
     recording = None
-    if any(q["answer_type"] == "video" for q in issued):
+    if any(q["answer_type"] == "video" or q.get("response_mode") for q in issued):
         recording, _ = hr_video.owned_recording(db, current_user, interview.id, lock=True)
+        if any(q.get("response_mode") for q in issued):
+            answer_recording.sealed_answers(db, interview, issued, submitted_by_id)
         db.refresh(interview)
         if interview.overall_score is not None:
             return {"interview_id": interview.id, **json.loads(interview.evaluation_json)}
@@ -2147,6 +2156,8 @@ def _evaluate_saved_answers(db, current_user, profile, interview, job, issued, s
     if recording and recording.started_at:
         video_result = hr_video.analyze_recording(db, recording, interview)
         video_by_id = {item["question_id"]: item for item in video_result["answers"]}
+    if any(q.get("response_mode") for q in issued):
+        video_by_id.update(answer_recording.analyze(db, interview, issued, submitted_by_id))
 
     started = time.perf_counter()
     answers_payload: list[dict[str, Any]] = []
@@ -2165,22 +2176,24 @@ def _evaluate_saved_answers(db, current_user, profile, interview, job, issued, s
             "answer_type": item.get("answer_type"),
             "answer": answer,
         })
-        if item["answer_type"] == "video" and qid in video_by_id:
+        if (item["answer_type"] == "video" or item.get("response_mode")) and qid in video_by_id:
             spoken = video_by_id[qid]
             score = round(spoken["answer_correctness"] * 0.7 + spoken["communication_clarity"] * 0.2 + spoken["english_fluency"] * 0.1)
             evaluations.append({
                 "question_id": qid, "question": item["question"], "section": item["section"],
-                "category": item["category"], "difficulty": item["difficulty"], "answer_type": "video",
+                "category": item["category"], "difficulty": item["difficulty"], "answer_type": "audio" if item.get("response_mode") == "audio" else "video",
                 "answer": spoken["transcript"], "score": score,
                 "verdict": "strong" if score >= 75 else "acceptable" if score >= 55 else "weak" if score >= 20 else "insufficient",
-                "grading_method": "ai_video", "feedback": spoken["feedback"],
+                "grading_method": "ai_audio" if item.get("response_mode") == "audio" else "ai_video", "feedback": spoken["feedback"],
+                "recording_url": spoken.get("recording_url"), "response_mode": item.get("response_mode"),
+                "recording_size_bytes": spoken.get("size_bytes"), "recording_mime_type": spoken.get("mime_type"),
                 "rubric": {key: spoken[key] for key in ("answer_correctness", "communication_clarity", "english_fluency")},
                 "strengths": spoken["strengths"], "issues": spoken["improvements"],
                 "evidence": spoken["evidence"], "missing_points": [], "key_points": [],
                 "better_answer_outline": "", "ideal_answer": "",
             })
             continue
-        if item["answer_type"] == "video":
+        if item["answer_type"] == "video" or item.get("response_mode"):
             answer = "[No response submitted before assessment ended]"
         if answer.startswith("[No response submitted"):
             evaluations.append({
@@ -2401,10 +2414,16 @@ def saved_interview_result(
             raise HTTPException(503, {"code": "SAVED_REPORT_UNAVAILABLE", "message": "Your saved report needs support to recover. Please contact your institution with the assessment reference."})
         result = {**evaluation, "interview_id": interview.id, "analysis_status": "complete"}
     complete = result is not None
+    spoken_progress = None
+    if any(q.get("response_mode") for q in json.loads(interview.questions_json)):
+        clips = db.query(AnswerRecording).filter_by(interview_id=interview_id).all()
+        recorded = [clip for clip in clips if clip.sealed_at and clip.chunk_count]
+        spoken_progress = {"recorded": len(recorded), "analyzed": sum(bool(clip.analysis_json) for clip in recorded)}
     return {"interview_id": interview.id,
             "status": "complete" if complete else "pending" if queued or recording and recording.submission_json else "awaiting_submission",
             "queued": bool(queued), "queue_status": queued.state if queued else None,
             "retry_after_seconds": 10, "error_code": queued.error_code if queued else None,
+            "spoken_progress": spoken_progress,
             "result": result}
 
 
@@ -2421,7 +2440,11 @@ def retry_saved_interview(
             raise HTTPException(404, "Mock interview not found")
         queued = db.query(AssessmentJob).filter_by(interview_id=interview_id).with_for_update().first()
         if not queued:
-            raise HTTPException(409, "Submit this assessment before requesting analysis")
+            recording, _ = hr_video.owned_recording(db, current_user, interview_id, lock=True)
+            if not recording.submission_json:
+                raise HTTPException(409, "Submit this assessment before requesting analysis")
+            body = MockInterviewEvaluationV2.model_validate_json(recording.submission_json)
+            return JSONResponse(assessment_queue.enqueue(db, interview, current_user, body), status_code=202)
         # Repeated retries cannot reset attempts or bypass the global admission budget.
         return JSONResponse(assessment_queue.pending(queued), status_code=202)
     recording, _ = hr_video.owned_recording(db, current_user, interview_id)

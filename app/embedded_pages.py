@@ -265,7 +265,7 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
     </aside>
   </section>
 
-  <div id="preview-banner" class="preview-banner hidden"><strong>Review environment</strong><span>This Render build uses sample assessment data. Camera, screen-share and on-device proctoring checks run when you grant permission; no biometric identity matching is performed.</span></div>
+  <div id="preview-banner" class="preview-banner hidden"><strong>Assessment preview</strong><span>This preview uses sample assessment data. Camera, screen-share and on-device proctoring checks run when you grant permission; no biometric identity matching is performed.</span></div>
   <div id="auth-state" class="notice">Checking your student session…</div>
 
   <section id="setup-panel" class="panel hidden">
@@ -342,7 +342,7 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
     </div>
 
     <div class="consent-row">
-      <label class="consent"><input id="consent-check" type="checkbox"><span>I understand that this proctored assessment uses camera, microphone, entire-screen sharing, full-screen/focus monitoring and on-device object detection for integrity signals. Confirmed warnings are recorded for institutional review. I consent to one camera-and-microphone recording of the HR section and sending my face, voice and spoken answers to Google Gemini for communication and answer-quality feedback. PlaceAI keeps the private recording for 30 days for me and authorized institution staff. The complete result appears together after analysis; it is practice feedback for human review.</span></label>
+      <label class="consent"><input id="consent-check" type="checkbox"><span>I understand that this proctored assessment uses camera, microphone, entire-screen sharing, full-screen/focus monitoring and on-device object detection for integrity signals. Confirmed warnings are recorded for institutional review. I consent to recording my spoken answers, including camera-and-microphone HR answers, and sending my face, voice and answers to Google Gemini for communication and answer-quality feedback. PlaceAI keeps recordings private for 30 days for me and authorized institution staff. Analysis can continue after submission; the complete result appears together after all sections are ready. This is practice feedback for human review.</span></label>
       <div class="system-actions"><button id="run-check" class="button secondary" type="button">Run system check</button><button id="start-assessment" class="button primary" type="button" disabled>Start proctored assessment</button></div>
     </div>
   </section>

@@ -24,8 +24,9 @@ Real affected submissions and recordings are retained. This release does not inv
 | Priority | Gate | Required evidence/action |
 | --- | --- | --- |
 | High | Sustained provider failures leave HR reports pending | A successful isolated production HR analysis and subsequent saved-result read; reliable quota; queued recovery and alerting for prolonged failures |
-| High | Render deployment is failing | Repair the existing runtime database login and approved private-table permissions, then verify a healthy deployment |
-| High | Durable assessment queue is disabled | Apply the private queue schema with migration-owner permissions, deploy healthy workers, then enable admission in the application |
+| High | Production HR provider rejects analysis with HTTP 429 | Saved submissions are intact, but reliable provider capacity and private processing must be verified before claiming report readiness |
+| High | New separate spoken-answer rollout remains gated | The user selected no billing and a gated rollout; verify private processing, grading quality, retention and capacity before enabling it |
+| High | Durable assessment queue is disabled | Private queue schema is applied; reviewed runtime queue access, a healthy worker and admission checks are still required before enabling it |
 | High for large cohorts | Video bytes currently pass through API/database chunks | Direct private resumable object-storage upload, immutable objects, verified retention and owner/reviewer access before 5,000-video cohorts |
 | High for capacity claims | No representative production-equivalent cohort test | Test 100/500/1,000/5,000 students in staging with starts, proctoring, video upload, coding execution, synchronized submissions and provider quotas; measure latency, loss, cost and recovery |
 | Medium | Several server-managed tables do not have RLS | Current public roles have no CRUD privileges; review backend least privilege and migration ownership without blindly changing policies |
@@ -34,6 +35,12 @@ Real affected submissions and recordings are retained. This release does not inv
 | Medium | Operational support/access | Vercel dashboard logs are accessible, but the connector returns 403; provide approved monitoring, pending-report alerts and an incident owner |
 
 See [capacity and rollout](assessment-capacity.md) for workload estimates, worker admission, staged validation and rollback. Pricing there is a planning estimate and must be checked before purchasing infrastructure.
+
+## 6 October continuation
+
+PR #146 is deployed on Vercel and Render at main commit `e7fb3435e5c8aacedb59c386c80dea1c0018273b`. The Render database login, approved private-table access and migration record were repaired. Render reports LIVE; public endpoint verification is still required for the next release.
+
+The remaining HR report blocker is now identified as upstream Gemini HTTP 429, rather than an unknown rendering error. The follow-up release classifies quota/access/model failures safely and stops rapid browser retries while retaining submitted evidence. The opt-in question recorder reads the entire question before starting, records each descriptive answer as audio and each HR answer as camera plus audio, and persists each question analysis independently. It remains disabled under the user's no-billing decision. See [recording rollout gates](question-recording-rollout.md). Local automated checks do not establish grading accuracy or large-cohort readiness.
 
 ## Security checks and limitations
 

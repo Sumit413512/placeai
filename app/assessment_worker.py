@@ -1,6 +1,7 @@
 """Run as a persistent background worker: python -m app.assessment_worker.
 
-No background threads are started in the web/serverless application.
+An opt-in worker can also run in the existing persistent Render web process.
+Serverless processes never start this worker.
 """
 import logging
 import signal
@@ -37,6 +38,7 @@ def process(item):
     heartbeat = Thread(target=renew, daemon=True)
     heartbeat.start()
     complete = False
+    error_code = None
     try:
         with Session() as db:
             db.info["assessment_lease"] = (interview_id, token)
@@ -46,27 +48,28 @@ def process(item):
             result = evaluate_inline(MockInterviewEvaluationV2.model_validate_json(payload), user, db)
             complete = result.get("analysis_status") == "complete"
     except Exception as error:
+        detail = getattr(error, "detail", None)
+        if isinstance(detail, dict) and detail.get("code") in {"VIDEO_PROVIDER_CAPACITY", "VIDEO_PROVIDER_ACCESS", "VIDEO_PROVIDER_MODEL", "VIDEO_PROVIDER_UNAVAILABLE"}:
+            error_code = detail["code"]
         LOGGER.warning("Assessment deferred error_type=%s", type(error).__name__)
     finally:
         done.set()
         heartbeat.join(timeout=5)
         with Session() as db:
-            assessment_queue.finish(db, interview_id, token, complete)
+            assessment_queue.finish(db, interview_id, token, complete, error_code=error_code)
 
 
-def main():
+def run(stop, max_workers=1):
     settings = get_settings()
     if engine.dialect.name != "postgresql":
         raise RuntimeError("Multi-worker admission requires PostgreSQL")
     if not settings.assessment_queue_enabled:
         raise RuntimeError("Enable the queue only after migrations and worker configuration")
-    for signum in (signal.SIGTERM, signal.SIGINT):
-        signal.signal(signum, lambda *_: STOP.set())
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
         active = set()
-        while not STOP.is_set():
+        while not stop.is_set():
             active = {future for future in active if not future.done()}
-            if len(active) < 2:
+            if len(active) < max_workers:
                 try:
                     with Session() as db:
                         item = assessment_queue.claim(db, settings.assessment_queue_concurrency,
@@ -76,7 +79,13 @@ def main():
                         continue
                 except Exception as error:
                     LOGGER.warning("Assessment queue unavailable error_type=%s", type(error).__name__)
-            STOP.wait(2)
+            stop.wait(2)
+
+
+def main():
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(signum, lambda *_: STOP.set())
+    run(STOP)
 
 
 if __name__ == "__main__":

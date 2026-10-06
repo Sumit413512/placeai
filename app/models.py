@@ -501,6 +501,38 @@ class HRRecording(Base):
     created_at = Column(DateTime, nullable=False, default=utcnow)
 
 
+class AnswerRecording(Base):
+    """One immutable private media answer per server-issued question."""
+    __tablename__ = "answer_recordings"
+    __table_args__ = (UniqueConstraint("interview_id", "question_id", name="uq_answer_recording_question"),)
+    id = Column(String, primary_key=True, default=generate_uuid)
+    interview_id = Column(String, ForeignKey("mock_interviews.id", ondelete="CASCADE"), nullable=False)
+    question_id = Column(Integer, nullable=False)
+    status = Column(String(30), nullable=False, default="recording")
+    mime_type = Column(String(80), nullable=False)
+    exam_started_at = Column(DateTime, nullable=False)
+    started_at = Column(DateTime, nullable=False)
+    deadline_at = Column(DateTime, nullable=False)
+    consent_at = Column(DateTime, nullable=False)
+    sealed_at = Column(DateTime)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    size_bytes = Column(Integer, nullable=False, default=0)
+    chunk_count = Column(Integer, nullable=False, default=0)
+    segments_json = Column(Text, nullable=False, default="[]")
+    analysis_json = Column(Text)
+    analysis_lease_until = Column(DateTime)
+    provider_file_name = Column(String(200))
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+
+class AnswerRecordingChunk(Base):
+    __tablename__ = "answer_recording_chunks"
+    recording_id = Column(String, ForeignKey("answer_recordings.id", ondelete="CASCADE"), primary_key=True)
+    sequence = Column(Integer, primary_key=True)
+    sha256 = Column(String(64), nullable=False)
+    data = Column(LargeBinary, nullable=False)
+
+
 class HRVideoChunk(Base):
     __tablename__ = "hr_video_chunks"
 
