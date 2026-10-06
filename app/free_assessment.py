@@ -43,12 +43,16 @@ def _vision_observations(data, segment, transcription, progress, qid, persist):
 
     Vision is supplementary coaching evidence. A decoder/provider/schema failure must
     not erase a valid Whisper transcript or force repeated quota-burning retries.
-    Once a question records vision as unavailable, its empty observation set is cached
-    and later retries continue with spoken evidence only.
+    Once camera analysis is unavailable for the recording, later questions cache an
+    empty observation set and continue with spoken evidence only.
     """
     key = str(qid)
     if key in progress["observations"]:
         return progress["observations"][key]
+    if progress.get("camera_unavailable"):
+        progress["observations"][key] = []
+        persist(progress)
+        return []
 
     try:
         frames = sample_frames(data, segment["start"], min(segment["end"], transcription["duration"]))
