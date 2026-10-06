@@ -42,9 +42,47 @@ def enqueue(db, interview, user, body):
     return pending(job)
 
 
+def _control_for_update(db, now):
+    """Return the singleton admission row, recreating it if production data drift removed it.
+
+    Migration 0016 seeds id=1, but queue safety must not depend forever on that one
+    historical insert. The nested transaction makes concurrent worker bootstrap safe:
+    exactly one insert wins while the others recover and lock the same row.
+    """
+    control = (
+        db.query(AssessmentQueueControl)
+        .filter_by(id=1)
+        .with_for_update()
+        .one_or_none()
+    )
+    if control is not None:
+        return control
+
+    try:
+        with db.begin_nested():
+            control = AssessmentQueueControl(
+                id=1,
+                window_started_at=now,
+                starts_in_window=0,
+            )
+            db.add(control)
+            db.flush()
+    except IntegrityError:
+        # Another worker restored the singleton first. The outer transaction remains
+        # usable because the conflict was isolated to the SAVEPOINT above.
+        pass
+
+    return (
+        db.query(AssessmentQueueControl)
+        .filter_by(id=1)
+        .with_for_update()
+        .one()
+    )
+
+
 def claim(db, concurrency, starts_per_minute):
     now = utcnow()
-    control = db.query(AssessmentQueueControl).filter_by(id=1).with_for_update().one()
+    control = _control_for_update(db, now)
     if control.window_started_at <= now - timedelta(minutes=1):
         control.window_started_at = now
         control.starts_in_window = 0
