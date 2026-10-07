@@ -23,20 +23,22 @@ jobs:
 
           path = Path('app/routers/ai.py')
           text = path.read_text(encoding='utf-8')
-          old = '''@router.get("/status", summary="AI provider configuration status")
-def ai_status():
-    """Return privacy-safe AI readiness without exposing API keys."""
-    return ai_status_payload()
-'''
-          new = '''@router.get("/status", summary="AI provider configuration status")
-def ai_status():
-    """Return coarse public readiness without exposing provider or model details."""
-    payload = ai_status_payload()
-    return {
-        "configured": bool(payload.get("configured")),
-        "sdk_available": bool(payload.get("sdk_available")),
-    }
-'''
+          old = (
+              '@router.get("/status", summary="AI provider configuration status")\n'
+              'def ai_status():\n'
+              '    """Return privacy-safe AI readiness without exposing API keys."""\n'
+              '    return ai_status_payload()\n'
+          )
+          new = (
+              '@router.get("/status", summary="AI provider configuration status")\n'
+              'def ai_status():\n'
+              '    """Return coarse public readiness without exposing provider or model details."""\n'
+              '    payload = ai_status_payload()\n'
+              '    return {\n'
+              '        "configured": bool(payload.get("configured")),\n'
+              '        "sdk_available": bool(payload.get("sdk_available")),\n'
+              '    }\n'
+          )
           if text.count(old) != 1:
               raise SystemExit(f'Expected one public AI status function, found {text.count(old)}')
           path.write_text(text.replace(old, new, 1), encoding='utf-8')
