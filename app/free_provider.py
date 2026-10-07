@@ -17,15 +17,15 @@ AUDIO_MODEL = "whisper-large-v3"
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
 # Local failures happen before Groq can return an HTTP status. Give them bounded,
-# internal status classes so downstream retry logic can distinguish transient
-# transport/provider failures from invalid local input without logging payloads.
+# internal status classes so downstream retry logic can distinguish transport,
+# malformed-response and transcript-validation failures without logging payloads.
 LOCAL_ERROR_STATUS = {
     "FREE_PROVIDER_NOT_CONFIGURED": 503,
     "FREE_PROVIDER_NETWORK": 503,
     "FREE_PROVIDER_RESPONSE_TOO_LARGE": 502,
     "FREE_PROVIDER_INVALID_RESPONSE": 502,
-    "FREE_PROVIDER_INCOMPLETE_RESPONSE": 502,
-    "FREE_PROVIDER_INVALID_TRANSCRIPT": 422,
+    "FREE_PROVIDER_INCOMPLETE_RESPONSE": 504,
+    "FREE_PROVIDER_INVALID_TRANSCRIPT": 500,
     "FREE_PROVIDER_INPUT_LIMIT": 422,
 }
 
