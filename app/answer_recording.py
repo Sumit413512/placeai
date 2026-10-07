@@ -1,16 +1,79 @@
 """Question-scoped voice/video answers. Legacy continuous HR recordings stay readable."""
 import json
+from collections import Counter
 from datetime import timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import func
+from sqlalchemy import event, func
 
 from app import hr_video, recording_policy
-from app.models import AnswerRecording, AnswerRecordingChunk, utcnow
+from app.models import AnswerRecording, AnswerRecordingChunk, MockInterview, utcnow
 
 AUDIO_BYTES = 2 * 1024 * 1024
 VIDEO_BYTES = 7 * 1024 * 1024
 POST_HR_VOICE_SECTIONS = frozenset({"role", "situational"})
+FULL_ASSESSMENT_SECTION_COUNTS = {
+    "quantitative": 8,
+    "logical": 8,
+    "communication": 6,
+    "technical": 8,
+    "programming": 6,
+    "coding": 2,
+    "resume": 4,
+    "behavioral": 4,
+    "role": 2,
+    "situational": 2,
+}
+FULL_ASSESSMENT_QUESTION_COUNT = sum(FULL_ASSESSMENT_SECTION_COUNTS.values())
+
+
+def is_full_assessment_questions(questions):
+    """Identify the standardized 50-item assessment without relying on client state."""
+    if not isinstance(questions, list) or len(questions) != FULL_ASSESSMENT_QUESTION_COUNT:
+        return False
+    counts = Counter(
+        str(question.get("section", "")).strip().lower()
+        for question in questions
+        if isinstance(question, dict)
+    )
+    return counts == Counter(FULL_ASSESSMENT_SECTION_COUNTS)
+
+
+def materialize_post_hr_modes(questions):
+    """Persist the two required post-HR audio modes for a full assessment only.
+
+    Practice rounds may also contain a situational question, so section name alone is
+    not sufficient to opt a session into mandatory recording. The standardized 50-item
+    blueprint is the server-owned boundary for this policy.
+    """
+    if not is_full_assessment_questions(questions):
+        return False
+    changed = False
+    for question in questions:
+        if not isinstance(question, dict):
+            continue
+        section = str(question.get("section", "")).strip().lower()
+        answer_type = str(question.get("answer_type", "text")).strip().lower()
+        if section not in POST_HR_VOICE_SECTIONS or answer_type != "text":
+            continue
+        if question.get("response_mode") not in {"audio", "video"}:
+            question["response_mode"] = "audio"
+            changed = True
+        if question.get("narration_enabled") is not True:
+            question["narration_enabled"] = True
+            changed = True
+    return changed
+
+
+@event.listens_for(MockInterview, "before_insert")
+def _persist_full_assessment_spoken_policy(_mapper, _connection, target):
+    """Store mandatory post-HR audio metadata before a new assessment reaches the DB."""
+    try:
+        questions = json.loads(target.questions_json or "[]")
+    except (TypeError, ValueError):
+        return
+    if materialize_post_hr_modes(questions):
+        target.questions_json = json.dumps(questions)
 
 
 def response_mode(question):
