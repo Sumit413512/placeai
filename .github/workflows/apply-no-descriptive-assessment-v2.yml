@@ -1,0 +1,40 @@
+name: Apply no-descriptive assessment patch v2
+
+on:
+  push:
+    branches:
+      - feature/no-descriptive-text-assessment-20261007
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'Run guarded no-descriptive assessment patch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/no-descriptive-text-assessment-20261007
+          fetch-depth: 0
+      - name: Apply guarded source patch
+        run: python .github/scripts/apply_no_descriptive_assessment.py
+      - name: Validate assessment contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q app
+          node --check app/static/mock-interview.js
+          node --check app/static/assessment-audio-enhancements.js
+          pytest -q tests/test_no_descriptive_assessment.py tests/test_post_hr_voice_answers.py tests/test_question_recording_browser.py tests/test_mock_interview.py tests/test_mock_interview_static_mirror.py
+      - name: Commit source and tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/answer_recording.py app/assessment_queue.py app/routers/mock_interview_v2.py app/static/mock-interview.js public/static/mock-interview.js app/static/assessment-audio-enhancements.js public/static/assessment-audio-enhancements.js tests/test_post_hr_voice_answers.py tests/test_no_descriptive_assessment.py
+          git commit -m 'Remove descriptive text answers from standardized assessment'
+          git push origin HEAD:feature/no-descriptive-text-assessment-20261007
