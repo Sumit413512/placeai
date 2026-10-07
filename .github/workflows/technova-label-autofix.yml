@@ -1,0 +1,49 @@
+name: TechNova Label Autofix
+
+on:
+  push:
+    branches:
+      - fix/technova-demo-label-20261007
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[technova-label-patched]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch mirrored assessment assets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          paths = [Path('app/static/mock-interview.js'), Path('public/static/mock-interview.js')]
+          old = "const demoLabel = j.is_trial_demo ? (j.can_start ? ' · REPEAT PRACTICE AVAILABLE' : ' · STUDENT ACCESS REQUIRED') : '';"
+          new = """const demoLabel = j.is_trial_demo
+                ? (j.can_start
+                    ? (j.free_attempts_remaining === 1 ? ' · 1 FREE DEMO ATTEMPT' : ' · INCLUDED WITH ACCESS')
+                    : ' · STUDENT ACCESS REQUIRED')
+                : '';"""
+
+          for path in paths:
+              text = path.read_text(encoding='utf-8')
+              if text.count(old) != 1:
+                  raise SystemExit(f'Expected exactly one stale TechNova label in {path}, found {text.count(old)}')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          if paths[0].read_bytes() != paths[1].read_bytes():
+              raise SystemExit('Assessment static mirrors diverged after TechNova label patch')
+          print('TechNova label patch applied to both mirrors')
+          PY
+      - name: Commit exact patch
+        run: |
+          git config user.name "placeai-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/static/mock-interview.js public/static/mock-interview.js
+          git diff --cached --check
+          git commit -m "Fix TechNova one-attempt UI label [technova-label-patched]"
+          git push origin HEAD:${GITHUB_REF_NAME}
