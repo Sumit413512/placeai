@@ -735,6 +735,13 @@
     return clip.uploading;
   }
 
+  async function drainQuestionAnswerUploads(clip) {
+    // MediaRecorder may emit its final dataavailable event while an earlier
+    // upload promise is settling. Re-check the queue after every awaited
+    // upload so submission can never seal before that final chunk is saved.
+    while(clip.uploading || clip.uploaded<clip.chunks.length)await uploadQuestionAnswer(clip);
+  }
+
   function beginQuestionAnswer(q) {
     if(state.answerStartTask)return state.answerStartTask;
     state.answerStartTask=startQuestionRecorder(q).finally(()=>{state.answerStartTask=null;});
@@ -785,7 +792,8 @@
         const timer=setTimeout(()=>reject(new Error('The recording is still closing. Keep this page open and retry.')),10000);
         clip.recorder.addEventListener('stop',()=>{clearTimeout(timer);resolve();},{once:true});clip.recorder.stop();
       });
-      await uploadQuestionAnswer(clip);
+      await drainQuestionAnswerUploads(clip);
+      if(clip.uploaded!==clip.chunks.length)throw new Error('The spoken answer has not finished uploading. Keep this page open and retry.');
       await api(`/mock-interview/${clip.interviewId}/answers/${clip.questionId}/submit`,{method:'POST',body:JSON.stringify({chunks:clip.uploaded})});
       clip.submitted=true;
       state.answers[clip.questionId-1]={question_id:clip.questionId,answer:clip.uploaded?'[Spoken answer submitted]':'[No response submitted: no recording captured]'};
