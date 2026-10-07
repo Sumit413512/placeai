@@ -21,7 +21,9 @@ from app.models import HRRecording, HRVideoChunk, MockInterview, StudentProfile,
 
 LOGGER = logging.getLogger("placeai.hr_video")
 CHUNK_BYTES = 768 * 1024
-MAX_BYTES = 28 * 1024 * 1024
+# Groq Free-tier transcription accepts files up to 25 MB. Keep the persisted
+# HR recording bound at the same ceiling so a recording we accept can be analyzed.
+MAX_BYTES = 25 * 1024 * 1024
 MAX_CHUNKS = 512
 QUESTION_SECONDS = 150
 RETENTION_DAYS = 30

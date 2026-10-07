@@ -3,7 +3,7 @@ from datetime import timedelta
 import pytest
 from fastapi import HTTPException
 
-from app import assessment_queue as queue
+from app import assessment_queue as queue, recording_policy
 from app.models import AssessmentJob, AssessmentQueueControl, MockInterview, utcnow
 from app.routers import mock_interview_v2 as exams, mock_interview
 from test_hr_video import body, exam  # noqa: F401 - shared isolated exam fixture
@@ -38,6 +38,39 @@ def test_enqueue_route_does_not_call_providers_and_hides_partial_scores(queued, 
     assert status["queued"] and status["result"] is None
     assert mock_interview.mock_interview_history(queued.user, queued.db)[0]["overall_score"] is None
     assert exams.retry_saved_interview(queued.interview.id, queued.user, queued.db).status_code == 202
+
+
+def test_saved_groq_submission_requires_consent_then_enqueues_once(queued, monkeypatch):
+    monkeypatch.setenv("HR_AI_PROVIDER", "groq")
+    monkeypatch.setattr(exams.get_settings(), "assessment_queue_enabled", True)
+    saved = body(queued, "Saved spoken answer")
+    queued.recording.submission_json = saved.model_dump_json()
+    queued.db.commit()
+
+    status = exams.saved_interview_result(queued.interview.id, queued.user, queued.db)
+    assert status["status"] == "pending"
+    assert status["requires_recording_consent"] is True
+    assert status["queued"] is False
+    assert queued.db.query(AssessmentJob).count() == 0
+
+    recording_policy.record(queued.db, queued.user, queued.interview, "groq", True)
+    status = exams.saved_interview_result(queued.interview.id, queued.user, queued.db)
+    assert status["requires_recording_consent"] is False
+
+    first = exams.retry_saved_interview(queued.interview.id, queued.user, queued.db)
+    assert first.status_code == 202
+    job = queued.db.get(AssessmentJob, queued.interview.id)
+    assert job is not None
+    assert "Saved spoken answer" in job.payload_json
+    assert queued.db.query(AssessmentJob).count() == 1
+
+    attempts_before = job.attempts
+    second = exams.retry_saved_interview(queued.interview.id, queued.user, queued.db)
+    assert second.status_code == 202
+    queued.db.refresh(job)
+    assert queued.db.query(AssessmentJob).count() == 1
+    assert job.attempts == attempts_before
+    assert "Saved spoken answer" in job.payload_json
 
 
 def test_enqueue_rejects_foreign_exam_and_changed_question_set(queued, monkeypatch):
