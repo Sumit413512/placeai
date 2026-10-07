@@ -83,13 +83,11 @@ jobs:
           import json
           from pathlib import Path
           payload = json.loads(Path('/tmp/vercel-ai-status.json').read_text(encoding='utf-8'))
-          expected = {'configured', 'sdk_available', 'model'}
+          expected = {'configured', 'sdk_available'}
           if set(payload) != expected:
               raise SystemExit(f'Unexpected direct-backend AI status fields: {sorted(payload)}')
           if not isinstance(payload.get('configured'), bool) or not isinstance(payload.get('sdk_available'), bool):
               raise SystemExit(f'Direct-backend AI readiness booleans invalid: {payload}')
-          if not isinstance(payload.get('model'), str) or not payload['model'].strip():
-              raise SystemExit(f'Direct-backend AI model value invalid: {payload}')
           print('Direct Vercel AI readiness contract passed; configured=', payload['configured'])
           PY
 
@@ -175,13 +173,11 @@ jobs:
           import json
           from pathlib import Path
           payload = json.loads(Path('/tmp/ai-status.json').read_text(encoding='utf-8'))
-          expected = {'configured', 'sdk_available', 'model'}
+          expected = {'configured', 'sdk_available'}
           if set(payload) != expected:
               raise SystemExit(f'Unexpected AI status fields: {sorted(payload)}')
           if not isinstance(payload.get('configured'), bool) or not isinstance(payload.get('sdk_available'), bool):
               raise SystemExit(f'AI readiness booleans invalid: {payload}')
-          if not isinstance(payload.get('model'), str) or not payload['model'].strip():
-              raise SystemExit(f'AI model readiness value invalid: {payload}')
           print('AI readiness contract is privacy-safe; configured=', payload['configured'])
           PY
 
