@@ -95,8 +95,12 @@ router = APIRouter(prefix="/ai", tags=["AI Features ✨"])
 
 @router.get("/status", summary="AI provider configuration status")
 def ai_status():
-    """Return privacy-safe AI readiness without exposing API keys."""
-    return ai_status_payload()
+    """Return coarse public readiness without exposing provider or model details."""
+    payload = ai_status_payload()
+    return {
+        "configured": bool(payload.get("configured")),
+        "sdk_available": bool(payload.get("sdk_available")),
+    }
 
 
 def get_gemini_client():
