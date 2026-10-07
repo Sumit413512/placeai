@@ -44,16 +44,16 @@ def test_inferred_mode_persists_for_queue_recovery_without_releasing_lock():
     assert db.flushes == 1
 
 
-def test_assessment_audio_frontend_policy_is_scoped_and_mirrored():
+def test_assessment_audio_frontend_policy_is_scoped_manual_and_mirrored():
     app_js = (ROOT / "app/static/assessment-audio-enhancements.js").read_text(encoding="utf-8")
     public_js = (ROOT / "public/static/assessment-audio-enhancements.js").read_text(encoding="utf-8")
     assert app_js == public_js
     assert "new Set(['role', 'situational'])" in app_js
-    assert "narration_enabled: true" in app_js
     assert "next.response_mode = 'audio'" in app_js
     assert "spokenRecorderBusy()" in app_js
     assert "Read question aloud" in app_js
-    assert "automaticSpokenQuestion" in app_js
+    assert "button.hidden = legacyReader || automaticSpokenQuestion" in app_js
+    assert "narration_enabled: true" not in app_js
     assert "section === 'behavioral'" not in app_js
 
 
