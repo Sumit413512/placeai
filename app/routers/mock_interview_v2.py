@@ -46,6 +46,9 @@ ASSESSMENT_BLUEPRINT = (
     ("role", "Role / JD / Company", 2),
     ("situational", "Situational & Decision", 2),
 )
+OBJECTIVE_ASSESSMENT_SECTIONS = frozenset({"quantitative", "logical", "communication", "technical", "programming"})
+AUDIO_ASSESSMENT_SECTIONS = frozenset({"resume", "role", "situational"})
+SPOKEN_ANSWER_SECONDS = {"resume": 120, "role": 90, "situational": 120}
 
 
 class MockInterviewStartV2(BaseModel):
@@ -284,7 +287,7 @@ def _question_prompt(
 {PROMPT_GUARDRAIL}
 
 You are a senior interviewer preparing a realistic campus interview for the exact role below.
-{("Generate exactly 48 NEW AI-authored primary assessment items for a standardized full campus-placement mock. PlaceAI injects 2 server-owned executable coding-editor questions separately, so DO NOT generate coding-section items. Use this exact AI-authored section blueprint: quantitative 8; logical 8; communication 6; technical 8; programming 6; resume 4; behavioral 4; role 2; situational 2. Technical, programming and the 2 server-owned coding-editor questions together form the candidate-facing Technical Assessment. Difficulty must progress from foundational to intermediate and then challenging within each section. At least half of technical/programming/resume/role items must directly test the role description, required skills or candidate's relevant experience. Quantitative, logical, communication, technical and programming items MUST be objective multiple-choice questions with exactly four distinct plausible options and exactly one correct answer. Technical and programming must test applied knowledge through MCQs, never essays; coding is tested separately in the executable editor. Resume, behavioral, role and situational items should normally be applied-response questions." if count == FULL_MOCK_QUESTION_COUNT else f"Generate exactly {count} NEW role-specific practice interview questions. {focus_instruction} Difficulty: {difficulty}. Prefer applied technical reasoning, debugging, design, behavioral evidence, situational judgment and role fit over trivia.")}
+{("Generate exactly 48 NEW AI-authored primary assessment items for a standardized full campus-placement mock. PlaceAI injects 2 server-owned executable coding-editor questions separately, so DO NOT generate coding-section items. Use this exact AI-authored section blueprint: quantitative 8; logical 8; communication 6; technical 8; programming 6; resume 4; behavioral 4; role 2; situational 2. Technical, programming and the 2 server-owned coding-editor questions together form the candidate-facing Technical Assessment. Difficulty must progress from foundational to intermediate and then challenging within each section. At least half of technical/programming/resume/role items must directly test the role description, required skills or candidate's relevant experience. Quantitative, logical, communication, technical and programming items MUST be objective multiple-choice questions with exactly four distinct plausible options and exactly one correct answer. Technical and programming must test applied knowledge through MCQs, never essays; coding is tested separately in the executable editor. Resume, behavioral, role and situational items MUST be open-ended spoken-response questions. Do not create typed descriptive or essay answers for the standardized assessment." if count == FULL_MOCK_QUESTION_COUNT else f"Generate exactly {count} NEW role-specific practice interview questions. {focus_instruction} Difficulty: {difficulty}. Prefer applied technical reasoning, debugging, design, behavioral evidence, situational judgment and role fit over trivia.")}
 Questions must be concise, non-discriminatory and suitable for campus placement preparation.
 Use ONLY facts present in ROLE and CANDIDATE CONTEXT. Do not invent company processes, technologies, projects,
 metrics, responsibilities, achievements or candidate experience. If a fact is not provided, ask a generic
@@ -294,7 +297,7 @@ Do not ask multiple questions that are substantially the same within this new se
 
 Return ONLY valid JSON.
 For a 50-item full assessment use:
-{{"questions":[{{"question":"...","section":"quantitative|logical|communication|technical|programming|resume|behavioral|role|situational","category":"...","difficulty":"easy|medium|hard","answer_type":"mcq|text","options":["A","B","C","D"],"correct_answer":"exact option text or empty for text"}}]}}
+{{"questions":[{{"question":"...","section":"quantitative|logical|communication|technical|programming|resume|behavioral|role|situational","category":"...","difficulty":"easy|medium|hard","answer_type":"mcq|audio|video","options":["A","B","C","D"],"correct_answer":"exact option text or empty for spoken"}}]}}
 For legacy practice rounds use:
 {{"questions":[{{"question":"...","category":"technical|behavioral|hr|situational|communication","difficulty":"easy|medium|hard"}}]}}
 
@@ -329,6 +332,55 @@ def _order_full_assessment_items(items: list[dict[str, Any]]) -> list[dict[str, 
         )
     )
     return [item for _, item in indexed]
+
+
+def _apply_standard_assessment_response_contract(questions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Make the 50-item response pattern server-authoritative and textarea-free."""
+    if len(questions) != FULL_MOCK_QUESTION_COUNT:
+        raise HTTPException(502, "Standardized assessment generation is incomplete")
+    counts = {key: 0 for key, _, _ in ASSESSMENT_BLUEPRINT}
+    for item in questions:
+        section = str(item.get("section", "")).strip().lower()
+        if section not in counts:
+            raise HTTPException(502, "Standardized assessment contains an unsupported section")
+        counts[section] += 1
+        if section in OBJECTIVE_ASSESSMENT_SECTIONS:
+            options = [str(value).strip() for value in (item.get("options") or [])]
+            correct = _resolve_correct_option(options, str(item.get("correct_answer", ""))) if len(options) == 4 else ""
+            if len(options) != 4 or len({value.casefold() for value in options}) != 4 or not correct:
+                raise HTTPException(502, "Standardized objective question is malformed")
+            item["answer_type"] = "mcq"
+            item["options"] = options
+            item["correct_answer"] = correct
+            item.pop("response_mode", None)
+            item["narration_enabled"] = False
+        elif section == "coding":
+            item["answer_type"] = "code"
+            item["options"] = []
+            item["correct_answer"] = ""
+            item.pop("response_mode", None)
+            item["narration_enabled"] = False
+        elif section == "behavioral":
+            item["answer_type"] = "video"
+            item["options"] = []
+            item["correct_answer"] = ""
+            item.pop("response_mode", None)
+            item["narration_enabled"] = False
+        elif section in AUDIO_ASSESSMENT_SECTIONS:
+            item["answer_type"] = "audio"
+            item["response_mode"] = "audio"
+            item["narration_enabled"] = True
+            item["answer_time_seconds"] = SPOKEN_ANSWER_SECONDS[section]
+            item["options"] = []
+            item["correct_answer"] = ""
+        else:
+            raise HTTPException(502, "Standardized assessment response mode is unsupported")
+    expected = {key: count for key, _, count in ASSESSMENT_BLUEPRINT}
+    if counts != expected:
+        raise HTTPException(502, "Standardized assessment blueprint is incomplete")
+    if any(str(item.get("answer_type", "")).lower() == "text" for item in questions):
+        raise HTTPException(502, "Descriptive typed answers are not allowed in the standardized assessment")
+    return questions
 
 
 def _difficulty_for(index: int, total: int, requested: str) -> str:
@@ -823,7 +875,7 @@ def _fallback_questions(
                 "section": section,
                 "category": section,
                 "difficulty": _difficulty_for(index + 1, max(missing, 1), difficulty),
-                "answer_type": "text",
+                "answer_type": "video" if section == "behavioral" else "audio",
                 "options": [],
                 "correct_answer": "",
             })
@@ -899,9 +951,19 @@ def _generate_unique_questions(
                 if objective_section and (len(options) != 4 or len({option.casefold().strip() for option in options}) != 4 or not resolved_correct):
                     continue
 
-                answer_type = "mcq" if count == FULL_MOCK_QUESTION_COUNT and len(options) == 4 and resolved_correct else "text"
+                if count == FULL_MOCK_QUESTION_COUNT:
+                    if objective_section:
+                        answer_type = "mcq"
+                    elif section == "behavioral":
+                        answer_type = "video"
+                    elif section in AUDIO_ASSESSMENT_SECTIONS:
+                        answer_type = "audio"
+                    else:
+                        continue
+                else:
+                    answer_type = "text"
                 correct_answer = resolved_correct if answer_type == "mcq" else ""
-                if answer_type == "text":
+                if answer_type != "mcq":
                     options = []
                 accepted.append({
                     "question": question[:2000],
@@ -943,6 +1005,8 @@ def _generate_unique_questions(
         if count == FULL_MOCK_QUESTION_COUNT
         else accepted[:count]
     )
+    if count == FULL_MOCK_QUESTION_COUNT:
+        ordered = _apply_standard_assessment_response_contract(ordered)
     questions = [
         {"question_id": index, **item}
         for index, item in enumerate(ordered, start=1)
@@ -984,12 +1048,7 @@ def start_mock_interview_v2(
         previous=previous,
     )
     if body.mode == "assessment":
-        for question in questions:
-            question["narration_enabled"] = get_settings().question_recordings_enabled
-            if question.get("section") == "behavioral":
-                question["answer_type"] = "video"
-            if get_settings().question_recordings_enabled and question.get("answer_type") in {"text", "video"}:
-                question["response_mode"] = "video" if question["answer_type"] == "video" else "audio"
+        _apply_standard_assessment_response_contract(questions)
     interview = MockInterview(
         student_id=profile.id,
         job_id=job.id,

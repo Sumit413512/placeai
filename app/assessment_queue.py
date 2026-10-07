@@ -23,8 +23,8 @@ def pending(job):
 def _enforce_spoken_contract(db, interview, body):
     """Fail closed if a full-assessment client substitutes text for required audio.
 
-    Older/in-flight assessments may have Role/JD and Situational questions stored as
-    text because their audio response mode was historically inferred by the browser.
+    Older/in-flight assessments may have Resume/Project, Role/JD and Situational questions stored
+    as text because their audio response mode was historically inferred by the browser.
     The server-side answer policy is authoritative: materialize that inferred mode in
     the same locked transaction and require a sealed recording before queue admission.
     Practice rounds are deliberately excluded even when they contain a situational item.
@@ -55,7 +55,7 @@ def _enforce_spoken_contract(db, interview, body):
     if set(submitted) != question_ids:
         raise HTTPException(422, "Answers must match the server-issued interview question set")
 
-    # response_mode() recognizes legacy Role/Situational records even before the
+    # response_mode() recognizes legacy standardized spoken records even before the
     # explicit metadata is persisted. Text is never accepted as a substitute for
     # those required spoken answers.
     answer_recording.sealed_answers(db, interview, questions, submitted)

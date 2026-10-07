@@ -11,7 +11,8 @@ from app.models import AnswerRecording, AnswerRecordingChunk, MockInterview, utc
 
 AUDIO_BYTES = 2 * 1024 * 1024
 VIDEO_BYTES = 7 * 1024 * 1024
-POST_HR_VOICE_SECTIONS = frozenset({"role", "situational"})
+ASSESSMENT_AUDIO_SECTIONS = frozenset({"resume", "role", "situational"})
+POST_HR_VOICE_SECTIONS = ASSESSMENT_AUDIO_SECTIONS  # compatibility alias
 FULL_ASSESSMENT_SECTION_COUNTS = {
     "quantitative": 8,
     "logical": 8,
@@ -40,11 +41,11 @@ def is_full_assessment_questions(questions):
 
 
 def materialize_post_hr_modes(questions):
-    """Persist the two required post-HR audio modes for a full assessment only.
+    """Persist required private-audio modes for a standardized full assessment.
 
-    Practice rounds may also contain a situational question, so section name alone is
-    not sufficient to opt a session into mandatory recording. The standardized 50-item
-    blueprint is the server-owned boundary for this policy.
+    Practice rounds are deliberately excluded. Resume/Project Defence, Role/JD and
+    Situational answers are spoken; Behavioural/HR keeps its continuous video flow.
+    Legacy in-flight items that already have an explicit video mode remain unchanged.
     """
     if not is_full_assessment_questions(questions):
         return False
@@ -54,10 +55,13 @@ def materialize_post_hr_modes(questions):
             continue
         section = str(question.get("section", "")).strip().lower()
         answer_type = str(question.get("answer_type", "text")).strip().lower()
-        if section not in POST_HR_VOICE_SECTIONS or answer_type != "text":
+        if section not in ASSESSMENT_AUDIO_SECTIONS or answer_type not in {"text", "audio"}:
             continue
         if question.get("response_mode") not in {"audio", "video"}:
             question["response_mode"] = "audio"
+            changed = True
+        if question.get("response_mode") == "audio" and question.get("answer_type") != "audio":
+            question["answer_type"] = "audio"
             changed = True
         if question.get("narration_enabled") is not True:
             question["narration_enabled"] = True
@@ -67,7 +71,7 @@ def materialize_post_hr_modes(questions):
 
 @event.listens_for(MockInterview, "before_insert")
 def _persist_full_assessment_spoken_policy(_mapper, _connection, target):
-    """Store mandatory post-HR audio metadata before a new assessment reaches the DB."""
+    """Store mandatory assessment-audio metadata before a new assessment reaches the DB."""
     try:
         questions = json.loads(target.questions_json or "[]")
     except (TypeError, ValueError):
@@ -79,28 +83,22 @@ def _persist_full_assessment_spoken_policy(_mapper, _connection, target):
 def response_mode(question):
     """Return the effective spoken-answer mode without changing legacy HR behavior.
 
-    The final Role/JD and Situational sections are spoken answers even while the
-    broader separate-question recording rollout remains disabled. Resume stays text
-    and Behavioural/HR keeps its existing continuous camera recording unless the
-    server explicitly issued a response_mode.
+    Standardized Resume/Project, Role/JD and Situational responses are private audio.
+    Behavioural/HR keeps its existing continuous camera recording unless an older
+    server-issued question already carries an explicit response mode.
     """
     explicit = question.get("response_mode")
     if explicit in {"audio", "video"}:
         return explicit
     section = str(question.get("section", "")).strip().lower()
     answer_type = str(question.get("answer_type", "text")).strip().lower()
-    if section in POST_HR_VOICE_SECTIONS and answer_type == "text":
+    if section in ASSESSMENT_AUDIO_SECTIONS and answer_type in {"text", "audio"}:
         return "audio"
     return None
 
 
 def _persist_inferred_mode(db, interview, question_id, mode):
-    """Persist inferred post-HR audio metadata in the current locked transaction.
-
-    Evaluation and recovery read the immutable issued question set from the database.
-    Flushing the inferred mode before media is accepted keeps retries, queue processing
-    and saved-result recovery consistent without releasing the assessment row lock.
-    """
+    """Persist inferred assessment-audio metadata without releasing the row lock."""
     questions = json.loads(interview.questions_json or "[]")
     changed = False
     for item in questions:
@@ -109,6 +107,9 @@ def _persist_inferred_mode(db, interview, question_id, mode):
         if item.get("response_mode") not in {"audio", "video"}:
             item["response_mode"] = mode
             item["narration_enabled"] = True
+            changed = True
+        if mode == "audio" and item.get("answer_type") != "audio":
+            item["answer_type"] = "audio"
             changed = True
         break
     if changed:
@@ -126,6 +127,15 @@ def owned(db, user, interview_id, question_id, *, lock=False, reviewer=False):
     query = db.query(AnswerRecording).filter_by(interview_id=interview_id, question_id=question_id)
     row = (query.populate_existing().with_for_update() if lock else query).first()
     return root, interview, question, row
+
+
+def _answer_time_seconds(question):
+    """Use the server-issued spoken-answer window, bounded by the recording policy."""
+    try:
+        requested = int(question.get("answer_time_seconds") or hr_video.QUESTION_SECONDS)
+    except (TypeError, ValueError):
+        requested = hr_video.QUESTION_SECONDS
+    return max(45, min(requested, hr_video.QUESTION_SECONDS))
 
 
 def begin(db, user, interview_id, question_id, mime_type, consent):
@@ -150,7 +160,7 @@ def begin(db, user, interview_id, question_id, mime_type, consent):
     now = utcnow()
     row = AnswerRecording(interview_id=interview_id, question_id=question_id, mime_type=mime_type,
                           exam_started_at=root.exam_started_at, started_at=now, consent_at=now,
-                          deadline_at=min(now + timedelta(seconds=hr_video.QUESTION_SECONDS),
+                          deadline_at=min(now + timedelta(seconds=_answer_time_seconds(question)),
                                           root.exam_started_at + timedelta(minutes=hr_video.EXAM_MINUTES)),
                           expires_at=root.expires_at,
                           segments_json=json.dumps([{"question_id": question_id, "start": 0, "end": None}]))

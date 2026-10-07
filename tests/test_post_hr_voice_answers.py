@@ -19,7 +19,7 @@ def _full_assessment_questions():
         elif section == "coding":
             answer_type = "code"
         elif section in {"resume", "role", "situational"}:
-            answer_type = "text"
+            answer_type = "audio"
         else:
             answer_type = "mcq"
         for _ in range(count):
@@ -39,7 +39,7 @@ def _answers_for(questions):
             question_id=question["question_id"],
             answer=(
                 "text must not bypass required audio"
-                if question["section"] in {"role", "situational"}
+                if question["section"] in {"resume", "role", "situational"}
                 else "submitted answer"
             ),
         )
@@ -47,10 +47,10 @@ def _answers_for(questions):
     ]
 
 
-def test_post_hr_sections_use_audio_without_changing_resume_or_legacy_hr():
+def test_standardized_open_ended_sections_use_audio_without_changing_legacy_hr():
     assert answer_recording.response_mode({"section": "role", "answer_type": "text"}) == "audio"
     assert answer_recording.response_mode({"section": "situational", "answer_type": "text"}) == "audio"
-    assert answer_recording.response_mode({"section": "resume", "answer_type": "text"}) is None
+    assert answer_recording.response_mode({"section": "resume", "answer_type": "text"}) == "audio"
     assert answer_recording.response_mode({"section": "behavioral", "answer_type": "video"}) is None
     assert answer_recording.response_mode(
         {"section": "behavioral", "answer_type": "video", "response_mode": "video"}
@@ -89,16 +89,17 @@ def test_new_full_assessment_persists_server_authoritative_post_hr_audio():
     answer_recording._persist_full_assessment_spoken_policy(None, None, target)
     persisted = json.loads(target.questions_json)
 
-    role_and_situational = [
-        item for item in persisted if item["section"] in {"role", "situational"}
+    spoken_audio = [
+        item for item in persisted if item["section"] in {"resume", "role", "situational"}
     ]
-    assert len(role_and_situational) == 4
-    assert all(item["response_mode"] == "audio" for item in role_and_situational)
-    assert all(item["narration_enabled"] is True for item in role_and_situational)
+    assert len(spoken_audio) == 8
+    assert all(item["response_mode"] == "audio" for item in spoken_audio)
+    assert all(item["answer_type"] == "audio" for item in spoken_audio)
+    assert all(item["narration_enabled"] is True for item in spoken_audio)
     assert all(
         item.get("response_mode") is None
         for item in persisted
-        if item["section"] in {"resume", "behavioral"}
+        if item["section"] == "behavioral"
     )
     assert all(
         item["answer_type"] == "video"
@@ -137,14 +138,14 @@ def test_queue_enforces_legacy_post_hr_audio_before_admission(monkeypatch):
         calls.append((issued, submitted))
         spoken = [
             item for item in issued
-            if item["section"] in {"role", "situational"}
+            if item["section"] in {"resume", "role", "situational"}
         ]
-        assert len(spoken) == 4
+        assert len(spoken) == 8
         assert all(answer_recording.response_mode(item) == "audio" for item in spoken)
         assert all(
             answer_recording.response_mode(item) is None
             for item in issued
-            if item["section"] in {"resume", "behavioral"}
+            if item["section"] == "behavioral"
         )
 
     monkeypatch.setattr(answer_recording, "sealed_answers", sealed)
@@ -153,14 +154,14 @@ def test_queue_enforces_legacy_post_hr_audio_before_admission(monkeypatch):
     persisted = json.loads(interview.questions_json)
     spoken = [
         item for item in persisted
-        if item["section"] in {"role", "situational"}
+        if item["section"] in {"resume", "role", "situational"}
     ]
     assert all(item["response_mode"] == "audio" for item in spoken)
     assert all(item["narration_enabled"] is True for item in spoken)
     assert all(
         item.get("response_mode") is None
         for item in persisted
-        if item["section"] in {"resume", "behavioral"}
+        if item["section"] == "behavioral"
     )
     assert db.flushes == 1
     assert len(calls) == 1
@@ -213,7 +214,7 @@ def test_assessment_audio_frontend_policy_is_scoped_manual_and_mirrored():
     app_js = (ROOT / "app/static/assessment-audio-enhancements.js").read_text(encoding="utf-8")
     public_js = (ROOT / "public/static/assessment-audio-enhancements.js").read_text(encoding="utf-8")
     assert app_js == public_js
-    assert "new Set(['role', 'situational'])" in app_js
+    assert "new Set(['resume', 'role', 'situational'])" in app_js
     assert "next.response_mode = 'audio'" in app_js
     assert "spokenRecorderBusy()" in app_js
     assert "Read question aloud" in app_js
@@ -237,7 +238,7 @@ def test_report_method_label_includes_written_spoken_and_hr_video_analysis():
     app_js = (ROOT / "app/static/assessment-audio-enhancements.js").read_text(encoding="utf-8")
     assert "installGradingMethodLabel()" in app_js
     assert "LEGACY_GRADING_METHOD_LABEL" in app_js
-    assert "Answer key + sandbox execution + written, spoken and HR video analysis" in app_js
+    assert "Answer key + sandbox execution + spoken and HR video analysis" in app_js
     assert "label.textContent?.trim() === LEGACY_GRADING_METHOD_LABEL" in app_js
 
 
