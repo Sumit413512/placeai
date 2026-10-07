@@ -87,7 +87,7 @@ def _verify_runtime_access(bind) -> None:
                   AND tablename = :table
                   AND policyname = :policy
                   AND cmd = 'ALL'
-                  AND :role = ANY(roles)
+                  AND CAST(:role AS name) = ANY(roles)
                   AND qual = 'true'
                   AND with_check = 'true'
             )
