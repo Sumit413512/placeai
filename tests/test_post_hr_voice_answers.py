@@ -10,6 +10,43 @@ from app import answer_recording, assessment_queue
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _full_assessment_questions():
+    questions = []
+    question_id = 1
+    for section, count in answer_recording.FULL_ASSESSMENT_SECTION_COUNTS.items():
+        if section == "behavioral":
+            answer_type = "video"
+        elif section == "coding":
+            answer_type = "code"
+        elif section in {"resume", "role", "situational"}:
+            answer_type = "text"
+        else:
+            answer_type = "mcq"
+        for _ in range(count):
+            questions.append({
+                "question_id": question_id,
+                "question": f"Question {question_id}",
+                "section": section,
+                "answer_type": answer_type,
+            })
+            question_id += 1
+    return questions
+
+
+def _answers_for(questions):
+    return [
+        SimpleNamespace(
+            question_id=question["question_id"],
+            answer=(
+                "text must not bypass required audio"
+                if question["section"] in {"role", "situational"}
+                else "submitted answer"
+            ),
+        )
+        for question in questions
+    ]
+
+
 def test_post_hr_sections_use_audio_without_changing_resume_or_legacy_hr():
     assert answer_recording.response_mode({"section": "role", "answer_type": "text"}) == "audio"
     assert answer_recording.response_mode({"section": "situational", "answer_type": "text"}) == "audio"
@@ -47,21 +84,44 @@ def test_inferred_mode_persists_for_queue_recovery_without_releasing_lock():
     assert db.flushes == 1
 
 
-def test_queue_enforces_legacy_post_hr_audio_before_admission(monkeypatch):
-    interview = SimpleNamespace(
-        questions_json=json.dumps([
-            {"question_id": 1, "section": "resume", "answer_type": "text"},
-            {"question_id": 2, "section": "behavioral", "answer_type": "video"},
-            {"question_id": 3, "section": "role", "answer_type": "text"},
-            {"question_id": 4, "section": "situational", "answer_type": "text"},
-        ])
+def test_new_full_assessment_persists_server_authoritative_post_hr_audio():
+    target = SimpleNamespace(questions_json=json.dumps(_full_assessment_questions()))
+    answer_recording._persist_full_assessment_spoken_policy(None, None, target)
+    persisted = json.loads(target.questions_json)
+
+    role_and_situational = [
+        item for item in persisted if item["section"] in {"role", "situational"}
+    ]
+    assert len(role_and_situational) == 4
+    assert all(item["response_mode"] == "audio" for item in role_and_situational)
+    assert all(item["narration_enabled"] is True for item in role_and_situational)
+    assert all(
+        item.get("response_mode") is None
+        for item in persisted
+        if item["section"] in {"resume", "behavioral"}
     )
-    body = SimpleNamespace(answers=[
-        SimpleNamespace(question_id=1, answer="typed resume answer"),
-        SimpleNamespace(question_id=2, answer="[Spoken answer submitted]"),
-        SimpleNamespace(question_id=3, answer="text must not bypass audio"),
-        SimpleNamespace(question_id=4, answer="text must not bypass audio"),
-    ])
+    assert all(
+        item["answer_type"] == "video"
+        for item in persisted
+        if item["section"] == "behavioral"
+    )
+
+
+def test_post_hr_materialization_does_not_change_practice_situational_questions():
+    practice = [
+        {"question_id": 1, "section": "technical", "answer_type": "text"},
+        {"question_id": 2, "section": "situational", "answer_type": "text"},
+        {"question_id": 3, "section": "behavioral", "answer_type": "text"},
+    ]
+    assert answer_recording.is_full_assessment_questions(practice) is False
+    assert answer_recording.materialize_post_hr_modes(practice) is False
+    assert all(item.get("response_mode") is None for item in practice)
+
+
+def test_queue_enforces_legacy_post_hr_audio_before_admission(monkeypatch):
+    questions = _full_assessment_questions()
+    interview = SimpleNamespace(questions_json=json.dumps(questions))
+    body = SimpleNamespace(answers=_answers_for(questions))
 
     class DB:
         def __init__(self):
@@ -75,34 +135,42 @@ def test_queue_enforces_legacy_post_hr_audio_before_admission(monkeypatch):
 
     def sealed(_db, _interview, issued, submitted):
         calls.append((issued, submitted))
-        assert answer_recording.response_mode(issued[2]) == "audio"
-        assert answer_recording.response_mode(issued[3]) == "audio"
-        assert answer_recording.response_mode(issued[0]) is None
-        assert answer_recording.response_mode(issued[1]) is None
+        spoken = [
+            item for item in issued
+            if item["section"] in {"role", "situational"}
+        ]
+        assert len(spoken) == 4
+        assert all(answer_recording.response_mode(item) == "audio" for item in spoken)
+        assert all(
+            answer_recording.response_mode(item) is None
+            for item in issued
+            if item["section"] in {"resume", "behavioral"}
+        )
 
     monkeypatch.setattr(answer_recording, "sealed_answers", sealed)
     assessment_queue._enforce_spoken_contract(db, interview, body)
 
     persisted = json.loads(interview.questions_json)
-    assert persisted[0].get("response_mode") is None
-    assert persisted[1].get("response_mode") is None
-    assert persisted[2]["response_mode"] == "audio"
-    assert persisted[2]["narration_enabled"] is True
-    assert persisted[3]["response_mode"] == "audio"
-    assert persisted[3]["narration_enabled"] is True
+    spoken = [
+        item for item in persisted
+        if item["section"] in {"role", "situational"}
+    ]
+    assert all(item["response_mode"] == "audio" for item in spoken)
+    assert all(item["narration_enabled"] is True for item in spoken)
+    assert all(
+        item.get("response_mode") is None
+        for item in persisted
+        if item["section"] in {"resume", "behavioral"}
+    )
     assert db.flushes == 1
     assert len(calls) == 1
-    assert set(calls[0][1]) == {1, 2, 3, 4}
+    assert set(calls[0][1]) == {item["question_id"] for item in persisted}
 
 
 def test_queue_spoken_contract_rejects_mismatched_submission_before_worker(monkeypatch):
-    interview = SimpleNamespace(
-        questions_json=json.dumps([
-            {"question_id": 49, "section": "role", "answer_type": "text"},
-            {"question_id": 50, "section": "situational", "answer_type": "text"},
-        ])
-    )
-    body = SimpleNamespace(answers=[SimpleNamespace(question_id=49, answer="text")])
+    questions = _full_assessment_questions()
+    interview = SimpleNamespace(questions_json=json.dumps(questions))
+    body = SimpleNamespace(answers=_answers_for(questions)[:-1])
 
     class DB:
         def flush(self):
@@ -118,26 +186,23 @@ def test_queue_spoken_contract_rejects_mismatched_submission_before_worker(monke
     assert exc.value.status_code == 422
 
 
-def test_queue_does_not_convert_resume_or_legacy_hr_to_separate_recordings(monkeypatch):
-    interview = SimpleNamespace(
-        questions_json=json.dumps([
-            {"question_id": 1, "section": "resume", "answer_type": "text"},
-            {"question_id": 2, "section": "behavioral", "answer_type": "video"},
-        ])
-    )
-    body = SimpleNamespace(answers=[
-        SimpleNamespace(question_id=1, answer="resume"),
-        SimpleNamespace(question_id=2, answer="[Spoken answer submitted]"),
-    ])
+def test_queue_does_not_apply_full_assessment_recording_contract_to_practice(monkeypatch):
+    practice = [
+        {"question_id": 1, "section": "technical", "answer_type": "text"},
+        {"question_id": 2, "section": "situational", "answer_type": "text"},
+        {"question_id": 3, "section": "behavioral", "answer_type": "text"},
+    ]
+    interview = SimpleNamespace(questions_json=json.dumps(practice))
+    body = SimpleNamespace(answers=_answers_for(practice))
 
     class DB:
         def flush(self):
-            raise AssertionError("No per-question mode should be persisted")
+            raise AssertionError("Practice questions must not gain recording metadata")
 
     monkeypatch.setattr(
         answer_recording,
         "sealed_answers",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Legacy HR uses its own recorder")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Practice must not require sealed audio")),
     )
     assessment_queue._enforce_spoken_contract(DB(), interview, body)
     persisted = json.loads(interview.questions_json)
