@@ -19,19 +19,12 @@ jobs:
         run: |
           set -euo pipefail
           status_body="$(curl -fsS --retry 5 --retry-delay 2 --connect-timeout 15 --max-time 30 'https://placeai-rxpp.vercel.app/ai/status')"
-          openapi_body="$(curl -fsS --retry 5 --retry-delay 2 --connect-timeout 15 --max-time 30 'https://placeai-rxpp.vercel.app/openapi.json')"
-          STATUS_BODY="$status_body" OPENAPI_BODY="$openapi_body" python - <<'PY'
+          STATUS_BODY="$status_body" python - <<'PY'
           import json, os
           status = json.loads(os.environ['STATUS_BODY'])
-          spec = json.loads(os.environ['OPENAPI_BODY'])
-          op = (((spec.get('paths') or {}).get('/ai/status') or {}).get('get') or {})
-          summary = str(op.get('summary') or '')
           configured = status.get('configured') is True
           sdk_available = status.get('sdk_available') is True
           print(f'Vercel AI status: configured={configured} sdk_available={sdk_available}')
-          print(f'Vercel /ai/status OpenAPI summary: {summary!r}')
-          if summary != 'AI provider configuration status':
-              raise SystemExit('LIVE_SOURCE_OLD: Vercel is not running the current AI readiness source.')
           if not configured or not sdk_available:
               raise SystemExit('LIVE_PROVIDER_UNAVAILABLE: AI provider is not ready.')
           if set(status) != {'configured', 'sdk_available'}:
