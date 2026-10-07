@@ -21,14 +21,13 @@ def pending(job):
 
 
 def _enforce_spoken_contract(db, interview, body):
-    """Fail closed if an assessment client substitutes text for a required voice answer.
+    """Fail closed if a full-assessment client substitutes text for required audio.
 
     Older/in-flight assessments may have Role/JD and Situational questions stored as
     text because their audio response mode was historically inferred by the browser.
     The server-side answer policy is authoritative: materialize that inferred mode in
     the same locked transaction and require a sealed recording before queue admission.
-    This keeps queue workers and recovery deterministic even if client JavaScript is
-    missing, stale, or deliberately modified.
+    Practice rounds are deliberately excluded even when they contain a situational item.
     """
     try:
         questions = json.loads(interview.questions_json or "[]")
@@ -36,21 +35,15 @@ def _enforce_spoken_contract(db, interview, body):
         raise HTTPException(409, "Interview question set is unavailable") from exc
     if not isinstance(questions, list) or not questions:
         raise HTTPException(409, "Interview question set is unavailable")
+    if not answer_recording.is_full_assessment_questions(questions):
+        return
 
-    effective_spoken = False
-    changed = False
-    for question in questions:
-        if not isinstance(question, dict):
-            continue
-        mode = answer_recording.response_mode(question)
-        if mode not in {"audio", "video"}:
-            continue
-        effective_spoken = True
-        if question.get("response_mode") not in {"audio", "video"}:
-            question["response_mode"] = mode
-            question["narration_enabled"] = True
-            changed = True
-
+    changed = answer_recording.materialize_post_hr_modes(questions)
+    effective_spoken = any(
+        answer_recording.response_mode(question) in {"audio", "video"}
+        for question in questions
+        if isinstance(question, dict)
+    )
     if not effective_spoken:
         return
 
@@ -62,9 +55,9 @@ def _enforce_spoken_contract(db, interview, body):
     if set(submitted) != question_ids:
         raise HTTPException(422, "Answers must match the server-issued interview question set")
 
-    # response_mode() also recognizes legacy Role/Situational records that were
-    # issued before explicit server-side mode persistence. Text is never accepted
-    # as a substitute for those required spoken answers.
+    # response_mode() recognizes legacy Role/Situational records even before the
+    # explicit metadata is persisted. Text is never accepted as a substitute for
+    # those required spoken answers.
     answer_recording.sealed_answers(db, interview, questions, submitted)
     if changed:
         interview.questions_json = json.dumps(questions)
