@@ -32,11 +32,11 @@ def response_mode(question):
 
 
 def _persist_inferred_mode(db, interview, question_id, mode):
-    """Persist inferred post-HR audio metadata before media is accepted.
+    """Persist inferred post-HR audio metadata in the current locked transaction.
 
     Evaluation and recovery read the immutable issued question set from the database.
-    Persisting the inferred mode once keeps retries, queue processing and saved-result
-    recovery consistent with what the student actually recorded.
+    Flushing the inferred mode before media is accepted keeps retries, queue processing
+    and saved-result recovery consistent without releasing the assessment row lock.
     """
     questions = json.loads(interview.questions_json or "[]")
     changed = False
@@ -50,7 +50,7 @@ def _persist_inferred_mode(db, interview, question_id, mode):
         break
     if changed:
         interview.questions_json = json.dumps(questions)
-        db.commit()
+        db.flush()
 
 
 def owned(db, user, interview_id, question_id, *, lock=False, reviewer=False):
