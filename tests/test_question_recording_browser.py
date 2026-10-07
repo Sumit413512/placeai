@@ -75,3 +75,16 @@ def test_question_reading_precedes_separate_audio_and_video_and_capacity_stops_r
     assert page.locator(".analysis-step.done").count() == 0
     page.evaluate("clearInterval(paint);audio.close()")
     page.close()
+
+
+def test_spoken_answer_submit_drains_final_media_chunk_before_sealing():
+    script = (ROOT / "app/static/mock-interview.js").read_text(encoding="utf-8")
+    public_script = (ROOT / "public/static/mock-interview.js").read_text(encoding="utf-8")
+    assert script == public_script
+    assert "async function drainQuestionAnswerUploads(clip)" in script
+    assert "while(clip.uploading || clip.uploaded<clip.chunks.length)await uploadQuestionAnswer(clip);" in script
+    assert "await drainQuestionAnswerUploads(clip);" in script
+    assert "if(clip.uploaded!==clip.chunks.length)throw new Error('The spoken answer has not finished uploading." in script
+    drain_at = script.index("await drainQuestionAnswerUploads(clip);")
+    submit_at = script.index("/submit`,{method:'POST'", drain_at)
+    assert drain_at < submit_at
