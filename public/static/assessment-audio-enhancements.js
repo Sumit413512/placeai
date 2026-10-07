@@ -3,6 +3,7 @@
 
   const POST_HR_VOICE_SECTIONS = new Set(['role', 'situational']);
   const START_PATH = '/mock-interview/start';
+  const SPOKEN_BLUEPRINT_LABELS = new Set(['Role / JD / Company', 'Situational & Decision']);
 
   function decorateAssessmentSession(payload) {
     if (!payload || payload.mode !== 'assessment' || !Array.isArray(payload.questions)) return payload;
@@ -84,31 +85,16 @@
     return Boolean(document.querySelector('#repeat-hr-question'));
   }
 
-  function speakText(text, button) {
-    if (!text || !('speechSynthesis' in window) || typeof window.SpeechSynthesisUtterance !== 'function') return;
-    window.speechSynthesis.cancel();
-    const chunks = text.match(/.{1,230}(?:\s|$)/g) || [text];
-    let index = 0;
-    button.disabled = true;
-    button.textContent = 'Reading aloud…';
-
-    const finish = () => {
-      button.textContent = 'Read question aloud';
-      syncReadButton(button);
-    };
-    const next = () => {
-      if (index >= chunks.length) {
-        finish();
-        return;
-      }
-      const utterance = new SpeechSynthesisUtterance(chunks[index++].trim());
-      utterance.lang = 'en-IN';
-      utterance.rate = 0.95;
-      utterance.onend = next;
-      utterance.onerror = finish;
-      window.speechSynthesis.speak(utterance);
-    };
-    next();
+  function syncBlueprintVoiceLabels(root = document) {
+    root.querySelectorAll?.('.blueprint-row')?.forEach(row => {
+      const label = row.querySelector('strong')?.textContent?.trim() || '';
+      if (!SPOKEN_BLUEPRINT_LABELS.has(label)) return;
+      const meta = row.querySelector('small');
+      if (!meta) return;
+      const minutes = (meta.textContent || '').split('·')[0].trim();
+      const desired = `${minutes} · Private spoken answer`;
+      if (meta.textContent?.trim() !== desired) meta.textContent = desired;
+    });
   }
 
   function syncReadButton(button = document.querySelector('#read-question-aloud')) {
@@ -124,6 +110,55 @@
     } else {
       button.title = 'Read the current question aloud.';
     }
+  }
+
+  let manualReadGeneration = 0;
+
+  function cancelManualReading(button) {
+    manualReadGeneration += 1;
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    if (button) {
+      button.textContent = 'Read question aloud';
+      syncReadButton(button);
+    }
+  }
+
+  function speakText(text, button) {
+    if (!text || !('speechSynthesis' in window) || typeof window.SpeechSynthesisUtterance !== 'function') return;
+    cancelManualReading(button);
+    const generation = ++manualReadGeneration;
+    const chunks = text.match(/.{1,230}(?:\s|$)/g) || [text];
+    let index = 0;
+    button.disabled = true;
+    button.textContent = 'Reading aloud…';
+
+    const finish = () => {
+      if (generation !== manualReadGeneration) return;
+      button.textContent = 'Read question aloud';
+      syncReadButton(button);
+    };
+    const next = () => {
+      if (generation !== manualReadGeneration) return;
+      if (index >= chunks.length) {
+        finish();
+        return;
+      }
+      const utterance = new SpeechSynthesisUtterance(chunks[index++].trim());
+      utterance.lang = 'en-IN';
+      utterance.rate = 0.95;
+      utterance.onend = next;
+      utterance.onerror = finish;
+      window.speechSynthesis.speak(utterance);
+    };
+    next();
+  }
+
+  function installBlueprintVoiceLabels() {
+    const list = document.querySelector('#blueprint-list');
+    if (!list) return;
+    syncBlueprintVoiceLabels(list);
+    const observer = new MutationObserver(() => syncBlueprintVoiceLabels(list));
+    observer.observe(list, {childList: true, subtree: true});
   }
 
   function installReadAloudControl() {
@@ -145,15 +180,37 @@
 
     const target = document.querySelector('#answer-area');
     const question = document.querySelector('#question-text');
-    const observer = new MutationObserver(() => syncReadButton(button));
+    let lastQuestion = question?.textContent?.trim() || '';
+    const syncForMutation = () => {
+      const currentQuestion = question?.textContent?.trim() || '';
+      // Never let manual narration from the previous MCQ/coding/text question
+      // continue after navigation. Spoken-answer sections own their automatic
+      // narration lifecycle in mock-interview.js and are deliberately left alone.
+      if (currentQuestion !== lastQuestion) {
+        lastQuestion = currentQuestion;
+        if (!document.querySelector('#spoken-answer-status') && button.textContent === 'Reading aloud…') {
+          cancelManualReading(button);
+        }
+      }
+      syncReadButton(button);
+    };
+    const observer = new MutationObserver(syncForMutation);
     if (target) observer.observe(target, {childList: true, subtree: true, characterData: true});
     if (question) observer.observe(question, {childList: true, subtree: true, characterData: true});
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && button.textContent === 'Reading aloud…') cancelManualReading(button);
+    });
+  }
+
+  function installAssessmentAudioEnhancements() {
+    installBlueprintVoiceLabels();
+    installReadAloudControl();
   }
 
   installAssessmentResponseDecorator();
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', installReadAloudControl, {once: true});
+    document.addEventListener('DOMContentLoaded', installAssessmentAudioEnhancements, {once: true});
   } else {
-    installReadAloudControl();
+    installAssessmentAudioEnhancements();
   }
 })();

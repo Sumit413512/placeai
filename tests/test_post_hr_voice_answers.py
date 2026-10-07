@@ -57,6 +57,17 @@ def test_assessment_audio_frontend_policy_is_scoped_manual_and_mirrored():
     assert "section === 'behavioral'" not in app_js
 
 
+def test_voice_sections_are_labeled_as_spoken_and_manual_narration_cannot_leak():
+    app_js = (ROOT / "app/static/assessment-audio-enhancements.js").read_text(encoding="utf-8")
+    assert "SPOKEN_BLUEPRINT_LABELS" in app_js
+    assert "Private spoken answer" in app_js
+    assert "meta.textContent?.trim() !== desired" in app_js
+    assert "cancelManualReading(button)" in app_js
+    assert "currentQuestion !== lastQuestion" in app_js
+    assert "document.addEventListener('visibilitychange'" in app_js
+    assert "document.querySelector('#spoken-answer-status')" in app_js
+
+
 def test_mock_interview_loads_assessment_audio_enhancement_in_both_static_trees():
     app_loader = (ROOT / "app/static/api-errors.js").read_text(encoding="utf-8")
     public_loader = (ROOT / "public/static/api-errors.js").read_text(encoding="utf-8")
