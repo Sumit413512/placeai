@@ -350,3 +350,11 @@
     installClientContracts();
   }
 })();
+
+if (window.location.pathname === '/mock-interview' && !window.__placeAIAssessmentAudioLoader) {
+  window.__placeAIAssessmentAudioLoader = true;
+  const script = document.createElement('script');
+  script.src = '/static/assessment-audio-enhancements.js?v=20261007-voice1';
+  script.async = false;
+  document.head.appendChild(script);
+}
