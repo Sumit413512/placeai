@@ -753,6 +753,7 @@
     state.answerStarting=true;
     try {
       cancelQuestionReading();
+      if(!window.MediaRecorder)throw new Error('This browser cannot record this answer. Use a supported browser.');
       const audioOnly=q.response_mode==='audio';
       const tracks=state.mediaStream?.getTracks().filter(t=>!audioOnly || t.kind==='audio') || [];
       if(!tracks.some(t=>t.kind==='audio' && t.readyState==='live') || !audioOnly && !tracks.some(t=>t.kind==='video' && t.readyState==='live'))throw new Error('Camera or microphone is unavailable. Restore your devices to record.');
@@ -764,7 +765,6 @@
       if(server.status!=='recording')throw new Error('This answer has already been submitted.');
       const clip={questionId:q.question_id,interviewId:state.session.interview_id,recorder,chunks:[],uploaded:0,bytes:0,submitted:false,
         deadline:Date.now()+Math.max(0,Date.parse(server.question_deadline_at)-Date.parse(server.server_time))};
-      state.answerClip=clip;
       recorder.ondataavailable=event=>{
         if(!event.data.size)return;
         clip.bytes+=event.data.size;
@@ -774,6 +774,7 @@
       };
       recorder.onerror=()=>{clip.error='Recording was interrupted. Finish this answer to preserve captured media.';};
       recorder.start(4000);
+      state.answerClip=clip;
       $('#spoken-answer-status').textContent='Recording your answer · microphone on'+(audioOnly?'':' · camera on');
       $('#start-spoken-answer').classList.add('hidden');
       $('#next-question').disabled=false;

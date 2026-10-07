@@ -88,3 +88,16 @@ def test_spoken_answer_submit_drains_final_media_chunk_before_sealing():
     drain_at = script.index("await drainQuestionAnswerUploads(clip);")
     submit_at = script.index("/submit`,{method:'POST'", drain_at)
     assert drain_at < submit_at
+
+
+def test_spoken_recorder_is_retryable_when_mediarecorder_start_throws():
+    script = (ROOT / "app/static/mock-interview.js").read_text(encoding="utf-8")
+    public_script = (ROOT / "public/static/mock-interview.js").read_text(encoding="utf-8")
+    assert script == public_script
+    assert "if(!window.MediaRecorder)throw new Error('This browser cannot record this answer. Use a supported browser.');" in script
+    start = script.index("async function startQuestionRecorder(q)")
+    end = script.index("async function finishQuestionAnswer()", start)
+    block = script[start:end]
+    recorder_start = block.index("recorder.start(4000);")
+    publish_clip = block.index("state.answerClip=clip;")
+    assert recorder_start < publish_clip
