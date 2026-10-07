@@ -4,6 +4,8 @@
   const POST_HR_VOICE_SECTIONS = new Set(['role', 'situational']);
   const START_PATH = '/mock-interview/start';
   const SPOKEN_BLUEPRINT_LABELS = new Set(['Role / JD / Company', 'Situational & Decision']);
+  const LEGACY_GRADING_METHOD_LABEL = 'Answer key + sandbox execution + answer and HR video analysis';
+  const COMPLETE_GRADING_METHOD_LABEL = 'Answer key + sandbox execution + written, spoken and HR video analysis';
 
   function decorateAssessmentSession(payload) {
     if (!payload || payload.mode !== 'assessment' || !Array.isArray(payload.questions)) return payload;
@@ -161,6 +163,19 @@
     observer.observe(list, {childList: true, subtree: true});
   }
 
+  function installGradingMethodLabel() {
+    const label = document.querySelector('#grading-method-label');
+    if (!label) return;
+    const sync = () => {
+      if (label.textContent?.trim() === LEGACY_GRADING_METHOD_LABEL) {
+        label.textContent = COMPLETE_GRADING_METHOD_LABEL;
+      }
+    };
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(label, {childList: true, subtree: true, characterData: true});
+  }
+
   function installReadAloudControl() {
     const questionWrap = document.querySelector('#question-canvas-wrap');
     if (!questionWrap || document.querySelector('#read-question-aloud')) return;
@@ -204,6 +219,7 @@
 
   function installAssessmentAudioEnhancements() {
     installBlueprintVoiceLabels();
+    installGradingMethodLabel();
     installReadAloudControl();
   }
 
