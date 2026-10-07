@@ -10,13 +10,56 @@ from app.models import AnswerRecording, AnswerRecordingChunk, utcnow
 
 AUDIO_BYTES = 2 * 1024 * 1024
 VIDEO_BYTES = 7 * 1024 * 1024
+POST_HR_VOICE_SECTIONS = frozenset({"role", "situational"})
+
+
+def response_mode(question):
+    """Return the effective spoken-answer mode without changing legacy HR behavior.
+
+    The final Role/JD and Situational sections are spoken answers even while the
+    broader separate-question recording rollout remains disabled. Resume stays text
+    and Behavioural/HR keeps its existing continuous camera recording unless the
+    server explicitly issued a response_mode.
+    """
+    explicit = question.get("response_mode")
+    if explicit in {"audio", "video"}:
+        return explicit
+    section = str(question.get("section", "")).strip().lower()
+    answer_type = str(question.get("answer_type", "text")).strip().lower()
+    if section in POST_HR_VOICE_SECTIONS and answer_type == "text":
+        return "audio"
+    return None
+
+
+def _persist_inferred_mode(db, interview, question_id, mode):
+    """Persist inferred post-HR audio metadata in the current locked transaction.
+
+    Evaluation and recovery read the immutable issued question set from the database.
+    Flushing the inferred mode before media is accepted keeps retries, queue processing
+    and saved-result recovery consistent without releasing the assessment row lock.
+    """
+    questions = json.loads(interview.questions_json or "[]")
+    changed = False
+    for item in questions:
+        if item.get("question_id") != question_id:
+            continue
+        if item.get("response_mode") not in {"audio", "video"}:
+            item["response_mode"] = mode
+            item["narration_enabled"] = True
+            changed = True
+        break
+    if changed:
+        interview.questions_json = json.dumps(questions)
+        db.flush()
 
 
 def owned(db, user, interview_id, question_id, *, lock=False, reviewer=False):
     root, interview = hr_video.owned_recording(db, user, interview_id, lock=lock, reviewer=reviewer)
     question = next((q for q in json.loads(interview.questions_json) if q.get("question_id") == question_id), None)
-    if not question or question.get("response_mode") not in {"audio", "video"}:
+    mode = response_mode(question) if question else None
+    if not question or mode not in {"audio", "video"}:
         raise HTTPException(404, "Spoken-answer question not found")
+    question = {**question, "response_mode": mode}
     query = db.query(AnswerRecording).filter_by(interview_id=interview_id, question_id=question_id)
     row = (query.populate_existing().with_for_update() if lock else query).first()
     return root, interview, question, row
@@ -25,7 +68,8 @@ def owned(db, user, interview_id, question_id, *, lock=False, reviewer=False):
 def begin(db, user, interview_id, question_id, mime_type, consent):
     root, interview, question, row = owned(db, user, interview_id, question_id, lock=True)
     recording_policy.require(db, interview)
-    permitted = {"audio/webm", "audio/mp4"} if question["response_mode"] == "audio" else hr_video.MIME_TYPES
+    mode = question["response_mode"]
+    permitted = {"audio/webm", "audio/mp4"} if mode == "audio" else hr_video.MIME_TYPES
     if not consent or mime_type not in permitted:
         raise HTTPException(422, "Consent and a supported recording format are required")
     if root.submission_json or interview.overall_score is not None or root.expires_at <= utcnow():
@@ -39,6 +83,7 @@ def begin(db, user, interview_id, question_id, mime_type, consent):
     active = db.query(AnswerRecording).filter_by(interview_id=interview_id, sealed_at=None).first()
     if active:
         raise HTTPException(409, "Submit the current recording before opening another")
+    _persist_inferred_mode(db, interview, question_id, mode)
     now = utcnow()
     row = AnswerRecording(interview_id=interview_id, question_id=question_id, mime_type=mime_type,
                           exam_started_at=root.exam_started_at, started_at=now, consent_at=now,
@@ -75,7 +120,7 @@ def sealed_answers(db, interview, issued, submitted):
     rows = db.query(AnswerRecording).filter_by(interview_id=interview.id).all()
     by_id = {row.question_id: row for row in rows}
     for question in issued:
-        if question.get("response_mode") not in {"audio", "video"}:
+        if response_mode(question) not in {"audio", "video"}:
             continue
         answer = submitted[question["question_id"]].answer
         row = by_id.get(question["question_id"])
@@ -90,13 +135,14 @@ def analyze(db, interview, issued, submitted):
     rows = sealed_answers(db, interview, issued, submitted)
     answers = {}
     for question in issued:
+        mode = response_mode(question)
         row = rows.get(question["question_id"])
-        if question.get("response_mode") not in {"audio", "video"} or not row or not row.sealed_at or not row.chunk_count:
+        if mode not in {"audio", "video"} or not row or not row.sealed_at or not row.chunk_count:
             continue
         # Commit each validated answer independently. A later failure never forces
         # previous answers to be re-uploaded or re-analyzed on the next attempt.
         result = hr_video.analyze_recording(db, row, interview, chunk_model=AnswerRecordingChunk,
-                                           questions=[question], audio_only=question["response_mode"] == "audio")
+                                           questions=[{**question, "response_mode": mode}], audio_only=mode == "audio")
         answers[question["question_id"]] = {**result["answers"][0],
             "size_bytes": row.size_bytes, "mime_type": row.mime_type,
             "recording_url": f"/mock-interview/{interview.id}/answers/{question['question_id']}/recording"}
