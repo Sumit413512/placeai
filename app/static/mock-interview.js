@@ -158,7 +158,11 @@
     state.jobs = jobs;
     const select = $('#job-select');
     select.innerHTML = `<option value="">Select an opportunity…</option>${jobs.map(j=>{
-      const demoLabel = j.is_trial_demo ? (j.can_start ? ' · REPEAT PRACTICE AVAILABLE' : ' · STUDENT ACCESS REQUIRED') : '';
+      const demoLabel = j.is_trial_demo
+      ? (j.can_start
+          ? (j.free_attempts_remaining === 1 ? ' · 1 FREE DEMO ATTEMPT' : ' · INCLUDED WITH ACCESS')
+          : ' · STUDENT ACCESS REQUIRED')
+      : '';
       const disabled = j.is_trial_demo && !j.can_start ? ' disabled' : '';
       return `<option value="${esc(j.id)}"${disabled}>${esc(j.title)}${j.company_name ? ` · ${esc(j.company_name)}` : ''}${demoLabel}</option>`;
     }).join('')}`;
