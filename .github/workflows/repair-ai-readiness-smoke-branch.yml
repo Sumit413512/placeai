@@ -1,0 +1,91 @@
+name: Repair AI readiness smoke branch
+
+on:
+  push:
+    branches:
+      - fix/public-ai-readiness-smoke-contract-20261007
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/public-ai-readiness-smoke-contract-20261007
+          fetch-depth: 0
+      - name: Align public AI readiness checks with privacy contract
+        shell: python
+        run: |
+          from pathlib import Path
+
+          vercel = Path('.github/workflows/vercel-production-smoke.yml')
+          text = vercel.read_text(encoding='utf-8')
+          old_expected = "          expected = {'configured', 'sdk_available', 'model'}\n"
+          assert text.count(old_expected) == 1
+          text = text.replace(old_expected, "          expected = {'configured', 'sdk_available'}\n")
+          old_model_check = "          if not isinstance(payload.get('model'), str) or not payload['model'].strip():\n              raise SystemExit(f'AI model readiness value invalid: {payload}')\n"
+          assert text.count(old_model_check) == 1
+          text = text.replace(old_model_check, '')
+          old_evidence = "          print('ai_configured=', ai.get('configured'), 'sdk_available=', ai.get('sdk_available'), 'model=', ai.get('model'))\n"
+          assert text.count(old_evidence) == 1
+          text = text.replace(old_evidence, "          print('ai_configured=', ai.get('configured'), 'sdk_available=', ai.get('sdk_available'))\n")
+          vercel.write_text(text, encoding='utf-8')
+
+          production = Path('.github/workflows/production-smoke.yml')
+          text = production.read_text(encoding='utf-8')
+          assert text.count(old_expected) == 2
+          text = text.replace(old_expected, "          expected = {'configured', 'sdk_available'}\n")
+          direct_model_check = "          if not isinstance(payload.get('model'), str) or not payload['model'].strip():\n              raise SystemExit(f'Direct-backend AI model value invalid: {payload}')\n"
+          safe_model_check = "          if not isinstance(payload.get('model'), str) or not payload['model'].strip():\n              raise SystemExit(f'AI model readiness value invalid: {payload}')\n"
+          assert text.count(direct_model_check) == 1
+          assert text.count(safe_model_check) == 1
+          text = text.replace(direct_model_check, '').replace(safe_model_check, '')
+          production.write_text(text, encoding='utf-8')
+
+          live = Path('.github/workflows/verify-live-openai.yml')
+          text = live.read_text(encoding='utf-8')
+          replacements = {
+              'name: Verify Live OpenAI Provider': 'name: Verify Live AI Readiness',
+              '- name: Fingerprint Vercel AI deployment': '- name: Verify Vercel AI readiness contract',
+              '- name: Verify Render gateway sees the same OpenAI provider': '- name: Verify Render gateway AI readiness contract',
+              "          model = str(status.get('model') or '')\n": '',
+              "          print(f'Vercel AI status: configured={configured} sdk_available={sdk_available} model={model}')\n": "          print(f'Vercel AI status: configured={configured} sdk_available={sdk_available}')\n",
+              "          if model != 'gpt-5.6-terra':\n              raise SystemExit('OPENAI_KEY_NOT_ACTIVE: new source is live, but OPENAI_API_KEY is not active in the production runtime.')\n": '',
+              "          print('VERCEL_OPENAI_PRIMARY_OK')\n": "          if set(status) != {'configured', 'sdk_available'}:\n              raise SystemExit(f'PUBLIC_AI_STATUS_METADATA_LEAK: {sorted(status)}')\n          print('VERCEL_AI_READINESS_OK')\n",
+              "          model = str(payload.get('model') or '')\n": '',
+              "          print(f'Render gateway AI status: configured={configured} sdk_available={sdk_available} model={model}')\n": "          print(f'Render gateway AI status: configured={configured} sdk_available={sdk_available}')\n",
+              "          if not configured or not sdk_available or model != 'gpt-5.6-terra':\n              raise SystemExit('RENDER_GATEWAY_NOT_ON_OPENAI_PRIMARY')\n": "          if not configured or not sdk_available:\n              raise SystemExit('RENDER_GATEWAY_AI_UNAVAILABLE')\n          if set(payload) != {'configured', 'sdk_available'}:\n              raise SystemExit(f'RENDER_AI_STATUS_METADATA_LEAK: {sorted(payload)}')\n",
+              "          print('RENDER_OPENAI_PRIMARY_OK')\n": "          print('RENDER_AI_READINESS_OK')\n",
+          }
+          for old, new in replacements.items():
+              assert text.count(old) == 1, old
+              text = text.replace(old, new)
+          live.write_text(text, encoding='utf-8')
+
+          for path in (vercel, production, live):
+              value = path.read_text(encoding='utf-8')
+              assert "{'configured', 'sdk_available', 'model'}" not in value
+              assert "payload.get('model')" not in value
+              assert "status.get('model')" not in value
+      - name: Check workflow diffs
+        run: |
+          set -euo pipefail
+          git diff --check
+          grep -q "expected = {'configured', 'sdk_available'}" .github/workflows/vercel-production-smoke.yml
+          test "$(grep -c "expected = {'configured', 'sdk_available'}" .github/workflows/production-smoke.yml)" = '2'
+          grep -q 'PUBLIC_AI_STATUS_METADATA_LEAK' .github/workflows/verify-live-openai.yml
+          grep -q 'RENDER_AI_STATUS_METADATA_LEAK' .github/workflows/verify-live-openai.yml
+      - name: Commit repaired workflows and remove helper
+        run: |
+          set -euo pipefail
+          rm .github/workflows/repair-ai-readiness-smoke-branch.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/vercel-production-smoke.yml .github/workflows/production-smoke.yml .github/workflows/verify-live-openai.yml .github/workflows/repair-ai-readiness-smoke-branch.yml
+          git diff --cached --check
+          git commit -m 'Align public AI readiness smoke checks with privacy contract'
+          git push origin HEAD:fix/public-ai-readiness-smoke-contract-20261007
