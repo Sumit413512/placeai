@@ -15,10 +15,10 @@
     {key:'technical', label:'Technical Assessment · Fundamentals', count:8, minutes:14, kind:'mcq'},
     {key:'programming', label:'Technical Assessment · Programming & Debugging', count:6, minutes:14, kind:'mcq'},
     {key:'coding', label:'Technical Assessment · Coding Editor', count:2, minutes:24, kind:'code'},
-    {key:'resume', label:'Resume & Project Defence', count:4, minutes:10, kind:'text'},
+    {key:'resume', label:'Resume & Project Defence', count:4, minutes:10, kind:'audio'},
     {key:'behavioral', label:'Behavioural & HR', count:4, minutes:10, kind:'video'},
-    {key:'role', label:'Role / JD / Company', count:2, minutes:5, kind:'text'},
-    {key:'situational', label:'Situational & Decision', count:2, minutes:5, kind:'text'}
+    {key:'role', label:'Role / JD / Company', count:2, minutes:5, kind:'audio'},
+    {key:'situational', label:'Situational & Decision', count:2, minutes:5, kind:'audio'}
   ];
   const TOTAL_QUESTIONS = BLUEPRINT.reduce((sum, item) => sum + item.count, 0);
   const TOTAL_SECONDS = BLUEPRINT.reduce((sum, item) => sum + item.minutes * 60, 0);
@@ -99,7 +99,7 @@
     list.innerHTML = BLUEPRINT.map((item,index)=>`
       <div class="blueprint-row">
         <span class="blueprint-index">${String(index+1).padStart(2,'0')}</span>
-        <div><strong>${esc(item.label)}</strong><small>${item.minutes} min · ${item.kind === 'mcq' ? 'Objective' : item.kind === 'mixed' ? 'Objective + applied' : item.kind === 'code' ? 'Executable coding' : item.kind === 'video' ? 'Recorded spoken answers' : 'Applied response'}</small></div>
+        <div><strong>${esc(item.label)}</strong><small>${item.minutes} min · ${item.kind === 'mcq' ? 'Objective' : item.kind === 'mixed' ? 'Objective + applied' : item.kind === 'code' ? 'Executable coding' : item.kind === 'video' ? 'Recorded HR video answers' : item.kind === 'audio' ? 'Private spoken answers' : 'Unsupported response'}</small></div>
         <b>${item.count}</b>
       </div>`).join('');
   }
@@ -264,7 +264,9 @@
           role:`Based on the known requirements of the ${job.title} opportunity, which capability would you prioritise in your first 30 days and why?`,
           situational:`A deadline is close and you discover a defect that could affect users. What would you do next, and how would you communicate the trade-off?`
         };
-        questions.push({question_id:id++,section:section.key,category:section.label,difficulty:i < Math.ceil(section.count*.4)?'Foundation':i < Math.ceil(section.count*.8)?'Intermediate':'Advanced',question:templates[section.key] || `Explain a role-relevant approach for ${skill}.`,answer_type:'text'});
+        const spokenAudio=['resume','role','situational'].includes(section.key);
+        const answerTime=section.key==='resume'?120:section.key==='role'?90:120;
+        questions.push({question_id:id++,section:section.key,category:section.label,difficulty:i < Math.ceil(section.count*.4)?'Foundation':i < Math.ceil(section.count*.8)?'Intermediate':'Advanced',question:templates[section.key] || `Explain a role-relevant approach for ${skill}.`,answer_type:section.key==='behavioral'?'video':'audio',...(spokenAudio?{response_mode:'audio',narration_enabled:true,answer_time_seconds:answerTime}:{})});
       }
     }
     return questions;
@@ -339,7 +341,8 @@
   }
 
   function isAttemptedAnswer(answer) {
-    return Boolean(answer && answer.answer && !String(answer.answer).startsWith('['));
+    const value=String(answer?.answer||'');
+    return Boolean(value && !value.startsWith('[No response submitted'));
   }
 
   function renderSectionNav() {
@@ -578,10 +581,10 @@
       return;
     }
 
-    $('#next-question').disabled=false;
-    $('#save-question').disabled=false;
-    area.innerHTML='<label class="answer-field">Your response<textarea id="current-answer" class="secure-textarea" maxlength="5000" autocomplete="off" spellcheck="true" placeholder="Write a concise, evidence-based response."></textarea></label>';
-    if(existing?.answer) $('#current-answer').value=existing.answer;
+    area.innerHTML='<div class="answer-load-error"><strong>Unsupported response mode</strong><span>This assessment item did not load with an approved MCQ, coding or spoken-answer mode. The assessment is paused to protect scoring integrity.</span></div>';
+    $('#next-question').disabled=true;
+    $('#save-question').disabled=true;
+    logIntegrity('response_mode_invalid','Assessment item attempted to render an unsupported descriptive response mode.','system',null);
   }
 
   function hrStatus(message) {
@@ -804,7 +807,9 @@
 
   function renderSpokenAnswer(q) {
     state.answerClip=null;
-    $('#answer-area').innerHTML='<div class="answer-field"><strong>'+(q.response_mode==='video'?'HR camera and voice answer':'Spoken answer')+'</strong><p>Listen to the question, then answer aloud. This question has its own private recording and up to 2 minutes 30 seconds of answer time.</p><p id="spoken-answer-status" role="status">Reading question…</p><button id="start-spoken-answer" type="button" class="button secondary hidden">Start answer</button>'+(q.response_mode==='video'?'<video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video>':'')+'</div>';
+    const answerSeconds=Math.max(45,Math.min(150,Number(q.answer_time_seconds)||150));
+    const answerWindow=answerSeconds%60===0?(answerSeconds/60)+' minute'+(answerSeconds===60?'':'s'):Math.floor(answerSeconds/60)+' min '+(answerSeconds%60)+' sec';
+    $('#answer-area').innerHTML='<div class="answer-field"><strong>'+(q.response_mode==='video'?'HR camera and voice answer':'Spoken answer')+'</strong><p>Listen to the question, then answer aloud. This question has its own private recording with up to '+answerWindow+' of answer time.</p><p id="spoken-answer-status" role="status">Reading question…</p><button id="start-spoken-answer" type="button" class="button secondary hidden">Start answer</button>'+(q.response_mode==='video'?'<video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video>':'')+'</div>';
     const preview=$('#hr-answer-preview');if(preview){preview.srcObject=state.mediaStream;preview.play().catch(()=>{});}
     $('#start-spoken-answer').onclick=()=>beginQuestionAnswer(q);
     $('#save-question').disabled=true;$('#next-question').disabled=true;
@@ -870,11 +875,15 @@
     $('#question-progress').textContent=`Question ${state.current+1} of ${state.questions.length}`;
     $('#question-section').textContent=info.label;
     $('#question-difficulty').textContent=q.difficulty || 'Mixed';
-    $('#question-guidance').textContent=q.answer_type==='mcq'
-      ? 'Select one option. Use Save answer to keep it on the current question, or Save & Next to lock it and move forward.'
-      : q.answer_type==='code'
-        ? 'Technical coding question: write a complete program, use Run Code for sample tests, then Submit Code for sample + hidden tests before Save & Next.'
-        : 'Respond using clear reasoning and evidence. After submission this question is permanently closed.';
+    $('#question-guidance').textContent=q.response_mode==='audio'
+      ? 'Listen to the question, then answer aloud. Your private microphone recording is submitted when you continue.'
+      : q.answer_type==='video'
+        ? 'Answer aloud using the secure HR camera and microphone recording.'
+        : q.answer_type==='mcq'
+          ? 'Select one option. Use Save answer to keep it on the current question, or Save & Next to lock it and move forward.'
+          : q.answer_type==='code'
+            ? 'Technical coding question: write a complete program, use Run Code for sample tests, then Submit Code for sample + hidden tests before Save & Next.'
+            : 'Unsupported response mode. This item cannot be submitted.';
     const stage=$('.question-stage');
     if(stage) stage.scrollTop=0;
     $('#question-text').textContent=q.question;
@@ -928,8 +937,8 @@
       answer=JSON.stringify({language:language,source_code:source});
       codeDraftBucket(q.question_id)[language]=source;
     } else {
-      answer=($('#current-answer')?.value || '').trim();
-      if(!answer) { toast('Enter your response before continuing.','error'); return false; }
+      toast('This question has an unsupported response mode. Submission is paused to protect scoring integrity.','error');
+      return false;
     }
     state.answers[q.question_id-1]={question_id:q.question_id,answer};
     $('#autosave-state').textContent='Answer saved';

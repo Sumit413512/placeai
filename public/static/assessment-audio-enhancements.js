@@ -1,11 +1,11 @@
 (() => {
   'use strict';
 
-  const POST_HR_VOICE_SECTIONS = new Set(['role', 'situational']);
+  const ASSESSMENT_AUDIO_SECTIONS = new Set(['resume', 'role', 'situational']);
   const START_PATH = '/mock-interview/start';
-  const SPOKEN_BLUEPRINT_LABELS = new Set(['Role / JD / Company', 'Situational & Decision']);
+  const SPOKEN_BLUEPRINT_LABELS = new Set(['Resume & Project Defence', 'Role / JD / Company', 'Situational & Decision']);
   const LEGACY_GRADING_METHOD_LABEL = 'Answer key + sandbox execution + answer and HR video analysis';
-  const COMPLETE_GRADING_METHOD_LABEL = 'Answer key + sandbox execution + written, spoken and HR video analysis';
+  const COMPLETE_GRADING_METHOD_LABEL = 'Answer key + sandbox execution + spoken and HR video analysis';
 
   function decorateAssessmentSession(payload) {
     if (!payload || payload.mode !== 'assessment' || !Array.isArray(payload.questions)) return payload;
@@ -14,11 +14,14 @@
       const next = {...question};
       const section = String(next.section || '').trim().toLowerCase();
       const answerType = String(next.answer_type || 'text').trim().toLowerCase();
-      // Keep Resume & Project Defence as text and preserve the current continuous
-      // Behavioural/HR video experience. Only the two post-HR response sections
-      // become private audio answers while the broad recording rollout is disabled.
-      if (POST_HR_VOICE_SECTIONS.has(section) && answerType === 'text' && !next.response_mode) {
+      // Standardized open-ended non-HR sections are private audio answers.
+      // Behavioural/HR keeps its existing continuous video experience.
+      if (ASSESSMENT_AUDIO_SECTIONS.has(section)) {
+        next.answer_type = 'audio';
         next.response_mode = 'audio';
+        next.narration_enabled = true;
+        if (!next.answer_time_seconds) next.answer_time_seconds = section === 'resume' ? 120 : section === 'role' ? 90 : 120;
+        next.options = [];
       }
       return next;
     });
