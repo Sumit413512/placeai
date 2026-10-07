@@ -82,6 +82,45 @@ def test_resume_preserves_transcription_vision_and_completed_questions(exam, mon
     assert all("pronunciation" in answer["feedback"] for answer in result["answers"])
 
 
+def test_audio_only_coaching_discloses_that_no_visual_evidence_was_used(exam, monkeypatch):
+    seal(exam)
+    calls = {"grade": 0}
+    monkeypatch.setattr(free_provider, "transcribe", lambda *a: transcript())
+    monkeypatch.setattr(
+        free_assessment,
+        "sample_contact_sheet",
+        lambda *a: pytest.fail("Audio-only coaching must not decode or send camera frames"),
+    )
+
+    def text(prompt, **kwargs):
+        assert not kwargs.get("images")
+        assert "sampled-image observations" not in prompt
+        assert "No image or video evidence is available for this audio-only answer." in prompt
+        payload = json.loads(prompt[prompt.index('{'):])
+        assert payload["sampled_frame_observations"] == []
+        qid = payload["question"]["question_id"]
+        calls["grade"] += 1
+        return json.dumps(analysis(exam)["answers"][qid - 1])
+
+    monkeypatch.setattr(free_provider, "text", text)
+    result = free_assessment.analyze(
+        b"synthetic audio",
+        exam.recording,
+        exam.questions,
+        lambda value: None,
+        audio_only=True,
+    )
+
+    assert calls["grade"] == 4
+    assert result["video_usable"] is False
+    assert "No image or video evidence was used" in result["summary"]
+    assert all(answer["transcript"] == f"Answer{index}" for index, answer in enumerate(result["answers"], 1))
+    assert all("Speech recognition limits this coaching" in answer["feedback"] for answer in result["answers"])
+    assert all("visual behavior were not assessed" in answer["feedback"] for answer in result["answers"])
+    assert all("sampled images" not in answer["feedback"] for answer in result["answers"])
+    assert all("Camera evidence" not in answer["feedback"] for answer in result["answers"])
+
+
 def test_single_contact_sheet_distributes_valid_question_evidence(exam, monkeypatch):
     seal(exam)
     monkeypatch.setattr(free_provider, "transcribe", lambda *a: transcript())
