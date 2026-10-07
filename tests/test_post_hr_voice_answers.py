@@ -233,6 +233,14 @@ def test_voice_sections_are_labeled_as_spoken_and_manual_narration_cannot_leak()
     assert "document.querySelector('#spoken-answer-status')" in app_js
 
 
+def test_report_method_label_includes_written_spoken_and_hr_video_analysis():
+    app_js = (ROOT / "app/static/assessment-audio-enhancements.js").read_text(encoding="utf-8")
+    assert "installGradingMethodLabel()" in app_js
+    assert "LEGACY_GRADING_METHOD_LABEL" in app_js
+    assert "Answer key + sandbox execution + written, spoken and HR video analysis" in app_js
+    assert "label.textContent?.trim() === LEGACY_GRADING_METHOD_LABEL" in app_js
+
+
 def test_mock_interview_loads_assessment_audio_enhancement_in_both_static_trees():
     app_loader = (ROOT / "app/static/api-errors.js").read_text(encoding="utf-8")
     public_loader = (ROOT / "public/static/api-errors.js").read_text(encoding="utf-8")
