@@ -8,7 +8,7 @@
     if (!payload || payload.mode !== 'assessment' || !Array.isArray(payload.questions)) return payload;
     payload.questions = payload.questions.map(question => {
       if (!question || typeof question !== 'object') return question;
-      const next = {...question, narration_enabled: true};
+      const next = {...question};
       const section = String(next.section || '').trim().toLowerCase();
       const answerType = String(next.answer_type || 'text').trim().toLowerCase();
       // Keep Resume & Project Defence as text and preserve the current continuous
@@ -81,7 +81,7 @@
   }
 
   function legacyHrReaderPresent() {
-    return Boolean(document.querySelector('#read-hr-question'));
+    return Boolean(document.querySelector('#repeat-hr-question'));
   }
 
   function speakText(text, button) {
@@ -117,12 +117,10 @@
     const hasQuestion = Boolean(document.querySelector('#question-text')?.textContent?.trim());
     const automaticSpokenQuestion = Boolean(document.querySelector('#spoken-answer-status'));
     const legacyReader = legacyHrReaderPresent();
-    button.hidden = legacyReader;
-    button.disabled = !supported || !hasQuestion || spokenRecorderBusy() || automaticSpokenQuestion;
+    button.hidden = legacyReader || automaticSpokenQuestion;
+    button.disabled = !supported || !hasQuestion || spokenRecorderBusy();
     if (!supported) {
       button.title = 'Read aloud is not supported by this browser.';
-    } else if (automaticSpokenQuestion) {
-      button.title = 'This spoken-answer question is read automatically before recording starts.';
     } else {
       button.title = 'Read the current question aloud.';
     }
