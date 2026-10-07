@@ -144,13 +144,11 @@ jobs:
           import json
           from pathlib import Path
           payload = json.loads(Path('/tmp/ai-status.json').read_text(encoding='utf-8'))
-          expected = {'configured', 'sdk_available', 'model'}
+          expected = {'configured', 'sdk_available'}
           if set(payload) != expected:
               raise SystemExit(f'Unexpected AI status fields: {sorted(payload)}')
           if not isinstance(payload.get('configured'), bool) or not isinstance(payload.get('sdk_available'), bool):
               raise SystemExit(f'AI readiness booleans invalid: {payload}')
-          if not isinstance(payload.get('model'), str) or not payload['model'].strip():
-              raise SystemExit(f'AI model readiness value invalid: {payload}')
           print('AI readiness contract passed; configured=', payload['configured'])
           PY
 
@@ -197,7 +195,7 @@ jobs:
           safe = {k: payload.get(k) for k in ('status','service','version','database','configuration','transactional_email')}
           print('production=', json.dumps(safe, sort_keys=True))
           print('release=', release)
-          print('ai_configured=', ai.get('configured'), 'sdk_available=', ai.get('sdk_available'), 'model=', ai.get('model'))
+          print('ai_configured=', ai.get('configured'), 'sdk_available=', ai.get('sdk_available'))
           print('origin=https://placeai-rxpp.vercel.app')
           print('canonical=https://www.placeai.in')
           PY
