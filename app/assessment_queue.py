@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 
+from app import answer_recording
 from app.models import AssessmentJob, AssessmentQueueControl, utcnow
 
 MAX_ATTEMPTS = 24
@@ -19,8 +20,60 @@ def pending(job):
             "status_url": f"/mock-interview/{job.interview_id}/result"}
 
 
+def _enforce_spoken_contract(db, interview, body):
+    """Fail closed if an assessment client substitutes text for a required voice answer.
+
+    Older/in-flight assessments may have Role/JD and Situational questions stored as
+    text because their audio response mode was historically inferred by the browser.
+    The server-side answer policy is authoritative: materialize that inferred mode in
+    the same locked transaction and require a sealed recording before queue admission.
+    This keeps queue workers and recovery deterministic even if client JavaScript is
+    missing, stale, or deliberately modified.
+    """
+    try:
+        questions = json.loads(interview.questions_json or "[]")
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(409, "Interview question set is unavailable") from exc
+    if not isinstance(questions, list) or not questions:
+        raise HTTPException(409, "Interview question set is unavailable")
+
+    effective_spoken = False
+    changed = False
+    for question in questions:
+        if not isinstance(question, dict):
+            continue
+        mode = answer_recording.response_mode(question)
+        if mode not in {"audio", "video"}:
+            continue
+        effective_spoken = True
+        if question.get("response_mode") not in {"audio", "video"}:
+            question["response_mode"] = mode
+            question["narration_enabled"] = True
+            changed = True
+
+    if not effective_spoken:
+        return
+
+    submitted = {answer.question_id: answer for answer in body.answers}
+    question_ids = {
+        question.get("question_id") for question in questions
+        if isinstance(question, dict) and isinstance(question.get("question_id"), int)
+    }
+    if set(submitted) != question_ids:
+        raise HTTPException(422, "Answers must match the server-issued interview question set")
+
+    # response_mode() also recognizes legacy Role/Situational records that were
+    # issued before explicit server-side mode persistence. Text is never accepted
+    # as a substitute for those required spoken answers.
+    answer_recording.sealed_answers(db, interview, questions, submitted)
+    if changed:
+        interview.questions_json = json.dumps(questions)
+        db.flush()
+
+
 def enqueue(db, interview, user, body):
-    """First submission wins, including simultaneous duplicate submissions."""
+    """First valid submission wins, including simultaneous duplicate submissions."""
+    _enforce_spoken_contract(db, interview, body)
     existing = db.get(AssessmentJob, interview.id)
     if existing:
         return pending(existing)
