@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message == 'Retry guarded no-descriptive assessment patch with dependencies'
+    if: github.event.head_commit.message == 'Retry guarded no-descriptive assessment patch with browser runtime'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -22,7 +22,10 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install validation dependencies
-        run: python -m pip install -q -r requirements.txt pytest
+        shell: bash
+        run: |
+          python -m pip install -q -r requirements.txt pytest pytest-playwright playwright
+          python -m playwright install chromium
       - name: Apply guarded source patch
         run: python .github/scripts/apply_no_descriptive_assessment.py
       - name: Validate assessment contract
