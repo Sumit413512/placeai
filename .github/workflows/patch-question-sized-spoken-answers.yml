@@ -1,0 +1,73 @@
+name: Patch question-sized spoken answers
+
+on:
+  push:
+    branches:
+      - fix/question-sized-spoken-answers-20261008
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/question-sized-spoken-answers-20261008
+          fetch-depth: 0
+      - name: Apply bounded question-sized spoken timing
+        shell: python
+        run: |
+          from pathlib import Path
+
+          router = Path('app/routers/mock_interview_v2.py')
+          text = router.read_text(encoding='utf-8')
+
+          old = 'SPOKEN_ANSWER_SECONDS = {"resume": 120, "role": 90, "situational": 120}\n'
+          new = '''SPOKEN_ANSWER_SECONDS_BY_SIZE = {"short": 60, "medium": 90, "long": 120}\nSPOKEN_ANSWER_SIZE_ORDER = ("short", "medium", "long")\nSPOKEN_COMPLEXITY_MARKERS = (\n    "walk through", "step by step", "specific evidence", "evidence of", "trade-off",\n    "what did you do", "what would you do", "how would you", "and why",\n    "and how", "plan", "verify", "validation", "outcome", "risk",\n)\n\n\ndef _spoken_answer_size(*, section: str, difficulty: str, question: str, requested: str = "") -> str:\n    """Classify a spoken answer window without trusting arbitrary model-provided seconds.\n\n    AI may suggest short/medium/long, while the server guarantees a floor based on\n    section, difficulty and multi-step/evidence cues. This keeps timing predictable,\n    auditable and within the recording policy's 45-150 second hard bounds.\n    """\n    section = str(section or "").strip().lower()\n    difficulty = str(difficulty or "medium").strip().lower()\n    question_text = str(question or "").strip().lower()\n    rank = {"easy": 0, "medium": 1, "hard": 2}.get(difficulty, 1)\n    if section in {"resume", "situational"}:\n        rank = max(rank, 1)\n    marker_hits = sum(marker in question_text for marker in SPOKEN_COMPLEXITY_MARKERS)\n    if question_text.count("?") >= 2 or marker_hits >= 2:\n        rank = min(2, rank + 1)\n    requested = str(requested or "").strip().lower()\n    if requested in SPOKEN_ANSWER_SECONDS_BY_SIZE:\n        rank = max(rank, SPOKEN_ANSWER_SIZE_ORDER.index(requested))\n    return SPOKEN_ANSWER_SIZE_ORDER[rank]\n'''
+          assert text.count(old) == 1, 'spoken timing constant changed unexpectedly'
+          text = text.replace(old, new, 1)
+
+          old_prompt = 'Resume, behavioral, role and situational items MUST be open-ended spoken-response questions. Do not create typed descriptive or essay answers for the standardized assessment.'
+          new_prompt = old_prompt + ' For every spoken-response item, include expected_answer_size as short, medium or long based on the evidence/reasoning a strong answer needs: short for one focused point, medium for one example plus reasoning, and long for multi-step, scenario or evidence-heavy answers.'
+          assert text.count(old_prompt) == 1, 'assessment prompt marker changed unexpectedly'
+          text = text.replace(old_prompt, new_prompt, 1)
+
+          old_schema = '{{"questions":[{{"question":"...","section":"quantitative|logical|communication|technical|programming|resume|behavioral|role|situational","category":"...","difficulty":"easy|medium|hard","answer_type":"mcq|audio|video","options":["A","B","C","D"],"correct_answer":"exact option text or empty for spoken"}}]}}'
+          new_schema = '{{"questions":[{{"question":"...","section":"quantitative|logical|communication|technical|programming|resume|behavioral|role|situational","category":"...","difficulty":"easy|medium|hard","answer_type":"mcq|audio|video","expected_answer_size":"short|medium|long or empty for non-spoken","options":["A","B","C","D"],"correct_answer":"exact option text or empty for spoken"}}]}}'
+          assert text.count(old_schema) == 1, 'assessment JSON schema marker changed unexpectedly'
+          text = text.replace(old_schema, new_schema, 1)
+
+          old_accepted = '''                    "answer_type": answer_type,\n                    "options": options,\n                    "correct_answer": correct_answer,\n'''
+          new_accepted = '''                    "answer_type": answer_type,\n                    "expected_answer_size": str(item.get("expected_answer_size", "")).strip().lower(),\n                    "options": options,\n                    "correct_answer": correct_answer,\n'''
+          assert text.count(old_accepted) == 1, 'accepted question payload marker changed unexpectedly'
+          text = text.replace(old_accepted, new_accepted, 1)
+
+          old_contract = '''        if section in OBJECTIVE_ASSESSMENT_SECTIONS:\n            options = [str(value).strip() for value in (item.get("options") or [])]\n            correct = _resolve_correct_option(options, str(item.get("correct_answer", ""))) if len(options) == 4 else ""\n            if len(options) != 4 or len({value.casefold() for value in options}) != 4 or not correct:\n                raise HTTPException(502, "Standardized objective question is malformed")\n            item["answer_type"] = "mcq"\n            item["options"] = options\n            item["correct_answer"] = correct\n            item.pop("response_mode", None)\n            item["narration_enabled"] = False\n        elif section == "coding":\n            item["answer_type"] = "code"\n            item["options"] = []\n            item["correct_answer"] = ""\n            item.pop("response_mode", None)\n            item["narration_enabled"] = False\n        elif section == "behavioral":\n            item["answer_type"] = "video"\n            item["options"] = []\n            item["correct_answer"] = ""\n            item.pop("response_mode", None)\n            item["narration_enabled"] = False\n        elif section in AUDIO_ASSESSMENT_SECTIONS:\n            item["answer_type"] = "audio"\n            item["response_mode"] = "audio"\n            item["narration_enabled"] = True\n            item["answer_time_seconds"] = SPOKEN_ANSWER_SECONDS[section]\n            item["options"] = []\n            item["correct_answer"] = ""\n'''
+          new_contract = '''        if section in OBJECTIVE_ASSESSMENT_SECTIONS:\n            options = [str(value).strip() for value in (item.get("options") or [])]\n            correct = _resolve_correct_option(options, str(item.get("correct_answer", ""))) if len(options) == 4 else ""\n            if len(options) != 4 or len({value.casefold() for value in options}) != 4 or not correct:\n                raise HTTPException(502, "Standardized objective question is malformed")\n            item["answer_type"] = "mcq"\n            item["options"] = options\n            item["correct_answer"] = correct\n            item.pop("response_mode", None)\n            item.pop("expected_answer_size", None)\n            item.pop("answer_time_seconds", None)\n            item["narration_enabled"] = False\n        elif section == "coding":\n            item["answer_type"] = "code"\n            item["options"] = []\n            item["correct_answer"] = ""\n            item.pop("response_mode", None)\n            item.pop("expected_answer_size", None)\n            item.pop("answer_time_seconds", None)\n            item["narration_enabled"] = False\n        elif section == "behavioral":\n            item["answer_type"] = "video"\n            item["options"] = []\n            item["correct_answer"] = ""\n            item.pop("response_mode", None)\n            item.pop("expected_answer_size", None)\n            item.pop("answer_time_seconds", None)\n            item["narration_enabled"] = False\n        elif section in AUDIO_ASSESSMENT_SECTIONS:\n            answer_size = _spoken_answer_size(\n                section=section,\n                difficulty=str(item.get("difficulty", "medium")),\n                question=str(item.get("question", "")),\n                requested=str(item.get("expected_answer_size", "")),\n            )\n            item["answer_type"] = "audio"\n            item["response_mode"] = "audio"\n            item["narration_enabled"] = True\n            item["expected_answer_size"] = answer_size\n            item["answer_time_seconds"] = SPOKEN_ANSWER_SECONDS_BY_SIZE[answer_size]\n            item["options"] = []\n            item["correct_answer"] = ""\n'''
+          assert text.count(old_contract) == 1, 'standard assessment response contract changed unexpectedly'
+          text = text.replace(old_contract, new_contract, 1)
+          router.write_text(text, encoding='utf-8')
+
+          test = Path('tests/test_no_descriptive_assessment.py')
+          value = test.read_text(encoding='utf-8')
+          old_assert = '''            assert q["response_mode"] == "audio"\n            assert q["narration_enabled"] is True\n            assert q["answer_time_seconds"] == {"resume": 120, "role": 90, "situational": 120}[q["section"]]\n'''
+          new_assert = '''            assert q["response_mode"] == "audio"\n            assert q["narration_enabled"] is True\n            assert q["expected_answer_size"] in mock_interview_v2.SPOKEN_ANSWER_SECONDS_BY_SIZE\n            assert q["answer_time_seconds"] == mock_interview_v2.SPOKEN_ANSWER_SECONDS_BY_SIZE[q["expected_answer_size"]]\n'''
+          assert value.count(old_assert) == 1, 'existing spoken timing assertion changed unexpectedly'
+          value = value.replace(old_assert, new_assert, 1)
+          value += '''\n\ndef test_spoken_answer_windows_scale_with_question_size_and_server_floors():\n    questions = _issued_blueprint()\n    role = [q for q in questions if q["section"] == "role"]\n    resume = [q for q in questions if q["section"] == "resume"]\n    situational = [q for q in questions if q["section"] == "situational"]\n\n    role[0].update(difficulty="easy", question="Name one capability you would prioritise.", expected_answer_size="short")\n    role[1].update(difficulty="hard", question="Explain the capability, evidence, trade-off and validation plan.", expected_answer_size="medium")\n    resume[0].update(difficulty="easy", question="Name one relevant project.", expected_answer_size="short")\n    situational[0].update(difficulty="medium", question="Walk through what you would do, how you would communicate risk, and how you would verify the outcome.", expected_answer_size="short")\n\n    normalized = mock_interview_v2._apply_standard_assessment_response_contract(questions)\n    by_question = {q["question"]: q for q in normalized}\n\n    assert by_question["Name one capability you would prioritise."]["expected_answer_size"] == "short"\n    assert by_question["Name one capability you would prioritise."]["answer_time_seconds"] == 60\n    assert by_question["Explain the capability, evidence, trade-off and validation plan."]["expected_answer_size"] == "long"\n    assert by_question["Explain the capability, evidence, trade-off and validation plan."]["answer_time_seconds"] == 120\n    assert by_question["Name one relevant project."]["expected_answer_size"] == "medium"\n    assert by_question["Name one relevant project."]["answer_time_seconds"] == 90\n    assert by_question["Walk through what you would do, how you would communicate risk, and how you would verify the outcome."]["expected_answer_size"] == "long"\n    assert by_question["Walk through what you would do, how you would communicate risk, and how you would verify the outcome."]["answer_time_seconds"] == 120\n\n\ndef test_client_spoken_answer_timer_uses_server_question_window():\n    app_js = (ROOT / "app/static/mock-interview.js").read_text(encoding="utf-8")\n    assert "Number(q.answer_time_seconds)||150" in app_js\n    assert "Math.max(45,Math.min(150" in app_js\n'''
+          test.write_text(value, encoding='utf-8')
+      - name: Validate focused regression tests
+        run: |
+          python -m py_compile app/routers/mock_interview_v2.py
+          pytest -q tests/test_no_descriptive_assessment.py tests/test_post_hr_voice_answers.py
+          git diff --check
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/routers/mock_interview_v2.py tests/test_no_descriptive_assessment.py
+          git commit -m 'Size spoken answer windows by question complexity'
+          git push origin HEAD:fix/question-sized-spoken-answers-20261008
