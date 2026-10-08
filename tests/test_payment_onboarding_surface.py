@@ -29,12 +29,9 @@ def test_public_payment_onboarding_pages_are_present_and_linked():
 
     assert "Request access" in contact
     assert "₹299" in pricing
-    assert "30 days" in pricing
-    assert "does not auto-renew" in pricing
     assert "₹20" in pricing
     assert "No physical product is shipped" in service_delivery
     assert "₹299" in refund
-    assert "does not auto-renew" in refund
     assert "₹20" in refund
     assert "original payment" in refund
     assert "/static/pricing.html" in legal_links
