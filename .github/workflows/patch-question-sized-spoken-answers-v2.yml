@@ -30,8 +30,8 @@ jobs:
           script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
           Path('/tmp/placeai_spoken_timing_patch.py').write_text(script, encoding='utf-8')
           exec(compile(script, '/tmp/placeai_spoken_timing_patch.py', 'exec'), {'__name__': '__main__'})
-      - name: Install focused test dependency
-        run: python -m pip install --disable-pip-version-check -q pytest
+      - name: Install PlaceAI test dependencies
+        run: python -m pip install --disable-pip-version-check -q -r requirements.txt pytest
       - name: Validate focused regression tests
         run: |
           python -m py_compile app/routers/mock_interview_v2.py
