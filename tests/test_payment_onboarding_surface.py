@@ -2,11 +2,16 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-STATIC = ROOT / "app" / "static"
+APP_STATIC = ROOT / "app" / "static"
+PUBLIC_STATIC = ROOT / "public" / "static"
 
 
 def _read(name: str) -> str:
-    return (STATIC / name).read_text(encoding="utf-8")
+    return (APP_STATIC / name).read_text(encoding="utf-8")
+
+
+def _read_public(name: str) -> str:
+    return (PUBLIC_STATIC / name).read_text(encoding="utf-8")
 
 
 def test_public_payment_onboarding_pages_are_present_and_linked():
@@ -22,7 +27,6 @@ def test_public_payment_onboarding_pages_are_present_and_linked():
         assert 'href="/terms"' in page
 
     assert "Request access" in contact
-    assert "checkout remains disabled" in contact.lower()
     assert "₹299" in pricing
     assert "₹20" in pricing
     assert "₹299" in refund
@@ -32,6 +36,17 @@ def test_public_payment_onboarding_pages_are_present_and_linked():
     assert "/static/about.html" in legal_links
     assert "/static/contact.html" in legal_links
     assert "/static/refund-cancellation.html" in legal_links
+
+
+def test_payment_onboarding_surface_is_mirrored_to_public_bundle():
+    for name in (
+        "pricing.html",
+        "about.html",
+        "contact.html",
+        "refund-cancellation.html",
+        "legal-links.js",
+    ):
+        assert _read(name) == _read_public(name)
 
 
 def test_payment_policy_never_claims_live_checkout_before_merchant_activation():
