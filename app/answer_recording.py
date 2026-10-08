@@ -13,6 +13,13 @@ AUDIO_BYTES = 2 * 1024 * 1024
 VIDEO_BYTES = 7 * 1024 * 1024
 ASSESSMENT_AUDIO_SECTIONS = frozenset({"resume", "role", "situational"})
 POST_HR_VOICE_SECTIONS = ASSESSMENT_AUDIO_SECTIONS  # compatibility alias
+SPOKEN_ANSWER_SECONDS_BY_SIZE = {"short": 60, "medium": 90, "long": 120}
+SPOKEN_ANSWER_SIZE_ORDER = ("short", "medium", "long")
+SPOKEN_COMPLEXITY_MARKERS = (
+    "walk through", "step by step", "specific evidence", "evidence of", "trade-off",
+    "what did you do", "what would you do", "how would you", "and why",
+    "and how", "plan", "verify", "validation", "outcome", "risk",
+)
 FULL_ASSESSMENT_SECTION_COUNTS = {
     "quantitative": 8,
     "logical": 8,
@@ -129,12 +136,29 @@ def owned(db, user, interview_id, question_id, *, lock=False, reviewer=False):
     return root, interview, question, row
 
 
+def _legacy_answer_size(question):
+    """Recover the #172 timing policy for stored rows that predate timing metadata."""
+    section = str(question.get("section", "")).strip().lower()
+    difficulty = str(question.get("difficulty", "medium")).strip().lower()
+    question_text = str(question.get("question", "")).strip().lower()
+    rank = {"easy": 0, "medium": 1, "hard": 2}.get(difficulty, 1)
+    if section in {"resume", "situational"}:
+        rank = max(rank, 1)
+    marker_hits = sum(marker in question_text for marker in SPOKEN_COMPLEXITY_MARKERS)
+    if question_text.count("?") >= 2 or marker_hits >= 2:
+        rank = min(2, rank + 1)
+    requested = str(question.get("expected_answer_size", "")).strip().lower()
+    if requested in SPOKEN_ANSWER_SECONDS_BY_SIZE:
+        rank = max(rank, SPOKEN_ANSWER_SIZE_ORDER.index(requested))
+    return SPOKEN_ANSWER_SIZE_ORDER[rank]
+
+
 def _answer_time_seconds(question):
-    """Use the server-issued spoken-answer window, bounded by the recording policy."""
+    """Use server-issued timing, recovering the same bounded policy for legacy rows."""
     try:
-        requested = int(question.get("answer_time_seconds") or hr_video.QUESTION_SECONDS)
+        requested = int(question.get("answer_time_seconds"))
     except (TypeError, ValueError):
-        requested = hr_video.QUESTION_SECONDS
+        requested = SPOKEN_ANSWER_SECONDS_BY_SIZE[_legacy_answer_size(question)]
     return max(45, min(requested, hr_video.QUESTION_SECONDS))
 
 
