@@ -15,9 +15,9 @@
     if (!region) return;
     const node = document.createElement('div');
     node.className = `toast ${type}`;
+    const wrapper = document.createElement('div');
     const strong = document.createElement('strong');
     strong.textContent = title;
-    const wrapper = document.createElement('div');
     wrapper.appendChild(strong);
     if (message) {
       const span = document.createElement('span');
@@ -47,9 +47,7 @@
     if (!accessToken) await refreshAccessToken();
     const headers = new Headers(options.headers || {});
     headers.set('Authorization', `Bearer ${accessToken}`);
-    if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
-      headers.set('Content-Type', 'application/json');
-    }
+    if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
     const response = await fetch(path, { ...options, headers, credentials: 'include' });
     if (response.status === 401 && retry) {
       accessToken = '';
@@ -114,10 +112,7 @@
 
       const Cashfree = await loadCashfreeSdk();
       const cashfree = Cashfree({ mode: checkout.sdk_mode === 'sandbox' ? 'sandbox' : 'production' });
-      const result = await cashfree.checkout({
-        paymentSessionId: checkout.payment_session_id,
-        redirectTarget: '_modal'
-      });
+      const result = await cashfree.checkout({ paymentSessionId: checkout.payment_session_id, redirectTarget: '_modal' });
       if (result && result.error) throw new Error(result.error.message || 'Payment was not completed.');
 
       paymentToast('Verifying payment', 'PlaceAI is confirming the payment directly with Cashfree.');
@@ -136,36 +131,56 @@
     }
   }
 
-  async function decorateBillingView() {
-    const root = document.querySelector('#app-content');
-    if (!root || root.querySelector('[data-placeai-payment-plan]')) return;
+  async function decorateBillingView(root, plans) {
+    if (root.querySelector('[data-placeai-payment-plan]')) return;
     const text = root.textContent || '';
     if (!text.includes('Independent student access') || !text.includes('Online checkout is not available yet')) return;
+    if (!plans.checkout_enabled || !plans.plans || !plans.plans.length) return;
+    const intro = [...root.querySelectorAll('.form-intro')].find(node => (node.textContent || '').includes('Online checkout is not available yet'));
+    if (!intro) return;
+    const plan = plans.plans[0];
+    intro.innerHTML = '';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'button button-primary';
+    button.dataset.placeaiPaymentPlan = '';
+    button.textContent = `Activate 30-day access for ₹${Number(plan.price_inr || 299)}`;
+    const note = document.createElement('span');
+    note.className = 'table-secondary';
+    note.textContent = ' Secure payment by Cashfree. Access is granted only after server-side payment verification.';
+    intro.append(button, note);
+  }
 
+  function decorateRoadmapView(root, plans) {
+    if (!plans.roadmap_checkout_enabled) return;
+    const candidates = [...root.querySelectorAll('button')];
+    const locked = candidates.find(button => (button.textContent || '').includes('₹20 checkout awaiting payment gateway activation'));
+    if (!locked) return;
+    locked.disabled = false;
+    locked.removeAttribute('aria-disabled');
+    locked.dataset.action = 'roadmap-checkout';
+    locked.textContent = 'Unlock Career Roadmap for ₹20';
+  }
+
+  async function decorateCheckoutViews() {
+    const root = document.querySelector('#app-content');
+    if (!root) return;
+    const text = root.textContent || '';
+    const needsBilling = text.includes('Independent student access') && text.includes('Online checkout is not available yet');
+    const needsRoadmap = text.includes('₹20 checkout awaiting payment gateway activation');
+    if (!needsBilling && !needsRoadmap) return;
     try {
       const plans = await api('/billing/plans');
-      if (!plans.checkout_enabled || !plans.plans || !plans.plans.length) return;
-      const intro = [...root.querySelectorAll('.form-intro')].find(node => (node.textContent || '').includes('Online checkout is not available yet'));
-      if (!intro) return;
-      const plan = plans.plans[0];
-      intro.innerHTML = '';
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'button button-primary';
-      button.dataset.placeaiPaymentPlan = '';
-      button.textContent = `Activate 30-day access for ₹${Number(plan.price_inr || 299)}`;
-      const note = document.createElement('span');
-      note.className = 'table-secondary';
-      note.textContent = ' Secure payment by Cashfree. Access is granted only after server-side payment verification.';
-      intro.append(button, note);
+      if (needsBilling) await decorateBillingView(root, plans);
+      if (needsRoadmap) decorateRoadmapView(root, plans);
     } catch {
-      // Keep the existing fail-closed billing copy if checkout cannot be positively confirmed as ready.
+      // Fail closed: existing disabled/unavailable UI remains unchanged unless readiness is positively confirmed.
     }
   }
 
   function scheduleDecorate() {
     clearTimeout(decorateTimer);
-    decorateTimer = setTimeout(decorateBillingView, 120);
+    decorateTimer = setTimeout(decorateCheckoutViews, 120);
   }
 
   async function handleReturnOrder() {
