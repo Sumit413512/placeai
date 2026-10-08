@@ -1,17 +1,16 @@
 (() => {
   'use strict';
 
-  function loadScriptOnce(src, dataAttribute, loadedFlag) {
-    if (window[loadedFlag] || document.querySelector(`script[${dataAttribute}]`)) return;
+  function loadProductionPolish() {
+    if (window.__PLACEAI_PRODUCTION_POLISH_LOADED__ || document.querySelector('script[data-placeai-production-polish]')) return;
     const script = document.createElement('script');
-    script.src = src;
+    script.src = '/static/production-polish.js';
     script.defer = true;
-    script.setAttribute(dataAttribute, '');
+    script.dataset.placeaiProductionPolish = '';
     document.head.appendChild(script);
   }
 
-  loadScriptOnce('/static/production-polish.js', 'data-placeai-production-polish', '__PLACEAI_PRODUCTION_POLISH_LOADED__');
-  loadScriptOnce('/static/payment-checkout.js', 'data-placeai-payment-checkout', '__PLACEAI_PAYMENT_CHECKOUT_LOADED__');
+  loadProductionPolish();
 
   const footer = document.querySelector('.site-footer');
   if (!footer || footer.querySelector('[data-placeai-legal-links]')) return;
