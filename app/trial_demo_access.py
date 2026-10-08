@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
@@ -9,6 +11,14 @@ from app.student_entitlements import student_access_status
 TRIAL_DEMO_COMPANY_NAME = "TechNova Solutions — Demo"
 TRIAL_DEMO_JOB_TITLE = "PlaceAI TechNova Demo Assessment"
 TRIAL_DEMO_FREE_ATTEMPTS = 1
+
+# The live standardized assessment contract. Historical demo rows created before the
+# private spoken-response rollout must not consume a student's one current free attempt.
+# A completed historical attempt still counts, so this cannot be used to regain a free
+# attempt after receiving a real result.
+TRIAL_DEMO_CURRENT_QUESTION_COUNT = 50
+TRIAL_DEMO_AUDIO_RESPONSES = 8
+TRIAL_DEMO_VIDEO_RESPONSES = 4
 
 
 def is_trial_demo_job(job: Job | None) -> bool:
@@ -20,15 +30,52 @@ def is_trial_demo_job(job: Job | None) -> bool:
     )
 
 
-def trial_demo_attempt_count(profile: StudentProfile, job: Job, db: Session) -> int:
+def _counts_as_trial_attempt(interview: MockInterview) -> bool:
+    """Count only completed attempts or attempts issued under the current contract.
+
+    Before private spoken responses were server-issued, development/pilot demo rows could
+    contain the 50-item assessment and four HR video questions but no explicit audio
+    response modes. Those obsolete rows can no longer be completed under the current
+    recording contract and should not permanently consume today's one-free-attempt grant.
+    """
+    if interview.overall_score is not None:
+        return True
+
+    try:
+        questions = json.loads(interview.questions_json or "[]")
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(questions, list) or len(questions) != TRIAL_DEMO_CURRENT_QUESTION_COUNT:
+        return False
+
+    audio_count = sum(
+        1
+        for question in questions
+        if isinstance(question, dict)
+        and str(question.get("response_mode", "")).strip().lower() == "audio"
+    )
+    video_count = sum(
+        1
+        for question in questions
+        if isinstance(question, dict)
+        and str(question.get("answer_type", "")).strip().lower() == "video"
+    )
     return (
+        audio_count >= TRIAL_DEMO_AUDIO_RESPONSES
+        and video_count >= TRIAL_DEMO_VIDEO_RESPONSES
+    )
+
+
+def trial_demo_attempt_count(profile: StudentProfile, job: Job, db: Session) -> int:
+    rows = (
         db.query(MockInterview)
         .filter(
             MockInterview.student_id == profile.id,
             MockInterview.job_id == job.id,
         )
-        .count()
+        .all()
     )
+    return sum(1 for interview in rows if _counts_as_trial_attempt(interview))
 
 
 def trial_demo_access_state(
