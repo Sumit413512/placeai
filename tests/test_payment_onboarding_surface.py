@@ -18,10 +18,11 @@ def test_public_payment_onboarding_pages_are_present_and_linked():
     pricing = _read("pricing.html")
     about = _read("about.html")
     contact = _read("contact.html")
+    service_delivery = _read("service-delivery.html")
     refund = _read("refund-cancellation.html")
     legal_links = _read("legal-links.js")
 
-    for page in (pricing, about, contact, refund):
+    for page in (pricing, about, contact, service_delivery, refund):
         assert "www.placeai.in" in page or "PlaceAI" in page
         assert 'href="/privacy"' in page
         assert 'href="/terms"' in page
@@ -29,12 +30,14 @@ def test_public_payment_onboarding_pages_are_present_and_linked():
     assert "Request access" in contact
     assert "₹299" in pricing
     assert "₹20" in pricing
+    assert "No physical product is shipped" in service_delivery
     assert "₹299" in refund
     assert "₹20" in refund
     assert "original payment" in refund
     assert "/static/pricing.html" in legal_links
     assert "/static/about.html" in legal_links
     assert "/static/contact.html" in legal_links
+    assert "/static/service-delivery.html" in legal_links
     assert "/static/refund-cancellation.html" in legal_links
 
 
@@ -43,6 +46,7 @@ def test_payment_onboarding_surface_is_mirrored_to_public_bundle():
         "pricing.html",
         "about.html",
         "contact.html",
+        "service-delivery.html",
         "refund-cancellation.html",
         "legal-links.js",
     ):
@@ -54,9 +58,11 @@ def test_payment_policy_never_claims_live_checkout_before_merchant_activation():
     refund = _read("refund-cancellation.html").lower()
     contact = _read("contact.html").lower()
     about = _read("about.html").lower()
+    service_delivery = _read("service-delivery.html").lower()
 
     assert "online payment collection is not active yet" in pricing
     assert "checkout is currently disabled" in refund
     assert "live online checkout is not currently activated" in contact
     assert "live online checkout remains disabled" in about
+    assert "live online checkout is currently disabled" in service_delivery
     assert "unofficial personal transfer" in refund
