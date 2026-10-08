@@ -39,6 +39,20 @@ if engine_initialization_error_code and engine_initialization_error_code not in 
     runtime_readiness_errors.append(engine_initialization_error_code)
 
 
+def _release_sha() -> str | None:
+    """Return a safe public Git commit identity from supported deployment runtimes.
+
+    Commit SHAs are non-secret release metadata for this public repository. Keeping the
+    value on /health lets production smoke checks distinguish a healthy old deployment
+    from the exact revision that triggered the workflow.
+    """
+    for name in ("VERCEL_GIT_COMMIT_SHA", "RENDER_GIT_COMMIT", "GITHUB_SHA"):
+        value = os.getenv(name, "").strip().lower()
+        if 7 <= len(value) <= 64 and all(character in "0123456789abcdef" for character in value):
+            return value
+    return None
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     worker_stop, worker_thread = Event(), None
@@ -429,18 +443,19 @@ def sitemap(request: Request) -> Response:
 @app.get("/health", tags=["System"])
 def health_check():
     service_name = settings.app_name or "PlaceAI"
+    release_sha = _release_sha()
     if runtime_readiness_errors:
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "degraded",
-                "service": service_name,
-                "version": "3.2.0",
-                "database": "not_checked",
-                "configuration": "invalid",
-                "configuration_errors": runtime_readiness_errors,
-            },
-        )
+        content = {
+            "status": "degraded",
+            "service": service_name,
+            "version": "3.2.0",
+            "database": "not_checked",
+            "configuration": "invalid",
+            "configuration_errors": runtime_readiness_errors,
+        }
+        if release_sha:
+            content["release_sha"] = release_sha
+        return JSONResponse(status_code=503, content=content)
 
     try:
         with engine.connect() as connection:
@@ -460,6 +475,8 @@ def health_check():
         "configuration": "ok",
         "transactional_email": "ok" if transactional_email_configured(settings) else "not_configured",
     }
+    if release_sha:
+        payload["release_sha"] = release_sha
     if not settings.is_production:
         payload["database_target"] = safe_database_target(settings.database_url)
     if database_error:
