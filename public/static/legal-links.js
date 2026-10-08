@@ -21,6 +21,6 @@
   nav.style.gap = '12px';
   nav.style.flexWrap = 'wrap';
   nav.style.fontSize = '13px';
-  nav.innerHTML = '<a href="/static/pricing.html">Pricing</a><a href="/static/about.html">About</a><a href="/static/contact.html">Contact</a><a href="/static/refund-cancellation.html">Refunds & cancellation</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/acceptable-use">Acceptable Use</a>';
+  nav.innerHTML = '<a href="/static/pricing.html">Pricing</a><a href="/static/about.html">About</a><a href="/static/contact.html">Contact</a><a href="/static/service-delivery.html">Service delivery</a><a href="/static/refund-cancellation.html">Refunds & cancellation</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/acceptable-use">Acceptable Use</a>';
   footer.appendChild(nav);
 })();
