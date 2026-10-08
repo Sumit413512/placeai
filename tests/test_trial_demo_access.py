@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 
 import pytest
@@ -73,6 +74,23 @@ def _fixture(tag: str):
     return db, student_user, student, job
 
 
+def _current_demo_questions() -> str:
+    questions = []
+    for index in range(50):
+        question = {
+            "question_id": index + 1,
+            "question": f"Demo question {index + 1}?",
+            "category": "technical",
+            "answer_type": "mcq",
+        }
+        if index < 8:
+            question.update({"answer_type": "text", "response_mode": "audio"})
+        elif index < 12:
+            question["answer_type"] = "video"
+        questions.append(question)
+    return json.dumps(questions)
+
+
 def test_active_trial_student_gets_exactly_one_free_demo_attempt():
     db, user, profile, job = _fixture("free")
     try:
@@ -86,7 +104,7 @@ def test_active_trial_student_gets_exactly_one_free_demo_attempt():
         db.add(MockInterview(
             student_id=profile.id,
             job_id=job.id,
-            questions_json='[{"question_id":1,"question":"Demo?","category":"technical"}]',
+            questions_json=_current_demo_questions(),
             answers_json="[]",
         ))
         db.commit()
@@ -135,7 +153,7 @@ def test_paid_independent_student_can_continue_after_free_attempt():
         db.add(MockInterview(
             student_id=profile.id,
             job_id=job.id,
-            questions_json='[{"question_id":1,"question":"Demo?","category":"technical"}]',
+            questions_json=_current_demo_questions(),
             answers_json="[]",
         ))
         db.add(StudentSubscription(
@@ -173,7 +191,7 @@ def test_institution_sponsored_student_can_continue_after_demo_attempt():
         db.add(MockInterview(
             student_id=profile.id,
             job_id=job.id,
-            questions_json='[{"question_id":1,"question":"Demo?","category":"technical"}]',
+            questions_json=_current_demo_questions(),
             answers_json="[]",
         ))
         db.commit()
