@@ -1,0 +1,46 @@
+name: Patch question-sized spoken answers v2
+
+on:
+  push:
+    branches:
+      - fix/question-sized-spoken-answers-20261008
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/question-sized-spoken-answers-20261008
+          fetch-depth: 0
+      - name: Reuse the validated patch script
+        shell: python
+        run: |
+          from pathlib import Path
+          source = Path('.github/workflows/patch-question-sized-spoken-answers.yml').read_text(encoding='utf-8')
+          start_marker = '      - name: Apply bounded question-sized spoken timing\n        shell: python\n        run: |\n'
+          end_marker = '      - name: Validate focused regression tests\n'
+          start = source.index(start_marker) + len(start_marker)
+          end = source.index(end_marker, start)
+          lines = source[start:end].splitlines()
+          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+          Path('/tmp/placeai_spoken_timing_patch.py').write_text(script, encoding='utf-8')
+          exec(compile(script, '/tmp/placeai_spoken_timing_patch.py', 'exec'), {'__name__': '__main__'})
+      - name: Install focused test dependency
+        run: python -m pip install --disable-pip-version-check -q pytest
+      - name: Validate focused regression tests
+        run: |
+          python -m py_compile app/routers/mock_interview_v2.py
+          pytest -q tests/test_no_descriptive_assessment.py tests/test_post_hr_voice_answers.py
+          git diff --check
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/routers/mock_interview_v2.py tests/test_no_descriptive_assessment.py
+          git commit -m 'Size spoken answer windows by question complexity'
+          git push origin HEAD:fix/question-sized-spoken-answers-20261008
