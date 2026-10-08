@@ -33,7 +33,8 @@ def test_standardized_exam_has_no_descriptive_text_response_mode():
         if q["section"] in {"resume", "role", "situational"}:
             assert q["response_mode"] == "audio"
             assert q["narration_enabled"] is True
-            assert q["answer_time_seconds"] == {"resume": 120, "role": 90, "situational": 120}[q["section"]]
+            assert q["expected_answer_size"] in mock_interview_v2.SPOKEN_ANSWER_SECONDS_BY_SIZE
+            assert q["answer_time_seconds"] == mock_interview_v2.SPOKEN_ANSWER_SECONDS_BY_SIZE[q["expected_answer_size"]]
         elif q["section"] == "behavioral":
             assert "response_mode" not in q
             assert q["answer_type"] == "video"
@@ -72,3 +73,33 @@ def test_assessment_audio_compatibility_layer_includes_resume_and_no_written_gra
     assert "Resume & Project Defence" in app_js
     assert "next.answer_type = 'audio'" in app_js
     assert "written, spoken" not in app_js
+
+
+def test_spoken_answer_windows_scale_with_question_size_and_server_floors():
+    questions = _issued_blueprint()
+    role = [q for q in questions if q["section"] == "role"]
+    resume = [q for q in questions if q["section"] == "resume"]
+    situational = [q for q in questions if q["section"] == "situational"]
+
+    role[0].update(difficulty="easy", question="Name one capability you would prioritise.", expected_answer_size="short")
+    role[1].update(difficulty="hard", question="Explain the capability, evidence, trade-off and validation plan.", expected_answer_size="medium")
+    resume[0].update(difficulty="easy", question="Name one relevant project.", expected_answer_size="short")
+    situational[0].update(difficulty="medium", question="Walk through what you would do, how you would communicate risk, and how you would verify the outcome.", expected_answer_size="short")
+
+    normalized = mock_interview_v2._apply_standard_assessment_response_contract(questions)
+    by_question = {q["question"]: q for q in normalized}
+
+    assert by_question["Name one capability you would prioritise."]["expected_answer_size"] == "short"
+    assert by_question["Name one capability you would prioritise."]["answer_time_seconds"] == 60
+    assert by_question["Explain the capability, evidence, trade-off and validation plan."]["expected_answer_size"] == "long"
+    assert by_question["Explain the capability, evidence, trade-off and validation plan."]["answer_time_seconds"] == 120
+    assert by_question["Name one relevant project."]["expected_answer_size"] == "medium"
+    assert by_question["Name one relevant project."]["answer_time_seconds"] == 90
+    assert by_question["Walk through what you would do, how you would communicate risk, and how you would verify the outcome."]["expected_answer_size"] == "long"
+    assert by_question["Walk through what you would do, how you would communicate risk, and how you would verify the outcome."]["answer_time_seconds"] == 120
+
+
+def test_client_spoken_answer_timer_uses_server_question_window():
+    app_js = (ROOT / "app/static/mock-interview.js").read_text(encoding="utf-8")
+    assert "Number(q.answer_time_seconds)||150" in app_js
+    assert "Math.max(45,Math.min(150" in app_js

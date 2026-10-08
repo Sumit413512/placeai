@@ -48,7 +48,35 @@ ASSESSMENT_BLUEPRINT = (
 )
 OBJECTIVE_ASSESSMENT_SECTIONS = frozenset({"quantitative", "logical", "communication", "technical", "programming"})
 AUDIO_ASSESSMENT_SECTIONS = frozenset({"resume", "role", "situational"})
-SPOKEN_ANSWER_SECONDS = {"resume": 120, "role": 90, "situational": 120}
+SPOKEN_ANSWER_SECONDS_BY_SIZE = {"short": 60, "medium": 90, "long": 120}
+SPOKEN_ANSWER_SIZE_ORDER = ("short", "medium", "long")
+SPOKEN_COMPLEXITY_MARKERS = (
+    "walk through", "step by step", "specific evidence", "evidence of", "trade-off",
+    "what did you do", "what would you do", "how would you", "and why",
+    "and how", "plan", "verify", "validation", "outcome", "risk",
+)
+
+
+def _spoken_answer_size(*, section: str, difficulty: str, question: str, requested: str = "") -> str:
+    """Classify a spoken answer window without trusting arbitrary model-provided seconds.
+
+    AI may suggest short/medium/long, while the server guarantees a floor based on
+    section, difficulty and multi-step/evidence cues. This keeps timing predictable,
+    auditable and within the recording policy's 45-150 second hard bounds.
+    """
+    section = str(section or "").strip().lower()
+    difficulty = str(difficulty or "medium").strip().lower()
+    question_text = str(question or "").strip().lower()
+    rank = {"easy": 0, "medium": 1, "hard": 2}.get(difficulty, 1)
+    if section in {"resume", "situational"}:
+        rank = max(rank, 1)
+    marker_hits = sum(marker in question_text for marker in SPOKEN_COMPLEXITY_MARKERS)
+    if question_text.count("?") >= 2 or marker_hits >= 2:
+        rank = min(2, rank + 1)
+    requested = str(requested or "").strip().lower()
+    if requested in SPOKEN_ANSWER_SECONDS_BY_SIZE:
+        rank = max(rank, SPOKEN_ANSWER_SIZE_ORDER.index(requested))
+    return SPOKEN_ANSWER_SIZE_ORDER[rank]
 
 
 class MockInterviewStartV2(BaseModel):
@@ -287,7 +315,7 @@ def _question_prompt(
 {PROMPT_GUARDRAIL}
 
 You are a senior interviewer preparing a realistic campus interview for the exact role below.
-{("Generate exactly 48 NEW AI-authored primary assessment items for a standardized full campus-placement mock. PlaceAI injects 2 server-owned executable coding-editor questions separately, so DO NOT generate coding-section items. Use this exact AI-authored section blueprint: quantitative 8; logical 8; communication 6; technical 8; programming 6; resume 4; behavioral 4; role 2; situational 2. Technical, programming and the 2 server-owned coding-editor questions together form the candidate-facing Technical Assessment. Difficulty must progress from foundational to intermediate and then challenging within each section. At least half of technical/programming/resume/role items must directly test the role description, required skills or candidate's relevant experience. Quantitative, logical, communication, technical and programming items MUST be objective multiple-choice questions with exactly four distinct plausible options and exactly one correct answer. Technical and programming must test applied knowledge through MCQs, never essays; coding is tested separately in the executable editor. Resume, behavioral, role and situational items MUST be open-ended spoken-response questions. Do not create typed descriptive or essay answers for the standardized assessment." if count == FULL_MOCK_QUESTION_COUNT else f"Generate exactly {count} NEW role-specific practice interview questions. {focus_instruction} Difficulty: {difficulty}. Prefer applied technical reasoning, debugging, design, behavioral evidence, situational judgment and role fit over trivia.")}
+{("Generate exactly 48 NEW AI-authored primary assessment items for a standardized full campus-placement mock. PlaceAI injects 2 server-owned executable coding-editor questions separately, so DO NOT generate coding-section items. Use this exact AI-authored section blueprint: quantitative 8; logical 8; communication 6; technical 8; programming 6; resume 4; behavioral 4; role 2; situational 2. Technical, programming and the 2 server-owned coding-editor questions together form the candidate-facing Technical Assessment. Difficulty must progress from foundational to intermediate and then challenging within each section. At least half of technical/programming/resume/role items must directly test the role description, required skills or candidate's relevant experience. Quantitative, logical, communication, technical and programming items MUST be objective multiple-choice questions with exactly four distinct plausible options and exactly one correct answer. Technical and programming must test applied knowledge through MCQs, never essays; coding is tested separately in the executable editor. Resume, behavioral, role and situational items MUST be open-ended spoken-response questions. Do not create typed descriptive or essay answers for the standardized assessment. For every spoken-response item, include expected_answer_size as short, medium or long based on the evidence/reasoning a strong answer needs: short for one focused point, medium for one example plus reasoning, and long for multi-step, scenario or evidence-heavy answers." if count == FULL_MOCK_QUESTION_COUNT else f"Generate exactly {count} NEW role-specific practice interview questions. {focus_instruction} Difficulty: {difficulty}. Prefer applied technical reasoning, debugging, design, behavioral evidence, situational judgment and role fit over trivia.")}
 Questions must be concise, non-discriminatory and suitable for campus placement preparation.
 Use ONLY facts present in ROLE and CANDIDATE CONTEXT. Do not invent company processes, technologies, projects,
 metrics, responsibilities, achievements or candidate experience. If a fact is not provided, ask a generic
@@ -297,7 +325,7 @@ Do not ask multiple questions that are substantially the same within this new se
 
 Return ONLY valid JSON.
 For a 50-item full assessment use:
-{{"questions":[{{"question":"...","section":"quantitative|logical|communication|technical|programming|resume|behavioral|role|situational","category":"...","difficulty":"easy|medium|hard","answer_type":"mcq|audio|video","options":["A","B","C","D"],"correct_answer":"exact option text or empty for spoken"}}]}}
+{{"questions":[{{"question":"...","section":"quantitative|logical|communication|technical|programming|resume|behavioral|role|situational","category":"...","difficulty":"easy|medium|hard","answer_type":"mcq|audio|video","expected_answer_size":"short|medium|long or empty for non-spoken","options":["A","B","C","D"],"correct_answer":"exact option text or empty for spoken"}}]}}
 For legacy practice rounds use:
 {{"questions":[{{"question":"...","category":"technical|behavioral|hr|situational|communication","difficulty":"easy|medium|hard"}}]}}
 
@@ -353,24 +381,37 @@ def _apply_standard_assessment_response_contract(questions: list[dict[str, Any]]
             item["options"] = options
             item["correct_answer"] = correct
             item.pop("response_mode", None)
+            item.pop("expected_answer_size", None)
+            item.pop("answer_time_seconds", None)
             item["narration_enabled"] = False
         elif section == "coding":
             item["answer_type"] = "code"
             item["options"] = []
             item["correct_answer"] = ""
             item.pop("response_mode", None)
+            item.pop("expected_answer_size", None)
+            item.pop("answer_time_seconds", None)
             item["narration_enabled"] = False
         elif section == "behavioral":
             item["answer_type"] = "video"
             item["options"] = []
             item["correct_answer"] = ""
             item.pop("response_mode", None)
+            item.pop("expected_answer_size", None)
+            item.pop("answer_time_seconds", None)
             item["narration_enabled"] = False
         elif section in AUDIO_ASSESSMENT_SECTIONS:
+            answer_size = _spoken_answer_size(
+                section=section,
+                difficulty=str(item.get("difficulty", "medium")),
+                question=str(item.get("question", "")),
+                requested=str(item.get("expected_answer_size", "")),
+            )
             item["answer_type"] = "audio"
             item["response_mode"] = "audio"
             item["narration_enabled"] = True
-            item["answer_time_seconds"] = SPOKEN_ANSWER_SECONDS[section]
+            item["expected_answer_size"] = answer_size
+            item["answer_time_seconds"] = SPOKEN_ANSWER_SECONDS_BY_SIZE[answer_size]
             item["options"] = []
             item["correct_answer"] = ""
         else:
@@ -971,6 +1012,7 @@ def _generate_unique_questions(
                     "category": category,
                     "difficulty": q_difficulty,
                     "answer_type": answer_type,
+                    "expected_answer_size": str(item.get("expected_answer_size", "")).strip().lower(),
                     "options": options,
                     "correct_answer": correct_answer,
                 })
