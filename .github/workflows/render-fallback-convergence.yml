@@ -1,0 +1,90 @@
+name: PlaceAI Render Fallback Convergence
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '41 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: placeai-render-fallback-convergence
+  cancel-in-progress: true
+
+jobs:
+  verify-render-fallback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FALLBACK_URL: https://placeai-production.onrender.com
+    steps:
+      - name: Verify Render fallback serves the current main release
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${GITHUB_SHA,,}"
+          for attempt in $(seq 1 60); do
+            code=$(curl -L -sS -o /tmp/render-health.json -w '%{http_code}' \
+              --connect-timeout 10 --max-time 25 "$FALLBACK_URL/health" || true)
+
+            if [ "$code" = '200' ]; then
+              if EXPECTED_SHA="$expected" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = json.loads(Path('/tmp/render-health.json').read_text(encoding='utf-8'))
+          expected = os.environ['EXPECTED_SHA'].strip().lower()
+          actual = str(payload.get('release_sha') or '').strip().lower()
+          required = {
+              'status': 'healthy',
+              'database': 'ok',
+              'configuration': 'ok',
+          }
+          bad = {
+              key: (payload.get(key), wanted)
+              for key, wanted in required.items()
+              if payload.get(key) != wanted
+          }
+          if bad:
+              raise SystemExit(f'Render fallback health contract failed: {bad}')
+          if actual != expected:
+              raise SystemExit(f'Render fallback release mismatch: expected={expected} actual={actual or "missing"}')
+          print('Render fallback serves exact current-main release', actual)
+          PY
+              then
+                exit 0
+              fi
+            fi
+
+            if [ "$attempt" = '60' ]; then
+              echo "Render fallback did not converge to $expected (last HTTP $code)." >&2
+              cat /tmp/render-health.json 2>/dev/null || true
+              exit 1
+            fi
+
+            echo "Waiting for Render fallback convergence (attempt $attempt/60; HTTP $code)."
+            sleep 10
+          done
+
+      - name: Verify fallback security boundary and assessment surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --connect-timeout 10 --max-time 25 -D /tmp/render-health.headers \
+            -o /tmp/render-health-final.json "$FALLBACK_URL/health"
+          grep -qi '^strict-transport-security:' /tmp/render-health.headers
+          grep -qi '^x-content-type-options: *nosniff' /tmp/render-health.headers
+          grep -qi '^x-frame-options: *DENY' /tmp/render-health.headers
+          grep -qi '^cache-control: *no-store' /tmp/render-health.headers
+
+          curl -fsS --connect-timeout 10 --max-time 25 "$FALLBACK_URL/mock-interview" \
+            -o /tmp/render-assessment.html
+          grep -qi '<title>PlaceAI — Secure Placement Assessment</title>' /tmp/render-assessment.html
+
+          auth_code=$(curl -sS -o /tmp/render-auth.json -w '%{http_code}' \
+            --connect-timeout 10 --max-time 25 "$FALLBACK_URL/auth/me")
+          test "$auth_code" = '401'
