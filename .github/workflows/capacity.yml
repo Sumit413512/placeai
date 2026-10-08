@@ -1,0 +1,29 @@
+name: PlaceAI Assessment Capacity Guard
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: placeai-assessment-capacity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  admission-burst:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Verify 100 concurrent assessment submissions are durably admitted
+        run: python -m scripts.benchmark_assessment_queue --students 100 --concurrency 100

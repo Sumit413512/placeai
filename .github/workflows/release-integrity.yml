@@ -1,0 +1,84 @@
+name: PlaceAI Release Integrity
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: placeai-release-integrity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile release surface
+        run: python -m py_compile app/app.py
+      - name: Verify release identity regression coverage exists
+        run: |
+          test -s tests/test_release_identity.py
+          grep -q 'VERCEL_GIT_COMMIT_SHA' app/app.py
+          grep -q 'RENDER_GIT_COMMIT' app/app.py
+          grep -q 'release_sha' app/app.py
+
+  production-release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BASE_URL: https://www.placeai.in
+    steps:
+      - name: Wait for canonical production to serve this exact commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 36); do
+            code=$(curl -L -sS -o /tmp/health.json -w '%{http_code}' --connect-timeout 10 --max-time 20 "$BASE_URL/health" || true)
+            if [ "$code" = '200' ]; then
+              if GITHUB_SHA="$GITHUB_SHA" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = json.loads(Path('/tmp/health.json').read_text(encoding='utf-8'))
+          expected = os.environ['GITHUB_SHA'].strip().lower()
+          actual = str(payload.get('release_sha') or '').strip().lower()
+          healthy = payload.get('status') == 'healthy' and payload.get('database') == 'ok' and payload.get('configuration') == 'ok'
+          if not healthy or actual != expected:
+              raise SystemExit(1)
+          print('Canonical production serves exact release', actual)
+          PY
+              then
+                break
+              fi
+            fi
+            if [ "$attempt" = '36' ]; then
+              echo "Canonical production did not converge to $GITHUB_SHA (last HTTP $code)." >&2
+              cat /tmp/health.json 2>/dev/null || true
+              exit 1
+            fi
+            echo "Waiting for canonical release convergence (attempt $attempt/36; HTTP $code)."
+            sleep 10
+          done
+
+      - name: Verify standardized assessment audio release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --connect-timeout 10 --max-time 20 \
+            "$BASE_URL/static/assessment-audio-enhancements.js?v=$GITHUB_SHA" \
+            -o /tmp/assessment-audio-enhancements.js
+          grep -q "ASSESSMENT_AUDIO_SECTIONS" /tmp/assessment-audio-enhancements.js
+          grep -q "next.response_mode = 'audio'" /tmp/assessment-audio-enhancements.js
+          grep -q "next.answer_type = 'audio'" /tmp/assessment-audio-enhancements.js
