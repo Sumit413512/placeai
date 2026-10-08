@@ -39,6 +39,7 @@
     proctorModelReady:false,
     proctorModelLoading:null,
     proctorModelBusy:false,
+    proctorInputCanvas:null,
     nativeFaceDetector:null,
     localProctorTimer:null,
     mediaWatchTimer:null,
@@ -80,7 +81,8 @@
     sectionDeadline:0,
     advancing:false,
     submissionSaved:false,
-    recordingUrl:null
+    recordingUrl:null,
+    voiceMeter:null
   };
 
   function toast(message, type='') {
@@ -177,7 +179,7 @@
         {job_title:'Graduate Software Engineer',company_name:'Campus Technology Partner',overall_score:71,created_at:new Date(Date.now()-86400000*9).toISOString()}
       ] : await api('/mock-interview/history');
       panel.classList.remove('hidden');
-      $('#history-list').innerHTML = rows.length ? rows.map(row=>`<article class="history-item"><div><strong>${esc(row.job_title)}</strong><span>${esc(row.company_name || 'Company')} · ${row.created_at ? new Date(row.created_at).toLocaleString('en-IN') : 'Saved attempt'}</span>${row.id?`<button type="button" class="button secondary" data-saved-result="${esc(row.id)}">${row.overall_score===null?'Complete analysis':'View complete result'}</button>`:''}</div><div class="history-score">${row.overall_score ?? 'Pending'}</div></article>`).join('') : '<p class="disclaimer">No saved attempts yet.</p>';
+      $('#history-list').innerHTML = rows.length ? rows.map(row=>`<article class="history-item"><div><strong>${esc(row.job_title)}</strong><span>${esc(row.company_name || 'Company')} · ${row.created_at ? new Date(row.created_at).toLocaleString('en-IN') : 'Saved attempt'}</span>${row.id?`<button type="button" class="button secondary" data-saved-result="${esc(row.id)}">${row.overall_score===null?'View report status':'View complete result'}</button>`:''}</div><div class="history-score">${row.overall_score ?? 'Within 24h'}</div></article>`).join('') : '<p class="disclaimer">No saved attempts yet.</p>';
     } catch (_) {
       panel.classList.remove('hidden');
       $('#history-list').textContent='Saved reports could not load. Refresh this page to try again.';
@@ -265,8 +267,9 @@
           situational:`A deadline is close and you discover a defect that could affect users. What would you do next, and how would you communicate the trade-off?`
         };
         const spokenAudio=['resume','role','situational'].includes(section.key);
+        const spokenVideo=section.key==='behavioral';
         const answerTime=section.key==='resume'?120:section.key==='role'?90:120;
-        questions.push({question_id:id++,section:section.key,category:section.label,difficulty:i < Math.ceil(section.count*.4)?'Foundation':i < Math.ceil(section.count*.8)?'Intermediate':'Advanced',question:templates[section.key] || `Explain a role-relevant approach for ${skill}.`,answer_type:section.key==='behavioral'?'video':'audio',...(spokenAudio?{response_mode:'audio',narration_enabled:true,answer_time_seconds:answerTime}:{})});
+        questions.push({question_id:id++,section:section.key,category:section.label,difficulty:i < Math.ceil(section.count*.4)?'Foundation':i < Math.ceil(section.count*.8)?'Intermediate':'Advanced',question:templates[section.key] || `Explain a role-relevant approach for ${skill}.`,answer_type:spokenVideo?'video':'audio',...(spokenAudio?{response_mode:'audio',narration_enabled:true,answer_time_seconds:answerTime}:spokenVideo?{response_mode:'video',narration_enabled:true,answer_time_seconds:150}:{})});
       }
     }
     return questions;
@@ -670,9 +673,11 @@
       });
       if(window.speechSynthesis)speechSynthesis.cancel();
       recorder.start(4000);
+      ensureVoiceMeter();
       hrStatus('Recording · camera and microphone on · answers saved privately');
       hr.retryTimer=setInterval(uploadHRChunks,5000);
       setHRQuestionDeadline(response);
+      updateSpokenIndicator();
       $('#next-question').disabled=false;
       $('#start-hr-recording')?.classList.add('hidden');
       if($('#repeat-hr-question'))$('#repeat-hr-question').disabled=true;
@@ -754,6 +759,7 @@
   async function startQuestionRecorder(q) {
     if(state.answerClip?.questionId===q.question_id || state.answerStarting || !state.assessmentActive)return;
     state.answerStarting=true;
+    updateSpokenIndicator();
     try {
       cancelQuestionReading();
       if(!window.MediaRecorder)throw new Error('This browser cannot record this answer. Use a supported browser.');
@@ -778,11 +784,13 @@
       recorder.onerror=()=>{clip.error='Recording was interrupted. Finish this answer to preserve captured media.';};
       recorder.start(4000);
       state.answerClip=clip;
+      ensureVoiceMeter();
       $('#spoken-answer-status').textContent='Recording your answer · microphone on'+(audioOnly?'':' · camera on');
+      updateSpokenIndicator();
       $('#start-spoken-answer').classList.add('hidden');
       $('#next-question').disabled=false;
     }catch(error){$('#spoken-answer-status').textContent=error.message;$('#start-spoken-answer')?.classList.remove('hidden');}
-    finally{state.answerStarting=false;}
+    finally{state.answerStarting=false;updateSpokenIndicator();}
   }
 
   async function finishQuestionAnswer() {
@@ -805,17 +813,92 @@
     return clip.finishing;
   }
 
+  function spokenIndicatorMarkup(seconds,video=false) {
+    return '<div id="spoken-listening-indicator" class="spoken-listening-indicator reading" role="status" aria-live="polite">'+
+      '<span class="spoken-mic-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm-5-3a1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V21H8a1 1 0 1 0 0 2h8a1 1 0 1 0 0-2h-3v-2.08A7 7 0 0 0 19 12a1 1 0 1 0-2 0 5 5 0 0 1-10 0Z"/></svg><i></i></span>'+
+      '<span class="spoken-frequency-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>'+
+      '<span class="spoken-listening-copy"><strong id="spoken-mic-label">Question is being read aloud</strong><small id="spoken-mic-help">The microphone starts listening after narration finishes.</small></span>'+
+      '<span class="spoken-question-clock"><small>Answer time</small><time id="spoken-question-timer" datetime="PT'+seconds+'S">'+formatTime(seconds)+'</time></span>'+
+      '<span class="sr-only">'+(video?'Camera and microphone answer':'Microphone answer')+'</span></div>';
+  }
+
+  function stopVoiceMeter() {
+    const meter=state.voiceMeter;
+    if(!meter)return;
+    cancelAnimationFrame(meter.frame);
+    try{meter.source.disconnect();meter.analyser.disconnect();meter.context.close();}catch{}
+    state.voiceMeter=null;
+  }
+
+  function ensureVoiceMeter() {
+    if(state.voiceMeter)return;
+    const audioTrack=state.mediaStream?.getAudioTracks().find(track=>track.readyState==='live');
+    const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+    if(!audioTrack || !AudioContextClass)return;
+    try{
+      const context=new AudioContextClass();
+      const analyser=context.createAnalyser();
+      analyser.fftSize=256;analyser.smoothingTimeConstant=.72;
+      const source=context.createMediaStreamSource(new MediaStream([audioTrack]));
+      source.connect(analyser);
+      const frequencies=new Uint8Array(analyser.frequencyBinCount);
+      const meter={context,analyser,source,frequencies,frame:0};
+      state.voiceMeter=meter;
+      context.resume().catch(()=>{});
+      const draw=()=>{
+        if(state.voiceMeter!==meter)return;
+        analyser.getByteFrequencyData(frequencies);
+        const indicator=$('#spoken-listening-indicator');
+        if(indicator?.classList.contains('listening')){
+          const bars=$$('.spoken-frequency-bars i',indicator);
+          let total=0;
+          bars.forEach((bar,index)=>{
+            const start=2+index*5,end=Math.min(frequencies.length,start+7);
+            let sum=0;for(let bin=start;bin<end;bin++)sum+=frequencies[bin];
+            const level=Math.max(.12,Math.min(1,(sum/Math.max(1,end-start))/150));
+            total+=level;bar.style.transform='scaleY('+level.toFixed(3)+')';
+          });
+          const voiceLevel=total/Math.max(1,bars.length);
+          indicator.style.setProperty('--voice-level',voiceLevel.toFixed(3));
+          indicator.style.setProperty('--mic-scale',(1+voiceLevel*.08).toFixed(3));
+          indicator.style.setProperty('--voice-glow',(10+voiceLevel*18).toFixed(1)+'px');
+          indicator.classList.toggle('voice-active',voiceLevel>.2);
+        }
+        meter.frame=requestAnimationFrame(draw);
+      };
+      draw();
+    }catch{state.voiceMeter=null;}
+  }
+
+  function updateSpokenIndicator() {
+    const indicator=$('#spoken-listening-indicator');
+    if(!indicator)return;
+    const q=state.questions[state.current];
+    const clip=state.answerClip?.questionId===q?.question_id?state.answerClip:null;
+    const legacyVideo=!q?.response_mode && q?.answer_type==='video' && state.hr?.recorder;
+    const recording=Boolean(clip?.recorder?.state==='recording' || legacyVideo?.state==='recording');
+    const deadline=clip?.deadline || (legacyVideo?state.hr.questionDeadline:0);
+    const configured=Math.max(45,Math.min(150,Number(q?.answer_time_seconds)||150));
+    const left=recording&&deadline?Math.max(0,Math.ceil((deadline-Date.now())/1000)):configured;
+    indicator.classList.toggle('listening',recording);
+    indicator.classList.toggle('reading',!recording);
+    const label=$('#spoken-mic-label'),help=$('#spoken-mic-help'),timer=$('#spoken-question-timer');
+    if(label)label.textContent=recording?'Microphone on · Listening':state.answerStarting?'Starting microphone…':'Question is being read aloud';
+    if(help)help.textContent=recording?(q?.response_mode==='video'?'Camera and microphone are recording this answer.':'Your voice is recording for this question.'):'The microphone starts listening after narration finishes.';
+    if(timer){timer.textContent=formatTime(left);timer.setAttribute('datetime','PT'+left+'S');}
+  }
+
   function renderSpokenAnswer(q) {
     state.answerClip=null;
     const answerSeconds=Math.max(45,Math.min(150,Number(q.answer_time_seconds)||150));
     const answerWindow=answerSeconds%60===0?(answerSeconds/60)+' minute'+(answerSeconds===60?'':'s'):Math.floor(answerSeconds/60)+' min '+(answerSeconds%60)+' sec';
-    $('#answer-area').innerHTML='<div class="answer-field"><strong>'+(q.response_mode==='video'?'HR camera and voice answer':'Spoken answer')+'</strong><p>Listen to the question, then answer aloud. This question has its own private recording with up to '+answerWindow+' of answer time.</p><p id="spoken-answer-status" role="status">Reading question…</p><button id="start-spoken-answer" type="button" class="button secondary hidden">Start answer</button>'+(q.response_mode==='video'?'<video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video>':'')+'</div>';
+    $('#answer-area').innerHTML='<div class="answer-field"><strong>'+(q.response_mode==='video'?'HR camera and voice answer':'Spoken answer')+'</strong><p>Listen to the question, then answer aloud. This question has its own private recording with up to '+answerWindow+' of answer time.</p>'+spokenIndicatorMarkup(answerSeconds,q.response_mode==='video')+'<p id="spoken-answer-status" role="status">Reading question…</p><button id="start-spoken-answer" type="button" class="button secondary hidden">Start answer</button>'+(q.response_mode==='video'?'<video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video>':'')+'</div>';
     const preview=$('#hr-answer-preview');if(preview){preview.srcObject=state.mediaStream;preview.play().catch(()=>{});}
     $('#start-spoken-answer').onclick=()=>beginQuestionAnswer(q);
     $('#save-question').disabled=true;$('#next-question').disabled=true;
     readQuestionBeforeAnswer(q,true).catch(error=>{
       if(state.questions[state.current]?.question_id!==q.question_id || !state.assessmentActive)return;
-      $('#spoken-answer-status').textContent=error.message;$('#start-spoken-answer').classList.remove('hidden');
+      $('#spoken-answer-status').textContent=error.message;$('#start-spoken-answer').classList.remove('hidden');updateSpokenIndicator();
     });
   }
 
@@ -890,7 +973,7 @@
     $('#question-watermark').textContent=`${state.candidateLabel} · Q${state.current+1}`;
     if(q.response_mode)renderSpokenAnswer(q);
     else if(q.answer_type==='video') {
-      $('#answer-area').innerHTML='<div class="answer-field"><strong>HR video answer</strong><p>Answer aloud in English. One private video captures all four HR answers. Each answer has up to 2 minutes 30 seconds; the next question opens automatically when its time expires.</p><p id="hr-recording-status" role="status">Camera and microphone ready. Read the question, then start your answer.</p><button type="button" id="start-hr-recording" class="button primary">Start HR recording</button><button type="button" id="repeat-hr-question" class="button secondary">Read question aloud</button><button type="button" id="retry-hr-recording" class="button secondary hidden">Retry recording setup</button><video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video></div>';
+      $('#answer-area').innerHTML='<div class="answer-field"><strong>HR video answer</strong><p>Answer aloud in English. One private video captures all four HR answers. Each answer has up to 2 minutes 30 seconds; the next question opens automatically when its time expires.</p>'+spokenIndicatorMarkup(150,true)+'<p id="hr-recording-status" role="status">Camera and microphone ready. Read the question, then start your answer.</p><button type="button" id="start-hr-recording" class="button primary">Start HR recording</button><button type="button" id="repeat-hr-question" class="button secondary">Read question aloud</button><button type="button" id="retry-hr-recording" class="button secondary hidden">Retry recording setup</button><video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video></div>';
       $('#repeat-hr-question').onclick=speakHRQuestion;
       $('#retry-hr-recording').onclick=beginHRVideo;
       const preview=$('#hr-answer-preview');
@@ -997,6 +1080,7 @@
       state.totalRemaining=Math.max(0,Math.ceil((state.examDeadline-Date.now())/1000));
       state.sectionRemaining=Math.max(0,Math.ceil((state.sectionDeadline-Date.now())/1000));
       updateTimers();
+      updateSpokenIndicator();
       // The whole-exam deadline takes priority over advancing an HR answer.
       if(state.totalRemaining<=0){
         finishAssessment(true);
@@ -1213,7 +1297,33 @@
 
   async function detectProctorObjects(video) {
     if(!state.proctorModelReady || !state.proctorModel || !video || video.readyState<2) return [];
-    return state.proctorModel.detect(video,10,0.32);
+    if(!state.proctorInputCanvas){
+      state.proctorInputCanvas=document.createElement('canvas');
+      state.proctorInputCanvas.width=320;
+      state.proctorInputCanvas.height=240;
+    }
+    const canvas=state.proctorInputCanvas;
+    const context=canvas.getContext('2d',{alpha:false});
+    if(!context)return [];
+    const sourceWidth=video.videoWidth||canvas.width;
+    const sourceHeight=video.videoHeight||canvas.height;
+    const scale=Math.max(canvas.width/sourceWidth,canvas.height/sourceHeight);
+    const width=sourceWidth*scale;
+    const height=sourceHeight*scale;
+    context.drawImage(video,(canvas.width-width)/2,(canvas.height-height)/2,width,height);
+    return state.proctorModel.detect(canvas,10,0.32);
+  }
+
+  function scheduleLocalProctorCheck(delay=0) {
+    clearTimeout(state.localProctorTimer);
+    state.localProctorTimer=setTimeout(function(){
+      const run=async function(){
+        await runLocalProctorCheck();
+        if(state.assessmentActive&&!state.finishing)scheduleLocalProctorCheck(2500);
+      };
+      if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:900});
+      else run();
+    },delay);
   }
 
   function showProctorWarning(title,detail) {
@@ -1574,7 +1684,12 @@
   async function startAssessment() {
     if(state.assessmentActive || $('#start-assessment').disabled)return;
     if(!state.systemReady || !$('#consent-check').checked){toast('Complete all required secure checks first.','error');return;}
-    $('#start-assessment').disabled=true;
+    const startButton=$('#start-assessment');
+    const startLabel=startButton.textContent;
+    startButton.disabled=true;
+    startButton.setAttribute('aria-busy','true');
+    startButton.classList.add('is-loading');
+    startButton.textContent='Starting assessment…';
     try {
       await $('#interview-panel').requestFullscreen();
       let remaining=TOTAL_SECONDS*1000;
@@ -1586,7 +1701,10 @@
       state.examDeadline=Date.now()+remaining;
     } catch(error) {
       if(document.fullscreenElement)await document.exitFullscreen().catch(()=>{});
-      $('#start-assessment').disabled=false;
+      startButton.disabled=false;
+      startButton.removeAttribute('aria-busy');
+      startButton.classList.remove('is-loading');
+      startButton.textContent=startLabel;
       toast(error.message || 'Full-screen permission is required to start the assessment.','error');
       return;
     }
@@ -1597,7 +1715,13 @@
     $('#system-panel').classList.add('hidden'); $('#interview-panel').classList.remove('hidden');
     history.pushState({placeaiSecure:true},'',location.href);
     installSecureGuards();
-    renderQuestion(); startTimer(); startPresenceMonitoring();
+    renderQuestion();
+    startTimer();
+    startButton.removeAttribute('aria-busy');
+    startButton.classList.remove('is-loading');
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){startPresenceMonitoring();});
+    });
   }
 
   function captureProctorFrame() {
@@ -1715,9 +1839,8 @@
     }
 
     $('#camera-proctor-status').textContent='Candidate present · monitoring';
-    state.localProctorTimer=setInterval(runLocalProctorCheck,1500);
     state.mediaWatchTimer=setInterval(checkLiveMediaIntegrity,3500);
-    setTimeout(runLocalProctorCheck,650);
+    scheduleLocalProctorCheck(1800);
 
     if(!previewMode){
       state.proctorVisionTimer=setInterval(runVisionProctorCheck,10000);
@@ -1908,6 +2031,16 @@
     });
   }
 
+  function showPendingResult(saved={}) {
+    const terminal=saved.queue_status==='failed';
+    $('#analysis-message').textContent=saved.status_message || (terminal
+      ? 'Your exam is saved. Analysis needs another attempt. Select Retry analysis; your answers will not be replaced.'
+      : 'Your exam is saved. Your complete report is expected within 24 hours. You can leave this page and return from exam history.');
+    $('#return-to-setup').classList.remove('hidden');
+    $('#retry-analysis').classList.toggle('hidden',saved.queued && !terminal);
+    state.finishing=false;
+  }
+
   function savedAttemptKey() {
     return state.me?.id ? `placeai-assessment-result:${state.me.id}` : null;
   }
@@ -1937,10 +2070,8 @@
         state.lastResult=saved.result;
         renderResult(saved.result,false);
       }else{
-        $('#analysis-message').textContent=saved.status==='pending'
-          ? (saved.queued?'Your submitted exam is saved. Every section is being analyzed in the background. Return to exam history later for the complete report.':'Your submitted exam is saved. Its complete report is pending. Retry analysis or return to setup to start another assessment.')
-          : 'This assessment has not been submitted. Finish it in the original exam tab.';
-        $('#retry-analysis').classList.toggle('hidden',saved.status!=='pending');
+        if(saved.status==='pending')showPendingResult(saved);
+        else $('#analysis-message').textContent='This assessment has not been submitted. Finish it in the original exam tab.';
       }
     }catch(error){
       if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
@@ -1963,11 +2094,11 @@
       const saved=await api(`/mock-interview/${interviewId}/result`);
       if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
       if(saved.status==='complete')return saved.result;
-      if(saved.queue_status==='failed')throw new Error('Your exam is saved. Analysis needs support to resume; contact your institution.');
-      if(saved.error_code==='VIDEO_PROVIDER_CAPACITY')$('#analysis-message').textContent='Your exam is saved. Analysis is waiting for available capacity. You can leave this page and return to exam history later; your complete report appears after every section is ready.';
+      if(saved.queue_status==='failed')return {analysis_status:'pending',...saved};
+      if(saved.error_code==='VIDEO_PROVIDER_CAPACITY')$('#analysis-message').textContent='Your exam is saved. Analysis is waiting for available capacity. Your complete report is expected within 24 hours, and you can return from exam history.';
       else if(saved.spoken_progress)$('#analysis-message').textContent=`Your exam is saved. ${saved.spoken_progress.analyzed} of ${saved.spoken_progress.recorded} recorded answers analyzed. The complete report appears after every section is ready; you can return from exam history later.`;
     }
-    throw new Error('Your exam is saved. Return to exam history to view the report when it is ready.');
+    return {analysis_status:'pending',status_message:'Your exam is saved. Your complete report is expected within 24 hours. You can leave this page and return from exam history.'};
   }
 
   async function runResultAnalysis(auto) {
@@ -2037,6 +2168,7 @@
         }
       }
       if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
+      if(result?.analysis_status==='pending' && !previewMode){showPendingResult(result);return;}
       if(result?.analysis_status!=='complete' && !previewMode)throw new Error('Your exam is saved. Analysis is still pending; retry to receive all results together.');
       markAnalysisComplete();
       state.lastResult=result;
@@ -2070,6 +2202,7 @@
     clearInterval(state.mediaWatchTimer);
     clearTimeout(state.proctorBannerTimer);
     try{await finishQuestionAnswer();await stopHRVideo();}catch(error){toast(error.message,'error');}
+    stopVoiceMeter();
     fillUnansweredResponses(auto?'[No response submitted before assessment ended]':'[No response submitted]');
     state.ignoreFullscreen=true;
     try{if(document.fullscreenElement)await document.exitFullscreen();}catch{}
@@ -2235,6 +2368,15 @@
     $('#overall-score').textContent=result.overall_score??'—';
     $('#report-iri').textContent=result.overall_score===null||result.overall_score===undefined?'Withheld':result.overall_score+'/100';
     $('#overall-feedback').textContent=result.overall_feedback||'Assessment completed.';
+    const email=$('#report-email-status');
+    if(email){
+      const delivery=result.report_email||{};
+      email.textContent=delivery.status==='sent'
+        ? 'A complete copy was sent to your verified registered email.'
+        : delivery.eligible
+          ? 'Your in-app report is ready. Email delivery will retry automatically if the mail provider is temporarily unavailable.'
+          : 'Email delivery is available only for a verified Google-registered student account and is disabled for demo assessments.';
+    }
     $('#grading-method-label').textContent=previewMode?'Answer key + coding workspace + preview scoring':'Answer key + sandbox execution + answer and HR video analysis';
     renderIntegrityReport(result);
     renderHRVideoResult(result);
@@ -2279,6 +2421,7 @@
   function resetAssessment() {
     (state.answerPlaybackUrls || []).forEach(url=>URL.revokeObjectURL(url));state.answerPlaybackUrls=[];
     cancelQuestionReading();
+    stopVoiceMeter();
     state.answerClip=null;
     state.analysisGeneration++;
     clearInterval(state.timerId);
@@ -2447,7 +2590,8 @@
       state.candidateLabel=(state.me.full_name || state.me.username || 'Candidate').toUpperCase().slice(0,40);
       $('#auth-state').classList.add('hidden'); $('#setup-panel').classList.remove('hidden');
       await Promise.all([loadJobs(),loadHistory()]);
-      // Entry always opens setup. Saved reports are an explicit history action.
+      const requestedResult=new URLSearchParams(location.search).get('result');
+      if(requestedResult)await openSavedResult(requestedResult);
     } catch(error){ $('#auth-state').textContent=error.message; toast(error.message,'error'); }
   })();
 })();

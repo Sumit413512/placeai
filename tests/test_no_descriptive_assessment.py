@@ -36,8 +36,10 @@ def test_standardized_exam_has_no_descriptive_text_response_mode():
             assert q["expected_answer_size"] in mock_interview_v2.SPOKEN_ANSWER_SECONDS_BY_SIZE
             assert q["answer_time_seconds"] == mock_interview_v2.SPOKEN_ANSWER_SECONDS_BY_SIZE[q["expected_answer_size"]]
         elif q["section"] == "behavioral":
-            assert "response_mode" not in q
             assert q["answer_type"] == "video"
+            assert q["response_mode"] == "video"
+            assert q["narration_enabled"] is True
+            assert q["answer_time_seconds"] == mock_interview_v2.hr_video.QUESTION_SECONDS
 
 
 def test_legacy_full_assessment_resume_is_upgraded_to_private_audio():

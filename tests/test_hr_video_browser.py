@@ -6,6 +6,40 @@ from datetime import datetime, timedelta, timezone
 from test_browser_smoke import BASE_URL, ROOT, browser, local_server  # noqa: F401
 
 
+def test_exam_start_responds_immediately_and_proctor_uses_reduced_frame(browser):  # noqa: F811
+    page = browser.new_page()
+    script = (ROOT / "app/static/mock-interview.js").read_text(encoding="utf-8")
+    script = script.rsplit("})();", 1)[0] + "window.startPerfTest={state,startAssessment,detectProctorObjects};})();"
+    page.route("**/static/mock-interview.js*", lambda route: route.fulfill(body=script, content_type="application/javascript"))
+    page.goto(f"{BASE_URL}/mock-interview?preview=1", wait_until="domcontentloaded")
+    page.wait_for_function("() => window.startPerfTest")
+    dimensions = page.evaluate("""async () => {
+      const source=document.createElement('canvas');source.width=1280;source.height=720;
+      source.getContext('2d').fillRect(0,0,1280,720);
+      const video=document.querySelector('#assessment-camera');
+      video.srcObject=source.captureStream(5);await video.play();
+      const state=startPerfTest.state;
+      state.proctorModelReady=true;
+      state.proctorModel={detect(input){return Promise.resolve([{width:input.width,height:input.height}]);}};
+      const result=await startPerfTest.detectProctorObjects(video);
+      video.srcObject.getTracks().forEach(track=>track.stop());
+      return result[0];
+    }""")
+    assert dimensions == {"width": 320, "height": 240}
+    start_state = page.evaluate("""() => {
+      const state=startPerfTest.state;
+      state.systemReady=true;state.session={interview_id:'preview'};state.answers=[];
+      state.questions=[{question_id:1,question:'Warm-up question',section:'quantitative',answer_type:'mcq',options:['A','B']}];
+      document.querySelector('#consent-check').checked=true;
+      const button=document.querySelector('#start-assessment');button.disabled=false;
+      document.querySelector('#interview-panel').requestFullscreen=()=>new Promise(resolve=>setTimeout(resolve,250));
+      startPerfTest.startAssessment();
+      return {label:button.textContent,busy:button.getAttribute('aria-busy'),loading:button.classList.contains('is-loading')};
+    }""")
+    assert start_state == {"label": "Starting assessment…", "busy": "true", "loading": True}
+    page.close()
+
+
 def test_saved_pending_attempt_never_hijacks_lab_entry_and_history_does_not_retry(browser):
     page = browser.new_page()
     requests = []
@@ -28,7 +62,7 @@ def test_saved_pending_attempt_never_hijacks_lab_entry_and_history_does_not_retr
     page.locator('[data-saved-result="saved"]').click()
     page.locator("#retry-analysis").wait_for(state="visible")
     assert requests == ["GET"]
-    assert "report is pending" in page.locator("#analysis-message").inner_text()
+    assert "expected within 24 hours" in page.locator("#analysis-message").inner_text()
     assert page.locator(".analysis-step.done").count() == 0
     page.locator("#return-to-setup").click()
     assert page.locator("#setup-panel").is_visible()

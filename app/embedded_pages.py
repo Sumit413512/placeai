@@ -234,7 +234,7 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/api-errors.css">
-  <link rel="stylesheet" href="/static/mock-interview.css?v=20260921-coding2">
+  <link rel="stylesheet" href="/static/mock-interview.css?v=20261008-spoken-timer">
   <link rel="stylesheet" href="/static/brand.css">
   <link rel="stylesheet" href="/static/ui-fixes.css">
 </head>
@@ -558,7 +558,7 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
 <script src="/static/api-errors.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.es2017.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js" defer></script>
-<script src="/static/mock-interview.js?v=20260921-coding2" defer></script>
+<script src="/static/mock-interview.js?v=20261008-spoken-timer" defer></script>
 </body>
 </html>
 '''

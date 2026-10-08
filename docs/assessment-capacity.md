@@ -1,8 +1,9 @@
 # PlaceAI assessment capacity and rollout
 
-Status: queue code is implemented; production queue is **disabled** until its
-private schema, persistent workers, database access and provider quota are verified.
-This document does not certify production capacity.
+Status: the durable queue is enabled for student report delivery. The persistent
+Render web process runs one conservative in-process worker, while Vercel only
+admits and reads durable jobs. This delivery configuration does not certify the
+separate 5,000-student target described below.
 
 ## Implemented
 
@@ -13,7 +14,7 @@ This document does not certify production capacity.
 - A process handles two exams at a time. Across processes, both concurrent jobs
   and job starts per minute are capped. These are **job** limits, not provider
   request limits: reserve quota for all grading requests within each exam.
-- Failed jobs back off for 15–300 seconds and stop after eight attempts. Restarting
+- Failed jobs back off for 15–300 seconds and stop after 24 attempts. Restarting
   or a browser retry does not erase attempts, replace answers or bypass admission.
 - All sections remain hidden until the final report is complete. Students poll
   read-only status with jitter and can return through exam history.
@@ -80,9 +81,9 @@ for Render compute alone. Do not enable this fleet without a spend approval.
 3. Configure the worker service described in `deploy/render-assessment-worker.yaml`.
    Match database and AI provider configuration with the web service. Do not copy
    secrets into source, job payloads, browser configuration or logs.
-4. Start worker with `ENABLE_ASSESSMENT_QUEUE=true`, global concurrency 4 and
-   starts/minute 12. Leave the web flag false until the worker is healthy.
-5. Enable the web queue flag, perform an isolated real complete assessment,
+4. For the paid validation fleet, start dedicated workers with global concurrency 4
+   and starts/minute 12, then disable the conservative in-process worker.
+5. Perform an isolated real complete assessment,
    verify all-section results and owner/reviewer access, then clean test data.
 6. Run staging bursts at 100, 500, 1,000 and 5,000 virtual students, including
    authenticated starts, question navigation, proctor calls, recording upload,
