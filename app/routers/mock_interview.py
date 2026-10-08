@@ -353,7 +353,7 @@ def mock_interview_history(
             "company_name": row.job.recruiter.company_name if row.job and row.job.recruiter else None,
             "overall_score": row.overall_score,
             "dimensions": evaluation.get("dimensions", {}) if row.overall_score is not None and isinstance(evaluation, dict) else {},
-            "overall_feedback": row.overall_feedback if row.overall_score is not None else "Your exam is saved. Analysis is pending.",
+            "overall_feedback": row.overall_feedback if row.overall_score is not None else "Your exam is saved. Your complete report is expected within 24 hours.",
             "created_at": row.created_at.isoformat() if row.created_at else None,
         })
     return result

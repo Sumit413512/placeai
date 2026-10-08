@@ -97,12 +97,14 @@ def test_new_full_assessment_persists_server_authoritative_post_hr_audio():
     assert all(item["answer_type"] == "audio" for item in spoken_audio)
     assert all(item["narration_enabled"] is True for item in spoken_audio)
     assert all(
-        item.get("response_mode") is None
+        item.get("response_mode") == "video"
         for item in persisted
         if item["section"] == "behavioral"
     )
     assert all(
         item["answer_type"] == "video"
+        and item["narration_enabled"] is True
+        and item["answer_time_seconds"] == answer_recording.hr_video.QUESTION_SECONDS
         for item in persisted
         if item["section"] == "behavioral"
     )

@@ -82,8 +82,8 @@ def test_mcq_interaction_and_expandable_navigator_contract():
     css = _text("app/static/mock-interview.css")
     js = _text("app/static/mock-interview.js")
 
-    assert "mock-interview.css?v=20260921-coding2" in html
-    assert "mock-interview.js?v=20260921-coding2" in html
+    assert "mock-interview.css?v=20261008-spoken-timer" in html
+    assert "mock-interview.js?v=20261008-spoken-timer" in html
     assert 'role="radiogroup"' in js
     assert 'role="radio"' in js
     assert "option-select-indicator" in js
@@ -126,7 +126,8 @@ def test_proctor_runtime_is_required_and_active_in_preview_and_production():
     assert 'id="proctor-warning-banner"' in html
     assert "ensureProctorModel" in js
     assert "runLocalProctorCheck" in js
-    assert "setInterval(runLocalProctorCheck,1500)" in js
+    assert "scheduleLocalProctorCheck(1800)" in js
+    assert "scheduleLocalProctorCheck(2500)" in js
     assert "item.class==='cell phone'" in js
     assert "candidate_not_visible" in js
     assert "multiple_people" in js
@@ -174,8 +175,8 @@ def test_executable_coding_workspace_is_mirrored_and_cache_busted():
     js = _text("app/static/mock-interview.js")
     css = _text("app/static/mock-interview.css")
 
-    assert "mock-interview.css?v=20260921-coding2" in html
-    assert "mock-interview.js?v=20260921-coding2" in html
+    assert "mock-interview.css?v=20261008-spoken-timer" in html
+    assert "mock-interview.js?v=20261008-spoken-timer" in html
     assert "code-workspace" in js
     assert "code-language" in js
     assert "run-code" in js
@@ -205,3 +206,35 @@ def test_coding_editor_has_line_numbers_and_real_tab_indentation():
     assert "this.setRangeText(indent,start,end,'end')" in js
     assert ".code-line-numbers" in css
     assert ".code-editor-frame" in css
+
+
+def test_pending_results_have_a_24_hour_status_and_verified_email_copy():
+    js = _text("app/static/mock-interview.js")
+    html = _text("app/templates/mock-interview.html")
+    assert "Your complete report is expected within 24 hours" in js
+    assert "View report status" in js
+    assert "verified registered email" in js
+    assert "report-email-status" in html
+
+
+def test_spoken_questions_show_live_microphone_state_and_per_question_timer():
+    js = _text("app/static/mock-interview.js")
+    css = _text("app/static/mock-interview.css")
+    assert "Microphone on · Listening" in js
+    assert "spoken-question-timer" in js
+    assert "clip?.deadline" in js
+    assert "getByteFrequencyData" in js
+    assert "spoken-frequency-bars" in js
+    assert ".spoken-listening-indicator.listening" in css
+    assert ".spoken-listening-indicator.voice-active" in css
+    assert "@keyframes micListening" in css
+
+
+def test_exam_start_keeps_ui_responsive_and_reduces_proctoring_work():
+    js = _text("app/static/mock-interview.js")
+    css = _text("app/static/mock-interview.css")
+    assert "state.proctorModel.detect(canvas,10,0.32)" in js
+    assert "scheduleLocalProctorCheck(1800)" in js
+    assert "requestIdleCallback(run,{timeout:900})" in js
+    assert "Starting assessment…" in js
+    assert ".button.is-loading" in css

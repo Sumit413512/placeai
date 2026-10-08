@@ -28,6 +28,7 @@ from app.placement_access import job_is_visible_to_student
 from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
 from app.student_entitlements import require_student_premium_access
 from app.trial_demo_access import enforce_trial_demo_start
+from app.assessment_report_email import deliver_completed_report, delivery_status, eligible_recipient
 
 router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])
 
@@ -394,12 +395,12 @@ def _apply_standard_assessment_response_contract(questions: list[dict[str, Any]]
             item["narration_enabled"] = False
         elif section == "behavioral":
             item["answer_type"] = "video"
+            item["response_mode"] = "video"
+            item["narration_enabled"] = True
+            item["answer_time_seconds"] = hr_video.QUESTION_SECONDS
             item["options"] = []
             item["correct_answer"] = ""
-            item.pop("response_mode", None)
             item.pop("expected_answer_size", None)
-            item.pop("answer_time_seconds", None)
-            item["narration_enabled"] = False
         elif section in AUDIO_ASSESSMENT_SECTIONS:
             answer_size = _spoken_answer_size(
                 section=section,
@@ -2486,7 +2487,7 @@ def _evaluate_saved_answers(db, current_user, profile, interview, job, issued, s
         ai_meta.get("provider"),
         ai_meta.get("model"),
     )
-    return {
+    response = {
         "interview_id": interview.id,
         "job_title": job.title,
         "institution_name": profile.institution.name if profile.institution else (profile.college or ""),
@@ -2494,6 +2495,13 @@ def _evaluate_saved_answers(db, current_user, profile, interview, job, issued, s
         "evaluation_mode": "hybrid_question_level",
         "evaluation_ms": evaluation_ms,
     }
+    # Delivery is best-effort and never withholds a completed in-app result. A failed
+    # provider attempt remains retryable when the student reopens the saved report.
+    response["report_email"] = {
+        "eligible": bool(eligible_recipient(db, current_user, job)),
+        "status": deliver_completed_report(db, interview, current_user, job, response),
+    }
+    return response
 
 
 @router.get("/{interview_id}/result")
@@ -2525,10 +2533,25 @@ def saved_interview_result(
         clips = db.query(AnswerRecording).filter_by(interview_id=interview_id).all()
         recorded = [clip for clip in clips if clip.sealed_at and clip.chunk_count]
         spoken_progress = {"recorded": len(recorded), "analyzed": sum(clip.status == "analyzed" for clip in recorded)}
+    job = db.query(Job).filter(Job.id == interview.job_id).first()
+    email_eligible = bool(job and eligible_recipient(db, current_user, job))
+    email_status = "not_eligible"
+    if complete and job and result:
+        email_status = deliver_completed_report(db, interview, current_user, job, result)
+    elif email_eligible:
+        email_status = delivery_status(db, interview.id)
+    if result is not None:
+        result["report_email"] = {"eligible": email_eligible, "status": email_status}
     return {"interview_id": interview.id,
             "status": "complete" if complete else "pending" if queued or recording and recording.submission_json else "awaiting_submission",
             "queued": bool(queued), "queue_status": queued.state if queued else None,
-            "retry_after_seconds": 10, "error_code": queued.error_code if queued else None,
+            "retry_after_seconds": 10, "expected_within_hours": 24 if not complete else None,
+            "status_message": (
+                "Your report is expected within 24 hours. You can leave this page and return from exam history."
+                if not complete else "Your complete report is ready."
+            ),
+            "error_code": queued.error_code if queued else None,
+            "report_email": {"eligible": email_eligible, "status": email_status},
             "spoken_progress": spoken_progress,
             "requires_recording_consent": bool(recording_policy.groq_selected() and recording
                                                 and not complete and not recording_policy.consented(db, interview)),
@@ -2553,7 +2576,17 @@ def retry_saved_interview(
                 raise HTTPException(409, "Submit this assessment before requesting analysis")
             body = MockInterviewEvaluationV2.model_validate_json(recording.submission_json)
             return JSONResponse(assessment_queue.enqueue(db, interview, current_user, body), status_code=202)
-        # Repeated retries cannot reset attempts or bypass the global admission budget.
+        if queued.state == "failed":
+            # A deliberate student retry may revive a terminal provider failure without
+            # changing the immutable submission. Admission limits still apply normally.
+            queued.state = "queued"
+            queued.attempts = 0
+            queued.available_at = utcnow()
+            queued.lease_until = None
+            queued.lease_token = None
+            queued.error_code = None
+            db.commit()
+        # Repeated retries cannot replace answers or bypass the global admission budget.
         return JSONResponse(assessment_queue.pending(queued), status_code=202)
     recording, _ = hr_video.owned_recording(db, current_user, interview_id)
     if not recording.submission_json:

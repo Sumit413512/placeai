@@ -10,7 +10,7 @@ from test_hr_video import body, exam  # noqa: F401 - shared isolated exam fixtur
 
 
 @pytest.fixture
-def queued(exam):
+def queued(exam):  # noqa: F811
     AssessmentJob.__table__.create(exam.engine)
     AssessmentQueueControl.__table__.create(exam.engine)
     exam.db.add(AssessmentQueueControl(id=1, window_started_at=utcnow(), starts_in_window=0))
@@ -179,3 +179,24 @@ def test_capacity_rejection_defers_saved_exam_without_rapid_retries(queued):
     assert queue.claim(queued.db, 1, 100) is None
     assert job.payload_json and queued.interview.answers_json
     assert queued.interview.overall_score is None
+
+
+def test_student_retry_revives_terminal_job_without_changing_answers(queued, monkeypatch):
+    monkeypatch.setattr(exams.get_settings(), "assessment_queue_enabled", True)
+    original = body(queued, "Immutable submitted answer")
+    queue.enqueue(queued.db, queued.interview, queued.user, original)
+    job = queued.db.get(AssessmentJob, queued.interview.id)
+    job.state = "failed"
+    job.attempts = queue.MAX_ATTEMPTS
+    job.error_code = "ANALYSIS_RETRY_LIMIT"
+    queued.db.commit()
+
+    response = exams.retry_saved_interview(queued.interview.id, queued.user, queued.db)
+
+    assert response.status_code == 202
+    queued.db.refresh(job)
+    assert job.state == "queued"
+    assert job.attempts == 0
+    assert job.error_code is None
+    assert "Immutable submitted answer" in job.payload_json
+    assert "Immutable submitted answer" in queued.interview.answers_json

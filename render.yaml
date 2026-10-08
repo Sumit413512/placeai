@@ -22,6 +22,14 @@ services:
         value: "false"
       - key: DEV_SHOW_RESET_TOKEN
         value: "false"
+      - key: ENABLE_ASSESSMENT_QUEUE
+        value: "true"
+      - key: ASSESSMENT_WORKER_IN_PROCESS
+        value: "true"
+      - key: ASSESSMENT_QUEUE_CONCURRENCY
+        value: "1"
+      - key: ASSESSMENT_QUEUE_STARTS_PER_MINUTE
+        value: "6"
       - key: PUBLIC_APP_URL
         value: https://www.placeai.in
       - key: ALLOWED_ORIGINS

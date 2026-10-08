@@ -474,6 +474,13 @@ def health_check():
         "database": database,
         "configuration": "ok",
         "transactional_email": "ok" if transactional_email_configured(settings) else "not_configured",
+        "assessment_queue": "enabled" if settings.assessment_queue_enabled else "disabled",
+        "assessment_worker": (
+            "in_process" if settings.assessment_queue_enabled and settings.assessment_worker_in_process
+            and os.getenv("RENDER") and not settings.running_on_vercel
+            else "external_or_not_applicable" if settings.assessment_queue_enabled
+            else "disabled"
+        ),
     }
     if release_sha:
         payload["release_sha"] = release_sha

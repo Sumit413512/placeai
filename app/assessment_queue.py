@@ -17,6 +17,7 @@ LEASE_SECONDS = 180
 def pending(job):
     return {"interview_id": job.interview_id, "analysis_status": "pending",
             "queued": True, "queue_status": job.state, "retry_after_seconds": 10,
+            "expected_within_hours": 24,
             "status_url": f"/mock-interview/{job.interview_id}/result"}
 
 

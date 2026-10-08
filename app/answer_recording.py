@@ -76,14 +76,44 @@ def materialize_post_hr_modes(questions):
     return changed
 
 
+def materialize_new_hr_video_modes(questions):
+    """Give every HR question in a new standardized assessment its own video clip.
+
+    This helper is used only while inserting a new interview. Stored assessments
+    without explicit video modes retain the legacy continuous recording contract.
+    """
+    if not is_full_assessment_questions(questions):
+        return False
+    changed = False
+    for question in questions:
+        if not isinstance(question, dict):
+            continue
+        section = str(question.get("section", "")).strip().lower()
+        answer_type = str(question.get("answer_type", "text")).strip().lower()
+        if section != "behavioral" or answer_type != "video":
+            continue
+        required = {
+            "response_mode": "video",
+            "narration_enabled": True,
+            "answer_time_seconds": hr_video.QUESTION_SECONDS,
+        }
+        for key, value in required.items():
+            if question.get(key) != value:
+                question[key] = value
+                changed = True
+    return changed
+
+
 @event.listens_for(MockInterview, "before_insert")
 def _persist_full_assessment_spoken_policy(_mapper, _connection, target):
-    """Store mandatory assessment-audio metadata before a new assessment reaches the DB."""
+    """Store mandatory question-scoped recording metadata on new assessments."""
     try:
         questions = json.loads(target.questions_json or "[]")
     except (TypeError, ValueError):
         return
-    if materialize_post_hr_modes(questions):
+    audio_changed = materialize_post_hr_modes(questions)
+    video_changed = materialize_new_hr_video_modes(questions)
+    if audio_changed or video_changed:
         target.questions_json = json.dumps(questions)
 
 

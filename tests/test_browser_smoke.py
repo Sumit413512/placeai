@@ -70,7 +70,8 @@ def local_server(tmp_path_factory):
 def browser(local_server):
     del local_server
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        executable = os.getenv("PLAYWRIGHT_CHROMIUM_EXECUTABLE", "").strip()
+        browser = playwright.chromium.launch(headless=True, **({"executable_path": executable} if executable else {}))
         try:
             yield browser
         finally:
