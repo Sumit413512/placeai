@@ -26,7 +26,6 @@ def _is_vercel_platform_url(value: str | None) -> bool:
     raw = (value or "").strip()
     if not raw:
         return False
-    # urlparse treats a schemeless hostname as a path, so normalize it first.
     candidate = raw if "://" in raw else f"https://{raw.lstrip('/')}"
     try:
         host = (urlparse(candidate).hostname or "").lower().rstrip(".")
@@ -36,12 +35,7 @@ def _is_vercel_platform_url(value: str | None) -> bool:
 
 
 def _bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
-    """Parse an integer environment variable without allowing bootstrap crashes.
-
-    Vercel environment variables are user-controlled strings. A stale placeholder such as
-    ``ACCESS_TOKEN_MINUTES=replace-me`` must not terminate the Python worker before FastAPI
-    can expose readiness. Invalid/out-of-range values fall back to conservative defaults.
-    """
+    """Parse an integer environment variable without allowing bootstrap crashes."""
     raw = os.getenv(name)
     if raw is None or not raw.strip():
         return default
@@ -113,10 +107,6 @@ class Settings:
         default_backend_url = vercel_default_url or "http://localhost:8000"
         self.backend_base_url = os.getenv("BASE_URL", default_backend_url).rstrip("/")
 
-        # External links sent to users must point at the stable public application.
-        # PlaceAI's production canonical domain is provider-independent. A Vercel
-        # platform hostname is a deployment origin, never a public canonical URL,
-        # even if runtime provider flags are absent or stale.
         default_public_app_url = "https://www.placeai.in" if self.is_production else self.backend_base_url
         canonical_public_url = _first_env("PLACEAI_CANONICAL_PUBLIC_URL").rstrip("/")
         legacy_public_url = _first_env("PUBLIC_APP_URL", "PASSWORD_RESET_BASE_URL").rstrip("/")
@@ -140,6 +130,16 @@ class Settings:
         self.public_recruiter_signup = os.getenv("PUBLIC_RECRUITER_SIGNUP", "false").lower() == "true"
         self.allow_talent_pool_search = os.getenv("ALLOW_TALENT_POOL_SEARCH", "false").lower() == "true"
         self.google_client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+
+        # Payments stay fail-closed until merchant onboarding is complete and this flag is explicitly enabled.
+        self.payment_provider = os.getenv("PAYMENT_PROVIDER", "cashfree").strip().lower() or "cashfree"
+        self.payment_checkout_enabled = os.getenv("PAYMENT_CHECKOUT_ENABLED", "false").lower() == "true"
+        self.cashfree_app_id = _first_env("CASHFREE_APP_ID", "CASHFREE_CLIENT_ID")
+        self.cashfree_secret_key = _first_env("CASHFREE_SECRET_KEY", "CASHFREE_CLIENT_SECRET")
+        self.cashfree_environment = os.getenv("CASHFREE_ENVIRONMENT", "sandbox").strip().lower() or "sandbox"
+        self.cashfree_api_version = os.getenv("CASHFREE_API_VERSION", "2025-01-01").strip() or "2025-01-01"
+        self.cashfree_timeout_seconds = _bounded_env_int("CASHFREE_TIMEOUT_SECONDS", 15, 5, 60)
+
         self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
         self.openai_backup_api_key = os.getenv("OPENAI_BACKUP_API_KEY", "")
         self.openai_model = os.getenv("OPENAI_MODEL", "gpt-5.6-terra").strip() or "gpt-5.6-terra"
@@ -180,12 +180,33 @@ class Settings:
     def uses_database_file_storage(self) -> bool:
         return self.running_on_vercel or self.is_production
 
+    @property
+    def cashfree_checkout_ready(self) -> bool:
+        return (
+            self.payment_provider == "cashfree"
+            and self.payment_checkout_enabled
+            and bool(self.cashfree_app_id)
+            and bool(self.cashfree_secret_key)
+            and self.cashfree_environment in {"sandbox", "production"}
+            and (not self.is_production or self.cashfree_environment == "production")
+        )
+
     def configuration_issues(self) -> list[tuple[str, str]]:
         """Return safe error codes plus owner-facing messages without secret values."""
         issues: list[tuple[str, str]] = []
         if self.environment not in {"development", "test", "production"}:
             issues.append(("ENVIRONMENT_INVALID", "ENVIRONMENT must be development, test, or production."))
             return issues
+
+        if self.payment_checkout_enabled:
+            if self.payment_provider != "cashfree":
+                issues.append(("PAYMENT_PROVIDER_INVALID", "PAYMENT_PROVIDER must be cashfree when checkout is enabled."))
+            if not self.cashfree_app_id or not self.cashfree_secret_key:
+                issues.append(("CASHFREE_CREDENTIALS_MISSING", "Cashfree credentials are required when checkout is enabled."))
+            if self.cashfree_environment not in {"sandbox", "production"}:
+                issues.append(("CASHFREE_ENVIRONMENT_INVALID", "CASHFREE_ENVIRONMENT must be sandbox or production."))
+            if self.is_production and self.cashfree_environment != "production":
+                issues.append(("CASHFREE_SANDBOX_NOT_ALLOWED", "Production checkout cannot use Cashfree sandbox credentials."))
 
         if self.is_production:
             weak = {
