@@ -16,11 +16,21 @@ VISION_MODEL = "qwen/qwen3.8-27b"
 AUDIO_MODEL = "whisper-large-v3"
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
+LOCAL_ERROR_STATUS = {
+    "FREE_PROVIDER_NOT_CONFIGURED": 503,
+    "FREE_PROVIDER_NETWORK": 503,
+    "FREE_PROVIDER_RESPONSE_TOO_LARGE": 502,
+    "FREE_PROVIDER_INVALID_RESPONSE": 502,
+    "FREE_PROVIDER_INCOMPLETE_RESPONSE": 504,
+    "FREE_PROVIDER_INVALID_TRANSCRIPT": 500,
+    "FREE_PROVIDER_INPUT_LIMIT": 422,
+}
+
 
 class ProviderError(RuntimeError):
     def __init__(self, reason: str, code: int | None = None):
         super().__init__(reason)
-        self.code = code
+        self.code = code if code is not None else LOCAL_ERROR_STATUS.get(reason)
 
 
 def configured():
