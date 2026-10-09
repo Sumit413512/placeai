@@ -703,6 +703,9 @@
 
   function cancelQuestionReading() {
     state.narrationGeneration=(state.narrationGeneration || 0)+1;
+    state.narrationCancel?.();
+    state.narrationCancel=null;
+    state.narrationUtterance=null;
     if(window.speechSynthesis)speechSynthesis.cancel();
   }
 
@@ -713,6 +716,10 @@
     const examples=(spec.sample_tests || []).map((sample,i)=>'Example '+(i+1)+'. Input. '+sample.input+'. Expected output. '+sample.output).join(' ');
     const text='Reading question. '+q.question+(q.options?.length?' Options. '+q.options.map((v,i)=>'Option '+(i+1)+'. '+v).join(' '):'')+' '+(spec.constraints || []).join('. ')+' '+examples+'. '+(record?'Record your answer.':'You may answer now.');
     if(!window.speechSynthesis)throw new Error('Question reading is unavailable in this browser. Read the displayed question, then select Start answer.');
+    // Let cancellation finish before queuing another utterance. Chrome can
+    // otherwise discard speech queued in the same task as cancel().
+    await new Promise(resolve=>setTimeout(resolve,100));
+    speechSynthesis.resume?.();
     // Short utterances avoid browser truncation of long questions. Every
     // character is included, and the microphone recorder starts only on end.
     for(let pos=0;pos<text.length;){
@@ -720,13 +727,35 @@
       let end=Math.min(text.length,pos+180);
       if(end<text.length){const space=text.lastIndexOf(' ',end);if(space>pos)end=space+1;}
       const chunk=text.slice(pos,end);pos=end;
-      await new Promise((resolve,reject)=>{
+      for(let attempt=0;attempt<2;attempt++){
+      if(state.narrationGeneration!==generation || !state.assessmentActive)return;
+      try { await new Promise((resolve,reject)=>{
         const utterance=new SpeechSynthesisUtterance(chunk);utterance.lang='en-IN';utterance.rate=0.95;
-        const timer=setTimeout(()=>{if(state.narrationGeneration!==generation){resolve();return;}speechSynthesis.cancel();reject(new Error('Question reading was interrupted. Read the displayed question, then select Start answer.'));},60000);
-        utterance.onend=()=>{clearTimeout(timer);resolve();};
-        utterance.onerror=()=>{clearTimeout(timer);if(state.narrationGeneration!==generation){resolve();return;}reject(new Error('Question reading was interrupted. Read the displayed question, then select Start answer.'));};
-        speechSynthesis.speak(utterance);
-      });
+        state.narrationUtterance=utterance;
+        let settled=false,startTimer=null,timer=null;
+        const finish=(error)=>{
+          if(settled)return;settled=true;clearTimeout(startTimer);clearTimeout(timer);
+          utterance.onend=null;utterance.onerror=null;utterance.onstart=null;
+          if(state.narrationUtterance===utterance){state.narrationUtterance=null;state.narrationCancel=null;}
+          if(error)reject(error);else resolve();
+        };
+        state.narrationCancel=()=>finish();
+        timer=setTimeout(()=>finish(new Error('Question reading was interrupted. Select Read question again to retry.')),60000);
+        startTimer=setTimeout(()=>finish(new Error('Question reading did not start. Select Read question again to retry.')),2500);
+        utterance.onstart=()=>clearTimeout(startTimer);
+        utterance.onend=()=>finish();
+        utterance.onerror=()=>finish(state.narrationGeneration!==generation?null:new Error('Question reading was interrupted. Select Read question again to retry.'));
+        speechSynthesis.resume?.();
+        try{speechSynthesis.speak(utterance);}catch(error){finish(error);}
+      }); break;
+      } catch(error){
+        if(state.narrationGeneration!==generation || !state.assessmentActive)return;
+        speechSynthesis.cancel();
+        if(attempt===1)throw error;
+        await new Promise(resolve=>setTimeout(resolve,150));
+      }
+      }
+      await new Promise(resolve=>setTimeout(resolve,0));
     }
     if(record && state.narrationGeneration===generation && state.assessmentActive)await beginQuestionAnswer(q);
   }
@@ -895,11 +924,23 @@
     $('#answer-area').innerHTML='<div class="answer-field"><strong>'+(q.response_mode==='video'?'HR camera and voice answer':'Spoken answer')+'</strong><p>Listen to the question, then answer aloud. This question has its own private recording with up to '+answerWindow+' of answer time.</p>'+spokenIndicatorMarkup(answerSeconds,q.response_mode==='video')+'<p id="spoken-answer-status" role="status">Reading question…</p><button id="start-spoken-answer" type="button" class="button secondary hidden">Start answer</button>'+(q.response_mode==='video'?'<video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video>':'')+'</div>';
     const preview=$('#hr-answer-preview');if(preview){preview.srcObject=state.mediaStream;preview.play().catch(()=>{});}
     $('#start-spoken-answer').onclick=()=>beginQuestionAnswer(q);
-    $('#save-question').disabled=true;$('#next-question').disabled=true;
-    readQuestionBeforeAnswer(q,true).catch(error=>{
+    const readAgain=document.createElement('button');
+    readAgain.id='retry-question-reading';readAgain.type='button';readAgain.className='button secondary hidden';
+    readAgain.textContent='Read question again';
+    $('#start-spoken-answer').after(readAgain);
+    const narrationFailed=error=>{
       if(state.questions[state.current]?.question_id!==q.question_id || !state.assessmentActive)return;
-      $('#spoken-answer-status').textContent=error.message;$('#start-spoken-answer').classList.remove('hidden');updateSpokenIndicator();
-    });
+      $('#spoken-answer-status').textContent=error.message;
+      $('#start-spoken-answer').classList.remove('hidden');readAgain.classList.remove('hidden');updateSpokenIndicator();
+    };
+    readAgain.onclick=()=>{
+      if(state.answerClip || state.answerStarting)return;
+      readAgain.classList.add('hidden');$('#start-spoken-answer').classList.add('hidden');
+      $('#spoken-answer-status').textContent='Reading question…';
+      readQuestionBeforeAnswer(q,true).catch(narrationFailed);
+    };
+    $('#save-question').disabled=true;$('#next-question').disabled=true;
+    readQuestionBeforeAnswer(q,true).catch(narrationFailed);
   }
 
   function speakHRQuestion() {

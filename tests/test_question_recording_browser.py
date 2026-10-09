@@ -40,7 +40,11 @@ def test_question_reading_precedes_separate_audio_and_video_and_capacity_stops_r
     page.evaluate("""() => {
       window.readings=[];
       window.SpeechSynthesisUtterance=class {constructor(text){this.text=text;}};
-      Object.defineProperty(window,'speechSynthesis',{value:{cancel(){},speak(u){readings.push(u.text);setTimeout(()=>u.onend(),5);}}});
+      window.speechResumes=0;window.stalledSecondQuestion=false;
+      Object.defineProperty(window,'speechSynthesis',{value:{cancel(){},resume(){speechResumes++;},speak(u){
+        if(u.text.includes('Describe a time')&&!stalledSecondQuestion){stalledSecondQuestion=true;return;}
+        readings.push(u.text);setTimeout(()=>u.onend?.(),5);
+      }}});
       const canvas=document.createElement('canvas');canvas.width=160;canvas.height=120;
       const context=canvas.getContext('2d');let frame=0;
       window.paint=setInterval(()=>{context.fillStyle=frame++%2?'blue':'green';context.fillRect(0,0,160,120);},30);
@@ -72,6 +76,7 @@ def test_question_reading_precedes_separate_audio_and_video_and_capacity_stops_r
     page.locator("#next-question").click()
     page.wait_for_function("() => questionTest.state.answerClip?.questionId===2 && questionTest.state.answerClip.recorder.state==='recording'")
     assert page.evaluate("readings.join('').includes(questionTest.state.questions[1].question)")
+    assert page.evaluate("stalledSecondQuestion && speechResumes > 1")
     assert page.evaluate("questionTest.state.answerClip.recorder !== firstRecorder")
     assert page.evaluate("questionTest.state.answerClip.recorder.stream.getVideoTracks().length") == 1
     assert page.locator("#spoken-question-timer").inner_text() in {"01:30", "01:29"}
