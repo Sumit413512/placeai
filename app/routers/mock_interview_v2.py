@@ -2528,6 +2528,7 @@ def saved_interview_result(
             raise HTTPException(503, {"code": "SAVED_REPORT_UNAVAILABLE", "message": "Your saved report needs support to recover. Please contact your institution with the assessment reference."})
         result = {**evaluation, "interview_id": interview.id, "analysis_status": "complete"}
     complete = result is not None
+    stopped = bool(queued and queued.state == "failed" and not complete)
     spoken_progress = None
     if any(q.get("response_mode") for q in json.loads(interview.questions_json)):
         clips = db.query(AnswerRecording).filter_by(interview_id=interview_id).all()
@@ -2545,9 +2546,10 @@ def saved_interview_result(
     return {"interview_id": interview.id,
             "status": "complete" if complete else "pending" if queued or recording and recording.submission_json else "awaiting_submission",
             "queued": bool(queued), "queue_status": queued.state if queued else None,
-            "retry_after_seconds": 10, "expected_within_hours": 24 if not complete else None,
+            "retry_after_seconds": None if stopped else 10, "expected_within_hours": 24 if not complete and not stopped else None,
             "status_message": (
-                "Your report is expected within 24 hours. You can leave this page and return from exam history."
+                "Your answers are saved, but analysis stopped after repeated failures. Retry analysis or contact your institution with the assessment reference."
+                if stopped else "Your report is expected within 24 hours. You can leave this page and return from exam history."
                 if not complete else "Your complete report is ready."
             ),
             "error_code": queued.error_code if queued else None,

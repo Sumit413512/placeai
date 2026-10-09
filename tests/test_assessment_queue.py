@@ -200,3 +200,18 @@ def test_student_retry_revives_terminal_job_without_changing_answers(queued, mon
     assert job.error_code is None
     assert "Immutable submitted answer" in job.payload_json
     assert "Immutable submitted answer" in queued.interview.answers_json
+
+
+def test_failed_report_does_not_promise_automatic_completion(queued, monkeypatch):
+    monkeypatch.setattr(exams.get_settings(), "assessment_queue_enabled", True)
+    queue.enqueue(queued.db, queued.interview, queued.user, body(queued))
+    job = queued.db.get(AssessmentJob, queued.interview.id)
+    job.state = "failed"
+    job.error_code = "ANALYSIS_RETRY_LIMIT"
+    queued.db.commit()
+    result = exams.saved_interview_result(queued.interview.id, queued.user, queued.db)
+    assert result["queue_status"] == "failed"
+    assert result["expected_within_hours"] is None
+    assert result["retry_after_seconds"] is None
+    assert "analysis stopped" in result["status_message"]
+    assert result["result"] is None

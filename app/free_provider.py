@@ -6,6 +6,7 @@ Account retention settings and free-tier status must be verified before rollout.
 from __future__ import annotations
 
 import json
+import logging
 import os
 
 import httpx
@@ -15,6 +16,13 @@ TEXT_MODEL = "openai/gpt-oss-120b"
 VISION_MODEL = "qwen/qwen3.8-27b"
 AUDIO_MODEL = "whisper-large-v3"
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+LOGGER = logging.getLogger(__name__)
+
+
+def _invalid_transcript(reason):
+    # Log a fixed diagnostic category, never the transcript or provider payload.
+    LOGGER.warning("Transcription validation failed reason=%s", reason)
+    raise ProviderError("FREE_PROVIDER_INVALID_TRANSCRIPT")
 
 LOCAL_ERROR_STATUS = {
     "FREE_PROVIDER_NOT_CONFIGURED": 503,
@@ -108,22 +116,22 @@ def transcribe(data: bytes, mime_type: str):
     if (not isinstance(response.get("text"), str) or len(response["text"]) > 60000
             or not isinstance(duration, (int, float)) or not 0 < duration <= 610
             or not isinstance(segments, list) or len(segments) > 1000):
-        raise ProviderError("FREE_PROVIDER_INVALID_TRANSCRIPT")
+        _invalid_transcript("response_shape")
     previous = 0
     for segment in segments:
         if (not isinstance(segment, dict) or not isinstance(segment.get("text"), str)
                 or not isinstance(segment.get("start"), (int, float))
                 or not isinstance(segment.get("end"), (int, float))
                 or not previous <= segment["start"] <= segment["end"] <= duration):
-            raise ProviderError("FREE_PROVIDER_INVALID_TRANSCRIPT")
+            _invalid_transcript("segment_shape_or_bounds")
         previous = segment["start"]
     words = response.get("words", [])
     if not isinstance(words, list) or len(words) > 10000 or (response["text"].strip() and not words):
-        raise ProviderError("FREE_PROVIDER_INVALID_TRANSCRIPT")
+        _invalid_transcript("missing_word_timestamps")
     for word in words:
         if (not isinstance(word, dict) or not isinstance(word.get("word"), str)
                 or not isinstance(word.get("start"), (int, float))
                 or not isinstance(word.get("end"), (int, float))
                 or not 0 <= word["start"] <= word["end"] <= duration):
-            raise ProviderError("FREE_PROVIDER_INVALID_TRANSCRIPT")
+            _invalid_transcript("word_shape_or_bounds")
     return response
