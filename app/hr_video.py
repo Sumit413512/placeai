@@ -413,7 +413,9 @@ def analyze_recording(db, row, interview, *, chunk_model=HRVideoChunk, questions
             code = "VIDEO_PROVIDER_ACCESS"
         elif safe_status == 404:
             code = "VIDEO_PROVIDER_MODEL"
-        LOGGER.warning("HR analysis pending code=%s error_type=%s upstream_status=%s", code, type(exc).__name__, safe_status)
+        from app.free_provider import ProviderError, LOCAL_ERROR_STATUS
+        provider_reason = str(exc) if isinstance(exc, ProviderError) and str(exc) in LOCAL_ERROR_STATUS else "upstream_or_other"
+        LOGGER.warning("HR analysis pending code=%s error_type=%s upstream_status=%s reason=%s", code, type(exc).__name__, safe_status, provider_reason)
         message = "Your exam is saved. Video analysis could not finish yet. Retry later to receive all section results together."
         if code == "VIDEO_PROVIDER_CAPACITY":
             message = "Your exam and recording are saved. Analysis capacity is currently unavailable. Your complete report will remain pending until capacity is restored; repeated retries will not speed it up."
