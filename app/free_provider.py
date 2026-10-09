@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 
 import httpx
@@ -121,10 +122,18 @@ def transcribe(data: bytes, mime_type: str):
     for segment in segments:
         if (not isinstance(segment, dict) or not isinstance(segment.get("text"), str)
                 or not isinstance(segment.get("start"), (int, float))
-                or not isinstance(segment.get("end"), (int, float))
-                or not previous <= segment["start"] <= segment["end"] <= duration):
+            or not isinstance(segment.get("end"), (int, float))
+                or not math.isfinite(segment["start"]) or not math.isfinite(segment["end"])
+                or not previous <= segment["start"] <= segment["end"]):
             _invalid_transcript("segment_shape_or_bounds")
         previous = segment["start"]
+    # Whisper segment windows can extend beyond the media duration. Segments
+    # describe confidence metadata; word timestamps remain the scoring evidence
+    # and are independently checked against duration below.
+    response["segments"] = [
+        {**segment, "end": min(segment["end"], duration)}
+        for segment in segments if segment["start"] < duration
+    ]
     words = response.get("words", [])
     if not isinstance(words, list) or len(words) > 10000 or (response["text"].strip() and not words):
         _invalid_transcript("missing_word_timestamps")
