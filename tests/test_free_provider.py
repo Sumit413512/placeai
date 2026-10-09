@@ -91,6 +91,10 @@ def test_timed_transcription_accepts_only_valid_segments(pilot):
     transcription["segments"][0]["end"] = 20
     assert free_provider.transcribe(b"synthetic", "audio/webm")["segments"][0]["end"] == 10
     transcription["words"][0]["end"] = 20
+    filtered = free_provider.transcribe(b"synthetic", "audio/webm")
+    assert filtered["text"] == "answer"
+    assert len(filtered["words"]) == 1
+    transcription["words"][0]["end"] = -1
     with pytest.raises(free_provider.ProviderError, match="INVALID_TRANSCRIPT"):
         free_provider.transcribe(b"synthetic", "audio/webm")
 

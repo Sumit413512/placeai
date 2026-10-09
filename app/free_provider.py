@@ -141,6 +141,11 @@ def transcribe(data: bytes, mime_type: str):
         if (not isinstance(word, dict) or not isinstance(word.get("word"), str)
                 or not isinstance(word.get("start"), (int, float))
                 or not isinstance(word.get("end"), (int, float))
-                or not 0 <= word["start"] <= word["end"] <= duration):
+                or not math.isfinite(word["start"]) or not math.isfinite(word["end"])
+                or not word["start"] <= word["end"]):
             _invalid_transcript("word_shape_or_bounds")
+    # Never credit padded or hallucinated words beyond the recording. Keep
+    # valid evidence instead of rejecting an otherwise usable transcription.
+    response["words"] = [word for word in words if 0 <= word["start"] <= word["end"] <= duration]
+    response["text"] = " ".join(word["word"].strip() for word in response["words"]).strip()
     return response
