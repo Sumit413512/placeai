@@ -301,11 +301,11 @@
     return lines;
   }
 
-  function drawTextCanvas(canvas, text, watermark, {fontSize=34,padding=54,lineHeight=48,minHeight=250}={}) {
+  function drawTextCanvas(canvas, text, watermark, {fontSize=36,padding=54,lineHeight=48,minHeight=250}={}) {
     if (!canvas) return;
     const width = Math.max(700, canvas.parentElement?.clientWidth ? canvas.parentElement.clientWidth * 2 : 1200);
     const ctx = canvas.getContext('2d');
-    ctx.font = `600 ${fontSize}px "DM Sans", Arial, sans-serif`;
+    ctx.font = `400 ${fontSize}px Calibri, Carlito, "Segoe UI", Arial, sans-serif`;
     const lines = wrapText(ctx,text,width-padding*2);
     const height = Math.max(minHeight*2,padding*2 + lines.length*lineHeight + 90);
     canvas.width = width;
@@ -317,7 +317,7 @@
     const mark = `${watermark} · PLACEAI SECURE`;
     for(let x=0;x<width*1.2;x+=420) ctx.fillText(mark,x,0);
     ctx.restore();
-    ctx.fillStyle='#17263d'; ctx.font=`600 ${fontSize}px "DM Sans", Arial, sans-serif`;
+    ctx.fillStyle='#17263d'; ctx.font=`400 ${fontSize}px Calibri, Carlito, "Segoe UI", Arial, sans-serif`;
     let y=padding+fontSize;
     lines.forEach(line=>{ctx.fillText(line,padding,y);y+=lineHeight;});
     ctx.font='700 18px "DM Sans", Arial, sans-serif'; ctx.fillStyle='#718096';
@@ -328,12 +328,12 @@
     if (!canvas) return;
     const width = Math.max(620, canvas.parentElement?.clientWidth ? (canvas.parentElement.clientWidth - 70) * 2 : 900);
     const ctx = canvas.getContext('2d');
-    ctx.font='500 25px "DM Sans", Arial, sans-serif';
+    ctx.font='400 28px Calibri, Carlito, "Segoe UI", Arial, sans-serif';
     const lines=wrapText(ctx,text,width-40);
     const height=Math.max(90,lines.length*34+30);
     canvas.width=width;canvas.height=height;
     ctx.clearRect(0,0,width,height);
-    ctx.fillStyle='#27364c';ctx.font='500 25px "DM Sans", Arial, sans-serif';
+    ctx.fillStyle='#27364c';ctx.font='400 28px Calibri, Carlito, "Segoe UI", Arial, sans-serif';
     let y=31;lines.forEach(line=>{ctx.fillText(line,12,y);y+=34;});
     ctx.font='700 12px "DM Sans", Arial, sans-serif';ctx.fillStyle='rgba(40,91,160,.13)';
     ctx.fillText(watermark,width-ctx.measureText(watermark).width-10,height-10);

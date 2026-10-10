@@ -45,8 +45,8 @@
   --shadow: 0 2px 8px rgb(39 35 48 / 6%) !important;
   --radius: 6px !important;
   --radius-sm: 5px !important;
-  --font-body: "Segoe UI", Arial, sans-serif !important;
-  --font-display: "Segoe UI", Arial, sans-serif !important;
+  --font-body: Calibri, Carlito, "Segoe UI", Arial, sans-serif !important;
+  --font-display: Calibri, Carlito, "Segoe UI", Arial, sans-serif !important;
   --bg: var(--pa-canvas) !important;
   --brand: var(--pa-accent) !important;
   --brand-2: var(--pa-accent-hover) !important;
@@ -263,3 +263,87 @@ input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color:
   color: var(--pa-surface) !important;
 }
 /* Keep success, warning, error, integrity and microphone activity colours semantic. */
+
+/* Readable typography: hierarchy comes from scale, spacing and colour, not bold. */
+body { font-size: 17px !important; }
+body :is(h1, h2, h3, h4, h5, p, a, button, input, textarea, select, label,
+  strong, b, span, small, th, td, li, em) {
+  font-family: var(--font-body) !important;
+  font-weight: 400 !important;
+}
+body :is(pre, code, kbd), body :is(pre, code, kbd) * {
+  font-family: Consolas, "Courier New", monospace !important;
+}
+#marketing-site .hero h1 {
+  font-family: var(--font-body) !important;
+  font-weight: 400 !important;
+  font-size: clamp(44px, 5.5vw, 74px) !important;
+  line-height: 1.12 !important;
+  letter-spacing: -.025em !important;
+}
+#marketing-site :is(.section-heading h2, .dark-section h2, .security-card h2,
+  .prep-lab-intro h2, .cta-inner h2) {
+  font-size: clamp(34px, 4.3vw, 58px) !important;
+  line-height: 1.16 !important;
+  letter-spacing: -.018em !important;
+}
+#marketing-site :is(.hero-lead, .section-heading p, .prep-lab-intro p,
+  .security-card p, .dark-section p) { font-size: 18px !important; line-height: 1.65 !important; }
+#marketing-site :is(.bento-card h3, .prep-role-card h3, .production-surface-card h3) {
+  font-size: 25px !important; line-height: 1.3 !important;
+}
+#marketing-site :is(.bento-card p, .prep-role-card p, .production-surface-card p,
+  .prep-feature-list li, .production-surface-grid span) { font-size: 16px !important; }
+.app-shell .page-head h1, .page-head h1 { font-size: 30px !important; font-weight: 400 !important; }
+.app-shell :is(.panel-head h2, .data-toolbar h2, .form-panel h2) { font-size: 21px !important; }
+.app-shell :is(.page-head p, .panel-head p, .data-table td, .table-primary,
+  .form-stack label, .field-label, .table-secondary) { font-size: 15px !important; }
+body .app-shell .app-nav button { font-size: 14px !important; }
+body :is(.nav-label, .check-label) { font-weight: 400 !important; }
+.app-sidebar { --pa-muted: #59525f; }
+.app-sidebar :is(.nav-group-label, small, .account-security-button span) { opacity: 1 !important; }
+.app-sidebar :is(.nav-group-label, .workspace-pill small, .account-security-button span) {
+  font-size: 11px !important; letter-spacing: .06em !important;
+}
+.app-shell .metric-card small, .app-shell .metric-card span { font-size: 13px !important; }
+.app-shell .metric-card strong { font-size: 32px !important; font-weight: 400 !important; }
+.button, .app-shell .button, .privacy-actions button { font-size: 16px !important; }
+.row-button, .app-shell .row-button { font-size: 14px !important; }
+.auth-form-panel :is(input, select, textarea, label, .button) { font-size: 16px !important; }
+.auth-form-panel h2, #auth-overlay .auth-form-panel h2 { font-size: 30px !important; }
+.auth-brand-panel h2 { font-size: 34px !important; }
+.access-role-card strong { font-size: 15px !important; }
+.access-selection-summary :is(b, strong) { font-size: 15px !important; }
+.legal-card :is(p, li), .legal-hero p { font-size: 17px !important; }
+.panel-head h2, .result-head h2 { font-weight: 400 !important; }
+.spoken-question-clock time { font-family: var(--font-body) !important; font-weight: 400 !important; }
+.learning-journey { padding: 12px 0 65px; }
+.journey-heading { margin-bottom: 25px; }
+.journey-heading h2 { font-size: 36px; font-weight: 400; line-height: 1.2; margin: 10px 0 0; }
+.journey-grid { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; padding: 0; margin: 0; }
+.journey-card { position: relative; padding: 25px; background: var(--pa-surface); border: 1px solid var(--pa-border); border-radius: 6px; }
+.journey-card::before { content: ""; position: absolute; inset: -1px 24px auto; height: 3px; background: var(--pa-accent); animation: placeaiJourneyHighlight 6s ease-in-out infinite; }
+.journey-card:nth-child(2)::before { animation-delay: -4s; }
+.journey-card:nth-child(3)::before { animation-delay: -2s; }
+.journey-index { color: var(--pa-accent); font-size: 14px; }
+.journey-card h3 { font-size: 28px; line-height: 1.2; margin: 12px 0; }
+.journey-card p { font-size: 17px; line-height: 1.6; margin: 0 0 22px; }
+.journey-card a { color: var(--pa-accent); font-size: 16px; text-decoration: underline; text-underline-offset: 4px; }
+#marketing-site :is(.hero-trust strong, .security-grid strong) { font-size: 17px !important; }
+#marketing-site :is(.hero-trust span, .security-grid span) { font-size: 14px !important; }
+#marketing-site .preparation-grid h3 { font-size: 23px !important; }
+#marketing-site .preparation-grid p { font-size: 16px !important; }
+.placeai-footer :is(p, a, span) { font-size: 15px !important; }
+@keyframes placeaiJourneyHighlight { 0%, 27% { opacity: 1; } 34%, 94% { opacity: .15; } 100% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .journey-card::before { animation: none; opacity: 1; } }
+@media (max-width: 760px) {
+  .journey-grid { grid-template-columns: 1fr; gap: 16px; }
+  .learning-journey { padding-bottom: 45px; }
+  .journey-card { padding: 22px; }
+  .app-shell .page-head h1 { font-size: 27px !important; }
+}
+@media (max-width: 320px) {
+  #marketing-site .hero h1 { font-size: 36px !important; }
+  .auth-form-panel h2, #auth-overlay .auth-form-panel h2 { font-size: 25px !important; }
+  .button, .app-shell .button { white-space: normal; }
+}

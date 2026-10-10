@@ -83,7 +83,7 @@ def test_mcq_interaction_and_expandable_navigator_contract():
     js = _text("app/static/mock-interview.js")
 
     assert "mock-interview.css?v=20261008-spoken-timer" in html
-    assert "mock-interview.js?v=20261009-narration-recovery" in html
+    assert "mock-interview.js?v=20261010-readable-fonts" in html
     assert 'role="radiogroup"' in js
     assert 'role="radio"' in js
     assert "option-select-indicator" in js
@@ -176,7 +176,7 @@ def test_executable_coding_workspace_is_mirrored_and_cache_busted():
     css = _text("app/static/mock-interview.css")
 
     assert "mock-interview.css?v=20261008-spoken-timer" in html
-    assert "mock-interview.js?v=20261009-narration-recovery" in html
+    assert "mock-interview.js?v=20261010-readable-fonts" in html
     assert "code-workspace" in js
     assert "code-language" in js
     assert "run-code" in js
