@@ -4,10 +4,12 @@ from test_browser_smoke import BASE_URL, browser, local_server  # noqa: F401
 def test_learning_journey_is_readable_responsive_and_links_to_existing_flows(browser):  # noqa: F811
     page = browser.new_page(viewport={"width": 1440, "height": 1000})
     page.goto(BASE_URL, wait_until="networkidle")
+    assert page.locator(".hero h1").inner_text().replace("\n", " ") == "Placement operations, connected end to end."
+    assert page.locator(".hero-journey-line").inner_text() == "Learn · Practice · Get Placed"
     heading = page.locator("#recruiters .section-heading h2")
     assert heading.evaluate("el=>getComputedStyle(el).fontWeight") == "400"
     assert "Calibri" in heading.evaluate("el=>getComputedStyle(el).fontFamily")
-    assert page.locator(".journey-card h3").all_text_contents() == ["Learn", "Practise", "Get placed"]
+    assert page.locator(".journey-card h3").all_text_contents() == ["Learn", "Practice", "Get Placed"]
     assert page.locator(".journey-card a").evaluate_all("els=>els.map(el=>el.getAttribute('href'))") == [
         "#preparation-lab",
         "#preparation-lab",

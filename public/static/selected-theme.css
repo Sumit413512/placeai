@@ -277,7 +277,7 @@ body :is(pre, code, kbd), body :is(pre, code, kbd) * {
 #marketing-site .hero h1 {
   font-family: var(--font-body) !important;
   font-weight: 400 !important;
-  font-size: clamp(44px, 5.5vw, 74px) !important;
+  font-size: clamp(40px, 4.5vw, 60px) !important;
   line-height: 1.12 !important;
   letter-spacing: -.025em !important;
 }
@@ -317,6 +317,7 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 .legal-card :is(p, li), .legal-hero p { font-size: 17px !important; }
 .panel-head h2, .result-head h2 { font-weight: 400 !important; }
 .spoken-question-clock time { font-family: var(--font-body) !important; font-weight: 400 !important; }
+#marketing-site .hero-journey-line { color: var(--pa-accent); font-size: clamp(23px, 2.3vw, 30px); line-height: 1.4; margin: 22px 0 18px; }
 .learning-journey { padding: 12px 0 65px; }
 .journey-heading { margin-bottom: 25px; }
 .journey-heading h2 { font-size: 36px; font-weight: 400; line-height: 1.2; margin: 10px 0 0; }
