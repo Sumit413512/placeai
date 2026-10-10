@@ -9,8 +9,10 @@ from threading import Event, Thread
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from fastapi.exception_handlers import http_exception_handler
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy import text
 from sqlalchemy.exc import DataError, IntegrityError, SQLAlchemyError
 
@@ -23,7 +25,9 @@ from app.database import (
     safe_database_target,
 )
 from app.email_delivery import transactional_email_configured
+from app.public_surface import enhance_public_html, ORIGIN
 from app.embedded_pages import (
+    NOT_FOUND_HTML,
     ACCEPTABLE_USE_HTML,
     INDEX_HTML,
     MOCK_INTERVIEW_HTML,
@@ -353,17 +357,25 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 def _public_base(request: Request) -> str:
     if settings.is_production and settings.base_url:
-        return settings.base_url.rstrip("/")
+        return ORIGIN
     return str(request.base_url).rstrip("/")
 
 
 def _template_html(name: str, fallback: str) -> str:
     """Read the editable template, with an imported fallback for serverless bundles."""
     try:
-        return (TEMPLATE_DIR / name).read_text(encoding="utf-8")
+        return enhance_public_html((TEMPLATE_DIR / name).read_text(encoding="utf-8"), name)
     except OSError as exc:
         logger.warning("Using embedded PlaceAI page for %s: %s", name, type(exc).__name__)
-        return fallback
+        return enhance_public_html(fallback, name)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def public_http_error(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == 404 and request.method in {"GET", "HEAD"} and "text/html" in request.headers.get("accept", ""):
+        page = _template_html("404.html", NOT_FOUND_HTML)
+        return HTMLResponse(page, status_code=404, headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex"})
+    return await http_exception_handler(request, exc)
 
 
 @app.get("/", include_in_schema=False)
@@ -391,6 +403,8 @@ def root():
     )
     if "/static/access-portal.js" not in html:
         html = html.replace("</head>", f"{assets}</head>", 1)
+    if "/static/privacy-preferences.js" not in html:
+        html = html.replace("</head>", '<link rel="stylesheet" href="/static/privacy-preferences.css"><script src="/static/privacy-preferences.js" defer></script></head>', 1)
     return HTMLResponse(html)
 
 
@@ -426,7 +440,9 @@ def acceptable_use_page() -> HTMLResponse:
 
 @app.get("/robots.txt", include_in_schema=False)
 def robots(request: Request) -> Response:
-    body = f"User-agent: *\nAllow: /\nSitemap: {_public_base(request)}/sitemap.xml\n"
+    private_paths = ("/auth/", "/students/", "/recruiters/", "/institutions/", "/platform/", "/enterprise/", "/billing/", "/telemetry/", "/mock-interview")
+    body = "User-agent: *\nAllow: /\n" + "".join(f"Disallow: {path}\n" for path in private_paths)
+    body += f"Sitemap: {_public_base(request)}/sitemap.xml\n"
     return Response(content=body, media_type="text/plain")
 
 
@@ -434,6 +450,7 @@ def robots(request: Request) -> Response:
 def sitemap(request: Request) -> Response:
     base = _public_base(request)
     urls = ["/", "/privacy", "/terms", "/acceptable-use"]
+    urls += ["/static/" + name for name in ("about.html", "contact.html", "pricing.html", "service-delivery.html", "refund-cancellation.html")]
     body = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     body += "\n".join(f"  <url><loc>{base}{path}</loc></url>" for path in urls)
     body += "\n</urlset>\n"
