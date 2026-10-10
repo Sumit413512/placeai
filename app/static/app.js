@@ -89,10 +89,13 @@
     }
   }
 
-  const placeAIVisitorId = telemetryId(localStorage, 'placeai_visitor_id');
-  const placeAISessionId = globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
+  let placeAISessionId = null;
 
   function trackPageView(path) {
+    if(!window.PlaceAIPrivacy?.analyticsAllowed())return;
+    let placeAIVisitorId;
+    try{placeAIVisitorId=telemetryId(localStorage,'placeai_visitor_id');}catch{return;}
+    placeAISessionId ||= globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
     let referrerHost = '';
     try { referrerHost = document.referrer ? new URL(document.referrer).hostname : ''; } catch {}
     const headers = {'Content-Type':'application/json'};
@@ -110,6 +113,8 @@
       }),
     }).catch(() => {});
   }
+
+  window.addEventListener('placeai:privacy-changed',()=>{placeAISessionId=null;trackPageView(location.pathname);});
 
   function toast(title, message = '', type = 'success') {
     const node = document.createElement('div');

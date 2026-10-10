@@ -14,6 +14,7 @@ from app.models import User
 from app.placement_access import utcnow_naive
 from app.telemetry_models import PageViewEvent
 from app.utils import decode_token
+from app.rate_limit import enforce_rate_limit
 
 router = APIRouter(prefix="/telemetry", tags=["Telemetry"])
 settings = get_settings()
@@ -76,6 +77,7 @@ def page_view(
     """
     if not _ID_RE.fullmatch(body.visitor_id) or not _ID_RE.fullmatch(body.session_id):
         return Response(status_code=204)
+    enforce_rate_limit(db, request, scope="telemetry:page-view", limit=120, window_seconds=60, block_seconds=60)
 
     path = _clean_path(body.path)
     referrer_host = (body.referrer_host or "").strip().lower().rstrip(".")
