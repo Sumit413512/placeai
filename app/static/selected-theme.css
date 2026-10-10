@@ -1,0 +1,265 @@
+/* Approved PlaceAI palette: light-grey navigation, linen canvas, white surfaces.
+   This final presentation layer changes no visibility, media, timers or permissions.
+   Important declarations reconcile the legacy, dynamically loaded visual layers. */
+:root {
+  --pa-sidebar: #dfdddd;
+  --pa-canvas: #f5f2ec;
+  --pa-surface: #ffffff;
+  --pa-accent: #59416f;
+  --pa-accent-hover: #49355c;
+  --pa-ink: #272330;
+  --pa-muted: #67616c;
+  --pa-border: #ded9e2;
+  --pa-selected: #ffffff;
+  --ink: var(--pa-ink) !important;
+  --muted: var(--pa-muted) !important;
+  --line: var(--pa-border) !important;
+  --soft: var(--pa-canvas) !important;
+  --soft2: var(--pa-canvas) !important;
+  --panel: var(--pa-surface) !important;
+  --surface: var(--pa-surface) !important;
+  --surface-2: var(--pa-canvas) !important;
+  --surface-subtle: var(--pa-canvas) !important;
+  --surface-strong: var(--pa-sidebar) !important;
+  --text-strong: var(--pa-ink) !important;
+  --text-muted: var(--pa-muted) !important;
+  --border-strong: var(--pa-border) !important;
+  --accent: var(--pa-accent) !important;
+  --accent-2: var(--pa-accent-hover) !important;
+  --blue: var(--pa-accent) !important;
+  --blue2: var(--pa-accent-hover) !important;
+  --navy: var(--pa-ink) !important;
+  --navy-2: var(--pa-ink) !important;
+  --navy2: var(--pa-ink) !important;
+  --placeai-workspace-bg: var(--pa-canvas) !important;
+  --placeai-surface: var(--pa-surface) !important;
+  --placeai-surface-muted: var(--pa-canvas) !important;
+  --placeai-border: var(--pa-border) !important;
+  --placeai-border-strong: var(--pa-border) !important;
+  --placeai-text: var(--pa-ink) !important;
+  --placeai-text-muted: var(--pa-muted) !important;
+  --placeai-brand: var(--pa-accent) !important;
+  --placeai-brand-strong: var(--pa-accent-hover) !important;
+  --placeai-soft-shadow: 0 1px 3px rgb(39 35 48 / 4%) !important;
+  --placeai-lift-shadow: 0 2px 6px rgb(39 35 48 / 6%) !important;
+  --shadow: 0 2px 8px rgb(39 35 48 / 6%) !important;
+  --radius: 6px !important;
+  --radius-sm: 5px !important;
+  --font-body: "Segoe UI", Arial, sans-serif !important;
+  --font-display: "Segoe UI", Arial, sans-serif !important;
+  --bg: var(--pa-canvas) !important;
+  --brand: var(--pa-accent) !important;
+  --brand-2: var(--pa-accent-hover) !important;
+}
+html, body, #marketing-site, .app-shell, .app-shell:not(.hidden), .app-content-wrap,
+.app-content, .assessment-content {
+  background: var(--pa-canvas) !important;
+  color: var(--pa-ink) !important;
+}
+body { font-family: var(--font-body) !important; }
+h1, h2, h3, h4, h5, .legal-brand, .table-primary { color: var(--pa-ink) !important; }
+p, .hero-lead, .form-intro, .legal-card li, .table-secondary,
+.page-head p, .panel-head p, .section-heading p { color: var(--pa-muted) !important; }
+.site-header, .topbar, .app-topbar, .app-shell .app-topbar, .auth-form-panel,
+.legal-card, .panel, .data-panel, .form-panel, .metric-card, .operation-card,
+.assistant-card, .generic-modal-card, .command-card, .notification-panel,
+.trust-card, .report-card, .question-panel, .checks-card, .setup-form,
+.production-surface-card, .bento-card, .security-card, .prep-role-card,
+.access-role-card, .access-requests-panel, .analysis-panel, .result-panel,
+.answer-review, .answer-pane, .score-card, .score-tile, .score-summary-card {
+  background: var(--pa-surface) !important;
+  color: var(--pa-ink) !important;
+  border-color: var(--pa-border) !important;
+  box-shadow: none !important;
+  border-radius: 6px !important;
+}
+.site-header, .topbar, .app-topbar, .app-shell .app-topbar {
+  border-radius: 0 !important;
+  backdrop-filter: none !important;
+  color: var(--pa-ink) !important;
+}
+.site-header { border-bottom: 1px solid var(--pa-border); }
+.app-sidebar, .assessment-sidebar, .preview-sidebar, .auth-brand-panel,
+#auth-overlay .auth-brand-panel, .hero-score-card, .dark-section,
+.placeai-footer, .site-footer {
+  background: var(--pa-sidebar) !important;
+  color: var(--pa-ink) !important;
+  border-color: var(--pa-border) !important;
+  box-shadow: none !important;
+}
+.app-sidebar :is(p, small, strong, span, a, button),
+.assessment-sidebar :is(p, small, strong, span, a, button),
+.auth-brand-panel :is(p, small, strong, span, h2),
+.dark-section :is(p, small, strong, span, h2, li),
+.hero-score-card :is(p, small, strong, span),
+.placeai-footer :is(p, small, strong, span, a, h3),
+.site-footer :is(p, small, strong, span, a),
+.top-actions, .top-actions a, .secure {
+  color: var(--pa-ink) !important;
+}
+.app-sidebar .nav-group-label, .assessment-brand .eyebrow,
+.app-sidebar .workspace-pill small, .app-sidebar .user-info small,
+.app-sidebar .ai-policy p, .auth-panel-kicker {
+  color: var(--pa-muted) !important;
+}
+.workspace-pill, .ai-policy, .assessment-brand, .timer-card, .assessment-steps,
+.sidebar-footer, .user-menu, .assessment-sidebar .timer-card {
+  background: transparent !important;
+  color: var(--pa-ink) !important;
+  border-color: #c5c0c9 !important;
+  box-shadow: none !important;
+}
+.app-sidebar .app-nav button { color: var(--pa-ink) !important; }
+.app-sidebar .app-nav button:hover,
+.app-sidebar .app-nav button.active, .section-nav button.active {
+  background: var(--pa-selected) !important;
+  color: var(--pa-accent) !important;
+  box-shadow: none !important;
+  border-color: var(--pa-border) !important;
+}
+.app-sidebar .app-nav button.active :is(span, svg) { color: var(--pa-accent) !important; }
+.app-sidebar .app-nav button.active::after { background: var(--pa-accent) !important; }
+.app-sidebar .app-nav button { border-radius: 5px !important; }
+.sidebar-bottom, .sidebar-user, .account-security-button,
+.app-shell .account-security-button {
+  background: var(--pa-sidebar) !important;
+  color: var(--pa-ink) !important;
+  border-color: #c5c0c9 !important;
+}
+.sidebar-user em, .account-security-button :is(span, strong),
+.app-sidebar .ai-policy :is(p, small, strong) { color: var(--pa-ink) !important; }
+.workspace-avatar, .user-avatar, .ai-policy > span {
+  background: var(--pa-surface) !important;
+  color: var(--pa-accent) !important;
+  box-shadow: none !important;
+}
+.button-primary:not(.danger), .button.primary:not(.danger),
+.app-shell .button-primary, .app-shell .row-button.primary:not(.danger),
+.prep-card-action .button-primary, .privacy-actions button:last-child {
+  background: var(--pa-accent) !important;
+  color: var(--pa-surface) !important;
+  border-color: var(--pa-accent) !important;
+  box-shadow: none !important;
+}
+.button-primary:hover:not(:disabled), .button.primary:hover:not(:disabled) {
+  background: var(--pa-accent-hover) !important;
+}
+.button, .row-button, .auth-tab, .access-role-card, .access-mode-row button {
+  border-radius: 5px !important;
+}
+.button-secondary, .button.secondary, .button-light, .button-ghost,
+.icon-button, .mobile-menu, .privacy-settings-button {
+  background: var(--pa-surface) !important;
+  color: var(--pa-ink) !important;
+  border-color: var(--pa-border) !important;
+  box-shadow: none !important;
+}
+.text-button, .section-kicker, .eyebrow, .step, .card-kicker,
+.prep-lab-kicker, .prep-role-badge, .prep-feature-list li::before,
+.card-number, .legal-contact, .legal-kicker, .legal-nav a,
+.access-role-card.is-selected em, .auth-helper-link, .forgot-password,
+.hero h1 span { color: var(--pa-accent) !important; }
+.eyebrow, .hero-meta span, .prep-role-badge, .workspace-role-chip,
+.access-selection-summary, .legal-note, .locked-setting, .blueprint-card,
+.assessment-policy, .analysis-step, .prep-lab-note, .notification-count {
+  background: var(--pa-canvas) !important;
+  color: var(--pa-ink) !important;
+  border-color: var(--pa-border) !important;
+  box-shadow: none !important;
+}
+.access-role-card.is-selected, .auth-tab.active, .access-mode-row button.is-active {
+  background: var(--pa-canvas) !important;
+  border-color: var(--pa-accent) !important;
+  color: var(--pa-accent) !important;
+}
+.access-role-dot, .eyebrow-dot::after, .prep-lab-kicker::before,
+.analysis-meter > span { background: var(--pa-accent) !important; }
+.auth-proof span, .auth-role-proof, .mini-stats div {
+  background: var(--pa-surface) !important;
+  color: var(--pa-ink) !important;
+  border-color: var(--pa-border) !important;
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+textarea, select, .field-input, .form-control {
+  background-color: var(--pa-surface) !important;
+  color: var(--pa-ink) !important;
+  border-color: var(--pa-border) !important;
+  border-radius: 5px !important;
+}
+input::placeholder, textarea::placeholder { color: var(--pa-muted) !important; }
+input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color: var(--pa-accent); }
+.data-table, .section-table, .access-table, .data-table tbody tr,
+.app-shell .data-table tbody tr { background: var(--pa-surface) !important; }
+.data-table th, .section-table th, .access-table th,
+.app-shell .data-table thead th {
+  background: var(--pa-canvas) !important;
+  color: var(--pa-muted) !important;
+  border-color: var(--pa-border) !important;
+}
+.data-table td, .section-table td, .access-table td { border-color: var(--pa-border) !important; }
+.data-table tbody tr:hover, .app-shell .data-table tbody tr:hover { background: var(--pa-canvas) !important; }
+.proof-strip, .preparation-section, .prep-lab-section, .cta-section,
+.legal-note, .skill-intel-card, .question-progress, .assessment-footer {
+  background: var(--pa-canvas) !important;
+  color: var(--pa-ink) !important;
+  border-color: var(--pa-border) !important;
+  box-shadow: none !important;
+}
+.cta-section :is(h2, span), .proof-strip :is(strong, span),
+.production-surface-card :is(strong, h3), .locked-setting strong,
+.hero h1, .assessment-brand strong, .answer-review h4, .answer-score-box strong,
+.panel-head h2, .legal-hero h1, .result-head h2 { color: var(--pa-ink) !important; }
+.hero-score-card, .hero-photo-card, .security-card, .prep-role-card,
+.production-surface-card, .legal-card, .bento-card { border-radius: 6px !important; }
+#marketing-site .hero h1 {
+  font-family: Georgia, "Times New Roman", serif !important;
+  font-weight: 400 !important;
+  letter-spacing: -.035em !important;
+}
+.page-head h1, .app-shell .page-head h1 { font-weight: 600 !important; }
+.metric-card strong, .app-shell .metric-card strong { font-weight: 500 !important; }
+.privacy-preferences { background: var(--pa-surface); color: var(--pa-ink); border-color: var(--pa-border); box-shadow: none; border-radius: 6px; }
+.privacy-preferences a, .privacy-actions button { color: var(--pa-accent); }
+.privacy-actions button { border-color: var(--pa-accent); }
+.result-kicker, .assessment-brand .eyebrow, .question-counter,
+.section-clock, .section-clock span, .question-time, .answer-timer { color: var(--pa-accent) !important; }
+.ideal-answer-box, .answer-pane, .rubric-item, .review-detail-box,
+.analysis-note, .blueprint-row, .analysis-step.active, .ai-box,
+.empty-state, .production-surface-grid div {
+  background: var(--pa-canvas) !important;
+  border-color: var(--pa-border) !important;
+}
+.empty-state { border-style: solid !important; border-radius: 6px !important; }
+.empty-icon, .activity-icon, .app-shell .metric-card::after {
+  background: var(--pa-canvas) !important;
+  color: var(--pa-accent) !important;
+}
+.panel-head button, .ai-box-head span, .production-surface-card .surface-kicker,
+.topbar-context small { color: var(--pa-accent) !important; }
+.metric-card small, .app-shell .metric-card small,
+.production-surface-grid span { color: var(--pa-muted) !important; }
+.progress-bar i, .signal-meter i.on { background: var(--pa-accent) !important; }
+.option-button, .mcq-answer-area .option-button {
+  background: var(--pa-surface) !important;
+  border-color: var(--pa-border) !important;
+  border-radius: 5px !important;
+}
+.option-button:hover, .option-button.selected,
+.mcq-answer-area .option-button.selected {
+  background: var(--pa-canvas) !important;
+  border-color: var(--pa-accent) !important;
+  box-shadow: none !important;
+}
+.option-button.selected .option-key, .option-button.selected::after,
+.mcq-answer-area .option-button.selected .option-key,
+.option-button.selected .option-select-indicator {
+  background: var(--pa-accent) !important;
+  color: var(--pa-surface) !important;
+  border-color: var(--pa-accent) !important;
+}
+/* Dark media captions and the red proctoring banner retain light foregrounds. */
+.assessment-sidebar .proctor-header :is(strong, span),
+.assessment-sidebar .assessment-camera-meta :is(span, b) {
+  color: var(--pa-surface) !important;
+}
+/* Keep success, warning, error, integrity and microphone activity colours semantic. */
