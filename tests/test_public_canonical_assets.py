@@ -47,7 +47,7 @@ def test_static_public_crawler_assets_match_canonical_domain():
 
     assert f"Sitemap: {CANONICAL_PUBLIC_URL}/sitemap.xml" in robots
     assert VERCEL_ORIGIN not in robots
-    assert sitemap.count(f"<loc>{CANONICAL_PUBLIC_URL}") == 4
+    assert sitemap.count(f"<loc>{CANONICAL_PUBLIC_URL}") == 9
     assert VERCEL_ORIGIN not in sitemap
 
 

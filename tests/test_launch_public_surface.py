@@ -21,3 +21,12 @@ def test_sharing_metadata_never_contains_private_report_query():
     homepage = client.get("/").text
     assert 'property="og:image"' in homepage
     assert homepage.count("/static/privacy-preferences.js") == 1
+
+
+def test_static_crawler_documents_match_backend_routes():
+    from pathlib import Path
+
+    public = Path(__file__).resolve().parents[1] / "public"
+    with TestClient(app, base_url="https://www.placeai.in") as canonical_client:
+        for name in ("robots.txt", "sitemap.xml"):
+            assert canonical_client.get("/" + name).text == (public / name).read_text(encoding="utf-8")
