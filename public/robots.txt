@@ -1,3 +1,12 @@
 User-agent: *
 Allow: /
+Disallow: /auth/
+Disallow: /students/
+Disallow: /recruiters/
+Disallow: /institutions/
+Disallow: /platform/
+Disallow: /enterprise/
+Disallow: /billing/
+Disallow: /telemetry/
+Disallow: /mock-interview
 Sitemap: https://www.placeai.in/sitemap.xml
