@@ -30,6 +30,7 @@ INDEX_HTML = '''<!doctype html>
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/static/privacy-preferences.css"><script src="/static/privacy-preferences.js" defer></script>
 <link rel="stylesheet" href="/static/selected-theme.css?v=20261010-readability">
+  <link rel="stylesheet" href="/static/learning-hub.css?v=20261010-1">
 </head>
 <body>
   <div id="toast-region" class="toast-region" aria-live="polite"></div>
@@ -232,6 +233,7 @@ INDEX_HTML = '''<!doctype html>
   </div>
 
   <script src="/static/app.js" defer></script>
+  <script src="/static/learning-hub.js?v=20261010-1" defer></script>
 </body>
 </html>
 '''

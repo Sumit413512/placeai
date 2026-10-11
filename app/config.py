@@ -146,6 +146,9 @@ class Settings:
         self.assessment_queue_enabled = os.getenv("ENABLE_ASSESSMENT_QUEUE", "false").lower() == "true"
         self.question_recordings_enabled = os.getenv("ENABLE_QUESTION_RECORDINGS", "false").lower() == "true"
         self.assessment_worker_in_process = os.getenv("ASSESSMENT_WORKER_IN_PROCESS", "false").lower() == "true"
+        self.learning_worker_in_process = os.getenv(
+            "LEARNING_WORKER_IN_PROCESS", "true" if os.getenv("RENDER") else "false"
+        ).lower() == "true"
         self.assessment_queue_concurrency = _bounded_env_int("ASSESSMENT_QUEUE_CONCURRENCY", 4, 1, 64)
         self.assessment_queue_starts_per_minute = _bounded_env_int("ASSESSMENT_QUEUE_STARTS_PER_MINUTE", 12, 1, 600)
         self.database_pool_size = _bounded_env_int("DATABASE_POOL_SIZE", 3, 1, 20)

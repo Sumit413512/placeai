@@ -869,3 +869,37 @@ class ProfileChangeRequest(Base):
     reviewed_by_user_id = Column(String, ForeignKey("users.id"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utcnow, index=True)
+
+
+class LearningNotebook(Base):
+    __tablename__ = "learning_notebooks"
+    __table_args__ = (
+        UniqueConstraint("user_id", "request_id", name="uq_learning_request"),
+        Index("ix_learning_owner_created", "user_id", "created_at"),
+        Index("ix_learning_queue", "state", "available_at"),
+    )
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    request_id = Column(String(80), nullable=False)
+    title = Column(String(240), nullable=False)
+    state = Column(String(24), nullable=False, default="queued")
+    input_json = Column(Text, nullable=False)
+    plan_json = Column(Text, nullable=False, default="{}")
+    chapters_json = Column(Text, nullable=False, default="[]")
+    sources_json = Column(Text, nullable=False, default="[]")
+    evidence = Column(Text, nullable=False, default="")
+    provider = Column(String(180), nullable=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    error_code = Column(String(80), nullable=True)
+    available_at = Column(DateTime, nullable=False, default=utcnow)
+    lease_until = Column(DateTime, nullable=True)
+    lease_token = Column(String(40), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class LearningRuntime(Base):
+    __tablename__ = "learning_runtime"
+    id = Column(Integer, primary_key=True)
+    provider_configured = Column(Boolean, nullable=False, default=False)
+    checked_at = Column(DateTime, nullable=False, default=utcnow)
