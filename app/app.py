@@ -127,13 +127,30 @@ _DIAGNOSTIC_PATHS = {
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     path = request.url.path
+    # CORS prevents reading a foreign response; it does not stop a plain HTML
+    # form from reaching login and setting a victim's refresh cookie.
+    foreign_auth_request = False
+    if path.startswith("/auth/") and request.method not in {"GET", "HEAD", "OPTIONS"}:
+        trusted_origins = {*settings.allowed_origins, str(request.base_url).rstrip("/")}
+        if settings.is_production:
+            # Render terminates TLS before the ASGI peer. The browser's own HTTPS
+            # origin remains valid even when that internal hop is HTTP.
+            trusted_origins.add(f"https://{request.url.netloc}")
+        origin = request.headers.get("origin")
+        foreign_auth_request = ((origin is not None and origin not in trusted_origins)
+                                or (origin is None and request.headers.get("sec-fetch-site") == "cross-site"))
     reset_email_unavailable = (
         settings.is_production
         and request.method == "POST"
         and path == "/auth/forgot-password"
         and not transactional_email_configured(settings)
     )
-    if reset_email_unavailable:
+    if foreign_auth_request:
+        response = JSONResponse(status_code=403, content={
+            "detail": "Authentication requests must come from an approved PlaceAI origin.",
+            "code": "AUTH_ORIGIN_REJECTED",
+        })
+    elif reset_email_unavailable:
         response = JSONResponse(
             status_code=503,
             content={
@@ -185,6 +202,10 @@ async def security_headers(request: Request, call_next):
             f"{google_frames}object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
         )
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups" if path == "/" else "same-origin"
+    if request.headers.get("authorization"):
+        if "no-store" not in response.headers.get("Cache-Control", "").lower():
+            response.headers["Cache-Control"] = "private, no-store"
+        response.headers["Pragma"] = "no-cache"
     if path.startswith("/learning-hub"):
         response.headers["Cache-Control"] = "private, no-store"
         response.headers["X-Robots-Tag"] = "noindex, nofollow"

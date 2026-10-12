@@ -31,7 +31,7 @@
     '/static/workspace-experience.js',
     '/static/legal-links.js',
     '/static/career-roadmap.js',
-    '/static/app-core.js?v=20261012-learning-hub'
+    '/static/app-core.js?v=20261012-security'
   ];
 
   const loadNext = (index) => {
