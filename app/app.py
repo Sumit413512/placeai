@@ -60,6 +60,7 @@ def _release_sha() -> str | None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     worker_stop, worker_thread = Event(), None
+    learning_thread = None
     if runtime_readiness_errors:
         for code in runtime_readiness_errors:
             logger.error("PlaceAI runtime readiness blocked: %s", code)
@@ -77,12 +78,19 @@ async def lifespan(_: FastAPI):
         from app.assessment_worker import run
         worker_thread = Thread(target=run, args=(worker_stop,), daemon=True, name="assessment-worker")
         worker_thread.start()
+    if (not runtime_readiness_errors and settings.learning_worker_in_process
+            and os.getenv("RENDER") and not settings.running_on_vercel):
+        from app.learning_worker import run as run_learning
+        learning_thread = Thread(target=run_learning, args=(worker_stop,), daemon=True, name="learning-worker")
+        learning_thread.start()
     try:
         yield
     finally:
         worker_stop.set()
         if worker_thread:
             worker_thread.join(timeout=5)
+        if learning_thread:
+            learning_thread.join(timeout=5)
 
 
 app = FastAPI(
@@ -177,6 +185,9 @@ async def security_headers(request: Request, call_next):
             f"{google_frames}object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
         )
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups" if path == "/" else "same-origin"
+    if path.startswith("/learning-hub"):
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["X-Robots-Tag"] = "noindex, nofollow"
     if path == "/health" or path.startswith("/auth/") or path in {
         "/", "/mock-interview", "/privacy", "/terms", "/acceptable-use"
     }:
@@ -282,6 +293,7 @@ student_workspace_v2 = _import_router("student_workspace_v2")
 telemetry = _import_router("telemetry")
 billing = _import_router("billing")
 career_roadmap = _import_router("career_roadmap")
+learning_hub = _import_router("learning_hub")
 product_intelligence = _import_router("product_intelligence")
 
 ACCOUNT_SECURITY_REPLACEMENTS = {
@@ -348,6 +360,7 @@ _include_router(student_workspace_v2)
 _include_router(telemetry)
 _include_router(billing)
 _include_router(career_roadmap)
+_include_router(learning_hub)
 _include_router(product_intelligence)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -440,7 +453,7 @@ def acceptable_use_page() -> HTMLResponse:
 
 @app.get("/robots.txt", include_in_schema=False)
 def robots(request: Request) -> Response:
-    private_paths = ("/auth/", "/students/", "/recruiters/", "/institutions/", "/platform/", "/enterprise/", "/billing/", "/telemetry/", "/mock-interview")
+    private_paths = ("/auth/", "/students/", "/recruiters/", "/institutions/", "/platform/", "/enterprise/", "/billing/", "/telemetry/", "/mock-interview", "/learning-hub")
     body = "User-agent: *\nAllow: /\n" + "".join(f"Disallow: {path}\n" for path in private_paths)
     body += f"Sitemap: {_public_base(request)}/sitemap.xml\n"
     return Response(content=body, media_type="text/plain")
