@@ -122,6 +122,28 @@ def test_validation_rejects_short_notes_broken_diagrams_and_invented_sources():
     with pytest.raises(ValidationError): LearningChapter.model_validate(chapter)
 
 
+def test_short_exercise_solution_is_repaired_without_replacing_the_chapter(monkeypatch):
+    raw = chapter_data()
+    original = raw["subtopics"][0]["explanation"]
+    raw["exercises"][1]["solution"] = "SELECT name FROM students;"
+    replacement = "Select the name column from the students table. FROM identifies the source relation; every row is included because this query has no WHERE predicate."
+    monkeypatch.setattr(learning_ai, "generate_json", lambda *_: (
+        {"repairs": [{"path": "exercises.1.solution", "value": replacement}]}, "test:writer"))
+    chapter = learning_worker.validate_material(raw, LearningPlan.model_validate(plan_data()).chapters[0], 1, True, "SQL evidence")
+    assert chapter.exercises[1].solution == replacement
+    assert chapter.subtopics[0].explanation == original.strip()
+    assert chapter.examples[0].code == "SELECT name FROM students WHERE score >= 70;"
+
+
+def test_field_repair_cannot_overwrite_unrequested_content(monkeypatch):
+    raw = chapter_data()
+    raw["exercises"][1]["solution"] = "SELECT name FROM students;"
+    monkeypatch.setattr(learning_ai, "generate_json", lambda *_: (
+        {"repairs": [{"path": "title", "value": "Unexpected replacement"}]}, "test:writer"))
+    with pytest.raises(ValueError):
+        learning_worker.validate_material(raw, LearningPlan.model_validate(plan_data()).chapters[0], 1, True, "SQL evidence")
+
+
 def test_worker_saves_each_stage_resumes_and_never_publishes_partial_pdf(hub, monkeypatch):
     book = hub.client.post("/learning-hub", json=preferences()).json()
     sources = [{"url": "https://www.postgresql.org/docs/current/sql-select.html", "title": "SELECT"},

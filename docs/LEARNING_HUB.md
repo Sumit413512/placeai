@@ -7,8 +7,13 @@ common mistakes, solved exercises, takeaways and source references.
 
 ## Research and quality
 
-Research uses OpenAI Responses web search or Gemini Google Search grounding. References
-must come from provider search metadata, not model-invented URLs. Each chapter performs
+Research uses OpenAI Responses web search, Gemini Google Search grounding, or live retrieval
+of approved official documentation and university references. When search-tool quota is
+unavailable, AI selects reference candidates and the server fetches and verifies the actual
+documents before using their content. Unreachable or insufficient pages are excluded; at
+least three live sources are required. Reference candidates alone never count as research.
+The retrieval path restricts publishers, public DNS addresses, redirects, content types and
+download sizes. Scripts, navigation and footer boilerplate are excluded from evidence. Each chapter performs
 its own research, validates its structure and citations, and passes a separate AI content
 review. Each chapter requires at least 800 words of teaching prose excluding code and
 exercises. These checks improve quality; they do not guarantee every AI explanation is
@@ -41,6 +46,9 @@ chapter by chapter. Learning does not consume assessment grading admission slots
 - Set a usable `GEMINI_API_KEY` or `OPENAI_API_KEY` on the Render service. A valid key
   with exhausted quota cannot generate notes. Configure the corresponding existing
   `GEMINI_MODEL` or `OPENAI_MODEL` only to an available, supported model.
+  `LEARNING_GEMINI_MODEL` overrides the writer model only for this feature, without
+  changing existing AI tools. `LEARNING_RESEARCH_MODE=verified_docs` selects verified
+  document retrieval when the project has no provider-search-tool quota.
 - `LEARNING_WORKER_IN_PROCESS=true` starts a separate learning worker in the persistent
   Render process. It is enabled by default on Render and never starts on Vercel.
 - Alternatively run `python -m app.learning_worker` as a persistent worker.

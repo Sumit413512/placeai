@@ -34,10 +34,14 @@
     selected = book.id;
     const output = document.querySelector('#learning-notebook-result');
     if (!output) return;
+    const signature = [book.id, book.status, book.completed_chapters, book.sources?.length, book.plan?.title].join('|');
     // Preserve expanded chapters during progress updates.
+    if (output.dataset.learningSignature !== signature) {
     const open = new Set([...output.querySelectorAll('.learning-chapter[open]')].map(item => item.querySelector('summary').textContent));
     output.innerHTML = notebookHtml(book);
     output.querySelectorAll('.learning-chapter').forEach(item => { if (open.has(item.querySelector('summary').textContent)) item.open = true; });
+    output.dataset.learningSignature = signature;
+    }
     clearTimeout(timer);
     if (!['ready', 'failed'].includes(book.status)) {
       const version = epoch;
@@ -54,7 +58,7 @@
     if (!active(version)) return;
     document.querySelector('#learning-library').innerHTML = library.items.length ? library.items.map(book =>
       `<button type="button" class="learning-library-item" data-learning-id="${e(book.id)}"><span>${e(book.title)}</span><small>${book.completed_chapters}/${book.total_chapters} chapters · ${e(book.status)}</small></button>`).join('') : '<p>Your saved notebooks will appear here.</p>';
-    if (!library.generation_available) document.querySelector('#learning-service-status').textContent = 'Research is temporarily unavailable. You can still read and download your saved notes.';
+    document.querySelector('#learning-service-status').textContent = library.generation_available ? '' : 'Research is temporarily unavailable. You can still read and download your saved notes.';
     return library;
   }
   async function render(ctx) {

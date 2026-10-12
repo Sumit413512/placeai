@@ -50,7 +50,8 @@ class LearningPlan(ContentModel):
 
 class Subtopic(ContentModel):
     title: str = Field(min_length=3, max_length=180)
-    explanation: str = Field(min_length=500, max_length=16000)
+    explanation: str = Field(min_length=1600, max_length=16000,
+                             description="At least 300 words of detailed teaching with reasoning and practical context")
     source_ids: list[int] = Field(min_length=1, max_length=8)
 
 
@@ -92,7 +93,8 @@ class Diagram(ContentModel):
 
 class Exercise(ContentModel):
     question: str = Field(min_length=20, max_length=2000)
-    solution: str = Field(min_length=100, max_length=5000)
+    solution: str = Field(min_length=100, max_length=5000,
+                          description="The answer plus at least three explanatory sentences; never code alone")
 
 
 class LearningChapter(ContentModel):

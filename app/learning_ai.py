@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from urllib.parse import urlsplit
 
 import httpx
@@ -34,6 +35,9 @@ def clean_sources(sources):
 
 
 def research(subject: str) -> tuple[str, list[dict], str]:
+    if os.getenv("LEARNING_RESEARCH_MODE") == "verified_docs":
+        from app.learning_web import research_documents
+        return research_documents(subject, generate_json)
     settings = get_settings()
     prompt = (
         PROMPT_GUARDRAIL + "\nUse live web search to research the educational subject below. "
@@ -76,7 +80,8 @@ def research(subject: str) -> tuple[str, list[dict], str]:
                 return text[:22000], sources, f"gemini:{settings.gemini_model}"
         except Exception as error:
             LOGGER.warning("Learning research provider unavailable provider=gemini error_type=%s", type(error).__name__)
-    raise RuntimeError("LEARNING_RESEARCH_UNAVAILABLE")
+    from app.learning_web import research_documents
+    return research_documents(subject, generate_json)
 
 
 def generate_json(task: str, schema: dict, *, max_output_tokens: int = 8000) -> tuple[dict, str]:
@@ -95,10 +100,17 @@ def generate_json(task: str, schema: dict, *, max_output_tokens: int = 8000) -> 
             LOGGER.warning("Learning author unavailable provider=openai error_type=%s", type(error).__name__)
     if ai_provider._gemini_key():
         try:
-            text = ai_provider._call_gemini(ai_provider._gemini_key(), prompt, timeout_seconds=55, retry_count=0)
+            from google.genai import types
+            model = os.getenv("LEARNING_GEMINI_MODEL") or get_settings().gemini_model
+            client = ai_provider.genai.Client(api_key=ai_provider._gemini_key(),
+                                              http_options={"timeout": 55000, "retry_options": {"attempts": 1}})
+            response = client.models.generate_content(model=model, contents=prompt,
+                config=types.GenerateContentConfig(response_mime_type="application/json",
+                                                    max_output_tokens=max_output_tokens))
+            text = str(response.text or "")
             result = extract_json_from_response(text)
             if isinstance(result, dict):
-                return result, f"gemini:{get_settings().gemini_model}"
+                return result, f"gemini:{model}"
         except Exception as error:
             LOGGER.warning("Learning author unavailable provider=gemini error_type=%s", type(error).__name__)
     raise RuntimeError("LEARNING_AUTHOR_UNAVAILABLE")

@@ -28,25 +28,43 @@ def _fonts():
 
 
 
+def _label_lines(label, size, width):
+    lines = []
+    for line in simpleSplit(label, "LearningSans", size, width):
+        while pdfmetrics.stringWidth(line, "LearningSans", size) > width:
+            end = 1
+            while end < len(line) and pdfmetrics.stringWidth(line[:end + 1], "LearningSans", size) <= width:
+                end += 1
+            lines.append(line[:end])
+            line = line[end:]
+        if line:
+            lines.append(line)
+    return lines
+
+
 def diagram_rows(diagram, width=490):
     labels = {node["id"]: node["label"] for node in diagram["nodes"]}
     rows = []
     for edge in diagram["edges"]:
-        drawing = Drawing(width, 83)
         box_width = 170
-        for x, label in [(0, labels[edge["source"]]), (width - box_width, labels[edge["target"]])]:
-            drawing.add(Rect(x, 8, box_width, 58, rx=5, ry=5,
+        left = _label_lines(labels[edge["source"]], 10.5, box_width - 16)
+        right = _label_lines(labels[edge["target"]], 10.5, box_width - 16)
+        box_height = max(58, 20 + 13 * max(len(left), len(right)))
+        start, end = box_width + 5, width - box_width - 5
+        edge_lines = _label_lines(edge.get("label", ""), 9, end - start - 4)
+        arrow_y = 8 + box_height / 2
+        drawing = Drawing(width, max(box_height + 20, arrow_y + 24 + len(edge_lines) * 11))
+        for x, lines in [(0, left), (width - box_width, right)]:
+            drawing.add(Rect(x, 8, box_width, box_height, rx=5, ry=5,
                              fillColor=colors.HexColor("#f5f2ec"), strokeColor=ACCENT))
-            lines = simpleSplit(label, "LearningSans", 10.5, box_width - 16)
             for index, line in enumerate(lines):
-                drawing.add(String(x + box_width / 2, 45 - index * 13, line,
+                drawing.add(String(x + box_width / 2, arrow_y + (len(lines) - 1) * 6.5 - 4 - index * 13, line,
                                    fontName="LearningSans", fontSize=10.5,
                                    textAnchor="middle", fillColor=INK))
-        start, end = box_width + 5, width - box_width - 5
-        drawing.add(Line(start, 32, end - 7, 32, strokeColor=ACCENT, strokeWidth=1.4))
-        drawing.add(Polygon([end, 32, end - 8, 36, end - 8, 28], fillColor=ACCENT, strokeColor=ACCENT))
-        for index, label in enumerate(simpleSplit(edge.get("label", ""), "LearningSans", 9, end - start - 4)):
-            drawing.add(String(width / 2, 60 - index * 11, label, fontName="LearningSans",
+        drawing.add(Line(start, arrow_y, end - 7, arrow_y, strokeColor=ACCENT, strokeWidth=1.4))
+        drawing.add(Polygon([end, arrow_y, end - 8, arrow_y + 4, end - 8, arrow_y - 4], fillColor=ACCENT, strokeColor=ACCENT))
+        for index, label in enumerate(edge_lines):
+            drawing.add(String(width / 2, arrow_y + 12 + (len(edge_lines) - 1 - index) * 11, label, fontName="LearningSans",
                                fontSize=9, textAnchor="middle", fillColor=ACCENT))
         rows.append(drawing)
     return rows
