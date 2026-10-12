@@ -23,6 +23,34 @@ Session = sessionmaker(bind=engine, expire_on_commit=False)
 LEASE_SECONDS = 600
 
 
+def repair_structure(raw, evidence):
+    """Repair provider schema deviations before accessing nested teaching fields."""
+    for attempt in range(3):
+        try:
+            LearningChapter.model_validate(raw)
+            return raw
+        except ValidationError as error:
+            structural = [item for item in error.errors()
+                          if item["type"] not in {"string_too_short", "value_error"}]
+            if not structural:
+                return raw  # Depth is expanded and checked by validate_material.
+            if attempt == 2:
+                raise
+            corrected, _ = learning_ai.generate_json(
+                "Repair this chapter's JSON structure to match the supplied schema exactly. "
+                "Preserve all valid teaching paragraphs, code, examples and citations. "
+                "Use expected_result for example outcomes; no unexpected fields are allowed. "
+                "Supply missing fields using the retrieved evidence, with valid numbered source_ids. "
+                "Do not shorten or summarize the chapter. Return the complete corrected chapter.\n"
+                "INVALID FIELD PATHS:\n" + json.dumps([
+                    {"path": list(item["loc"]), "type": item["type"]} for item in structural
+                ]) + "\nCHAPTER:\n" + json.dumps(raw) + "\nLIVE EVIDENCE:\n" + evidence,
+                LearningChapter.model_json_schema(),
+            )
+            raw = corrected
+    raise ValueError("Learning chapter structure could not be repaired")
+
+
 def validate_material(raw, planned, source_count, programming, evidence):
     for attempt in range(3):
         try:
@@ -192,6 +220,7 @@ def _process(item, sessions):
                 + "\nEVIDENCE:\n" + memo + "\nNUMBERED SOURCES:\n" + json.dumps(numbered),
                 LearningChapter.model_json_schema(),
             )
+            raw = repair_structure(raw, memo)
             for _ in range(2):
                 if not isinstance(raw.get("subtopics"), list):
                     break
@@ -215,6 +244,8 @@ def _process(item, sessions):
                 if not isinstance(additions, list) or len(additions) != len(short_subtopics):
                     raise ValueError("Every subtopic needs its own additional explanation")
                 for subtopic, addition in zip(short_subtopics, additions):
+                    if not isinstance(addition, dict) or not isinstance(addition.get("explanation"), str) or not isinstance(addition.get("source_ids"), list):
+                        raise ValueError("Additional explanations must include teaching and citations")
                     if subtopic.get("title") != addition.get("title"):
                         raise ValueError("Additional explanations must match their original subtopics")
                     subtopic["explanation"] += "\n\n" + addition["explanation"]

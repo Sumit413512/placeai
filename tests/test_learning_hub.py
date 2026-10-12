@@ -135,6 +135,37 @@ def test_short_exercise_solution_is_repaired_without_replacing_the_chapter(monke
     assert chapter.examples[0].code == "SELECT name FROM students WHERE score >= 70;"
 
 
+def test_provider_structure_is_repaired_before_nested_fields_are_accessed(monkeypatch):
+    raw = chapter_data()
+    expected = chapter_data()
+    raw["examples"][0]["expected_symptom"] = raw["examples"][0].pop("expected_result")
+    raw["subtopics"][0].pop("source_ids")
+    calls = []
+    def correct(task, schema):
+        calls.append(task)
+        return expected, "test:writer"
+    monkeypatch.setattr(learning_ai, "generate_json", correct)
+    repaired = learning_worker.repair_structure(raw, "Retrieved SQL evidence")
+    chapter = validate_chapter(repaired, LearningPlan.model_validate(plan_data()).chapters[0], 1, True)
+    assert chapter.examples[0].expected_result == expected["examples"][0]["expected_result"]
+    assert chapter.subtopics[0].source_ids == [1]
+    assert chapter.subtopics[0].explanation == expected["subtopics"][0]["explanation"].strip()
+    assert len(calls) == 1
+
+
+def test_provider_structure_repair_is_bounded_and_depth_remains_required(monkeypatch):
+    raw = chapter_data()
+    raw["examples"][0]["unexpected"] = "invalid"
+    calls = []
+    monkeypatch.setattr(learning_ai, "generate_json", lambda *_: (calls.append(1) or raw, "test:writer"))
+    with pytest.raises(ValidationError): learning_worker.repair_structure(raw, "evidence")
+    assert len(calls) == 2
+    short = chapter_data()
+    short["subtopics"][0]["explanation"] = "Too short."
+    assert learning_worker.repair_structure(short, "evidence") is short
+    with pytest.raises(ValidationError): LearningChapter.model_validate(short)
+
+
 def test_field_repair_cannot_overwrite_unrequested_content(monkeypatch):
     raw = chapter_data()
     raw["exercises"][1]["solution"] = "SELECT name FROM students;"
