@@ -57,7 +57,7 @@
 
   function listHtml(items, esc) {
     const values = Array.isArray(items) ? items.filter(Boolean) : [];
-    if (!values.length) return '<p class="muted-copy">No additional items were returned for this section.</p>';
+    if (!values.length) return '';
     return '<ul class="check-list">' + values.map(item => '<li>' + esc(item) + '</li>').join('') + '</ul>';
   }
 
@@ -67,6 +67,22 @@
     const title = esc((source && source.title) || url);
     return '<a class="operation-card" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer"><h3>' + title + '</h3><p>' + esc(url) + '</p></a>';
   }
+
+  function supportingSection(title, items, esc) {
+    const list = listHtml(items, esc);
+    return list ? '<section class="roadmap-support-section"><h2>' + esc(title) + '</h2>' + list + '</section>' : '';
+  }
+
+  // Supplementary notes stay compact on screen and remain available in exports.
+  let printExpandedNotes = [];
+  window.addEventListener('beforeprint', () => {
+    printExpandedNotes = [...document.querySelectorAll('.roadmap-market-notes:not([open])')];
+    printExpandedNotes.forEach(details => { details.open = true; });
+  });
+  window.addEventListener('afterprint', () => {
+    printExpandedNotes.forEach(details => { details.open = false; });
+    printExpandedNotes = [];
+  });
 
   function phaseHtml(phase, esc) {
     const skills = Array.isArray(phase.skills) ? phase.skills : [];
@@ -159,12 +175,12 @@
     '</div>' +
 
     '<div class="two-panel roadmap-priority-grid">' +
-      '<section class="panel"><div class="panel-head"><div><span class="section-kicker">PRIORITY GAPS</span><h2>Skills to focus on next</h2><p>These market-relevant skills were not listed in your current skills.</p></div></div>' +
+      '<section class="panel"><div class="panel-head"><div><h2>Skills to focus on next</h2><p>Skills to add for your target role.</p></div></div>' +
         (priorityGaps.length ? '<div class="roadmap-chip-list">' + priorityGaps.map(skill => '<span>' + esc(skill) + '</span>').join('') + '</div>' : '<div class="note-box"><strong>You already cover the main listed skills.</strong><p>Use the project milestones below to prove depth and production ability.</p></div>') +
       '</section>' +
-      '<section class="panel"><div class="panel-head"><div><span class="section-kicker">MARKET SNAPSHOT</span><h2>What employers are signalling</h2><p>Use these signals to understand why the plan prioritises certain skills and projects.</p></div></div>' +
+      '<section class="panel roadmap-market-panel"><div class="panel-head"><div><h2>Market signals</h2><p>Recent job listings informing your plan.</p></div></div>' +
         listHtml(marketSignals, esc) +
-        (marketNotes.length ? '<div class="roadmap-market-notes"><strong>Worth knowing</strong>' + listHtml(marketNotes, esc) + '</div>' : '') +
+        (marketNotes.length ? '<details class="roadmap-market-notes"><summary>Research notes and limitations</summary>' + listHtml(marketNotes, esc) + '</details>' : '') +
       '</section>' +
     '</div>' +
 
@@ -180,10 +196,12 @@
     '<section class="roadmap-path-head"><div><span class="section-kicker">YOUR ROADMAP</span><h2>' + esc(data.title || 'Career Roadmap') + '</h2><p>Complete each phase in order. Every phase ends with something you can demonstrate, not just something you have watched or read.</p></div><span class="roadmap-generated">Updated ' + esc(fmtDate(data.created_at)) + '</span></section>' +
     '<div class="roadmap-phase-stack">' + phases.map(phase => phaseHtml(phase, esc)).join('') + '</div>' +
 
-    '<div class="two-panel">' +
-      '<section class="panel"><h2>Portfolio plan</h2>' + listHtml(roadmap.portfolio_plan, esc) + '<h2>Advanced next steps</h2>' + listHtml(roadmap.advanced_next_steps, esc) + '</section>' +
-      '<section class="panel"><h2>Interview preparation</h2>' + listHtml(roadmap.interview_preparation, esc) + '<div class="note-box"><strong>Keep the roadmap adaptive</strong><p>' + esc(data.disclaimer || roadmap.disclaimer || '') + '</p></div></section>' +
+    '<div class="roadmap-support-grid">' +
+      supportingSection('Portfolio plan', roadmap.portfolio_plan, esc) +
+      supportingSection('Interview preparation', roadmap.interview_preparation, esc) +
+      supportingSection('Advanced next steps', roadmap.advanced_next_steps, esc) +
     '</div>' +
+    ((data.disclaimer || roadmap.disclaimer) ? '<p class="roadmap-disclaimer">' + esc(data.disclaimer || roadmap.disclaimer) + '</p>' : '') +
 
     '<details class="roadmap-evidence panel"><summary><span><strong>Market evidence used for this roadmap</strong><small>View the current sources behind the recommendations</small></span><span aria-hidden="true">+</span></summary>' +
       '<div class="card-grid roadmap-source-grid">' + (sources.length ? sources.map(source => sourceHtml(source, esc)).join('') : '<p class="muted-copy">No source links are available for this saved roadmap.</p>') + '</div>' +
@@ -228,7 +246,7 @@
     if (latest) {
       root().innerHTML = page +
         '<section class="roadmap-plan-toolbar" aria-label="Saved roadmap actions">' +
-          '<div class="roadmap-plan-toolbar-copy"><span class="section-kicker">YOUR SAVED PLAN</span><strong>Continue from the next move below</strong><small>Adjust the plan when your target role, skills, available time or market changes. Last updated ' + esc(fmtDate(latest.created_at)) + '.</small></div>' +
+          '<div class="roadmap-plan-toolbar-copy"><span class="section-kicker">YOUR SAVED PLAN</span><small>Updated ' + esc(fmtDate(latest.created_at)) + '</small></div>' +
           '<div class="roadmap-plan-toolbar-actions"><button class="button button-secondary" type="button" data-action="roadmap-adjust">Adjust roadmap</button><button class="button button-secondary" type="button" data-action="roadmap-print">Print / save PDF</button></div>' +
         '</section>' +
         roadmapHtml(latest, esc, fmtDate) +
