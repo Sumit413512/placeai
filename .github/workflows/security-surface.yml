@@ -2,7 +2,7 @@ name: PlaceAI Production Security Surface
 
 on:
   workflow_run:
-    workflows: [PlaceAI Release Integrity]
+    workflows: [PlaceAI Render Fallback Convergence]
     branches: [main]
     types: [completed]
   schedule:
