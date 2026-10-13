@@ -21,7 +21,11 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
             data = {'items': [], 'unread': 0}
         elif path == '/learning-hub':
             data = {'items': [], 'generation_available': True}
-        elif path.endswith(('/applications', '/jobs', '/students', '/organizations', '/notebooks')):
+        elif path.endswith('/applications'):
+            data = [{'id': 'ui-application', 'job_title': 'Graduate engineer', 'company_name': 'Example company',
+                     'applied_at': '2026-10-13T10:00:00Z', 'status': 'applied',
+                     'student': {'full_name': 'Review student', 'college': 'Example institution'}}]
+        elif path.endswith(('/jobs', '/students', '/organizations', '/notebooks')):
             data = []
         elif path.endswith('/dashboard'):
             data = {'active_jobs': 0, 'applications': 0, 'interviews': 0,
@@ -54,6 +58,7 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
         if role == 'student':
             assert page.locator('#page-eyebrow').is_hidden()
         assert page.locator('#app-nav button[aria-current="page"]').get_attribute('data-view') == 'applications'
+        assert page.locator('.status-applied').evaluate('el => getComputedStyle(el).color') == 'rgb(89, 65, 111)'
     if role == 'student':
         page.locator('#app-nav button[data-view="learning-hub"]').click()
         page.locator('#learning-hub').wait_for()
