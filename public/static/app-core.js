@@ -308,6 +308,8 @@
   function setPage(title, eyebrow = 'Workspace') {
     $('#page-title').textContent = title;
     $('#page-eyebrow').textContent = eyebrow;
+    // Account role belongs in the sidebar, not beside every page title.
+    $('#page-eyebrow').hidden = /^(workspace|student workspace|recruiter workspace|institution workspace|placement office|platform control|platform operations)$/i.test(eyebrow);
     const active = state.nav.find(x => x[1] === state.view);
     if (active) {
       $$('#app-nav button').forEach(b => b.classList.toggle('active', b.dataset.view === state.view));
@@ -380,8 +382,9 @@
     $('#sidebar-avatar').textContent = initials(display);
     $('#workspace-avatar').textContent = state.me.role === 'institution_admin' ? 'I' : state.me.role === 'recruiter' ? 'R' : state.me.role === 'platform_admin' ? 'P' : 'S';
     $('#workspace-kind').textContent = state.me.role === 'institution_admin' ? 'Institution workspace' : state.me.role === 'recruiter' ? 'Recruiter workspace' : state.me.role === 'platform_admin' ? 'Platform control' : 'Student workspace';
-    $('#workspace-name').textContent = state.me.role === 'institution_admin' ? 'Placement Office' : display;
-    $('#workspace-name').title = $('#workspace-name').textContent;
+    // Keep the account name once, beside the sign-out action.
+    $('#workspace-name').textContent = '';
+    $('#workspace-name').hidden = true;
     if (state.me.role === 'student') {
       try { state.studentAccess = await api('/billing/status'); } catch { state.studentAccess = null; }
     }
@@ -524,7 +527,7 @@
     } else if (view === 'jobs') {
       setPage('Jobs','Recruiter workspace'); setContextAction('Post job','open-job-form');
       const jobs = await api('/jobs/my/listings'); state.lastJobs = jobs;
-      $('#app-content').innerHTML = `${pageHead('Job listings','Create public jobs or institution-targeted campus opportunities.','Post a job','open-job-form')}${jobs.length ? `<div class="data-panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Role</th><th>Visibility</th><th>Approval</th><th>Applications</th><th>Deadline</th><th></th></tr></thead><tbody>${jobs.map(j => `<tr><td><span class="table-primary">${esc(j.title)}</span><span class="table-secondary">${esc(j.company_name || '')} · ${esc(j.location || '')}</span></td><td>${j.visibility === 'campus' ? `Campus<span class="table-secondary">${esc(j.target_organization_name || 'Target institution')}</span>` : 'Public'}</td><td>${statusBadge(j.approval_status)}</td><td>${j.application_count}</td><td>${fmtDate(j.deadline)}</td><td><div class="row-actions"><button class="row-button primary" data-action="view-applicants" data-id="${j.id}">Applicants</button><button class="row-button" data-action="delete-job" data-id="${j.id}">Delete</button></div></td></tr>`).join('')}</tbody></table></div></div>` : emptyState('JB','No jobs yet','Post a public role or target a specific institution for campus hiring.',`<button class="button button-primary" data-action="open-job-form">Post first job</button>`)}`;
+      $('#app-content').innerHTML = `${pageHead('Job listings','Create public jobs or institution-targeted campus opportunities.','Post a job','open-job-form')}${jobs.length ? `<div class="data-panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Role</th><th>Visibility</th><th>Approval</th><th>Applications</th><th>Deadline</th><th></th></tr></thead><tbody>${jobs.map(j => `<tr><td><span class="table-primary">${esc(j.title)}</span><span class="table-secondary">${esc(j.company_name || '')} · ${esc(j.location || '')}</span></td><td>${j.visibility === 'campus' ? `Campus<span class="table-secondary">${esc(j.target_organization_name || 'Target institution')}</span>` : 'Public'}</td><td>${statusBadge(j.approval_status)}</td><td>${j.application_count}</td><td>${fmtDate(j.deadline)}</td><td><div class="row-actions"><button class="row-button primary" data-action="view-applicants" data-id="${j.id}">Applicants</button><button class="row-button danger" data-action="delete-job" data-id="${j.id}">Delete</button></div></td></tr>`).join('')}</tbody></table></div></div>` : emptyState('JB','No jobs yet','Post a public role or target a specific institution for campus hiring.',`<button class="button button-primary" data-action="open-job-form">Post first job</button>`)}`;
     } else if (view === 'candidates') {
       setPage('Candidates','Recruiter workspace'); setContextAction();
       const students = await api('/recruiters/students/search');

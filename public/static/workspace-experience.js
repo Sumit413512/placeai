@@ -32,14 +32,9 @@
 
     shell.dataset.placeaiRole = role;
 
-    let chip = context.querySelector('.workspace-role-chip');
-    if (!chip) {
-      chip = document.createElement('span');
-      chip.className = 'workspace-role-chip';
-      context.appendChild(chip);
-    }
-    chip.textContent = ROLE_META[role].short;
-    chip.title = ROLE_META[role].label;
+    // The sidebar already identifies the role. Do not add a second role badge
+    // beside the page title when views or account roles change.
+    context.querySelector('.workspace-role-chip')?.remove();
   }
 
   function navPreferenceKey(role) {

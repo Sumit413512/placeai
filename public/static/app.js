@@ -28,10 +28,10 @@
     '/static/release-ux-fixes.js',
     '/static/integration-readiness.js',
     '/static/ai-readiness.js',
-    '/static/workspace-experience.js',
+    '/static/workspace-experience.js?v=20261013-workspace',
     '/static/legal-links.js',
     '/static/career-roadmap.js',
-    '/static/app-core.js?v=20261012-security'
+    '/static/app-core.js?v=20261013-workspace'
   ];
 
   const loadNext = (index) => {

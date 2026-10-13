@@ -431,7 +431,7 @@ def root():
         '<script src="/static/release-ux-fixes.js" defer></script>\n'
         '<script src="/static/integration-readiness.js" defer></script>\n'
         '<script src="/static/ai-readiness.js" defer></script>\n'
-        '<script src="/static/workspace-experience.js" defer></script>\n'
+        '<script src="/static/workspace-experience.js?v=20261013-workspace" defer></script>\n'
         '<script src="/static/career-roadmap.js" defer></script>\n'
         '<script src="/static/legal-links.js" defer></script>\n'
     )
