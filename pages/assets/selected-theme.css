@@ -487,3 +487,117 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
     margin-right: 20px;
   }
 }
+
+/* Readable content on light workspace surfaces. The old check-list treatment
+   belongs to dark marketing sections, not authenticated feature cards. */
+#app-shell .check-list {
+  list-style: disc;
+  margin: 12px 0;
+  padding-inline-start: 22px;
+}
+#app-shell .check-list li {
+  display: list-item;
+  color: var(--pa-ink) !important;
+  font-size: var(--type-body) !important;
+  line-height: 1.6;
+  padding: 4px 0;
+  opacity: 1;
+  overflow-wrap: anywhere;
+}
+#app-shell .check-list li::before { content: none; }
+#app-shell .check-list li::marker { color: var(--pa-accent); }
+#app-shell .app-nav button[aria-current="page"] .nav-icon { color: var(--pa-accent) !important; }
+#app-shell :is(.activity-item small, .operation-card small, .note-box p, .ai-box p,
+  .muted-copy, .roadmap-generated, .roadmap-disclaimer) {
+  color: var(--pa-muted) !important;
+  font-size: var(--type-small) !important;
+  line-height: 1.6;
+}
+#app-shell .app-content .two-panel { align-items: start; }
+#app-shell .roadmap-priority-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+#app-shell .roadmap-priority-grid > .panel { min-height: 0; }
+#app-shell .roadmap-market-panel > .check-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 32px;
+  row-gap: 8px;
+}
+#app-shell .roadmap-market-notes {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-color: var(--pa-border);
+}
+#app-shell .roadmap-market-notes > summary {
+  cursor: pointer;
+  color: var(--pa-accent);
+  font-size: var(--type-small);
+  padding-block: 6px;
+}
+#app-shell .roadmap-market-notes > summary:focus-visible {
+  outline: 2px solid var(--pa-accent);
+  outline-offset: 3px;
+}
+#app-shell :is(.roadmap-focus-panel, .roadmap-target-card, .roadmap-rhythm-grid > div) {
+  background: var(--pa-surface);
+  border: 1px solid var(--pa-border);
+  border-radius: var(--radius-panel);
+  box-shadow: none;
+}
+#app-shell .roadmap-target-card { min-height: 0; justify-content: center; }
+#app-shell .roadmap-target-card small { margin-bottom: 8px; }
+#app-shell .roadmap-rhythm-grid > div { min-height: 0; }
+#app-shell :is(.roadmap-focus-copy > p, .roadmap-rhythm-grid span,
+  .roadmap-rhythm-grid strong, .roadmap-path-head p) {
+  font-size: var(--type-body) !important;
+  color: var(--pa-ink) !important;
+  line-height: 1.6;
+}
+#app-shell :is(.roadmap-chip-list span, .roadmap-focus-actions span,
+  .roadmap-target-card span, .roadmap-rhythm-grid small,
+  .roadmap-form-step small, .roadmap-builder-footer p,
+  .roadmap-plan-toolbar-copy small, .roadmap-adjust-panel > summary small) {
+  font-size: var(--type-small) !important;
+  color: var(--pa-muted) !important;
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: normal;
+}
+#app-shell .roadmap-support-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 16px;
+}
+#app-shell .roadmap-support-section {
+  min-width: 0;
+  padding: 20px;
+  background: var(--pa-surface);
+  border: 1px solid var(--pa-border);
+  border-radius: var(--radius-panel);
+}
+#app-shell .roadmap-support-section h2 { margin: 0 0 12px; font-size: var(--type-section); }
+#app-shell .roadmap-support-grid:empty { display: none; }
+#app-shell .roadmap-disclaimer { margin: 16px 0; }
+#app-shell .app-content :is(.panel > h2, .form-panel > h2) {
+  font-size: var(--type-section) !important;
+  line-height: 1.35;
+}
+#app-shell .app-content :is(.operation-card h3, .report-card h3, .activity-item strong) {
+  font-size: var(--type-body) !important;
+  color: var(--pa-ink) !important;
+  line-height: 1.5;
+}
+#app-shell .app-content :is(.operation-card p, .report-card p, .announcement-card p) {
+  font-size: var(--type-body) !important;
+  color: var(--pa-muted) !important;
+  line-height: 1.6;
+}
+#app-shell .app-content :is(.panel, .operation-card, .report-card, .activity-item > div) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  #app-shell .roadmap-market-panel > .check-list { grid-template-columns: minmax(0, 1fr); }
+}
