@@ -348,3 +348,136 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
   .auth-form-panel h2, #auth-overlay .auth-form-panel h2 { font-size: 25px !important; }
   .button, .app-shell .button { white-space: normal; }
 }
+
+/* Workspace design system: one identity, restrained hierarchy and shared controls.
+   Scoped to the authenticated shell; camera overlays and assessment timers keep
+   their purpose-built presentation and semantic colours. */
+#app-shell {
+  --type-caption: .75rem;
+  --type-small: .875rem;
+  --type-body: 1rem;
+  --type-section: 1.3125rem;
+  --type-title: 1.875rem;
+  --type-metric: 2rem;
+  --radius-control: 5px;
+  --radius-panel: 6px;
+  --radius-pill: 999px;
+  --text-success: #21634a;
+  --text-warning: #795414;
+  --text-danger: #a12727;
+  font-size: var(--type-body);
+  line-height: 1.5;
+  color: var(--pa-ink);
+}
+#app-shell [hidden] { display: none !important; }
+#app-shell .sidebar-user small { display: none; }
+#app-shell .sidebar-bottom .ai-policy { display: none; }
+#app-shell :is(.account-security-button strong, .workspace-avatar, .user-avatar,
+  .icon-button, .icon-button kbd) { font-size: var(--type-small) !important; }
+#app-shell .empty-state p { font-size: var(--type-body) !important; color: var(--pa-muted) !important; }
+#app-shell .workspace-pill { padding-block: 16px; }
+#app-shell #workspace-kind {
+  font-size: var(--type-small) !important;
+  letter-spacing: normal !important;
+  text-transform: none;
+  color: var(--pa-ink) !important;
+}
+#app-shell .page-head { margin-bottom: 24px; }
+#app-shell .page-head h1 {
+  font-size: var(--type-title) !important;
+  line-height: 1.2;
+  letter-spacing: -.02em;
+}
+#app-shell :is(.panel-head h2, .data-toolbar h2, .form-panel h2, .empty-state h3) {
+  font-size: var(--type-section) !important;
+  line-height: 1.35;
+}
+#app-shell :is(.page-head p, .panel-head p, .data-table td, .table-primary,
+  .form-stack label, .field-label, input, textarea, select) {
+  font-size: var(--type-body) !important;
+}
+#app-shell :is(.table-secondary, .data-table th, .app-nav button, .row-button,
+  .status-badge, .status-pill, .metric-card small, .metric-card span,
+  .sidebar-user strong, .sidebar-user em, .topbar-context strong) {
+  font-size: var(--type-small) !important;
+}
+#app-shell :is(.nav-group-label, .topbar-context small) {
+  font-size: var(--type-caption) !important;
+  text-transform: none;
+  letter-spacing: normal !important;
+}
+#app-shell .metric-card strong { font-size: var(--type-metric) !important; }
+#app-shell :is(.table-primary, .topbar-context strong) { color: var(--pa-ink) !important; }
+#app-shell :is(.table-secondary, .page-head p, .panel-head p, .data-table th,
+  .nav-group-label, .topbar-context small) { color: var(--pa-muted) !important; }
+#app-shell :is(.text-button, .section-kicker) { color: var(--pa-accent) !important; }
+#app-shell :is(.status-approved, .status-hired, .status-accepted, .metric-good) {
+  color: var(--text-success) !important;
+}
+#app-shell :is(.status-pending, .status-pending_review, .status-shortlisted) {
+  color: var(--text-warning) !important;
+}
+#app-shell :is(.status-rejected, .status-cancelled) { color: var(--text-danger) !important; }
+#app-shell :is(.panel, .data-panel, .form-panel, .metric-card, .operation-card, .empty-state) {
+  border-radius: var(--radius-panel) !important;
+}
+#app-shell :is(input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea, select,
+  .account-security-button, .app-nav button) { border-radius: var(--radius-control) !important; }
+#app-shell :is(.status-badge, .status-pill) { border-radius: var(--radius-pill) !important; }
+#app-shell :is(.button, .row-button, .icon-button) {
+  --button-bg: var(--pa-surface);
+  --button-fg: var(--pa-ink);
+  --button-border: var(--pa-border);
+  background: var(--button-bg) !important;
+  color: var(--button-fg) !important;
+  border: 1px solid var(--button-border) !important;
+  border-radius: var(--radius-control) !important;
+  box-shadow: none !important;
+  line-height: 1.4;
+}
+#app-shell .button { font-size: var(--type-body) !important; }
+#app-shell :is(.button-primary, .button.primary, .row-button.primary) {
+  --button-bg: var(--pa-accent);
+  --button-fg: var(--pa-surface);
+  --button-border: var(--pa-accent);
+}
+#app-shell :is(.button-ghost, .button-light) {
+  --button-bg: transparent;
+  --button-fg: var(--pa-accent);
+  --button-border: transparent;
+}
+#app-shell :is(.button, .row-button, .icon-button):hover:not(:disabled) {
+  --button-bg: var(--pa-canvas);
+  --button-border: var(--pa-accent);
+}
+#app-shell :is(.button-primary, .button.primary, .row-button.primary):hover:not(:disabled) {
+  --button-bg: var(--pa-accent-hover);
+}
+#app-shell :is(.button, .row-button).danger {
+  --button-bg: var(--pa-surface);
+  --button-fg: var(--text-danger);
+  --button-border: var(--text-danger);
+}
+#app-shell :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--pa-accent) !important;
+  outline-offset: 3px;
+}
+#app-shell button:disabled { opacity: .55; cursor: not-allowed; }
+#app-shell .account-security-button > span {
+  text-transform: none;
+  letter-spacing: normal !important;
+  font-size: var(--type-small) !important;
+  opacity: 1 !important;
+}
+@media (max-width: 760px) {
+  #app-shell .page-head h1 { font-size: var(--type-section) !important; }
+  #app-shell .topbar-actions .icon-button { min-width: 44px; min-height: 44px; }
+}
+@media (min-width: 1100px) {
+  body:has(#app-shell:not(.hidden)) .privacy-preferences {
+    width: calc(100% - 300px);
+    max-width: 1000px;
+    margin-left: 280px;
+    margin-right: 20px;
+  }
+}
