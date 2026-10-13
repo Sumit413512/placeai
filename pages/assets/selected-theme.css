@@ -617,6 +617,103 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
   color: var(--pa-muted) !important;
   font-size: var(--type-small) !important;
 }
+
+/* Readiness cards use the shared workspace hierarchy and readable evidence. */
+#app-shell :is(.readiness-hero, .readiness-component, .ai-box) {
+  border-radius: var(--radius-panel) !important;
+}
+#app-shell .readiness-hero { margin-bottom: 16px; }
+#app-shell .readiness-hero h2 {
+  font-size: var(--type-section) !important;
+  line-height: 1.35;
+}
+#app-shell .readiness-score strong { font-size: var(--type-metric) !important; }
+#app-shell .readiness-score :is(span, small) { font-size: var(--type-small) !important; }
+#app-shell .readiness-component {
+  min-width: 0;
+  padding: 18px;
+  background: var(--pa-surface);
+  border: 1px solid var(--pa-border);
+}
+#app-shell .readiness-component header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 12px;
+}
+#app-shell .readiness-component strong {
+  font-size: var(--type-body) !important;
+  color: var(--pa-ink) !important;
+}
+#app-shell .readiness-component :is(span, small) {
+  font-size: var(--type-small) !important;
+  color: var(--pa-muted) !important;
+}
+#app-shell .readiness-component header > span { white-space: nowrap; }
+#app-shell .readiness-component small { display: block; margin-top: 8px; }
+#app-shell :is(.readiness-component p, .readiness-hero p) {
+  font-size: var(--type-body) !important;
+  line-height: 1.6;
+  color: var(--pa-muted) !important;
+  overflow-wrap: anywhere;
+}
+#app-shell .readiness-component p { margin: 12px 0 0; }
+#app-shell .readiness-components > article:last-child:nth-child(odd) { grid-column: 1 / -1; }
+#app-shell :is(.professional-meter, .professional-meter i) { border-radius: var(--radius-pill); }
+#app-shell .ai-box-head span {
+  font-size: var(--type-small) !important;
+  text-transform: none;
+  letter-spacing: normal !important;
+}
+#app-shell .empty-state h2 {
+  font-size: var(--type-section) !important;
+  line-height: 1.35;
+  margin: 0;
+}
+#app-shell .command-launch-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: var(--pa-ink) !important;
+}
+#app-shell #document-upload-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 16px;
+}
+#app-shell #document-upload-form label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  font-size: var(--type-body) !important;
+  color: var(--pa-ink) !important;
+}
+#app-shell #document-upload-form :is(input, select) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+#app-shell #document-upload-form .file-picker { grid-column: 1 / -1; }
+#app-shell .command-launch kbd {
+  font-size: var(--type-caption) !important;
+  color: var(--pa-muted) !important;
+  border-radius: var(--radius-control);
+}
+#app-shell .panel-head button {
+  background: transparent !important;
+  color: var(--pa-accent) !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--radius-control);
+  padding: 8px 12px;
+  line-height: 1.4;
+}
+#app-shell .panel-head button:hover:not(:disabled) {
+  background: var(--pa-canvas) !important;
+  border-color: var(--pa-accent) !important;
+}
 @media (max-width: 760px) {
   #app-shell .roadmap-market-panel > .check-list { grid-template-columns: minmax(0, 1fr); }
 }
