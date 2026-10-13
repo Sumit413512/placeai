@@ -232,7 +232,7 @@ INDEX_HTML = '''<!doctype html>
     </section>
   </div>
 
-  <script src="/static/app.js?v=20261012-learning-hub" defer></script>
+  <script src="/static/app.js?v=20261012-security" defer></script>
   <script src="/static/learning-hub.js?v=20261012-2" defer></script>
 </body>
 </html>

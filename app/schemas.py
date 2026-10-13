@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, HttpUrl, TypeAdapter, field_validator
 
 
 class UserRoleEnum(str, Enum):
@@ -677,6 +677,17 @@ class DriveStageCreate(BaseModel):
     stage_type: str = "custom"
     is_terminal: bool = False
 
+def _meeting_web_url(value: str | None) -> str | None:
+    if value is None or not value.strip():
+        return None
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ValueError("Meeting links may not contain control characters")
+    parsed = TypeAdapter(HttpUrl).validate_python(value.strip())
+    if parsed.username or parsed.password:
+        raise ValueError("Meeting links may not contain embedded credentials")
+    return str(parsed)
+
+
 class InterviewScheduleCreate(BaseModel):
     application_id: str
     drive_id: Optional[str] = None
@@ -684,22 +695,26 @@ class InterviewScheduleCreate(BaseModel):
     scheduled_at: datetime
     mode: str = "online"
     venue: Optional[str] = None
-    meeting_url: Optional[str] = None
+    meeting_url: Optional[str] = Field(None, max_length=2000)
     interviewer: Optional[str] = None
     student_slot: Optional[str] = None
     instructions: Optional[str] = None
+
+    _validate_meeting_url = field_validator("meeting_url")(_meeting_web_url)
 
 class InterviewScheduleUpdate(BaseModel):
     scheduled_at: Optional[datetime] = None
     mode: Optional[str] = None
     venue: Optional[str] = None
-    meeting_url: Optional[str] = None
+    meeting_url: Optional[str] = Field(None, max_length=2000)
     interviewer: Optional[str] = None
     student_slot: Optional[str] = None
     instructions: Optional[str] = None
     status: Optional[str] = None
     attendance_status: Optional[str] = None
     result: Optional[str] = None
+
+    _validate_meeting_url = field_validator("meeting_url")(_meeting_web_url)
 
 class InterviewEvaluationCreate(BaseModel):
     technical_knowledge: Optional[int] = Field(None, ge=0, le=10)

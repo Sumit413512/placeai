@@ -1,0 +1,41 @@
+name: PlaceAI Production Security Surface
+
+on:
+  workflow_run:
+    workflows: [PlaceAI Release Integrity]
+    branches: [main]
+    types: [completed]
+  schedule:
+    - cron: '41 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: placeai-production-security-surface
+  cancel-in-progress: true
+
+jobs:
+  surface:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install bounded HTTP checker
+        run: pip install httpx==0.28.1
+      - name: Check production security and exact release
+        run: python scripts/security_surface_check.py --expected-sha "$(git rev-parse HEAD)" --output security-surface.json
+      - name: Save security evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: placeai-security-surface-${{ github.run_id }}
+          path: security-surface.json
+          retention-days: 30
