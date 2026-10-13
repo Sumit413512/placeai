@@ -407,6 +407,12 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
   letter-spacing: normal !important;
 }
 #app-shell .metric-card strong { font-size: var(--type-metric) !important; }
+#app-shell .panel-head button { font-size: var(--type-small) !important; }
+#app-shell .section-kicker {
+  font-size: var(--type-caption) !important;
+  text-transform: none;
+  letter-spacing: normal !important;
+}
 #app-shell :is(.table-primary, .topbar-context strong) { color: var(--pa-ink) !important; }
 #app-shell :is(.table-secondary, .page-head p, .panel-head p, .data-table th,
   .nav-group-label, .topbar-context small) { color: var(--pa-muted) !important; }
