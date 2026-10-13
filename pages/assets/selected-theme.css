@@ -598,6 +598,25 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
   min-width: 0;
   overflow-wrap: anywhere;
 }
+#app-shell :is(.metric-card span, .optional, .roadmap-target-card small,
+  .roadmap-evidence > summary small) {
+  font-size: var(--type-small) !important;
+  color: var(--pa-muted) !important;
+  line-height: 1.5;
+  opacity: 1 !important;
+  text-transform: none;
+  letter-spacing: normal;
+}
+#app-shell :is(.roadmap-form-step strong, .roadmap-evidence > summary strong,
+  .roadmap-adjust-panel > summary strong) {
+  font-size: var(--type-body) !important;
+  color: var(--pa-ink) !important;
+}
+#app-shell .status-badge.status-applied { color: var(--pa-accent) !important; }
+#app-shell .progress-item span {
+  color: var(--pa-muted) !important;
+  font-size: var(--type-small) !important;
+}
 @media (max-width: 760px) {
   #app-shell .roadmap-market-panel > .check-list { grid-template-columns: minmax(0, 1fr); }
 }
