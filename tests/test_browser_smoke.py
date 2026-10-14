@@ -9,7 +9,7 @@ import time
 from urllib.request import urlopen
 
 import pytest
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -220,7 +220,7 @@ def test_registration_verification_screen_and_resend_are_usable_on_mobile(browse
     dialog.wait_for(state='visible')
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1')
     dialog.get_by_role('button',name='Resend verification link').click()
-    assert 'Check your inbox' in dialog.get_by_role('status').inner_text()
+    expect(dialog.get_by_role('status')).to_contain_text('Check your inbox')
     dialog.get_by_role('button',name='Back to sign in').click()
     page.locator('#role-login-form').wait_for(state='visible')
     page.close()
