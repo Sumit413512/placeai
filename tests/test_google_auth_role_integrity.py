@@ -15,7 +15,7 @@ from app import google_login
 from app.database import Base, get_db
 from app.dependencies import get_current_user
 from app.models import (
-    GoogleIdentity, Organization, RateLimitBucket, RecruiterProfile, RefreshSession,
+    AccountProtection, GoogleIdentity, Organization, RateLimitBucket, RecruiterProfile, RefreshSession,
     StudentProfile, User, UserRole,
 )
 from app.routers import auth
@@ -29,7 +29,7 @@ CREDENTIAL = "synthetic-google-id-token-for-tests"
 def google_auth(monkeypatch):
     """Exercise real endpoints, sessions, password hashes and rate limits in isolation."""
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    tables = [Organization, User, GoogleIdentity, StudentProfile, RecruiterProfile, RefreshSession, RateLimitBucket]
+    tables = [Organization, User, GoogleIdentity, StudentProfile, RecruiterProfile, RefreshSession, RateLimitBucket, AccountProtection]
     Base.metadata.create_all(engine, tables=[model.__table__ for model in tables])
     sessions = sessionmaker(bind=engine)
     monkeypatch.setattr(auth.settings, "google_client_id", "placeai-test.apps.googleusercontent.com")
@@ -55,6 +55,7 @@ def google_auth(monkeypatch):
     password_hash = get_hashed_password(PASSWORD)
 
     def make_user(role="student", email=None, **fields):
+        fields.setdefault("email_verified", True)
         with sessions() as db:
             user = User(email=email or claims["email"], username=f"user_{db.query(User).count()}",
                         hashed_password=password_hash, role=UserRole(role), **fields)
@@ -303,6 +304,44 @@ def test_concurrent_link_conflict_rolls_back_without_session(google_auth, monkey
     with google_auth.sessions() as db:
         assert db.query(GoogleIdentity).count() == 0
         assert db.query(RefreshSession).count() == 0
+
+
+def test_restoring_a_used_google_nonce_cookie_cannot_replay_signin(google_auth):
+    google_auth.make_user()
+    challenge = google_auth.challenge()
+    cookie = challenge.cookies.get(google_login.COOKIE)
+    assert google_auth.sign_in(fresh_challenge=False).status_code == 200
+    google_auth.client.cookies.set(google_login.COOKIE, cookie, path='/auth/google')
+    replay = google_auth.sign_in(fresh_challenge=False)
+    assert replay.status_code == 401
+    with google_auth.sessions() as db:
+        assert db.query(RefreshSession).count() == 1
+
+
+def test_google_login_cannot_skip_an_enrolled_authenticator(google_auth):
+    from app.auth_protection import encrypt_secret
+    user_id = google_auth.make_user()
+    with google_auth.sessions() as db:
+        db.add(AccountProtection(user_id=user_id,mfa_secret=encrypt_secret(user_id,'JBSWY3DPEHPK3PXP')))
+        db.commit()
+    response = google_auth.sign_in()
+    assert response.status_code == 200
+    assert response.json()['mfa_required'] is True
+    assert response.json()['access_token'] is None
+    assert 'placeai_refresh' not in response.cookies
+    with google_auth.sessions() as db:
+        assert db.query(RefreshSession).count() == 0
+
+
+def test_unverified_existing_account_requires_explicit_password_or_recovery_before_google_link(google_auth):
+    user_id=google_auth.make_user(email_verified=False)
+    response=google_auth.sign_in()
+    assert response.status_code==403
+    assert response.json()['detail']['code']=='GOOGLE_LINK_PASSWORD_REQUIRED'
+    with google_auth.sessions() as db:
+        assert db.get(User,user_id).email_verified is False
+        assert db.query(GoogleIdentity).count()==0
+    assert google_auth.sign_in(password=PASSWORD).status_code==200
 
 
 def test_google_token_verifier_supplies_configured_audience(monkeypatch):

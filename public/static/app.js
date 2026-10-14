@@ -21,6 +21,7 @@
   const scripts = [
     '/static/workspace-runtime.js',
     '/static/api-errors.js',
+    '/static/auth-protection.js',
     '/static/access-portal.js',
     '/static/ui-state-fixes.js',
     '/static/account-security.js',

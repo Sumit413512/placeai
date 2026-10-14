@@ -1,6 +1,8 @@
 html.placeai-password-rotation-open,
 html.placeai-password-rotation-open body { overflow: hidden !important; }
 
+.auth-protection-button { width: 100%; margin-bottom: 8px; text-align: left; }
+
 .password-rotation-overlay {
   position: fixed; inset: 0; z-index: 30000; display: grid; place-items: center;
   padding: 20px; background: rgba(10, 18, 32, .72); backdrop-filter: blur(8px);

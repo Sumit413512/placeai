@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.exception_handlers import http_exception_handler
+from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy import text
 from sqlalchemy.exc import DataError, IntegrityError, SQLAlchemyError
@@ -171,6 +172,8 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if path == "/" and ({"reset_token", "verify_email_token"} & set(request.query_params)):
+        response.headers["Referrer-Policy"] = "no-referrer"
     # Camera/microphone remain denied platform-wide. Only the dedicated secure
     # assessment document may request media/display capture and load the pinned
     # on-device proctor runtime/model resources.
@@ -359,6 +362,8 @@ ENTERPRISE_SECURE_EXCLUSIONS = {
 _include_router(auth)
 _include_router(account_security, ACCOUNT_SECURITY_REPLACEMENTS)
 _include_router(account_security_secure)
+from app.auth_protection import router as auth_protection_router
+app.include_router(auth_protection_router)
 _include_router(access)
 _include_router(students)
 _include_router(recruiters)
@@ -412,6 +417,15 @@ async def public_http_error(request: Request, exc: StarletteHTTPException):
     return await http_exception_handler(request, exc)
 
 
+@app.exception_handler(RequestValidationError)
+async def safe_validation_error(request: Request, exc: RequestValidationError):
+    # Pydantic's default errors echo submitted input, including passwords and codes.
+    return JSONResponse(status_code=422, content={"detail": [
+        {"loc": list(error["loc"]), "msg": str(error["msg"]), "type": error["type"]}
+        for error in exc.errors()
+    ]})
+
+
 @app.get("/", include_in_schema=False)
 def root():
     """Serve the production workspace shell with the role-aware access layer."""
@@ -424,6 +438,7 @@ def root():
         '<link rel="stylesheet" href="/static/workspace-experience.css">\n'
         '<script src="/static/workspace-runtime.js" defer></script>\n'
         '<script src="/static/api-errors.js" defer></script>\n'
+        '<script src="/static/auth-protection.js" defer></script>\n'
         '<script src="/static/access-portal.js" defer></script>\n'
         '<script src="/static/ui-state-fixes.js" defer></script>\n'
         '<script src="/static/account-security.js" defer></script>\n'

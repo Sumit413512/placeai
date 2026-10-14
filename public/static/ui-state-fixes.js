@@ -267,26 +267,21 @@
 })();
 
 // Password recovery runs from this early-loaded shim, before app.js. Capture the
-// one-time token into sessionStorage before removing it from the address bar so a
-// refresh cannot destroy an otherwise valid recovery attempt.
+// one-time token in memory before removing it from the address bar. Reloading
+// requires reopening the original recovery link; browser storage keeps no token.
 (() => {
   'use strict';
   if (window.__PLACEAI_RECOVERY_SHIM_LOADED__) return;
   window.__PLACEAI_RECOVERY_SHIM_LOADED__ = true;
 
-  const RESET_TOKEN_KEY = 'placeai.password.reset.v1';
   const TOKEN_MIN = 20;
   const TOKEN_MAX = 512;
-
-  const sessionGet = () => {
-    try { return sessionStorage.getItem(RESET_TOKEN_KEY) || ''; } catch { return ''; }
-  };
-  const sessionSet = value => {
-    try { sessionStorage.setItem(RESET_TOKEN_KEY, value); } catch {}
-  };
-  const sessionClear = () => {
-    try { sessionStorage.removeItem(RESET_TOKEN_KEY); } catch {}
-  };
+  let recoveryToken = '';
+  // Clear credentials left by older releases, without persisting this one.
+  try { sessionStorage.removeItem('placeai.password.reset.v1'); } catch {}
+  const sessionGet = () => recoveryToken;
+  const sessionSet = value => { recoveryToken = value; };
+  const sessionClear = () => { recoveryToken = ''; };
 
   let token = '';
   try {
@@ -309,13 +304,15 @@
 
   window.__placeaiPasswordRecoveryActive = true;
 
-  const passwordChecks = value => ({
+  const passwordChecks = value => {
+    if (value.length >= 20 && value.length <= 128 && new Set(value.toLowerCase()).size >= 8) return {length:true, lower:true, upper:true, number:true, symbol:true};
+    return ({
     length: value.length >= 12,
     lower: /[a-z]/.test(value),
     upper: /[A-Z]/.test(value),
     number: /[0-9]/.test(value),
     symbol: /[^A-Za-z0-9]/.test(value)
-  });
+  }); };
 
   const apiMessage = (payload, fallback) => {
     if (typeof payload?.detail === 'string') return payload.detail;
@@ -361,7 +358,7 @@
         <div class="password-recovery-brand"><span class="password-recovery-dot" aria-hidden="true"></span><span>PlaceAI</span></div>
         <span class="password-recovery-kicker">Secure account recovery</span>
         <h1 id="password-recovery-title">Set a new password</h1>
-        <p class="password-recovery-copy">Use a strong password. This one-time recovery link remains available in this tab until the reset succeeds or you cancel.</p>
+        <p class="password-recovery-copy">Use a strong password. Keep this tab open until you finish. If you reload, reopen the original email link.</p>
         <form id="password-recovery-form" class="password-recovery-form" novalidate>
           <label>New password<input id="password-recovery-new" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
           <div class="password-rules" aria-live="polite">

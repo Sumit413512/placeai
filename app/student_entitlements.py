@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.billing_models import StudentSubscription
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import StudentProfile, User, UserRole
+from app.models import Organization, StudentProfile, User, UserRole
 from app.placement_access import utcnow_naive
 
 TRIAL_DAYS = 3
@@ -24,7 +24,10 @@ def student_access_status(user: User, db: Session) -> dict:
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found")
 
-    if profile.organization_id or user.organization_id:
+    # An institution code is a public identifier, never proof of sponsorship.
+    institution = db.get(Organization, profile.organization_id) if profile.organization_id else None
+    if (profile.is_verified and institution and institution.is_active
+            and user.organization_id == profile.organization_id):
         return {
             "student_kind": "university",
             "access_mode": "campus_sponsored",
