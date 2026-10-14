@@ -825,3 +825,51 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 @media (prefers-reduced-motion: reduce) {
   #app-shell .app-nav button, #app-shell .metric-card, #app-shell .workspace-shortcut { transition: none; }
 }
+
+/* Shared interaction details: native buttons, visible focus, restrained motion. */
+:root { --control-radius: 8px; --control-height: 44px; }
+#marketing-site .button {
+  min-height: var(--control-height);
+  border-radius: var(--control-radius) !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  line-height: 1.4;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.button-icon { width: 18px; height: 18px; flex: 0 0 18px; }
+#marketing-site :is(button, a):focus-visible {
+  outline: 2px solid var(--pa-accent) !important;
+  outline-offset: 4px;
+}
+#marketing-site .button:hover:not(:disabled) { transform: none; }
+#marketing-site .button:disabled { cursor: not-allowed; opacity: .6; }
+#marketing-site .hero-trust { gap: 20px; }
+#marketing-site .hero-trust > div { min-width: 0; }
+#marketing-site .journey-card { border-radius: 12px; display: flex; flex-direction: column; }
+#marketing-site .journey-card-top { display: flex; justify-content: space-between; align-items: center; }
+#marketing-site .journey-symbol {
+  display: grid; place-items: center; width: 40px; height: 40px;
+  background: #eaf1ff; border-radius: 8px; font-size: 21px;
+}
+#marketing-site .journey-card:nth-child(2) .journey-symbol { background: #f4efff; }
+#marketing-site .journey-card:nth-child(3) .journey-symbol { background: #ecf8f2; }
+#marketing-site .journey-card a { margin-top: auto; padding-block: 8px; min-height: 24px; }
+#app-shell .workspace-shortcut-copy { display: grid; gap: 5px; min-width: 0; }
+#app-shell .workspace-shortcut-label { font-size: var(--type-body); line-height: 1.35; }
+#app-shell .workspace-shortcut-hint {
+  color: var(--pa-muted); font-size: var(--type-caption); line-height: 1.5;
+  white-space: normal; overflow-wrap: normal;
+}
+#app-shell .workspace-shortcut:focus-visible { outline: 2px solid var(--pa-accent) !important; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { #marketing-site .button { transition: none; } }
+
+/* The social mark must not inherit the SVG intrinsic 300px width. */
+.placeai-footer .placeai-social-button {
+  min-height: 44px; border-color: var(--pa-border); border-radius: 8px;
+  background: var(--pa-canvas); font-weight: 400;
+}
+.placeai-footer .placeai-social-button svg {
+  width: 18px; height: 18px; flex: 0 0 18px; fill: currentColor;
+}

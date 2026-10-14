@@ -81,7 +81,10 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
     page.screenshot(path=str(output / f'{role}-dashboard-mobile.png'), full_page=True)
     page.set_viewport_size({'width':1440,'height':960})
     target = shortcuts.first.get_attribute('data-view')
-    shortcuts.first.click()
+    page.keyboard.press('Tab')
+    shortcuts.first.focus()
+    assert shortcuts.first.evaluate('el => getComputedStyle(el).outlineStyle') != 'none'
+    page.keyboard.press('Enter')
     page.wait_for_function("view => document.querySelector('#app-nav button.active')?.dataset.view === view", arg=target)
     page.locator('#app-nav button[data-view="dashboard"]').click()
     page.locator('.workspace-shortcuts').wait_for()

@@ -210,13 +210,21 @@
     const toneFor = label => /due|rescue|requests|opportunit/i.test(label) ? 'amber'
       : /offers|hires|placement rate|applications|students/i.test(label) ? 'mint'
       : /interview|recruiter|gemini/i.test(label) ? 'violet' : 'blue';
+    const metricIcon = label => {
+      if (/profile|verified/i.test(label)) return '<circle cx="12" cy="8" r="3"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>';
+      if (/interview/i.test(label)) return '<rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3"/>';
+      if (/offers|hires|placement rate/i.test(label)) return '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>';
+      if (/jobs|opportunit|drives/i.test(label)) return '<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V3h8v4M3 12h18"/>';
+      if (/students|recruiter|organizations/i.test(label)) return '<circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6m1 4a5 5 0 0 1 4 5"/>';
+      return '<path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h4"/>';
+    };
     for (const card of content.querySelectorAll('.metric-card')) {
       const label = card.querySelector('small')?.textContent || '';
       card.dataset.metricTone = toneFor(label);
       if (card.querySelector('.metric-symbol')) continue;
       const symbol = document.createElement('span');
       symbol.className = 'metric-symbol'; symbol.setAttribute('aria-hidden', 'true');
-      symbol.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 20h16M7 15v-4m5 4V5m5 10V8"/></svg>';
+      symbol.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false">' + metricIcon(label) + '</svg>';
       card.append(symbol);
     }
     if (!document.querySelector('#app-nav button.active[data-view="dashboard"]') || content.querySelector('.workspace-shortcuts')) return;
@@ -228,6 +236,16 @@
       institution_admin: ['students', 'drives', 'attention', 'reports'],
       platform_admin: ['organizations', 'registrations', 'leads', 'integrations']
     };
+    const descriptions = {
+      'learning-hub': 'Notes, diagrams and PDFs', 'mock-interview': 'Practice and get feedback',
+      roadmap: 'Plan your next skills', opportunities: 'Explore campus openings',
+      jobs: 'Manage open positions', candidates: 'Review your applicants',
+      interviews: 'Coordinate interviews', offers: 'Track offer decisions',
+      students: 'Manage student records', drives: 'Coordinate campus hiring',
+      attention: 'Review pending actions', reports: 'View placement reports',
+      organizations: 'Manage institutions', registrations: 'Review access requests',
+      leads: 'Review enquiries', integrations: 'Check connected services'
+    };
     const section = document.createElement('section');
     section.className = 'panel workspace-shortcuts'; section.setAttribute('aria-label', 'Quick actions');
     const title = document.createElement('h2'); title.textContent = 'Quick actions'; section.append(title);
@@ -238,7 +256,12 @@
       const button = document.createElement('button'); button.type = 'button'; button.className = 'workspace-shortcut'; button.dataset.view = view;
       const icon = source.querySelector('.nav-icon'); if (icon) { const copy = icon.cloneNode(true); copy.setAttribute('aria-hidden', 'true'); button.append(copy); }
       const label = document.createElement('span'); label.textContent = source.querySelector('.nav-label')?.textContent || source.textContent;
-      button.append(label); grid.append(button);
+      label.className = 'workspace-shortcut-label';
+      const copy = document.createElement('span'); copy.className = 'workspace-shortcut-copy';
+      copy.append(label);
+      const hint = document.createElement('small'); hint.className = 'workspace-shortcut-hint';
+      hint.textContent = descriptions[view] || 'Open workspace'; copy.append(hint);
+      button.append(copy); grid.append(button);
     }
     if (grid.childElementCount) { section.append(grid); metrics.after(section); }
   }

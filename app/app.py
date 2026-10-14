@@ -446,8 +446,8 @@ def root():
         '<script src="/static/release-ux-fixes.js" defer></script>\n'
         '<script src="/static/integration-readiness.js" defer></script>\n'
         '<script src="/static/ai-readiness.js" defer></script>\n'
-        '<script src="/static/workspace-experience.js?v=20261014-score-fit" defer></script>\n'
-        '<script src="/static/career-roadmap.js?v=20261014-score-fit" defer></script>\n'
+        '<script src="/static/workspace-experience.js?v=20261015-design-detail" defer></script>\n'
+        '<script src="/static/career-roadmap.js?v=20261015-design-detail" defer></script>\n'
         '<script src="/static/legal-links.js" defer></script>\n'
     )
     if "/static/access-portal.js" not in html:

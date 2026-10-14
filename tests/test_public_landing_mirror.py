@@ -48,7 +48,7 @@ def test_public_landing_uses_plain_resume_spelling_and_minimal_hero():
         assert "résumé" not in content
         assert "RÉSUMÉ" not in content
 
-    assert "Campus placement operations for institutions, recruiters and students" in app_html
+    assert "Campus placement operations</div>" in app_html
     assert "PlaceAI public hero refinement — approved minimal direction" in app_css
     assert app_css == public_css
     assert "#marketing-site .eyebrow-dot" in app_css
