@@ -39,6 +39,10 @@ def test_learning_workers_share_one_admission_slot_and_reclaim_expired_leases():
         with Session(scoped) as db:
             row = db.get(LearningNotebook, leases[0][0])
             row.lease_until = utcnow() - timedelta(seconds=1)
+            # Windows may give several inserted rows identical timestamps. Make
+            # this recovery candidate unambiguously oldest, rather than asserting
+            # an unspecified database ordering between equally eligible rows.
+            row.available_at = utcnow() - timedelta(minutes=2)
             db.commit()
         with ThreadPoolExecutor(max_workers=12) as pool:
             replacement = [item for item in pool.map(try_claim, range(24)) if item]

@@ -90,6 +90,7 @@ def test_institution_sponsored_student_gets_career_roadmap():
         db.flush()
         user.organization_id = org.id
         profile.organization_id = org.id
+        profile.is_verified = True
         db.commit()
         access = ensure_roadmap_access(user, db)
         assert access["allowed"] is True
@@ -135,6 +136,7 @@ def test_failed_roadmap_generation_records_safe_audit_metadata():
         db.flush()
         user.organization_id = org.id
         profile.organization_id = org.id
+        profile.is_verified = True
         db.commit()
 
         _record_generation_failure(

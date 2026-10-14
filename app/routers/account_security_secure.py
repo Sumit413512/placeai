@@ -75,4 +75,9 @@ def change_password(
     ).update({RefreshSession.revoked_at: now}, synchronize_session=False)
     db.commit()
     db.refresh(locked_user)
-    return _token_response(locked_user, response, db)
+    from app.models import AccountProtection
+    protection = db.get(AccountProtection, locked_user.id)
+    if protection:
+        protection.challenge_hash = None
+        protection.challenge_expires = None
+    return _token_response(locked_user, response, db, mfa_verified=True)

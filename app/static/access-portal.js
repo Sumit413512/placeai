@@ -262,6 +262,7 @@
     const password = String(body.password || '');
     if (!/^[A-Za-z0-9._-]{3,80}$/.test(username)) throw new Error('Username may only contain letters, numbers, dot, underscore, and hyphen.');
     if (password.length < 12) throw new Error('Password must be at least 12 characters long.');
+    if (password.length >= 20 && password.length <= 128 && new Set(password.toLowerCase()).size >= 8) return ;
     if (!/[a-z]/.test(password)) throw new Error('Password must contain a lowercase letter.');
     if (!/[A-Z]/.test(password)) throw new Error('Password must contain an uppercase letter.');
     if (!/[0-9]/.test(password)) throw new Error('Password must contain a number.');
@@ -276,7 +277,12 @@
       body.email = String(body.email || '').trim();
       body.organization_slug = String(body.organization_slug || '').trim();
       validateStudentSignup(body);
-      await requestJson('/auth/signup', {method: 'POST', body: JSON.stringify({username: body.username, email: body.email, password: body.password, role: 'student', organization_slug: body.organization_slug || null})});
+      const registration = await requestJson('/auth/signup', {method: 'POST', body: JSON.stringify({username: body.username, email: body.email, password: body.password, role: 'student', organization_slug: body.organization_slug || null})});
+      if (registration.verification_required) {
+        form.reset(); setBusy(form, false);
+        window.PlaceAIVerification.showPending(body.email, registration.message);
+        return;
+      }
       const login = await requestJson('/auth/login-role', {method: 'POST', body: JSON.stringify({email: body.email, password: body.password, role: 'student'})});
       if (body.full_name && login.access_token) {
         await requestJson('/students/profile', {method: 'PUT', headers: {Authorization: `Bearer ${login.access_token}`}, body: JSON.stringify({full_name: body.full_name})});

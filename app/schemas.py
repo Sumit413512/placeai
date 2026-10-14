@@ -40,6 +40,10 @@ class DriveStatusEnum(str, Enum):
 def _strong_password(value: str) -> str:
     if len(value) < 12:
         raise ValueError("Password must be at least 12 characters long")
+    if len(value) > 128:
+        raise ValueError("Password must be 128 characters or fewer")
+    if len(value) >= 20 and len(set(value.casefold())) >= 8:
+        return value
     if not any(c.islower() for c in value):
         raise ValueError("Password must contain a lowercase letter")
     if not any(c.isupper() for c in value):
@@ -86,10 +90,12 @@ class UserOut(BaseModel):
 
 
 class TokenSchema(BaseModel):
-    access_token: str
+    access_token: Optional[str] = None
     refresh_token: Optional[str] = None
     token_type: str = "bearer"
     expires_in: int = 1800
+    mfa_required: bool = False
+    mfa_challenge: Optional[str] = None
 
 
 class RefreshTokenRequest(BaseModel):

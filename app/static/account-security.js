@@ -9,6 +9,7 @@
 
   function validatePassword(password) {
     if (password.length < 12) return 'Password must be at least 12 characters long.';
+    if (password.length >= 20 && password.length <= 128 && new Set(password.toLowerCase()).size >= 8) return '';
     if (!/[a-z]/.test(password)) return 'Password must contain a lowercase letter.';
     if (!/[A-Z]/.test(password)) return 'Password must contain an uppercase letter.';
     if (!/[0-9]/.test(password)) return 'Password must contain a number.';

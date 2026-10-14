@@ -18,7 +18,10 @@ password_hash = PasswordHasher()
 MAX_SIGNED_TOKEN_LENGTH = 4096
 
 
-def get_hashed_password(password: str) -> str:
+def get_hashed_password(password: str, *, check_breach: bool = True) -> str:
+    if check_breach:
+        from app.password_security import screen_new_password
+        screen_new_password(password)
     return password_hash.hash(password)
 
 

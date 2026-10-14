@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
-from app.models import User, UserRole
+from app.models import AccountProtection, User, UserRole
 from app.utils import decode_token
 
 settings = get_settings()
@@ -29,6 +29,12 @@ def get_current_user(request: Request, token: str = Depends(oauth2_scheme), db: 
         raise credentials_exception
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is inactive")
+    request.state.placeai_auth_version = int(payload.get("ver", 0))
+    protection = db.get(AccountProtection, user.id)
+    if protection and protection.verification_required and not user.email_verified and request.url.path not in {
+        "/auth/me", "/auth/security-status", "/auth/email-verification/request", "/auth/change-password"
+    }:
+        raise HTTPException(403, detail={"code": "EMAIL_VERIFICATION_REQUIRED", "message": "Verify your email before accessing the workspace."})
     if user.must_change_password and request.url.path not in {"/auth/me", "/auth/change-password"}:
         raise HTTPException(
             status_code=status.HTTP_428_PRECONDITION_REQUIRED,

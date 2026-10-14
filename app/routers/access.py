@@ -21,7 +21,7 @@ from app.email_delivery import (
     transactional_email_configured,
 )
 from app.models import AuditEvent, User, UserRole
-from app.rate_limit import enforce_rate_limit
+from app.rate_limit import enforce_auth_limits, enforce_rate_limit
 from app.routers.auth import _token_response, _utcnow
 from app.schemas import TokenSchema
 from app.services import create_notification, record_audit
@@ -260,7 +260,7 @@ def login_for_selected_role(
 ):
     """Authenticate only when the selected workspace matches the account's actual role."""
     email = str(body.email).lower()
-    enforce_rate_limit(
+    enforce_auth_limits(
         db,
         request,
         scope="login",
@@ -269,18 +269,17 @@ def login_for_selected_role(
         window_seconds=600,
         block_seconds=900,
     )
-    user = db.query(User).filter(User.email == email).first()
-    if not user or not verify_password(body.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Incorrect email or password")
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="Account is inactive")
+    from app.routers.auth import _authenticate
+    user = _authenticate(email, body.password, db)
     if user.role.value != body.role:
         raise HTTPException(
             status_code=403,
             detail=f"This account does not have {ROLE_LABELS[body.role]} workspace access.",
         )
 
-    user.last_login_at = _utcnow()
+    tokens = _token_response(user, response, db)
+    if tokens.mfa_required:
+        return tokens
     _record_login_activity(db, user)
     db.commit()
     db.refresh(user)
@@ -297,7 +296,7 @@ def login_for_selected_role(
             },
             recipients,
         )
-    return _token_response(user, response, db)
+    return tokens
 
 
 @router.post("/public/access-requests", status_code=status.HTTP_202_ACCEPTED)

@@ -11,8 +11,8 @@ from fastapi import HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import GoogleIdentity, RecruiterProfile, StudentProfile, User, UserRole, utcnow
-from app.rate_limit import enforce_rate_limit
+from app.models import GoogleIdentity, RateLimitBucket, RecruiterProfile, StudentProfile, User, UserRole, utcnow
+from app.rate_limit import enforce_auth_limits, enforce_rate_limit
 from app.schemas import GoogleAuthRequest
 from app.utils import get_hashed_password, verify_password
 
@@ -82,10 +82,12 @@ def authenticate(payload: GoogleAuthRequest, request: Request, response: Respons
                 raise HTTPException(403, "Use the Google account already linked to this account")
             # Google is authoritative for Gmail and verified Workspace domains only.
             authoritative = email.endswith("@gmail.com") or bool(info.get("hd"))
-            if not authoritative:
-                enforce_rate_limit(db, request, scope="login", identifier=email, limit=12, window_seconds=600, block_seconds=900)
+            # Never turn an unverified pre-registered local account into an
+            # automatically linked identity using only an email-string match.
+            if not authoritative or not user.email_verified:
+                enforce_auth_limits(db, request, scope="login", identifier=email, limit=12, window_seconds=600, block_seconds=900)
                 if not payload.password:
-                    raise HTTPException(403, {"code": "GOOGLE_LINK_PASSWORD_REQUIRED", "message": "Enter your PlaceAI password once to link this Google account."})
+                    raise HTTPException(403, {"code": "GOOGLE_LINK_PASSWORD_REQUIRED", "message": "Enter your PlaceAI password once to link this Google account. If you did not create the existing account or do not know its password, use Forgot password first."})
                 if not verify_password(payload.password, user.hashed_password):
                     raise HTTPException(401, "Incorrect password")
     else:
@@ -93,7 +95,7 @@ def authenticate(payload: GoogleAuthRequest, request: Request, response: Respons
             raise HTTPException(403, "This role requires an existing account provisioned by an administrator")
         username_base = re.sub(r"[^A-Za-z0-9_]", "_", email.split("@")[0])[:55] or "student"
         username = f"{username_base}_{secrets.token_hex(6)}"
-        user = User(email=email, username=username, hashed_password=get_hashed_password(secrets.token_urlsafe(40)),
+        user = User(email=email, username=username, hashed_password=get_hashed_password(secrets.token_urlsafe(40), check_breach=False),
                     role=UserRole(payload.role), email_verified=True)
         db.add(user)
         db.flush()
@@ -103,6 +105,18 @@ def authenticate(payload: GoogleAuthRequest, request: Request, response: Respons
             db.add(RecruiterProfile(user_id=user.id, full_name=str(info.get("name", ""))[:200], is_verified=False))
     if not identity:
         db.add(GoogleIdentity(subject=subject, user_id=user.id))
+    # The signed cookie alone is replayable if restored. Consume the verified nonce
+    # in durable state shared by Vercel/Render, before minting any PlaceAI session.
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+    insert = pg_insert if db.get_bind().dialect.name == "postgresql" else sqlite_insert
+    claimed = db.execute(insert(RateLimitBucket).values(
+        key_hash=hashlib.sha256(f"google-nonce|{nonce}".encode()).hexdigest(), scope="google-nonce",
+        window_started_at=utcnow(), request_count=1, updated_at=utcnow()
+    ).on_conflict_do_nothing(index_elements=["key_hash"]))
+    if claimed.rowcount != 1:
+        raise HTTPException(401, "Google sign-in was already used. Please sign in again.")
+    user.email_verified = True
     user.last_login_at = utcnow()
     response.delete_cookie(COOKIE, path="/auth/google", secure=settings.is_production, httponly=True, samesite="strict")
     return user

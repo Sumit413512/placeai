@@ -57,7 +57,7 @@ def local_server(tmp_path_factory):
     )
     try:
         _wait_until_ready()
-        yield
+        yield db_path
     finally:
         process.terminate()
         try:
@@ -122,17 +122,19 @@ def test_login_role_cards_switch_without_a_mutation_loop(browser) -> None:
     page.close()
 
 
-def test_password_recovery_token_survives_reload_and_enforces_rules(browser) -> None:
+def test_password_recovery_token_stays_memory_only_and_enforces_rules(browser) -> None:
     token = "A" * 32
     page = browser.new_page(viewport={"width": 390, "height": 844})
     page.goto(f"{BASE_URL}/?reset_token={token}", wait_until="domcontentloaded")
     page.locator("#placeai-password-recovery").wait_for(state="visible")
     assert "reset_token" not in page.url
-    assert page.evaluate("sessionStorage.getItem('placeai.password.reset.v1')") == token
+    assert page.evaluate("sessionStorage.getItem('placeai.password.reset.v1')") is None
 
     page.reload(wait_until="domcontentloaded")
+    assert page.locator("#placeai-password-recovery").count() == 0
+    assert page.evaluate("sessionStorage.getItem('placeai.password.reset.v1')") is None
+    page.goto(f"{BASE_URL}/?reset_token={token}", wait_until="domcontentloaded")
     page.locator("#placeai-password-recovery").wait_for(state="visible")
-    assert page.evaluate("sessionStorage.getItem('placeai.password.reset.v1')") == token
 
     submit = page.locator("#password-recovery-submit")
     page.locator("#password-recovery-new").fill("weakpassword")
@@ -144,6 +146,83 @@ def test_password_recovery_token_survives_reload_and_enforces_rules(browser) -> 
     page.locator("#password-recovery-confirm").fill(strong)
     assert submit.is_enabled()
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+    page.close()
+
+
+def test_authenticator_browser_enrollment_signin_and_logout(browser, local_server) -> None:
+    import sqlite3
+    from uuid import uuid4
+    from app.auth_protection import totp
+
+    context = browser.new_context(viewport={"width":390,"height":844})
+    email = f"audit-{uuid4().hex[:12]}@example.com"
+    password = "Browser audit unique credential 2026!"
+    created = context.request.post(BASE_URL+'/auth/signup',data={'email':email,'username':'audit-'+uuid4().hex[:12],'password':password})
+    assert created.status == 201, created.text()
+    user_id = created.json()['id']
+    # Synthetic local mailbox ownership; this test never sends mail to real users.
+    with sqlite3.connect(local_server) as db:
+        db.execute('UPDATE users SET email_verified=1 WHERE id=?',(user_id,)); db.commit()
+    signed_in = context.request.post(BASE_URL+'/auth/login-json',data={'email':email,'password':password})
+    assert signed_in.status == 200
+    page = context.new_page()
+    errors=[]
+    page.on('pageerror',lambda error: errors.append(str(error)))
+    page.goto(BASE_URL,wait_until='domcontentloaded')
+    page.locator('.sidebar-trigger').click()
+    page.locator('[data-auth-protection]').click()
+    panel=page.get_by_role('dialog',name='Account protection',exact=True)
+    panel.locator('[name=password]').fill(password)
+    with page.expect_response('**/auth/mfa/enroll') as enrollment:
+        panel.get_by_role('button',name='Set up authenticator').click()
+    secret=enrollment.value.json()['secret']
+    setup=page.get_by_role('dialog',name='Connect your authenticator',exact=True)
+    setup.locator('[name=code]').fill(totp(secret,int(time.time())//30))
+    setup.get_by_role('button',name='Enable authenticator').click()
+    recovery=page.get_by_role('dialog',name='Save your recovery codes',exact=True)
+    recovery.wait_for(state='visible')
+    codes=recovery.locator('textarea').input_value().splitlines()
+    assert len(codes)==8
+    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1')
+    recovery.get_by_role('button',name='I saved my codes - continue').click()
+    page.wait_for_load_state('domcontentloaded')
+    page.locator('.sidebar-trigger').click()
+    page.locator('[data-action=logout]').first.click()
+    page.locator('.hero button[data-open-auth=login]').click()
+    form=page.locator('#role-login-form')
+    form.locator('[name=email]').fill(email)
+    form.locator('[name=password]').fill(password)
+    form.locator('button[type=submit]').click()
+    challenge=page.get_by_role('dialog',name='Verify your sign-in',exact=True)
+    challenge.wait_for(state='visible')
+    assert not any(cookie['name']=='placeai_refresh' for cookie in context.cookies())
+    challenge.locator('[name=code]').fill(codes[0])
+    challenge.get_by_role('button',name='Verify and sign in').click()
+    page.locator('#app-shell').wait_for(state='visible')
+    assert page.evaluate("Object.values(sessionStorage).every(v => !v.includes('eyJ'))")
+    assert not errors,errors
+    context.close()
+
+
+def test_registration_verification_screen_and_resend_are_usable_on_mobile(browser) -> None:
+    page=browser.new_page(viewport={"width":390,"height":844})
+    page.route('**/auth/signup',lambda route: route.fulfill(status=202,json={
+        'verification_required':True,'message':'If registration can be completed, a verification link will be sent.'}))
+    page.route('**/auth/email-verification/resend',lambda route: route.fulfill(status=202,json={'message':'Check your inbox and spam folder.'}))
+    page.goto(BASE_URL,wait_until='domcontentloaded')
+    page.locator('.hero button[data-open-auth=login]').click()
+    page.locator('#login-view [data-access-switch=create]').click()
+    form=page.locator('#role-student-signup-form')
+    for name,value in {'full_name':'Audit Student','username':'audit-student','email':'audit@example.com','password':'A varied phrase for audit signup 2026!'}.items():
+        form.locator(f'[name={name}]').fill(value)
+    form.locator('button[type=submit]').click()
+    dialog=page.get_by_role('dialog',name='Check your email',exact=True)
+    dialog.wait_for(state='visible')
+    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1')
+    dialog.get_by_role('button',name='Resend verification link').click()
+    assert 'Check your inbox' in dialog.get_by_role('status').inner_text()
+    dialog.get_by_role('button',name='Back to sign in').click()
+    page.locator('#role-login-form').wait_for(state='visible')
     page.close()
 
 

@@ -13,6 +13,18 @@ from app.models import RateLimitBucket
 settings = get_settings()
 
 
+def enforce_auth_limits(db: Session, request: Request, *, scope: str, identifier: str,
+                        limit: int, window_seconds: int, block_seconds: int) -> None:
+    """Independent address/account budgets; blocked attempts do not extend cooldowns."""
+    enforce_rate_limit(db, request, scope=f"{scope}:ip", limit=max(60, limit * 10),
+                       window_seconds=window_seconds, block_seconds=min(block_seconds, 300))
+    enforce_rate_limit(db, request, scope=f"{scope}:account", identifier=identifier,
+                       limit=limit, window_seconds=window_seconds,
+                       block_seconds=min(block_seconds, 300), include_client_address=False)
+    enforce_rate_limit(db, request, scope=scope, identifier=identifier, limit=limit,
+                       window_seconds=window_seconds, block_seconds=block_seconds)
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 

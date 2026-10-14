@@ -123,6 +123,23 @@ class User(Base):
     recruiter_profile = relationship("RecruiterProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
 
+class AccountProtection(Base):
+    __tablename__ = "account_protection"
+
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    verification_required = Column(Boolean, nullable=False, default=False)
+    email_token_hash = Column(String(64), nullable=True, unique=True)
+    email_token_expires = Column(DateTime, nullable=True)
+    mfa_secret = Column(Text, nullable=True)
+    mfa_pending = Column(Text, nullable=True)
+    mfa_pending_expires = Column(DateTime, nullable=True)
+    mfa_last_counter = Column(Integer, nullable=False, default=-1)
+    recovery_hashes = Column(Text, nullable=False, default="[]")
+    challenge_hash = Column(String(64), nullable=True, unique=True)
+    challenge_expires = Column(DateTime, nullable=True)
+    challenge_version = Column(Integer, nullable=True)
+
+
 class RefreshSession(Base):
     __tablename__ = "refresh_sessions"
 

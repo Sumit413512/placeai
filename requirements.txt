@@ -6,6 +6,7 @@ psycopg[binary]==3.2.10
 python-multipart==0.0.32
 python-dotenv==1.2.2
 argon2-cffi==25.1.0
+cryptography==50.0.2
 google-genai==2.8.0
 google-auth==2.55.0
 pypdf==6.19.0
