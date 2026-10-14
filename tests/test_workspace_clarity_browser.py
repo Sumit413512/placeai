@@ -66,13 +66,11 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
         assert page.locator('#page-eyebrow').is_hidden()
         assert page.locator('.workspace-role-chip').count() == 0
         assert page.locator('#learning-hub input[name="topic"]').is_visible()
-    security = page.locator('.account-security-button > span')
-    security.wait_for()
-    assert security.inner_text() == 'Account security'
-    assert security.evaluate('el => getComputedStyle(el).textTransform') == 'none'
+    assert page.locator('.account-security-button, [data-auth-protection]').count() == 0
+    sign_out = page.locator('[data-action="logout"]').first
     page.keyboard.press('Tab')
-    page.locator('.account-security-button').focus()
-    assert page.locator('.account-security-button').evaluate('el => getComputedStyle(el).outlineStyle') != 'none'
+    sign_out.focus()
+    assert sign_out.evaluate('el => getComputedStyle(el).outlineStyle') != 'none'
 
     output = Path(__file__).resolve().parents[1] / 'work/ui-review'
     output.mkdir(parents=True, exist_ok=True)
