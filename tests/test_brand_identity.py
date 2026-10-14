@@ -47,3 +47,22 @@ def test_brand_override_uses_supplied_lockup_and_keeps_accessible_name():
     assert ".brand > span:last-child" in css
     assert "clip:rect(0,0,0,0)" in css
     assert "display:none!important" not in css.split(".brand > span:last-child", 1)[1].split("}", 1)[0]
+
+
+def test_search_favicon_is_square_crisp_and_mirrored():
+    from PIL import Image
+
+    name = "placeai-favicon-96.png"
+    source = ROOT / "app/static" / name
+    with Image.open(source) as icon:
+        assert icon.format == "PNG"
+        assert icon.size == (96, 96)
+        assert icon.getpixel((0, 0)) == (255, 255, 255)
+    assert source.read_bytes() == (ROOT / "public/static" / name).read_bytes()
+    assert (ROOT / "app/static/favicon.ico").read_bytes() == (ROOT / "public/favicon.ico").read_bytes()
+    with Image.open(ROOT / "public/favicon.ico") as icon:
+        assert {(16, 16), (32, 32), (48, 48), (96, 96)} <= icon.ico.sizes()
+    for name in ("app/templates/index.html", "public/index.html"):
+        html = _read(name)
+        assert 'type="image/png" sizes="96x96" href="/static/placeai-favicon-96.png"' in html
+        assert html.index("placeai-favicon-96.png") < html.index("placeai-icon.svg")

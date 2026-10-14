@@ -51,13 +51,13 @@ def test_static_public_crawler_assets_match_canonical_domain():
     assert VERCEL_ORIGIN not in sitemap
 
 
-def test_favicon_is_served_as_svg_mime():
+def test_favicon_is_served_as_real_ico():
     client = TestClient(app_module.app)
     response = client.get("/favicon.ico")
 
     assert response.status_code == 200
-    assert response.headers["content-type"].startswith("image/svg+xml")
-    assert response.text.lstrip().startswith("<svg")
+    assert response.headers["content-type"].startswith("image/x-icon")
+    assert response.content[:4] == b"\x00\x00\x01\x00"
 
 
 def _clear_public_url_env(monkeypatch) -> None:
