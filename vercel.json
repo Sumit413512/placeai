@@ -51,7 +51,7 @@
       "headers": [
         {
           "key": "Content-Type",
-          "value": "image/svg+xml; charset=utf-8"
+          "value": "image/x-icon"
         },
         {
           "key": "Cache-Control",

@@ -459,10 +459,10 @@ def root():
 
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon() -> Response:
-    svg = (STATIC_DIR / "placeai-icon.svg").read_text(encoding="utf-8")
+    icon = (STATIC_DIR / "favicon.ico").read_bytes()
     return Response(
-        content=svg,
-        media_type="image/svg+xml",
+        content=icon,
+        media_type="image/x-icon",
         headers={"Cache-Control": "public, max-age=86400"},
     )
 

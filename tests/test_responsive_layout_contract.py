@@ -72,4 +72,4 @@ def test_vercel_config_sets_public_origin_and_favicon_content_type() -> None:
     vercel_json = (ROOT / "vercel.json").read_text(encoding="utf-8")
     assert '"PLACEAI_CANONICAL_PUBLIC_URL": "https://www.placeai.in"' in vercel_json
     assert '"source": "/favicon.ico"' in vercel_json
-    assert '"value": "image/svg+xml; charset=utf-8"' in vercel_json
+    assert '"value": "image/x-icon"' in vercel_json
