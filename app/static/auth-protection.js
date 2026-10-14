@@ -131,9 +131,9 @@
     url.searchParams.delete('verify_email_token');
     history.replaceState({}, '', url.pathname + url.search + url.hash);
   }
-  document.addEventListener('DOMContentLoaded', async () => {
+  async function initialize() {
     if (verificationToken) {
-      const {overlay, cancel} = dialog('Email verification', '<p role="status" aria-live="polite">Verifying your email…</p>');
+      const {overlay, cancel} = dialog('Email verification', '<p role="status" aria-live="polite">Verifying your emailâ€¦</p>');
       try { overlay.querySelector('[role="status"]').textContent = (await request('/auth/email-verification/confirm', {token:verificationToken})).message; cancel.onclick = () => location.reload(); }
       catch (error) { overlay.querySelector('[role="status"]').textContent = error.message; }
     }
@@ -148,5 +148,7 @@
     install();
     new MutationObserver(install).observe(document.body, {childList:true, subtree:true});
     try { const status = await request('/auth/security-status'); if (status.verification_required && !status.email_verified) await showSecurity(true); } catch {}
-  }, {once:true});
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialize, {once:true});
+  else initialize();
 })();

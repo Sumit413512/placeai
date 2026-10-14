@@ -406,3 +406,18 @@ def test_auth_modal_reflows_at_extreme_narrow_widths(browser) -> None:
             assert box["right"] <= geometry["viewport"] + 1, (width, key, box)
             assert box["width"] >= 120, (width, key, box)
         page.close()
+
+
+def test_email_verification_initializes_when_loaded_after_page_ready(browser) -> None:
+    page = browser.new_page()
+    page.route('**/static/auth-protection.js', lambda route: route.abort())
+    page.route('**/auth/email-verification/confirm', lambda route: route.fulfill(
+        status=200, json={'message': 'Your email is verified.'}))
+    page.goto(BASE_URL + '/?verify_email_token=isolated-browser-test-token', wait_until='load')
+    assert page.evaluate('document.readyState') == 'complete'
+    page.unroute('**/static/auth-protection.js')
+    page.add_script_tag(url=BASE_URL + '/static/auth-protection.js')
+    dialog = page.get_by_role('dialog', name='Email verification', exact=True)
+    expect(dialog.get_by_role('status')).to_contain_text('Your email is verified.')
+    assert 'verify_email_token' not in page.url
+    page.close()
