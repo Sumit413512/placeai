@@ -1,16 +1,16 @@
-/* Approved PlaceAI palette: light-grey navigation, linen canvas, white surfaces.
+/* PlaceAI professional workspace palette: white navigation, cool canvas, semantic accents.
    This final presentation layer changes no visibility, media, timers or permissions.
    Important declarations reconcile the legacy, dynamically loaded visual layers. */
 :root {
-  --pa-sidebar: #dfdddd;
-  --pa-canvas: #f5f2ec;
+  --pa-sidebar: #ffffff;
+  --pa-canvas: #f6f8fc;
   --pa-surface: #ffffff;
-  --pa-accent: #59416f;
-  --pa-accent-hover: #49355c;
-  --pa-ink: #272330;
-  --pa-muted: #67616c;
-  --pa-border: #ded9e2;
-  --pa-selected: #ffffff;
+  --pa-accent: #2459c4;
+  --pa-accent-hover: #1d469e;
+  --pa-ink: #17243b;
+  --pa-muted: #526177;
+  --pa-border: #e0e6ef;
+  --pa-selected: #eaf1ff;
   --ink: var(--pa-ink) !important;
   --muted: var(--pa-muted) !important;
   --line: var(--pa-border) !important;
@@ -359,8 +359,8 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
   --type-section: 1.3125rem;
   --type-title: 1.875rem;
   --type-metric: 2rem;
-  --radius-control: 5px;
-  --radius-panel: 6px;
+  --radius-control: 8px;
+  --radius-panel: 12px;
   --radius-pill: 999px;
   --text-success: #21634a;
   --text-warning: #795414;
@@ -735,4 +735,93 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 }
 @media (max-width: 760px) {
   #app-shell .roadmap-market-panel > .check-list { grid-template-columns: minmax(0, 1fr); }
+}
+
+
+/* Reference-led dashboard composition: colour belongs to categories and statuses,
+   while workspace surfaces and typography remain quiet and consistent. */
+#app-shell {
+  --metric-blue-bg: #edf4ff;
+  --metric-blue-ink: #2459c4;
+  --metric-mint-bg: #ecf8f2;
+  --metric-mint-ink: #17634a;
+  --metric-amber-bg: #fff5e8;
+  --metric-amber-ink: #8a500f;
+  --metric-violet-bg: #f4efff;
+  --metric-violet-ink: #6743a5;
+}
+#app-shell .app-sidebar { border-right: 1px solid var(--pa-border); }
+#app-shell .sidebar-brand { padding-block: 23px; border-bottom: 1px solid var(--pa-border); }
+#app-shell .workspace-pill { padding-block: 18px 12px; }
+#app-shell .app-nav { padding-inline: 14px; }
+#app-shell .app-nav button { min-height: 42px; padding: 10px 12px; transition: background-color .15s ease; }
+#app-shell .app-nav button:hover { background: var(--pa-canvas) !important; transform: none; }
+#app-shell .app-nav button.active { background: var(--pa-selected) !important; color: var(--pa-accent) !important; }
+#app-shell .app-nav button.active::after { display: none; }
+#app-shell .nav-group-label { padding-inline: 12px; margin-top: 20px; }
+#app-shell .user-avatar { background: var(--pa-selected) !important; color: var(--pa-accent) !important; }
+#app-shell .sidebar-user { padding: 12px; border: 1px solid var(--pa-border); border-radius: var(--radius-control); background: var(--pa-canvas) !important; }
+#app-shell .app-topbar { min-height: 70px; padding-block: 14px; }
+#app-shell .app-content { padding-top: 28px; }
+#app-shell .page-head { margin-bottom: 24px; }
+#app-shell .metric-grid { gap: 16px; margin-block: 24px; }
+#app-shell .metric-card {
+  --metric-bg: var(--metric-blue-bg);
+  --metric-ink: var(--metric-blue-ink);
+  background: var(--metric-bg) !important;
+  border: 1px solid rgb(23 36 59 / 7%) !important;
+  min-height: 150px;
+  padding: 22px 24px;
+  box-shadow: 0 1px 2px rgb(23 36 59 / 3%) !important;
+  transform: none;
+}
+#app-shell .metric-card[data-metric-tone="mint"] { --metric-bg: var(--metric-mint-bg); --metric-ink: var(--metric-mint-ink); }
+#app-shell .metric-card[data-metric-tone="amber"] { --metric-bg: var(--metric-amber-bg); --metric-ink: var(--metric-amber-ink); }
+#app-shell .metric-card[data-metric-tone="violet"] { --metric-bg: var(--metric-violet-bg); --metric-ink: var(--metric-violet-ink); }
+#app-shell .metric-card::after { content: none; }
+#app-shell .metric-card small { display: block; margin: 0 0 8px; padding-right: 30px; text-transform: none; letter-spacing: normal; }
+#app-shell .metric-card strong { margin: 0 0 6px; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+#app-shell .metric-card .metric-symbol {
+  position: absolute; right: 18px; top: 18px; display: grid; place-items: center;
+  width: 30px; height: 30px; border-radius: 999px; color: var(--metric-ink) !important;
+  background: var(--pa-surface); border: 1px solid rgb(23 36 59 / 7%);
+}
+#app-shell .metric-symbol svg { width: 16px; height: 16px; }
+#app-shell .dashboard-grid { gap: 20px; align-items: start; }
+#app-shell .panel { padding: 24px; }
+#app-shell :is(.panel, .data-panel, .form-panel, .operation-card) { box-shadow: 0 1px 3px rgb(23 36 59 / 3%) !important; }
+#app-shell .panel-head { margin-bottom: 20px; }
+#app-shell .activity-item { padding-block: 16px; border-bottom-color: var(--pa-border); }
+#app-shell .activity-icon { background: var(--pa-selected) !important; border-radius: var(--radius-control); }
+#app-shell .data-toolbar, #app-shell .data-table thead th { background: #f8fafc !important; }
+#app-shell .data-table tbody tr:hover { background: #f4f7fd; }
+#app-shell .workspace-shortcuts { margin-bottom: 24px; }
+#app-shell .workspace-shortcuts h2 { font-size: var(--type-section) !important; margin: 0 0 16px; }
+#app-shell .workspace-shortcut-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+#app-shell .workspace-shortcut {
+  display: flex; align-items: center; gap: 12px; text-align: left; min-height: 76px;
+  padding: 14px; background: var(--pa-surface); color: var(--pa-ink); border: 1px solid var(--pa-border);
+  border-radius: var(--radius-control); cursor: pointer; font-size: var(--type-small) !important;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+#app-shell .workspace-shortcut:hover { border-color: var(--pa-accent); background: var(--pa-canvas); }
+#app-shell .workspace-shortcut .nav-icon { width: 36px; height: 36px; flex-basis: 36px; border-radius: var(--radius-control); background: var(--pa-selected); color: var(--pa-accent); }
+#app-shell .workspace-shortcut:nth-child(2) .nav-icon { background: var(--metric-violet-bg); color: var(--metric-violet-ink); }
+#app-shell .workspace-shortcut:nth-child(3) .nav-icon { background: var(--metric-amber-bg); color: var(--metric-amber-ink); }
+#app-shell .workspace-shortcut:nth-child(4) .nav-icon { background: var(--metric-mint-bg); color: var(--metric-mint-ink); }
+@media (max-width: 1000px) {
+  #app-shell .workspace-shortcut-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  #app-shell .app-content { padding: 22px 16px 48px; }
+  #app-shell .panel { padding: 18px; }
+  #app-shell .metric-grid { gap: 12px; }
+  #app-shell .metric-card { padding: 18px; min-height: 148px; }
+  #app-shell .metric-card small { padding-right: 24px; }
+  #app-shell .metric-card .metric-symbol { right: 12px; top: 12px; width: 26px; height: 26px; }
+  #app-shell .workspace-shortcut { flex-direction: column; justify-content: center; gap: 10px; padding: 14px 10px; min-height: 108px; text-align: center; }
+  #app-shell .workspace-shortcut > span:not(.nav-icon) { width: 100%; overflow-wrap: normal; word-break: normal; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #app-shell .app-nav button, #app-shell .metric-card, #app-shell .workspace-shortcut { transition: none; }
 }

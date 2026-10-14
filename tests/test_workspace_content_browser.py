@@ -51,18 +51,18 @@ def test_saved_roadmap_readability_structure_and_supplementary_notes(browser, wi
     signals = page.locator('.roadmap-market-panel > .check-list li')
     signals.first.wait_for()
     assert signals.count() == 2
-    assert signals.first.evaluate('el => getComputedStyle(el).color') == 'rgb(39, 35, 48)'
+    assert signals.first.evaluate('el => getComputedStyle(el).color') == 'rgb(23, 36, 59)'
     assert signals.first.evaluate('el => getComputedStyle(el).fontSize') == '16px'
     assert signals.first.evaluate('el => getComputedStyle(el).display') == 'list-item'
     for selector in ('.roadmap-summary-grid .metric-card span', '.roadmap-target-card small', '.roadmap-evidence > summary small'):
         caption = page.locator(selector).first
-        assert caption.evaluate('el => getComputedStyle(el).color') == 'rgb(103, 97, 108)'
+        assert caption.evaluate('el => getComputedStyle(el).color') == 'rgb(82, 97, 119)'
         assert caption.evaluate('el => getComputedStyle(el).fontSize') == '14px'
     assert page.locator('.roadmap-priority-grid > .panel').first.bounding_box()['height'] < 300
     assert page.locator('.roadmap-support-section').count() == 2
     assert page.get_by_role('heading', name='Advanced next steps', exact=True).count() == 0
     assert 'No additional items were returned' not in page.locator('#app-content').inner_text()
-    assert page.locator('.roadmap-phase-stack .check-list li').first.evaluate('el => getComputedStyle(el).color') == 'rgb(39, 35, 48)'
+    assert page.locator('.roadmap-phase-stack .check-list li').first.evaluate('el => getComputedStyle(el).color') == 'rgb(23, 36, 59)'
 
     notes = page.locator('.roadmap-market-notes')
     summary = notes.locator('summary')

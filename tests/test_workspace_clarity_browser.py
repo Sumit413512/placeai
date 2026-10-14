@@ -28,10 +28,12 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
         elif path.endswith(('/jobs', '/students', '/organizations', '/notebooks')):
             data = []
         elif path.endswith('/dashboard'):
-            data = {'active_jobs': 0, 'applications': 0, 'interviews': 0,
+            data = {'active_jobs': 0, 'applications': 12, 'interviews': 0,
                     'shortlisted': 0, 'offers': 0, 'hired': 0, 'verified': True,
                     'organizations': 0, 'students': 0, 'recruiters': 0,
-                    'total_applications': 0, 'placement_rate': 0, 'hires': 0,
+                    'total_applications': 12, 'placement_rate': 76, 'hires': 8,
+                    'profile_completion': 73, 'active_applications': 3, 'interviews_completed': 2,
+                    'average_interview_score': 78, 'has_resume': True, 'open_drives': 4,
                     'organization': {'name': 'MIT'}, 'total_students': 0, 'verified_students': 0}
         else:
             data = {}
@@ -42,6 +44,7 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
                     '**/jobs/**', '**/intelligence/**', '**/learning-hub*'):
         page.route(pattern, api_response)
     page.goto(BASE_URL, wait_until='networkidle')
+    page.get_by_role('button', name='Essential only', exact=True).click()
     page.locator('#app-shell').wait_for(state='visible')
     assert page.locator('#sidebar-user-name').inner_text() == 'MIT account'
     assert page.locator('#workspace-name').is_hidden()
@@ -51,6 +54,39 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
         assert page.locator('#page-eyebrow').is_hidden()
     assert page.locator('#app-nav button[aria-current="page"]').count() == 1
 
+    cards = page.locator('.metric-grid .metric-card')
+    assert cards.count() == (5 if role == 'platform_admin' else 4)
+    assert page.locator('.workspace-shortcuts').count() == 1
+    shortcuts = page.locator('.workspace-shortcut')
+    assert shortcuts.count() == 4
+    assert len(set(cards.evaluate_all('els => els.map(el => getComputedStyle(el).backgroundColor)'))) >= 2
+    contrast = cards.evaluate_all(r'''els => {
+      const rgb = value => value.match(/[\d.]+/g).slice(0, 3).map(Number);
+      const lum = values => values.map(v => {v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4;})
+        .reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
+      return els.flatMap(card => [...card.querySelectorAll('small, strong, span:not(.metric-symbol)')].map(el => {
+        const fg = lum(rgb(getComputedStyle(el).color)), bg = lum(rgb(getComputedStyle(card).backgroundColor));
+        return {text: el.textContent, ratio: (Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05)};
+      }));
+    }''')
+    assert all(item['ratio'] >= 4.5 for item in contrast), contrast
+    assert cards.locator('.metric-symbol[aria-hidden="true"]').count() == cards.count()
+    output = Path(__file__).resolve().parents[1] / 'work/ui-review'
+    output.mkdir(parents=True, exist_ok=True)
+    page.screenshot(path=str(output / f'{role}-dashboard-desktop.png'), full_page=True)
+    for width in (390, 320):
+        page.set_viewport_size({'width': width, 'height': 900})
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
+        assert shortcuts.evaluate_all('els => els.every(el => el.getBoundingClientRect().height >= 44)')
+    page.screenshot(path=str(output / f'{role}-dashboard-mobile.png'), full_page=True)
+    page.set_viewport_size({'width':1440,'height':960})
+    target = shortcuts.first.get_attribute('data-view')
+    shortcuts.first.click()
+    page.wait_for_function("view => document.querySelector('#app-nav button.active')?.dataset.view === view", arg=target)
+    page.locator('#app-nav button[data-view="dashboard"]').click()
+    page.locator('.workspace-shortcuts').wait_for()
+    assert page.locator('.workspace-shortcuts').count() == 1
+
     if role in ('student', 'institution_admin'):
         page.locator('#app-nav button[data-view="applications"]').click()
         page.locator('.page-head h1').wait_for()
@@ -58,7 +94,7 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
         if role == 'student':
             assert page.locator('#page-eyebrow').is_hidden()
         assert page.locator('#app-nav button[aria-current="page"]').get_attribute('data-view') == 'applications'
-        assert page.locator('.status-applied').evaluate('el => getComputedStyle(el).color') == 'rgb(89, 65, 111)'
+        assert page.locator('.status-applied').evaluate('el => getComputedStyle(el).color') == 'rgb(36, 89, 196)'
     if role == 'student':
         page.locator('#app-nav button[data-view="learning-hub"]').click()
         page.locator('#learning-hub').wait_for()

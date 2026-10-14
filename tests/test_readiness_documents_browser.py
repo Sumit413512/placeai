@@ -54,8 +54,8 @@ def test_readiness_evidence_and_document_vault_accessibility(browser, width):
     active = page.locator('#app-nav button[aria-current="page"]')
     assert active.count() == 1
     assert active.get_attribute('data-view') == 'readiness'
-    assert active.evaluate("el => getComputedStyle(el, '::after').backgroundColor") == 'rgb(89, 65, 111)'
-    assert page.locator('.ai-box-head').inner_text() == 'Evidence → action'
+    assert active.evaluate("el => getComputedStyle(el, '::after').backgroundColor") == 'rgb(36, 89, 196)'
+    assert page.locator('.ai-box-head').inner_text() == 'Evidence â†’ action'
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
     output = Path(__file__).resolve().parents[1] / 'work/accessibility-review'
     output.mkdir(parents=True, exist_ok=True)
@@ -78,7 +78,7 @@ def test_readiness_evidence_and_document_vault_accessibility(browser, width):
     assert page.locator('#student-document-file').get_attribute('accept') == '.pdf,.png,.jpg,.jpeg'
     icon = page.locator('svg.command-launch-icon')
     assert icon.get_attribute('aria-hidden') == 'true'
-    assert icon.evaluate('el => getComputedStyle(el).color') == 'rgb(39, 35, 48)'
+    assert icon.evaluate('el => getComputedStyle(el).color') == 'rgb(23, 36, 59)'
     if width == 1440:
         page.get_by_role('button', name='Search PlaceAI', exact=True).click()
         page.locator('#command-search').wait_for(state='visible')

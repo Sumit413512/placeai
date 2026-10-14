@@ -204,8 +204,48 @@
     }
   }
 
+  function decorateDashboard() {
+    const content = document.querySelector('#app-content');
+    if (!content) return;
+    const toneFor = label => /due|rescue|requests|opportunit/i.test(label) ? 'amber'
+      : /offers|hires|placement rate|applications|students/i.test(label) ? 'mint'
+      : /interview|recruiter|gemini/i.test(label) ? 'violet' : 'blue';
+    for (const card of content.querySelectorAll('.metric-card')) {
+      const label = card.querySelector('small')?.textContent || '';
+      card.dataset.metricTone = toneFor(label);
+      if (card.querySelector('.metric-symbol')) continue;
+      const symbol = document.createElement('span');
+      symbol.className = 'metric-symbol'; symbol.setAttribute('aria-hidden', 'true');
+      symbol.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 20h16M7 15v-4m5 4V5m5 10V8"/></svg>';
+      card.append(symbol);
+    }
+    if (!document.querySelector('#app-nav button.active[data-view="dashboard"]') || content.querySelector('.workspace-shortcuts')) return;
+    const metrics = content.querySelector('.metric-grid');
+    if (!metrics) return;
+    const shortcuts = {
+      student: ['learning-hub', 'mock-interview', 'roadmap', 'opportunities'],
+      recruiter: ['jobs', 'candidates', 'interviews', 'offers'],
+      institution_admin: ['students', 'drives', 'attention', 'reports'],
+      platform_admin: ['organizations', 'registrations', 'leads', 'integrations']
+    };
+    const section = document.createElement('section');
+    section.className = 'panel workspace-shortcuts'; section.setAttribute('aria-label', 'Quick actions');
+    const title = document.createElement('h2'); title.textContent = 'Quick actions'; section.append(title);
+    const grid = document.createElement('div'); grid.className = 'workspace-shortcut-grid';
+    for (const view of shortcuts[normalizedRole()] || []) {
+      const source = document.querySelector(`#app-nav button[data-view="${view}"]`);
+      if (!source) continue;
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'workspace-shortcut'; button.dataset.view = view;
+      const icon = source.querySelector('.nav-icon'); if (icon) { const copy = icon.cloneNode(true); copy.setAttribute('aria-hidden', 'true'); button.append(copy); }
+      const label = document.createElement('span'); label.textContent = source.querySelector('.nav-label')?.textContent || source.textContent;
+      button.append(label); grid.append(button);
+    }
+    if (grid.childElementCount) { section.append(grid); metrics.after(section); }
+  }
+
   function enhance(root = document) {
     decorateNavigation();
+    decorateDashboard();
     decorateTables(root);
     humanizeStatuses(root);
     professionalizeAiUnavailable(root);
