@@ -163,18 +163,25 @@ def test_authenticator_browser_enrollment_signin_and_logout(browser, local_serve
     # Synthetic local mailbox ownership; this test never sends mail to real users.
     with sqlite3.connect(local_server) as db:
         db.execute('UPDATE users SET email_verified=1 WHERE id=?',(user_id,)); db.commit()
-    signed_in = context.request.post(BASE_URL+'/auth/login-json',data={'email':email,'password':password})
-    assert signed_in.status == 200
     page = context.new_page()
     errors=[]
     page.on('pageerror',lambda error: errors.append(str(error)))
     page.goto(BASE_URL,wait_until='domcontentloaded')
-    page.locator('.sidebar-trigger').click()
-    page.locator('[data-auth-protection]').click()
-    panel=page.get_by_role('dialog',name='Account protection',exact=True)
+    page.locator('.hero button[data-open-auth=login]').click()
+    form=page.locator('#role-login-form')
+    form.locator('[name=email]').fill(email)
+    form.locator('[name=password]').fill(password)
+    form.locator('button[type=submit]').click()
+    choice=page.get_by_role('dialog',name='Add an extra layer of protection',exact=True)
+    choice.wait_for(state='visible')
+    assert page.locator('#app-shell').is_hidden()
+    assert choice.get_by_role('button',name='Skip for now').is_visible()
+    page.screenshot(path=str(ROOT / 'work/auth-onboarding-preview.png'))
+    choice.get_by_role('button',name='Set up authenticator').click()
+    panel=page.get_by_role('dialog',name='Set up your authenticator',exact=True)
     panel.locator('[name=password]').fill(password)
     with page.expect_response('**/auth/mfa/enroll') as enrollment:
-        panel.get_by_role('button',name='Set up authenticator').click()
+        panel.get_by_role('button',name='Continue setup').click()
     secret=enrollment.value.json()['secret']
     setup=page.get_by_role('dialog',name='Connect your authenticator',exact=True)
     setup.locator('[name=code]').fill(totp(secret,int(time.time())//30))
@@ -199,6 +206,8 @@ def test_authenticator_browser_enrollment_signin_and_logout(browser, local_serve
     challenge.locator('[name=code]').fill(codes[0])
     challenge.get_by_role('button',name='Verify and sign in').click()
     page.locator('#app-shell').wait_for(state='visible')
+    assert page.locator('[data-auth-protection], .account-security-button').count() == 0
+    assert page.get_by_role('dialog',name='Add an extra layer of protection',exact=True).count() == 0
     assert page.evaluate("Object.values(sessionStorage).every(v => !v.includes('eyJ'))")
     assert not errors,errors
     context.close()
@@ -421,3 +430,41 @@ def test_email_verification_initializes_when_loaded_after_page_ready(browser) ->
     expect(dialog.get_by_role('status')).to_contain_text('Your email is verified.')
     assert 'verify_email_token' not in page.url
     page.close()
+
+
+@pytest.mark.parametrize('action', ['skip', 'escape', 'cancel-setup'])
+def test_optional_authenticator_can_be_skipped_before_workspace(browser, action) -> None:
+    from uuid import uuid4
+    context = browser.new_context(viewport={'width':390,'height':844})
+    email = f'optional-{uuid4().hex[:12]}@example.com'
+    password = 'Optional authenticator local password 2026!'
+    created = context.request.post(BASE_URL+'/auth/signup', data={
+        'email':email, 'username':'optional-'+uuid4().hex[:12], 'password':password})
+    assert created.status == 201
+    page = context.new_page()
+    page.goto(BASE_URL, wait_until='domcontentloaded')
+    page.locator('.hero button[data-open-auth=login]').click()
+    assert page.locator('#role-login-form [data-action=forgot-password]').is_visible()
+    form = page.locator('#role-login-form')
+    form.locator('[name=email]').fill(email)
+    form.locator('[name=password]').fill(password)
+    form.locator('button[type=submit]').click()
+    choice = page.get_by_role('dialog',name='Add an extra layer of protection',exact=True)
+    choice.wait_for(state='visible')
+    assert page.locator('#app-shell').is_hidden()
+    if action == 'escape':
+        page.keyboard.press('Escape')
+    elif action == 'cancel-setup':
+        choice.get_by_role('button',name='Set up authenticator').click()
+        panel = page.get_by_role('dialog',name='Verify your email first',exact=True)
+        panel.get_by_role('button',name='Skip for now').click()
+    else:
+        choice.get_by_role('button',name='Skip for now').click()
+    page.locator('#app-shell').wait_for(state='visible')
+    assert page.locator('[data-auth-protection], .account-security-button').count() == 0
+    status = context.request.post(BASE_URL+'/auth/refresh', data={})
+    assert status.status == 200
+    protection = context.request.get(BASE_URL+'/auth/security-status', headers={
+        'Authorization':'Bearer '+status.json()['access_token']})
+    assert protection.json()['mfa_enabled'] is False
+    context.close()

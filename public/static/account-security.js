@@ -49,18 +49,6 @@
     });
   }
 
-  function installSecurityButton() {
-    const sidebar = document.querySelector('.sidebar-bottom');
-    if (!sidebar || sidebar.querySelector('[data-account-security="change-password"]')) return;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'account-security-button';
-    button.dataset.accountSecurity = 'change-password';
-    button.innerHTML = '<span>Account security</span><strong>Change password</strong>';
-    const signOut = sidebar.querySelector('.sidebar-user');
-    sidebar.insertBefore(button, signOut || null);
-  }
-
   function closePasswordDialog() {
     const overlay = document.querySelector('#password-rotation-overlay');
     if (!overlay || overlay.dataset.forced === 'true') return;
@@ -274,7 +262,6 @@
   function installProtectionsAndEnhancements() {
     decorateProvisioningInputs();
     decorateCsvHandoff();
-    installSecurityButton();
     enhancePlatformAccessView();
 
     const observer = new MutationObserver(records => {
@@ -285,7 +272,6 @@
           decorateCsvHandoff(node);
         });
       }
-      installSecurityButton();
       queueMicrotask(enhancePlatformAccessView);
     });
     observer.observe(document.body, {childList: true, subtree: true});
