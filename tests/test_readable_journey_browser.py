@@ -4,6 +4,7 @@ from test_browser_smoke import BASE_URL, browser, local_server  # noqa: F401
 def test_learning_journey_is_readable_responsive_and_links_to_existing_flows(browser):  # noqa: F811
     page = browser.new_page(viewport={"width": 1440, "height": 1000})
     page.goto(BASE_URL, wait_until="networkidle")
+    page.get_by_role("button", name="Essential only", exact=True).click()
     assert page.locator(".hero h1").inner_text().replace("\n", " ") == "Placement operations, connected end to end."
     assert page.locator(".hero-journey-line").inner_text() == "Learn · Practice · Get Placed"
     heading = page.locator("#recruiters .section-heading h2")
@@ -29,6 +30,24 @@ def test_learning_journey_is_readable_responsive_and_links_to_existing_flows(bro
     assert page.locator(".journey-card").first.evaluate("el=>getComputedStyle(el,'::before').animationName") == "none"
     page.locator(".journey-card a").first.click()
     assert page.url.endswith("#preparation-lab")
-    page.locator('.hero button[data-open-auth="login"]').click()
+    sign_in = page.get_by_role('button', name='Sign in to PlaceAI', exact=True)
+    assert sign_in.locator('svg').get_attribute('aria-hidden') == 'true'
+    assert sign_in.bounding_box()['height'] >= 44
+    page.keyboard.press('Tab')
+    sign_in.focus()
+    assert sign_in.evaluate("el=>getComputedStyle(el).outlineStyle") != 'none'
+    page.keyboard.press('Enter')
     assert page.locator("#auth-overlay").is_visible()
+    from pathlib import Path
+    page.locator('[data-action="close-auth"]').click()
+    icon = page.locator('.placeai-social-button svg')
+    assert icon.bounding_box()['width'] <= 24
+    assert icon.bounding_box()['height'] <= 24
+    page.set_viewport_size({'width': 1440, 'height': 1000})
+    page.evaluate("document.documentElement.style.scrollBehavior = 'auto'; window.scrollTo(0, 0)")
+    output = Path(__file__).resolve().parents[1] / 'work/ui-review'
+    output.mkdir(parents=True, exist_ok=True)
+    page.screenshot(path=str(output / 'homepage-design-desktop.png'), full_page=True)
+    page.set_viewport_size({'width': 390, 'height': 844})
+    page.screenshot(path=str(output / 'homepage-design-mobile.png'), full_page=True)
     page.close()
