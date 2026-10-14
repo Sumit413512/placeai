@@ -626,9 +626,28 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 #app-shell .readiness-hero h2 {
   font-size: var(--type-section) !important;
   line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+#app-shell .readiness-hero > div { min-width: 0; }
+#app-shell .readiness-score {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  width: min(9.375rem, 100%);
+  height: auto;
+  aspect-ratio: 1;
+  border-width: .8125rem;
+  box-sizing: border-box;
+  text-align: center;
 }
 #app-shell .readiness-score strong { font-size: var(--type-metric) !important; }
-#app-shell .readiness-score :is(span, small) { font-size: var(--type-small) !important; }
+#app-shell .readiness-score span {
+  font-size: var(--type-small) !important;
+  line-height: 1.4;
+  margin: 0;
+}
 #app-shell .readiness-component {
   min-width: 0;
   padding: 18px;

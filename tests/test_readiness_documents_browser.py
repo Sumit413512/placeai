@@ -42,6 +42,9 @@ def test_readiness_evidence_and_document_vault_accessibility(browser, width):
     cards = page.locator('.readiness-component')
     cards.first.wait_for()
     assert cards.count() == 7
+    assert page.locator('.readiness-score small').count() == 0
+    assert page.get_by_role('heading', name='Building readiness', exact=True).count() == 1
+    assert page.locator('.readiness-score').inner_text().split() == ['71', '/100']
     assert 'Profile completeness 55 / 100' in cards.first.inner_text().replace('\n', ' ')
     assert cards.first.locator('header').evaluate('el => getComputedStyle(el).display') == 'flex'
     assert cards.first.locator('strong').evaluate('el => getComputedStyle(el).fontSize') == '16px'
@@ -85,4 +88,56 @@ def test_readiness_evidence_and_document_vault_accessibility(browser, width):
       .filter(el => el.getClientRects().length && el.getBoundingClientRect().right > innerWidth + 1)
       .map(el => ({tag: el.tagName, class: el.className, width: el.getBoundingClientRect().width}))''')
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), overflow
+    page.close()
+
+
+@pytest.mark.parametrize('width,score,band,text_scale', [
+    (1440, 73, 'Building readiness', 1),
+    (390, 100, 'Ready for interviews with verified preparation evidence', 1),
+    (320, 0, 'No preparation evidence available yet', 2),
+    (320, 100, 'Ready for interviews with verified preparation evidence', 2),
+])
+def test_readiness_score_stays_inside_circle_with_long_labels_and_large_text(browser, width, score, band, text_scale):
+    page = browser.new_page(viewport={'width': width, 'height': 960})
+    if text_scale != 1:
+        page.add_init_script(f"document.addEventListener('DOMContentLoaded', () => document.documentElement.style.fontSize = '{text_scale * 100}%')")
+
+    def response(route):
+        path = route.request.url.split(BASE_URL, 1)[-1].split('?', 1)[0]
+        if path == '/auth/me':
+            data = {'id': 'score-review', 'username': 'Review student', 'role': 'student'}
+        elif path == '/intelligence/student/readiness':
+            data = {'score': score, 'readiness_band': band, 'evidence': [],
+                    'disclaimer': 'Preparation evidence, not a hiring prediction.'}
+        elif path == '/enterprise/notifications':
+            data = {'items': [], 'unread': 0}
+        else:
+            data = {}
+        route.fulfill(status=200, content_type='application/json', body=json.dumps(data))
+
+    for pattern in ('**/auth/**', '**/students/**', '**/enterprise/**', '**/billing/**',
+                    '**/ai/**', '**/intelligence/**'):
+        page.route(pattern, response)
+    page.goto(BASE_URL + '/?view=readiness', wait_until='networkidle')
+    ring = page.locator('.readiness-score')
+    ring.wait_for()
+    assert ring.inner_text().split() == [str(score), '/100']
+    assert page.get_by_role('heading', name=band, exact=True).count() == 1
+    # A rectangular bounding box alone misses text crossing a circle's curved edge.
+    assert ring.evaluate('''ring => {
+      const box = ring.getBoundingClientRect(), style = getComputedStyle(ring);
+      const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+      const radius = box.width / 2 - parseFloat(style.borderLeftWidth);
+      return [...ring.children].every(el => {
+        const b = el.getBoundingClientRect();
+        return [[b.left,b.top],[b.right,b.top],[b.left,b.bottom],[b.right,b.bottom]]
+          .every(([x,y]) => Math.hypot(x-cx,y-cy) <= radius + 1);
+      });
+    }''')
+    hero = page.locator('.readiness-hero').bounding_box()
+    label = page.get_by_role('heading', name=band, exact=True).bounding_box()
+    assert label['x'] >= hero['x'] and label['x'] + label['width'] <= hero['x'] + hero['width'] + 1
+    output = Path(__file__).resolve().parents[1] / 'work/score-fit-review'
+    output.mkdir(parents=True, exist_ok=True)
+    page.screenshot(path=str(output / f'readiness-{width}-{text_scale}x.png'), full_page=True)
     page.close()
