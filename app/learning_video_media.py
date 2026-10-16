@@ -123,13 +123,22 @@ def slide(scene, number, total):
         labels = {node["id"]: node["label"] for node in diagram["nodes"]}
         y += 6
         for edge in diagram["edges"]:
-            relationship = f"{labels[edge['source']]} → {labels[edge['target']]}"
-            for line in _lines(relationship, _font(21), 850):
-                draw.text((52, y), line, font=_font(21), fill="#1e40af"); y += 28
+            left = _lines(labels[edge['source']], _font(18), 350)
+            right = _lines(labels[edge['target']], _font(18), 350)
+            height = max(48, max(len(left), len(right)) * 23 + 10)
+            for x, lines in ((52, left), (540, right)):
+                draw.rounded_rectangle((x, y, x + 365, y + height), radius=6,
+                                       fill="#eff6ff", outline="#93c5fd", width=1)
+                for offset, line in enumerate(lines):
+                    draw.text((x + 8, y + 5 + offset * 23), line, font=_font(18), fill="#1e40af")
+            middle = y + height // 2
+            draw.line((425, middle, 530, middle), fill="#2563eb", width=2)
+            draw.polygon(((530, middle), (520, middle-5), (520, middle+5)), fill="#2563eb")
+            y += height + 3
             if edge.get("label"):
-                for line in _lines(edge["label"], _font(18), 850):
-                    draw.text((65, y), line, font=_font(18), fill="#475569"); y += 24
-            y += 4
+                for line in _lines(edge["label"], _font(14), 850):
+                    draw.text((65, y), line, font=_font(14), fill="#475569"); y += 19
+            y += 8
     if y > 488:
         raise ValueError("Slide content exceeds its safe area; shorten the scene")
     draw.line((44, 505, 916, 505), fill="#cbd5e1", width=1)

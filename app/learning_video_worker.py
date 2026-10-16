@@ -34,7 +34,7 @@ def claim(db):
         query = db.query(model)
         if kind == "lesson":
             query = query.options(defer(VideoLesson.video_data))
-        row = query.filter(model.attempts < 3, model.available_at <= now, or_(model.state.in_(["queued", "retrying"]),
+        row = query.filter(model.attempts < 4, model.available_at <= now, or_(model.state.in_(["queued", "retrying"]),
             (model.state == "running") & (model.lease_until <= now))).order_by(
             model.created_at).with_for_update(skip_locked=True).first()
         if row:

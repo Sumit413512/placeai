@@ -158,6 +158,24 @@ def test_worker_failure_is_honest_and_no_media_is_published(video, monkeypatch):
         worker.process(item, video.sessions)
     assert video.api.get(f'/learning-hub/video/{identifier}').json()['status'] == 'failed'
     assert video.db.query(VideoLesson).count() == 0
+    assert video.api.post(f'/learning-hub/video/{identifier}/retry').status_code == 200
+    with video.sessions() as db:
+        item = worker.claim(db)
+    worker.process(item, video.sessions)
+    assert not video.api.get(f'/learning-hub/video/{identifier}').json()['retry_available']
+    assert video.api.post(f'/learning-hub/video/{identifier}/retry').status_code == 409
+
+
+def test_lesson_retry_reuses_the_same_private_record_and_is_bounded(video):
+    identifier, lesson_id, path = ready_lesson(video)
+    row = video.db.get(VideoLesson, lesson_id)
+    row.state, row.attempts = 'failed', 3; video.db.commit()
+    assert video.api.post(path).status_code == 202
+    assert video.db.query(VideoLesson).count() == 1
+    video.db.expire_all()
+    row = video.db.get(VideoLesson, lesson_id)
+    row.state, row.attempts = 'failed', 4; video.db.commit()
+    assert video.api.post(path).status_code == 409
 
 
 def test_scripts_reject_unreadable_content_and_captions_escape_markup():

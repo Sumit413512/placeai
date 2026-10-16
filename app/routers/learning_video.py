@@ -51,6 +51,7 @@ def course_data(db, course):
     lessons = {row.position: (row, progress) for row, progress in rows}
     plan = json.loads(course.plan_json)
     result = {"id": course.id, "title": course.title, "status": course.state,
+              "retry_available": course.state == "failed" and course.attempts < 4,
               "error_code": course.error_code, "introduction": plan.get("introduction", ""),
               "prerequisites": plan.get("prerequisites", []), "lessons": [],
               "sources": json.loads(course.sources_json), "created_at": course.created_at.isoformat()}
@@ -58,6 +59,7 @@ def course_data(db, course):
         row, progress = lessons.get(position, (None, None))
         result["lessons"].append({**outline, "position": position,
             "status": row.state if row else "not_started", "duration_seconds": row.duration_seconds if row else 0,
+            "retry_available": bool(row and row.state == "failed" and row.attempts < 4),
             **progress_data(progress)})
     result["videos_completed"] = sum(item["video_completed"] for item in result["lessons"])
     result["practice_completed"] = sum(item["practice_completed"] for item in result["lessons"])
@@ -117,6 +119,23 @@ def get_course(course_id: str, user: User = Depends(require_student), db: Sessio
     return course_data(db, owner_course(db, course_id, user))
 
 
+@router.post("/{course_id}/retry", dependencies=[Depends(student_ai_guard)])
+def retry_course(course_id: str, tasks: BackgroundTasks,
+                 user: User = Depends(require_student), db: Session = Depends(get_db)):
+    db.query(User).filter_by(id=user.id).with_for_update().one()
+    course = owner_course(db, course_id, user)
+    if course.state != "failed":
+        return course_data(db, course)
+    if course.attempts >= 4:
+        raise HTTPException(409, "Preparation could not finish after retries. Please try a new path later.")
+    if not generation_available(db):
+        raise HTTPException(503, "Video preparation is temporarily unavailable")
+    budget(db, user)
+    course.state, course.error_code, course.available_at = "queued", None, utcnow()
+    db.commit(); tasks.add_task(wake_worker)
+    return course_data(db, course)
+
+
 @router.post("/{course_id}/lessons/{position}", status_code=202, dependencies=[Depends(student_ai_guard)])
 def prepare(course_id: str, position: int, tasks: BackgroundTasks,
             user: User = Depends(require_student), db: Session = Depends(get_db)):
@@ -125,12 +144,18 @@ def prepare(course_id: str, position: int, tasks: BackgroundTasks,
     lessons = json.loads(course.plan_json).get("lessons", [])
     if course.state != "ready" or not 0 <= position < len(lessons):
         raise HTTPException(409, "Wait for the learning path before preparing a lesson")
-    existing = db.query(VideoLesson.id).filter_by(course_id=course.id, position=position).first()
-    if existing:
+    existing = db.query(VideoLesson).options(defer(VideoLesson.video_data)).filter_by(course_id=course.id, position=position).first()
+    if existing and existing.state != "failed":
         return course_data(db, course)
+    if existing and existing.attempts >= 4:
+        raise HTTPException(409, "Lesson preparation could not finish after retries. Please try again with a new course later.")
     if not generation_available(db):
         raise HTTPException(503, "Video preparation is temporarily unavailable")
     budget(db, user, lesson=True)
+    if existing:
+        existing.state, existing.error_code, existing.available_at = "queued", None, utcnow()
+        db.commit(); tasks.add_task(wake_worker)
+        return course_data(db, course)
     row = VideoLesson(course_id=course.id, position=position, title=lessons[position]["title"])
     db.add(row); db.flush()
     db.add(VideoProgress(lesson_id=row.id))

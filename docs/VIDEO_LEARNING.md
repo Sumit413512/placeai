@@ -3,7 +3,7 @@
 Learning Hub now contains Detailed notes and Video learning. A topic and starting
 level create a researched 4–12 lesson path. Students prepare each lesson on demand.
 The course and approved scripts survive deploys; an interrupted worker lease can
-be reclaimed. Generation stops after three unsuccessful or interrupted attempts.
+be reclaimed. Generation stops after three unsuccessful or interrupted attempts. One explicit student retry is available afterward, for at most four attempts in total.
 
 Each lesson is an actual H.264/AAC MP4 made from precisely rendered slides, code
 and diagrams with AI-generated narration. References and an independent automated
