@@ -120,7 +120,20 @@ jobs:
           grep -q 'provisioning-password-fix.js' /tmp/app-bootstrap.js
           grep -q 'ai-readiness.js' /tmp/app-bootstrap.js
           grep -q 'legal-links.js' /tmp/app-bootstrap.js
-          curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/favicon.ico" -o /tmp/favicon.svg
+          curl -fsS -D /tmp/favicon.headers --connect-timeout 10 --max-time 20 "$BASE_URL/favicon.ico" -o /tmp/favicon.ico
+          grep -qi '^content-type: *image/x-icon' /tmp/favicon.headers
+          curl -fsS -D /tmp/favicon-png.headers --connect-timeout 10 --max-time 20 "$BASE_URL/static/placeai-favicon-96.png" -o /tmp/favicon.png
+          grep -qi '^content-type: *image/png' /tmp/favicon-png.headers
+          python - <<'PY'
+          from pathlib import Path
+          from struct import unpack
+          ico = Path('/tmp/favicon.ico').read_bytes()
+          png = Path('/tmp/favicon.png').read_bytes()
+          assert ico[:4] == bytes((0, 0, 1, 0)) and int.from_bytes(ico[4:6], 'little') > 0
+          assert png[:8] == bytes((137, 80, 78, 71, 13, 10, 26, 10))
+          assert unpack('>II', png[16:24]) == (96, 96)
+          print('Individual-mark ICO and square 96px PNG passed')
+          PY
           curl -fsS --connect-timeout 10 --max-time 20 "$BASE_URL/static/api-errors.js" -o /tmp/api-errors.js
           grep -q 'PASSWORD_POLICY_HELP' /tmp/api-errors.js
           grep -q 'FORM_CONTRACTS' /tmp/api-errors.js
