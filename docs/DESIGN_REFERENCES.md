@@ -19,3 +19,26 @@ Reviewed 15 October 2026. Saved for future design work; no third-party runtime o
 - No new external scripts, fonts, UI libraries, AI subscriptions or data transfers. Payments remain deferred.
 
 These references inform design judgment; they cannot guarantee that viewers will not perceive a site as AI-generated.
+
+
+## Follow-up selection — 16 October 2026
+
+| Candidate | Fit for PlaceAI | Decision |
+| --- | --- | --- |
+| [Vercel Web Interface Guidelines](https://github.com/vercel-labs/agent-skills/tree/main/skills/web-design-guidelines) | Framework-independent review of working interfaces. | Selected for targeted native HTML/CSS corrections and regression checks. |
+| [Taste Skill](https://github.com/Leonxlnx/taste-skill) | Art direction; its default targets public-facing pages, while its redesign variant starts with an existing interface audit. | Supplemental visual reference; retain the approved PlaceAI direction. |
+| [Awesome Design.md](https://github.com/VoltAgent/awesome-design-md) | Community collection of brand design references. These are not proof of official endorsement by those brands. | Reference only; no copied company branding or typography. |
+| [Image to Code](https://github.com/Leonxlnx/taste-skill/tree/main/skills/image-to-code-skill) | Helpful when a specific reference screen must become working code. | No new reference screen in this task; no image generation pipeline needed. |
+| UI UX from Axure | Exact package could not be established from the supplied name. | Not installed or executed; the verified guideline source covers this task. |
+
+The plugin-directory search did not return these exact packages. Public source guidance was reviewed directly; no plugin installation is claimed. No new libraries, accounts or external design runtimes were added.
+
+## Applied guideline findings
+
+- `app/templates/index.html`: add native bypass links and focusable main targets for public and signed-in users.
+- `app/templates/index.html`: fix the hero supporting heading from h3 to h2; preserve its visual size.
+- `app/static/selected-theme.css`: give anchored sections clearance below the sticky header and balance primary headings.
+- `app/static/selected-theme.css`: replace continuous decorative journey motion with a brief, once-only entrance; respect reduced-motion scrolling.
+- `app/static/app.css`: replace an implicit all-property button transition with explicit visual properties.
+
+Source: https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md . This focused review is not a certification of complete guideline or WCAG conformance across every workflow. Existing assessment/media, authentication, permissions, payments deferral, typography and logo assets remain unchanged.

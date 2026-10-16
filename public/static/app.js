@@ -29,10 +29,10 @@
     '/static/release-ux-fixes.js',
     '/static/integration-readiness.js',
     '/static/ai-readiness.js',
-    '/static/workspace-experience.js?v=20261015-design-detail',
+    '/static/workspace-experience.js?v=20261016-interface-guidelines',
     '/static/legal-links.js',
-    '/static/career-roadmap.js?v=20261015-design-detail',
-    '/static/app-core.js?v=20261015-design-detail'
+    '/static/career-roadmap.js?v=20261016-interface-guidelines',
+    '/static/app-core.js?v=20261016-interface-guidelines'
   ];
 
   const loadNext = (index) => {

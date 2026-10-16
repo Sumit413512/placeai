@@ -23,13 +23,14 @@
 <meta property="og:image:alt" content="PlaceAI campus placement collaboration">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/static/privacy-preferences.css"><script src="/static/privacy-preferences.js" defer></script>
-<link rel="stylesheet" href="/static/selected-theme.css?v=20261015-design-detail">
+<link rel="stylesheet" href="/static/selected-theme.css?v=20261016-interface-guidelines">
   <link rel="stylesheet" href="/static/learning-hub.css?v=20261012-2">
 </head>
 <body>
   <div id="toast-region" class="toast-region" aria-live="polite"></div>
 
   <div id="marketing-site">
+    <a class="placeai-skip-link" href="#top">Skip to main content</a>
     <header class="site-header">
       <a class="brand" href="#top" aria-label="PlaceAI home">
         <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
@@ -49,7 +50,7 @@
       <button class="mobile-menu" data-action="toggle-mobile-menu" aria-label="Open navigation">Menu</button>
     </header>
 
-    <main id="top">
+    <main id="top" tabindex="-1">
       <section class="hero section-shell">
         <div class="hero-copy">
           <div class="eyebrow"><span class="eyebrow-dot"></span> Campus placement operations</div>
@@ -75,7 +76,7 @@
           <div class="production-surface-card hero-surface-card">
             <div>
               <span class="surface-kicker">Your placement journey</span>
-              <h3>Preparation and campus hiring, working together.</h3>
+              <h2>Preparation and campus hiring, working together.</h2>
               <p>A shared workspace for students, placement teams and recruiters, with the right access at every stage.</p>
             </div>
             <div class="production-surface-grid">
@@ -184,6 +185,7 @@
   </div>
 
   <div id="app-shell" class="app-shell hidden">
+    <a class="placeai-skip-link" href="#app-content">Skip to workspace content</a>
     <aside class="app-sidebar">
       <div class="sidebar-brand"><a class="brand brand-light" href="#"><span class="brand-mark"><span></span><span></span><span></span></span><span>PlaceAI</span></a><button class="sidebar-close" data-action="toggle-sidebar" aria-label="Close sidebar">×</button></div>
       <div class="workspace-pill"><span class="workspace-avatar" id="workspace-avatar">P</span><div><small id="workspace-kind">Workspace</small><strong id="workspace-name">PlaceAI</strong></div></div>
@@ -193,7 +195,7 @@
     <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" data-action="toggle-sidebar" aria-label="Close navigation"></button>
     <div class="app-content-wrap">
       <header class="app-topbar"><button class="sidebar-trigger" data-action="toggle-sidebar">Menu</button><div class="topbar-context"><small id="page-eyebrow">Workspace</small><strong id="page-title">Dashboard</strong></div><div class="topbar-actions"><button class="icon-button command-launch" data-action="open-command-palette" title="Search PlaceAI" aria-label="Search PlaceAI"><svg class="command-launch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>Search <kbd>Ctrl K</kbd></button><button class="icon-button" id="notifications-button" data-action="open-notifications" title="Notifications" aria-label="Notifications"><span class="notification-dot"></span>Updates <b id="notification-count" class="notification-count">0</b></button><button class="button button-primary button-small" id="context-action">New</button></div></header>
-      <main id="app-content" class="app-content"><div class="loading-state"><span class="loader"></span><p>Loading your workspace…</p></div></main>
+      <main id="app-content" class="app-content" tabindex="-1"><div class="loading-state"><span class="loader"></span><p>Loading your workspace…</p></div></main>
     </div>
   </div>
 
@@ -226,7 +228,7 @@
     </section>
   </div>
 
-  <script src="/static/app.js?v=20261015-design-detail" defer></script>
+  <script src="/static/app.js?v=20261016-interface-guidelines" defer></script>
   <script src="/static/learning-hub.js?v=20261012-2" defer></script>
 </body>
 </html>

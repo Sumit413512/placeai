@@ -206,7 +206,7 @@ input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color:
   box-shadow: none !important;
 }
 .cta-section :is(h2, span), .proof-strip :is(strong, span),
-.production-surface-card :is(strong, h3), .locked-setting strong,
+.production-surface-card :is(strong, h2, h3), .locked-setting strong,
 .hero h1, .assessment-brand strong, .answer-review h4, .answer-score-box strong,
 .panel-head h2, .legal-hero h1, .result-head h2 { color: var(--pa-ink) !important; }
 .hero-score-card, .hero-photo-card, .security-card, .prep-role-card,
@@ -289,7 +289,7 @@ body :is(pre, code, kbd), body :is(pre, code, kbd) * {
 }
 #marketing-site :is(.hero-lead, .section-heading p, .prep-lab-intro p,
   .security-card p, .dark-section p) { font-size: 18px !important; line-height: 1.65 !important; }
-#marketing-site :is(.bento-card h3, .prep-role-card h3, .production-surface-card h3) {
+#marketing-site :is(.bento-card h3, .prep-role-card h3, .production-surface-card h2, .production-surface-card h3) {
   font-size: 25px !important; line-height: 1.3 !important;
 }
 #marketing-site :is(.bento-card p, .prep-role-card p, .production-surface-card p,
@@ -323,9 +323,9 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 .journey-heading h2 { font-size: 36px; font-weight: 400; line-height: 1.2; margin: 10px 0 0; }
 .journey-grid { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; padding: 0; margin: 0; }
 .journey-card { position: relative; padding: 25px; background: var(--pa-surface); border: 1px solid var(--pa-border); border-radius: 6px; }
-.journey-card::before { content: ""; position: absolute; inset: -1px 24px auto; height: 3px; background: var(--pa-accent); animation: placeaiJourneyHighlight 6s ease-in-out infinite; }
-.journey-card:nth-child(2)::before { animation-delay: -4s; }
-.journey-card:nth-child(3)::before { animation-delay: -2s; }
+.journey-card::before { content: ""; position: absolute; inset: -1px 24px auto; height: 3px; background: var(--pa-accent); transform-origin: left center; animation: placeaiJourneyHighlight 1.2s ease-out both; }
+.journey-card:nth-child(2)::before { animation-delay: .15s; }
+.journey-card:nth-child(3)::before { animation-delay: .3s; }
 .journey-index { color: var(--pa-accent); font-size: 14px; }
 .journey-card h3 { font-size: 28px; line-height: 1.2; margin: 12px 0; }
 .journey-card p { font-size: 17px; line-height: 1.6; margin: 0 0 22px; }
@@ -335,7 +335,7 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 #marketing-site .preparation-grid h3 { font-size: 23px !important; }
 #marketing-site .preparation-grid p { font-size: 16px !important; }
 .placeai-footer :is(p, a, span) { font-size: 15px !important; }
-@keyframes placeaiJourneyHighlight { 0%, 27% { opacity: 1; } 34%, 94% { opacity: .15; } 100% { opacity: 1; } }
+@keyframes placeaiJourneyHighlight { from { opacity: .15; transform: scaleX(.4); } to { opacity: 1; transform: scaleX(1); } }
 @media (prefers-reduced-motion: reduce) { .journey-card::before { animation: none; opacity: 1; } }
 @media (max-width: 760px) {
   .journey-grid { grid-template-columns: 1fr; gap: 16px; }
@@ -872,4 +872,22 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 }
 .placeai-footer .placeai-social-button svg {
   width: 18px; height: 18px; flex: 0 0 18px; fill: currentColor;
+}
+
+/* Web Interface Guidelines: keyboard bypass, unobscured anchors and calm motion. */
+.placeai-skip-link {
+  position: fixed; top: 16px; left: 16px; z-index: 100;
+  max-width: calc(100vw - 32px); padding: 12px 18px;
+  background: var(--pa-surface); color: var(--pa-accent);
+  border: 2px solid var(--pa-accent); border-radius: 8px;
+  font-size: 16px; line-height: 1.4; text-decoration: underline;
+  transform: translateY(calc(-100% - 32px));
+}
+.placeai-skip-link:focus { transform: translateY(0); outline: 2px solid var(--pa-ink); outline-offset: 3px; }
+#marketing-site :is(section[id], main[id]), #app-content { scroll-margin-top: 100px; }
+#marketing-site :is(.hero h1, .section-heading h2), #app-shell .page-head h1 { text-wrap: balance; }
+#top:focus-visible, #app-content:focus-visible { outline: 2px solid var(--pa-accent); outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto !important; }
+  .button { transition: none !important; }
 }
