@@ -54,6 +54,14 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
         assert page.locator('#page-eyebrow').is_hidden()
     assert page.locator('#app-nav button[aria-current="page"]').count() == 1
 
+    page.locator('.sidebar-brand a').focus()
+    page.keyboard.press('Shift+Tab')
+    skip = page.get_by_role('link', name='Skip to workspace content', exact=True)
+    assert skip.evaluate('el => el === document.activeElement')
+    assert skip.bounding_box()['y'] >= 0
+    page.keyboard.press('Enter')
+    page.wait_for_function("document.activeElement.id === 'app-content'")
+
     cards = page.locator('.metric-grid .metric-card')
     assert cards.count() == (5 if role == 'platform_admin' else 4)
     assert page.locator('.workspace-shortcuts').count() == 1

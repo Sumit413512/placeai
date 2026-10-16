@@ -7,6 +7,16 @@ def test_learning_journey_is_readable_responsive_and_links_to_existing_flows(bro
     page.get_by_role("button", name="Essential only", exact=True).click()
     assert page.locator(".hero h1").inner_text().replace("\n", " ") == "Placement operations, connected end to end."
     assert page.locator(".hero-journey-line").inner_text() == "Learn · Practice · Get Placed"
+    page.locator('#marketing-site .site-header .brand').focus()
+    page.keyboard.press('Shift+Tab')
+    skip = page.get_by_role('link', name='Skip to main content', exact=True)
+    assert skip.evaluate('el=>el===document.activeElement')
+    assert skip.bounding_box()['y'] >= 0
+    page.keyboard.press('Enter')
+    page.wait_for_function("document.activeElement.id === 'top'")
+    levels = page.locator('#marketing-site h1, #marketing-site h2, #marketing-site h3').evaluate_all(
+        'els=>els.filter(el=>el.getClientRects().length).map(el=>Number(el.tagName[1]))')
+    assert all(current <= previous + 1 for previous, current in zip(levels, levels[1:])), levels
     heading = page.locator("#recruiters .section-heading h2")
     assert heading.evaluate("el=>getComputedStyle(el).fontWeight") == "400"
     assert "Calibri" in heading.evaluate("el=>getComputedStyle(el).fontFamily")
@@ -20,6 +30,7 @@ def test_learning_journey_is_readable_responsive_and_links_to_existing_flows(bro
         page.locator(".journey-card").first.evaluate("el=>getComputedStyle(el,'::before').animationName")
         == "placeaiJourneyHighlight"
     )
+    assert page.locator('.journey-card').first.evaluate("el=>getComputedStyle(el,'::before').animationIterationCount") == '1'
     for width in (1440, 736, 390, 320):
         page.set_viewport_size({"width": width, "height": 1000})
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
@@ -30,6 +41,8 @@ def test_learning_journey_is_readable_responsive_and_links_to_existing_flows(bro
     assert page.locator(".journey-card").first.evaluate("el=>getComputedStyle(el,'::before').animationName") == "none"
     page.locator(".journey-card a").first.click()
     assert page.url.endswith("#preparation-lab")
+    assert page.evaluate("getComputedStyle(document.documentElement).scrollBehavior") == 'auto'
+    assert page.locator('#preparation-lab').bounding_box()['y'] >= 76
     sign_in = page.get_by_role('button', name='Sign in to PlaceAI', exact=True)
     assert sign_in.locator('svg').get_attribute('aria-hidden') == 'true'
     assert sign_in.bounding_box()['height'] >= 44
