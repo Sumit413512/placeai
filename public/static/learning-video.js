@@ -15,7 +15,7 @@
     hub.prepend(navigation);
     const panel = document.createElement('section');
     panel.className = 'learning-video-panel'; panel.hidden = true;
-    panel.innerHTML = `<section class="panel"><span class="section-kicker">Video learning</span><h2>A topic. A clear learning path.</h2><p>Learn in short narrated lessons with visual explanations, practice and saved progress.</p><form id="learning-video-form"><div class="learning-form-grid"><label>Video topic<input name="topic" required minlength="2" maxlength="180" placeholder="SQL for placement interviews"></label><label>Starting level<select name="level"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></label><label class="learning-wide">Learning goal <span>(optional)</span><input name="goal" maxlength="1000" placeholder="For example: understand joins and solve interview questions"></label></div><p>Lessons are in English. Your learning path is prepared first; generate each video when you need it.</p><button class="button button-primary" type="submit">Create video learning path</button></form><p data-video-status role="status"></p></section><section class="panel"><div class="panel-head"><h2>Your video courses</h2><button type="button" class="button button-secondary" data-video-refresh>Refresh</button></div><div data-video-library>Loading your courses…</div></section><div data-video-course></div><div data-video-player></div>`;
+    panel.innerHTML = `<section class="panel"><span class="section-kicker">Video learning</span><h2>A topic. A clear learning path.</h2><p>Learn in short narrated lessons with visual explanations, practice and saved progress.</p><form id="learning-video-form"><div class="learning-form-grid"><label>Video topic<input name="video_topic" required minlength="2" maxlength="180" placeholder="SQL for placement interviews"></label><label>Starting level<select name="video_level"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></label><label class="learning-wide">Learning goal <span>(optional)</span><input name="goal" maxlength="1000" placeholder="For example: understand joins and solve interview questions"></label></div><p>Lessons are in English. Your learning path is prepared first; generate each video when you need it.</p><button class="button button-primary" type="submit">Create video learning path</button></form><p data-video-status role="status"></p></section><section class="panel"><div class="panel-head"><h2>Your video courses</h2><button type="button" class="button button-secondary" data-video-refresh>Refresh</button></div><div data-video-library>Loading your courses…</div></section><div data-video-course></div><div data-video-player></div>`;
     hub.append(panel);
     let alive = true, current = null, course = null, poll = null, player = null, position = null;
     let urls = [], playerEpoch = 0, saving = false, lastSaved = 0, observer;
@@ -85,6 +85,7 @@
       player = host.querySelector('video'); position = index;
       player.src = videoUrl; player.querySelector('track').src = captionUrl;
       player.addEventListener('loadedmetadata', () => { if (player && isCurrent(id, version)) player.currentTime = data.position_seconds < data.duration_seconds - 2 ? data.position_seconds : 0; }, {once:true});
+      player.addEventListener('error', () => status('Your browser could not play this video. Try an updated browser; the transcript and practice remain available below.'));
       player.addEventListener('timeupdate', () => { if (Date.now() - lastSaved >= 10000 && !player?.paused) saveProgress(); });
       player.addEventListener('pause', saveProgress); player.addEventListener('ended', saveProgress);
       status('');
@@ -106,6 +107,7 @@
       try {
         if (form.id === 'learning-video-form') {
           const fields = Object.fromEntries(new FormData(form));
+          fields.topic = fields.video_topic; fields.level = fields.video_level; delete fields.video_topic; delete fields.video_level;
           fields.goal = fields.goal || 'Placement preparation';
           const fingerprint = JSON.stringify(fields);
           if (form.dataset.fingerprint !== fingerprint) { form.dataset.fingerprint = fingerprint; form.dataset.requestId = crypto.randomUUID(); }

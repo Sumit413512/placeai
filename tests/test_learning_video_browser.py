@@ -1,13 +1,32 @@
 from copy import deepcopy
+import os
+import shutil
 
-from playwright.sync_api import expect
+import pytest
+from playwright.sync_api import expect, sync_playwright
 
 from test_browser_smoke import BASE_URL, browser, local_server  # noqa: F401
 from test_learning_video import course_plan, script
 from app.learning_video_media import captions, render_video
 
 
-def test_video_learning_playback_practice_mobile_and_cleanup(browser):  # noqa: F811
+@pytest.fixture(scope="module")
+def video_browser(local_server):  # noqa: F811
+    del local_server
+    # Bundled Chromium omits proprietary media codecs on Linux. GitHub's Ubuntu
+    # runner includes Google Chrome; use it to verify actual H.264/AAC playback.
+    executable = (os.getenv('PLAYWRIGHT_CHROMIUM_EXECUTABLE') or shutil.which('google-chrome')
+                  or shutil.which('google-chrome-stable'))
+    with sync_playwright() as playwright:
+        instance = playwright.chromium.launch(headless=True, **({'executable_path':executable} if executable else {}))
+        try:
+            yield instance
+        finally:
+            instance.close()
+
+
+def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
+    browser = video_browser
     page = browser.new_page(viewport={"width":1440,"height":1000})
     page.add_init_script("localStorage.setItem('placeai.analytics.preference.v1','declined')")
     errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
