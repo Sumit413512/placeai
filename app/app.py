@@ -62,6 +62,7 @@ def _release_sha() -> str | None:
 async def lifespan(_: FastAPI):
     worker_stop, worker_thread = Event(), None
     learning_thread = None
+    video_thread = None
     if runtime_readiness_errors:
         for code in runtime_readiness_errors:
             logger.error("PlaceAI runtime readiness blocked: %s", code)
@@ -84,6 +85,9 @@ async def lifespan(_: FastAPI):
         from app.learning_worker import run as run_learning
         learning_thread = Thread(target=run_learning, args=(worker_stop,), daemon=True, name="learning-worker")
         learning_thread.start()
+        from app.learning_video_worker import run as run_video_learning
+        video_thread = Thread(target=run_video_learning, args=(worker_stop,), daemon=True, name="video-learning-worker")
+        video_thread.start()
     try:
         yield
     finally:
@@ -92,6 +96,8 @@ async def lifespan(_: FastAPI):
             worker_thread.join(timeout=5)
         if learning_thread:
             learning_thread.join(timeout=5)
+        if video_thread:
+            video_thread.join(timeout=5)
 
 
 app = FastAPI(
@@ -202,6 +208,7 @@ async def security_headers(request: Request, call_next):
             f"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com{google_style}; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data: https:; "
+            "media-src 'self' blob:; "
             f"{google_frames}object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
         )
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups" if path == "/" else "same-origin"
@@ -318,6 +325,7 @@ telemetry = _import_router("telemetry")
 billing = _import_router("billing")
 career_roadmap = _import_router("career_roadmap")
 learning_hub = _import_router("learning_hub")
+learning_video = _import_router("learning_video")
 product_intelligence = _import_router("product_intelligence")
 
 ACCOUNT_SECURITY_REPLACEMENTS = {
@@ -386,6 +394,7 @@ _include_router(student_workspace_v2)
 _include_router(telemetry)
 _include_router(billing)
 _include_router(career_roadmap)
+_include_router(learning_video)
 _include_router(learning_hub)
 _include_router(product_intelligence)
 

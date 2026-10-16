@@ -920,3 +920,58 @@ class LearningRuntime(Base):
     id = Column(Integer, primary_key=True)
     provider_configured = Column(Boolean, nullable=False, default=False)
     checked_at = Column(DateTime, nullable=False, default=utcnow)
+
+
+class VideoCourse(Base):
+    __tablename__ = "learning_video_courses"
+    __table_args__ = (UniqueConstraint("user_id", "request_id", name="uq_video_course_request"),
+                     Index("ix_video_course_owner", "user_id", "created_at"))
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    request_id = Column(String(80), nullable=False)
+    title = Column(String(240), nullable=False)
+    input_json = Column(Text, nullable=False)
+    state = Column(String(24), nullable=False, default="queued")
+    plan_json = Column(Text, nullable=False, default="{}")
+    sources_json = Column(Text, nullable=False, default="[]")
+    evidence = Column(Text, nullable=False, default="")
+    attempts = Column(Integer, nullable=False, default=0)
+    error_code = Column(String(80))
+    lease_token = Column(String(40))
+    lease_until = Column(DateTime)
+    available_at = Column(DateTime, nullable=False, default=utcnow)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class VideoLesson(Base):
+    __tablename__ = "learning_video_lessons"
+    __table_args__ = (UniqueConstraint("course_id", "position", name="uq_video_lesson_position"),
+                     Index("ix_video_lesson_queue", "state", "available_at"))
+    id = Column(String, primary_key=True, default=generate_uuid)
+    course_id = Column(String, ForeignKey("learning_video_courses.id", ondelete="CASCADE"), nullable=False)
+    position = Column(Integer, nullable=False)
+    title = Column(String(240), nullable=False)
+    state = Column(String(24), nullable=False, default="queued")
+    content_json = Column(Text, nullable=False, default="{}")
+    video_data = Column(LargeBinary)
+    duration_seconds = Column(Float, nullable=False, default=0)
+    attempts = Column(Integer, nullable=False, default=0)
+    error_code = Column(String(80))
+    lease_token = Column(String(40))
+    lease_until = Column(DateTime)
+    available_at = Column(DateTime, nullable=False, default=utcnow)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class VideoProgress(Base):
+    __tablename__ = "learning_video_progress"
+    # Each course belongs to one student; authorization always follows its owner.
+    lesson_id = Column(String, ForeignKey("learning_video_lessons.id", ondelete="CASCADE"), primary_key=True)
+    position_seconds = Column(Float, nullable=False, default=0)
+    watched_seconds = Column(Float, nullable=False, default=0)
+    coverage_json = Column(Text, nullable=False, default="[]")
+    video_completed = Column(Boolean, nullable=False, default=False)
+    practice_completed = Column(Boolean, nullable=False, default=False)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
