@@ -1,5 +1,7 @@
 import io
 import json
+import base64
+import wave
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -201,3 +203,68 @@ def test_provider_script_format_is_repaired_once_before_narration(monkeypatch):
     monkeypatch.setattr(learning_ai, 'generate_json', lambda *_a, **_k: (raw, 'test'))
     with pytest.raises(ValidationError):
         worker.validate_script(raw, 'Query evidence', [{"id":1}])
+
+
+def test_mixed_visual_scene_is_split_without_losing_teaching_or_code():
+    raw = script()
+    diagram = {"title":"Projecting selected columns", "nodes":[{"id":"table","label":"Students"},
+               {"id":"output","label":"Names"}], "edges":[{"source":"table","target":"output","label":"Choose name column"}],
+               "explanation":"The source table contains student records. Selecting the name column projects one attribute from each input row into the query result."}
+    raw['scenes'][0]['diagram'] = diagram
+    transformed = worker.separate_visuals(raw)
+    checked = LessonScript.model_validate(transformed)
+    assert len(checked.scenes) == 5
+    assert checked.scenes[0].code == raw['scenes'][0]['code']
+    assert checked.scenes[0].narration == raw['scenes'][0]['narration']
+    assert checked.scenes[1].narration == diagram['explanation']
+    assert raw['scenes'][0]['diagram'] == diagram  # Input remains untouched.
+    for index, scene in enumerate(checked.scenes):
+        slide(scene.model_dump(), index+1, len(checked.scenes))
+
+
+def test_short_solution_is_expanded_without_regenerating_other_lesson_fields(monkeypatch):
+    raw = script(); raw['solution'] = 'SELECT name FROM students;'
+    replacement = script()['solution']
+    monkeypatch.setattr(learning_ai, 'generate_json', lambda *_a, **_k: (
+        {"repairs":[{"path":"solution","value":replacement}]},'test'))
+    checked = worker.validate_script(raw, 'Official query evidence', [{"id":1}])
+    assert checked.solution == replacement
+    assert checked.scenes[0].narration == raw['scenes'][0]['narration']
+
+
+def test_speech_quota_wait_keeps_completed_scene_work_and_has_a_bound(monkeypatch):
+    from contextlib import contextmanager
+    import httpx
+    from app import learning_video_media as media
+    wav = io.BytesIO()
+    with wave.open(wav, 'wb') as audio:
+        audio.setnchannels(1); audio.setsampwidth(2); audio.setframerate(24000)
+        audio.writeframes(b'\0'*48000)
+    request = httpx.Request('POST','https://generativelanguage.googleapis.com/v1beta/interactions')
+    responses = [httpx.Response(429,json={'error':{'details':[{'retryDelay':'2s'}]}},request=request),
+                 httpx.Response(200,json={'steps':[{'type':'model_output','content':[{'type':'audio',
+                    'data':base64.b64encode(wav.getvalue()).decode()}]}]},request=request)]
+    delays = []
+    monkeypatch.setattr(media.ai_provider,'_gemini_key',lambda:'isolated-test-key')
+    monkeypatch.setattr(media.ai_provider,'_openai_keys',lambda:[])
+    @contextmanager
+    def streamed(*_args, **_kwargs):
+        yield responses.pop(0)
+    monkeypatch.setattr(media.httpx,'stream',streamed)
+    monkeypatch.setattr(media.time,'sleep',delays.append)
+    assert media.speak('A short isolated teaching narration.') == b'\0'*48000
+    assert delays == [3] and not responses
+    daily = httpx.Response(429,json={'error':{'details':[{'violations':[{'quotaId':'RequestsPerDay','quotaValue':'0'}]}]}},request=request)
+    assert media.quota_delay(daily) is None
+    responses.append(httpx.Response(200,json={'steps':[{'type':'model_output','content':[{'type':'audio',
+        'data':base64.b64encode(wav.getvalue()).decode()}]}]},request=request))
+    failures = [True]
+    @contextmanager
+    def interrupted(*_args, **_kwargs):
+        if failures:
+            failures.pop()
+            raise httpx.RemoteProtocolError('Isolated transport interruption')
+        yield responses.pop(0)
+    monkeypatch.setattr(media.httpx,'stream',interrupted)
+    assert media.speak('Retry only the interrupted narration scene.') == b'\0'*48000
+    assert delays == [3, 1]

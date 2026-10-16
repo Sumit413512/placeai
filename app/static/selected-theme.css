@@ -891,3 +891,18 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
   html { scroll-behavior: auto !important; }
   .button { transition: none !important; }
 }
+
+/* Account identity and sign-out remain visually distinct at every sidebar width. */
+#app-shell .workspace-pill .workspace-avatar { display:none !important; }
+#app-shell .workspace-pill { gap:0; }
+#app-shell .sidebar-user { grid-template-columns:32px minmax(0,1fr); gap:10px; }
+#app-shell .sidebar-user-details { min-width:0; }
+#app-shell .sidebar-user strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#app-shell .sidebar-signout {
+  grid-column:1/-1; width:100%; min-height:42px; padding:9px 12px;
+  border:1px solid #9db5dc; border-radius:var(--radius-control,6px);
+  background:#fff; color:#1e40af; font:inherit; font-weight:400;
+  text-align:center; white-space:nowrap; cursor:pointer;
+}
+#app-shell .sidebar-signout:hover { background:#eff6ff; border-color:#2563eb; }
+#app-shell .sidebar-signout:focus-visible { outline:2px solid #1e40af; outline-offset:3px; }

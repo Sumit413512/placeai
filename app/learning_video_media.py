@@ -6,6 +6,7 @@ import io
 import logging
 import math
 import os
+import time
 import wave
 from fractions import Fraction
 from pathlib import Path
@@ -40,20 +41,57 @@ def _pcm(data):
     return frames
 
 
+def quota_delay(response):
+    """Respect a bounded provider retry hint; daily/zero quotas need account action."""
+    import json
+    try:
+        data = bytearray()
+        for chunk in response.iter_bytes():
+            data.extend(chunk)
+            if len(data) > 65536:
+                return None
+        details = json.loads(data).get('error', {}).get('details', [])
+        for detail in details:
+            for violation in detail.get('violations', []):
+                if 'perday' in str(violation.get('quotaId','')).lower() or str(violation.get('quotaValue')) == '0':
+                    return None
+        hints = [detail.get('retryDelay') for detail in details if detail.get('retryDelay')]
+        delay = float(str(hints[0]).removesuffix('s')) if hints else float(response.headers.get('retry-after', 30))
+        return max(1, min(delay + 1, 60))
+    except (ValueError, TypeError, KeyError):
+        return 30
+
+
 def speak(narration):
     """Only the approved lesson transcript is sent to speech providers, never identity data."""
     key = ai_provider._gemini_key()
     if key:
         try:
-            with httpx.stream("POST", "https://generativelanguage.googleapis.com/v1beta/interactions",
-                headers={"x-goog-api-key": key}, timeout=100,
-                json={"model": os.getenv("LEARNING_TTS_GEMINI_MODEL", "gemini-3.8-flash-lite-tts"),
-                      "input": [{"type": "user_input", "content": [{"type": "text", "text": narration,
-                          "annotations": [{"type": "speech_metadata", "style": "Clear, calm educational narration"}]}]}],
-                      "response_format": {"type": "audio"}, "store": False,
-                      "generation_config": {"speech_config": [{"voice": "Kore"}]}}) as response:
-                import json
-                payload = json.loads(_response_bytes(response, MAX_AUDIO_BYTES * 2))
+            import json
+            for attempt in range(3):
+                try:
+                    with httpx.stream("POST", "https://generativelanguage.googleapis.com/v1beta/interactions",
+                        headers={"x-goog-api-key": key}, timeout=60,
+                        json={"model": os.getenv("LEARNING_TTS_GEMINI_MODEL", "gemini-3.8-flash-lite-tts"),
+                              "input": [{"type": "user_input", "content": [{"type": "text", "text": narration,
+                                  "annotations": [{"type": "speech_metadata", "style": "Clear, calm educational narration"}]}]}],
+                              "response_format": {"type": "audio"}, "store": False,
+                              "generation_config": {"speech_config": [{"voice": "Kore"}]}}) as response:
+                        if response.status_code == 429 and attempt < 2:
+                            delay = quota_delay(response)
+                            if delay is not None:
+                                LOGGER.info("Video narration waiting for provider quota retry_seconds=%s", delay)
+                                time.sleep(delay)
+                                continue
+                        if response.status_code in {500, 502, 503, 504} and attempt < 2:
+                            time.sleep(2 ** attempt)
+                            continue
+                        payload = json.loads(_response_bytes(response, MAX_AUDIO_BYTES * 2))
+                        break
+                except httpx.TransportError:
+                    if attempt == 2:
+                        raise
+                    time.sleep(2 ** attempt)
             for step in reversed(payload.get("steps", [])):
                 if step.get("type") == "model_output":
                     for item in reversed(step.get("content", [])):
@@ -153,6 +191,7 @@ def render_video(script, narrate=speak):
     """One scene at a time: bounded RAM, one encoding thread and exact scene boundaries."""
     import av
     output = io.BytesIO()
+    deadline = time.monotonic() + 600
     timings = []
     # Playback fetches the bounded file as an authenticated blob, so an end-of-file
     # moov atom is safe and avoids FFmpeg's filesystem-only faststart rewrite.
@@ -166,6 +205,8 @@ def render_video(script, narrate=speak):
         resampler = av.AudioResampler(format="fltp", layout="mono", rate=RATE)
         seconds, samples = 0, 0
         for index, scene in enumerate(script["scenes"]):
+            if time.monotonic() > deadline:
+                raise RuntimeError("VIDEO_RENDER_DEADLINE")
             image = slide(scene, index + 1, len(script["scenes"]))
             pcm = narrate(scene["narration"])
             duration = math.ceil(len(pcm) / (RATE * 2))

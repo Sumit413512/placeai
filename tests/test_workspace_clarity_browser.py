@@ -49,6 +49,13 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
     assert page.locator('#sidebar-user-name').inner_text() == 'MIT account'
     assert page.locator('#workspace-name').is_hidden()
     assert page.locator('#sidebar-user-role').is_hidden()
+    assert page.locator('#workspace-avatar').is_hidden()
+    account_name = page.locator('#sidebar-user-name').bounding_box()
+    logout = page.get_by_role('button', name='Sign out', exact=True)
+    logout_box = logout.bounding_box()
+    assert logout_box['y'] >= account_name['y'] + account_name['height']
+    assert logout_box['height'] >= 40
+    assert logout.evaluate('el => parseFloat(getComputedStyle(el).borderTopWidth)') >= 1
     assert page.locator('.workspace-role-chip').count() == 0
     if role != 'institution_admin':
         assert page.locator('#page-eyebrow').is_hidden()
@@ -135,4 +142,7 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
     page.wait_for_timeout(100)
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
     page.screenshot(path=str(output / f'{role}-mobile.png'), full_page=True)
+    page.set_viewport_size({'width':1440,'height':960})
+    with page.expect_request(lambda request: request.url == BASE_URL+'/auth/logout' and request.method == 'POST'):
+        logout.click()
     page.close()

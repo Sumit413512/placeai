@@ -26,6 +26,10 @@ These indicators are learning aids, not proctored attendance or mastery certific
   `LEARNING_TTS_GEMINI_MODEL` and `LEARNING_TTS_OPENAI_MODEL`.
 - The speech provider must support the configured model and have available quota.
   Unavailable providers never produce a fabricated success or silent lesson.
+  Temporary rate limits use bounded provider retry hints; interrupted connections
+  retry only the current scene. Worker leases renew during these waits.
+- Mixed code/diagram scenes become separate visual cards without dropping teaching
+  text. Short answers get targeted expansion before independent content review.
 - Per student: three new paths and eight new lessons per rolling day.
   Platform-wide: thirty paths and forty lessons per rolling day.
 - Lessons are capped at eight minutes and 3 MiB. Private media storage is capped
