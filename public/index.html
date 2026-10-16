@@ -23,7 +23,7 @@
 <meta property="og:image:alt" content="PlaceAI campus placement collaboration">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/static/privacy-preferences.css"><script src="/static/privacy-preferences.js" defer></script>
-<link rel="stylesheet" href="/static/selected-theme.css?v=20261016-interface-guidelines">
+<link rel="stylesheet" href="/static/selected-theme.css?v=20261016-account-controls">
   <link rel="stylesheet" href="/static/learning-hub.css?v=20261012-2">
 </head>
 <body>
@@ -188,9 +188,9 @@
     <a class="placeai-skip-link" href="#app-content">Skip to workspace content</a>
     <aside class="app-sidebar">
       <div class="sidebar-brand"><a class="brand brand-light" href="#"><span class="brand-mark"><span></span><span></span><span></span></span><span>PlaceAI</span></a><button class="sidebar-close" data-action="toggle-sidebar" aria-label="Close sidebar">×</button></div>
-      <div class="workspace-pill"><span class="workspace-avatar" id="workspace-avatar">P</span><div><small id="workspace-kind">Workspace</small><strong id="workspace-name">PlaceAI</strong></div></div>
+      <div class="workspace-pill"><span class="workspace-avatar" id="workspace-avatar" hidden aria-hidden="true">P</span><div><small id="workspace-kind">Workspace</small><strong id="workspace-name">PlaceAI</strong></div></div>
       <nav id="app-nav" class="app-nav" aria-label="Workspace"></nav>
-      <div class="sidebar-bottom"><div class="ai-policy"><span>AI</span><p><strong>Human-reviewed intelligence</strong><small>AI features support—not replace—placement decisions.</small></p></div><button class="sidebar-user" data-action="logout"><span class="user-avatar" id="sidebar-avatar">U</span><span><strong id="sidebar-user-name">Account</strong><small id="sidebar-user-role">Role</small></span><em>Sign out</em></button></div>
+      <div class="sidebar-bottom"><div class="ai-policy"><span>AI</span><p><strong>Human-reviewed intelligence</strong><small>AI features support—not replace—placement decisions.</small></p></div><div class="sidebar-user"><span class="user-avatar" id="sidebar-avatar" aria-hidden="true">U</span><span class="sidebar-user-details"><strong id="sidebar-user-name">Account</strong><small id="sidebar-user-role">Role</small></span><button class="sidebar-signout" type="button" data-action="logout">Sign out</button></div></div>
     </aside>
     <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" data-action="toggle-sidebar" aria-label="Close navigation"></button>
     <div class="app-content-wrap">

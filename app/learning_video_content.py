@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
-from app.learning_content import ContentModel, Diagram
+from app.learning_content import ContentModel, Diagram, DiagramNode, DiagramEdge
 
 
 class VideoRequest(ContentModel):
@@ -31,12 +31,20 @@ class CoursePlan(ContentModel):
         return self
 
 
+class VideoDiagram(Diagram):
+    nodes: list[DiagramNode] = Field(min_length=2, max_length=4)
+    edges: list[DiagramEdge] = Field(min_length=1, max_length=3)
+    explanation: str = Field(min_length=100, max_length=5000,
+                             description="Describe what the visual relationships mean in spoken English.")
+
+
 class VideoScene(ContentModel):
     title: str = Field(min_length=3, max_length=65)
     narration: str = Field(min_length=100, max_length=1000)
     bullets: list[str] = Field(min_length=1, max_length=3)
-    code: str = Field(default="", max_length=600)
-    diagram: Diagram | None = None
+    code: str = Field(default="", max_length=600,
+                      description="At most seven short lines; at most 65 characters per line.")
+    diagram: VideoDiagram | None = None
     source_ids: list[int] = Field(min_length=1, max_length=5)
 
     @model_validator(mode="after")
@@ -47,8 +55,8 @@ class VideoScene(ContentModel):
             raise ValueError("Code needs short lines and at most seven lines per slide")
         if self.code and self.diagram:
             raise ValueError("Teach code and a diagram in separate scenes")
-        if (self.code and len(self.bullets) > 2) or (self.diagram and len(self.bullets) > 1):
-            raise ValueError("Code needs at most two slide points; diagrams need at most one")
+        if self.diagram and len(self.bullets) > 1:
+            raise ValueError("Diagrams need their own focused visual scene")
         if self.diagram and (len(self.diagram.nodes) > 4 or len(self.diagram.edges) > 3):
             raise ValueError("Use at most four diagram nodes and three relationships per scene")
         return self
@@ -71,11 +79,12 @@ class KnowledgeCheck(ContentModel):
 
 class LessonScript(ContentModel):
     objective: str = Field(min_length=20, max_length=500)
-    scenes: list[VideoScene] = Field(min_length=4, max_length=7)
+    scenes: list[VideoScene] = Field(min_length=4, max_length=14)
     takeaways: list[str] = Field(min_length=2, max_length=5)
     quiz: list[KnowledgeCheck] = Field(min_length=3, max_length=3)
     exercise: str = Field(min_length=40, max_length=1600)
-    solution: str = Field(min_length=80, max_length=2400)
+    solution: str = Field(min_length=80, max_length=2400,
+                          description="Give the answer AND two or three sentences explaining why it works; never code alone.")
 
 
 LESSON_PROMPT = """Create a PlaceAI narrated video lesson using ONLY the supplied research evidence.

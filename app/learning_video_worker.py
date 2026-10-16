@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 import logging
 from datetime import timedelta
 from uuid import uuid4
+from threading import Event, Thread
 
 from pydantic import ValidationError
 from sqlalchemy import func, or_, text
@@ -18,12 +20,14 @@ from app.models import User, UserRole, VideoCourse, VideoLesson, utcnow
 
 LOGGER = logging.getLogger("placeai.learning.video.worker")
 STORAGE_BUDGET = 150 * 1024 * 1024
+LEASE_SECONDS = 180
 
 
 def validate_script(raw, evidence, sources):
     """Repair one provider formatting/layout deviation before spending on narration."""
     from app.learning_video_media import slide
     for attempt in range(2):
+        raw = separate_visuals(raw)
         try:
             script = LessonScript.model_validate(raw)
             if any(i < 1 or i > len(sources) for scene in script.scenes for i in scene.source_ids):
@@ -40,6 +44,38 @@ def validate_script(raw, evidence, sources):
             problems = ([{"path":list(item["loc"]), "type":item["type"], "message":item["msg"]}
                          for item in error.errors()] if isinstance(error, ValidationError)
                         else [{"message":str(error)}])
+            if isinstance(error, ValidationError) and all(item['type'] == 'string_too_short' for item in error.errors()):
+                targets = {}
+                for item in error.errors():
+                    parent = raw
+                    for key in item['loc'][:-1]:
+                        parent = parent[key]
+                    path = '.'.join(map(str, item['loc']))
+                    targets[path] = (parent, item['loc'][-1])
+                repaired, _ = learning_ai.generate_json(
+                    "Expand ONLY the short lesson fields below. Supply the actual answer plus meaningful "
+                    "explanation, not filler or code alone. For solutions include two or three sentences "
+                    "explaining why the answer works. Preserve factual meaning and cite no invented sources. "
+                    "Return every exact path and its full replacement value, comfortably over the minimum.\nFIELDS: "
+                    + json.dumps([{'path':'.'.join(map(str,item['loc'])), 'minimum_characters':item['ctx']['min_length'],
+                        'current_value':targets['.'.join(map(str,item['loc']))][0][item['loc'][-1]]}
+                        for item in error.errors()]) + "\nLESSON: " + json.dumps(raw) + "\nEVIDENCE: " + evidence,
+                    {"type":"object","properties":{"repairs":{"type":"array","items":{"type":"object",
+                     "properties":{"path":{"type":"string"},"value":{"type":"string"}},
+                     "required":["path","value"],"additionalProperties":False}}},
+                     "required":["repairs"],"additionalProperties":False}, max_output_tokens=1800)
+                replacements = repaired.get('repairs', [])
+                if not isinstance(replacements, list) or len(replacements) != len(targets):
+                    raise ValueError("Every short lesson field needs a replacement")
+                seen = set()
+                for replacement in replacements:
+                    path = replacement.get('path')
+                    if path not in targets or path in seen or not isinstance(replacement.get('value'), str):
+                        raise ValueError("Lesson repairs must target only requested fields")
+                    seen.add(path)
+                    parent, key = targets[path]
+                    parent[key] = replacement['value']
+                continue
             raw, _ = learning_ai.generate_json(
                 LESSON_PROMPT + "\nRepair the complete lesson to match the schema and fix ONLY the "
                 "listed formatting or layout problems. Preserve accurate teaching and citations. "
@@ -48,6 +84,48 @@ def validate_script(raw, evidence, sources):
                 "Return the COMPLETE corrected lesson.\nPROBLEMS: " + json.dumps(problems)
                 + "\nLESSON: " + json.dumps(raw) + "\nEVIDENCE: " + evidence
                 + "\nSOURCES: " + json.dumps(sources), LessonScript.model_json_schema(), max_output_tokens=6500)
+
+
+def separate_visuals(raw):
+    """Preserve mixed code/diagram teaching as separate readable cards, without a model call.
+
+    Providers sometimes combine the two despite the prompt. A diagram already has a
+    sourced explanatory transcript, so it can form its own reinforcement scene.
+    All resulting scenes still pass schema, layout and independent accuracy checks.
+    """
+    result = deepcopy(raw)
+    if not isinstance(result, dict) or not isinstance(result.get("scenes"), list):
+        return result
+    scenes = []
+    for scene in result["scenes"]:
+        if not isinstance(scene, dict):
+            scenes.append(scene); continue
+        diagram = scene.get("diagram")
+        points = scene.get("bullets", [])
+        if isinstance(diagram, dict) and (scene.get("code") or isinstance(points, list) and len(points) > 1):
+            scene["diagram"] = None
+            scenes.append(scene)
+            explanation = diagram.get("explanation", "")
+            if not isinstance(explanation, str):
+                raise ValueError("Diagram explanation must be text")
+            chunks, current = [], ""
+            for word in explanation.split():
+                if current and len(current) + len(word) + 1 > 800:
+                    chunks.append(current); current = ""
+                current = (current + " " + word).strip()
+            if current:
+                if len(current) < 100 and chunks:
+                    chunks[-1] += " " + current
+                else:
+                    chunks.append(current)
+            for narration in chunks:
+                scenes.append({"title": str(diagram.get("title", "Visual explanation"))[:65],
+                    "narration": narration, "bullets": ["Trace each relationship in the diagram"],
+                    "code": "", "diagram": diagram, "source_ids": scene.get("source_ids", [])})
+        else:
+            scenes.append(scene)
+    result["scenes"] = scenes
+    return result
 
 
 def claim(db):
@@ -70,7 +148,7 @@ def claim(db):
             model.created_at).with_for_update(skip_locked=True).first()
         if row:
             row.state, row.lease_token = "running", uuid4().hex
-            row.lease_until = now + timedelta(minutes=20)
+            row.lease_until = now + timedelta(seconds=LEASE_SECONDS)
             row.attempts += 1
             db.commit()
             return kind, row.id, row.lease_token
@@ -83,6 +161,29 @@ def storage_used(db):
 
 
 def process(item, sessions=Session):
+    done = Event()
+    kind, identifier, token = item
+    model = VideoCourse if kind == 'course' else VideoLesson
+    def renew():
+        while not done.wait(30):
+            try:
+                with sessions() as db:
+                    changed = db.query(model).filter_by(id=identifier, lease_token=token, state='running').update(
+                        {'lease_until':utcnow() + timedelta(seconds=LEASE_SECONDS)})
+                    db.commit()
+                    if not changed:
+                        return
+            except Exception as error:
+                LOGGER.warning('Video lease renewal unavailable error_type=%s', type(error).__name__)
+    renewal = Thread(target=renew, daemon=True, name='video-lease-renewal')
+    renewal.start()
+    try:
+        _process(item, sessions)
+    finally:
+        done.set(); renewal.join(timeout=2)
+
+
+def _process(item, sessions):
     kind, identifier, token = item
     model = VideoCourse if kind == "course" else VideoLesson
     try:
