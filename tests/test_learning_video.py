@@ -186,3 +186,18 @@ def test_scripts_reject_unreadable_content_and_captions_escape_markup():
     bad = script()['scenes'][0]; bad['bullets'] = ['x'*100]*3; bad['code'] = '\n'.join(['line']*7)
     with pytest.raises(ValueError): slide(bad, 1, 4)
     assert '&lt;script&gt;' in captions({"scenes":[{"narration":"<script>"}],"timings":[{"start":0,"end":2}]})
+
+
+def test_provider_script_format_is_repaired_once_before_narration(monkeypatch):
+    raw = script(); raw['scenes'][0]['code'] = None
+    repairs = []
+    def repair(task, *_args, **_kwargs):
+        repairs.append(task)
+        return script(), 'test'
+    monkeypatch.setattr(learning_ai, 'generate_json', repair)
+    result = worker.validate_script(raw, 'Official SELECT documentation', [{"id":1,"url":"https://www.postgresql.org/docs/current/sql-select.html"}])
+    assert result.scenes[0].code == 'SELECT name FROM students;'
+    assert len(repairs) == 1 and 'scenes' in repairs[0]
+    monkeypatch.setattr(learning_ai, 'generate_json', lambda *_a, **_k: (raw, 'test'))
+    with pytest.raises(ValidationError):
+        worker.validate_script(raw, 'Query evidence', [{"id":1}])

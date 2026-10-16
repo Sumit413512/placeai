@@ -237,8 +237,8 @@ INDEX_HTML = '''<!doctype html>
 
   <script src="/static/app.js?v=20261016-interface-guidelines" defer></script>
   <link rel="stylesheet" href="/static/learning-video.css?v=20261016-1">
-  <script src="/static/learning-video.js?v=20261016-1" defer></script>
-  <script src="/static/learning-hub.js?v=20261016-video" defer></script>
+  <script src="/static/learning-video.js?v=20261016-2" defer></script>
+  <script src="/static/learning-hub.js?v=20261016-video2" defer></script>
 </body>
 </html>
 '''

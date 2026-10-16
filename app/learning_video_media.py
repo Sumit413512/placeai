@@ -61,7 +61,8 @@ def speak(narration):
                             return _pcm(base64.b64decode(item["data"], validate=True))
             raise ValueError("Narration provider returned no audio")
         except Exception as error:
-            LOGGER.warning("Video narration unavailable provider=gemini error_type=%s", type(error).__name__)
+            LOGGER.warning("Video narration unavailable provider=gemini error_type=%s status=%s",
+                           type(error).__name__, getattr(getattr(error, "response", None), "status_code", None))
     for key in ai_provider._openai_keys():
         try:
             with httpx.stream("POST", "https://api.openai.com/v1/audio/speech", timeout=100,
@@ -70,7 +71,8 @@ def speak(narration):
                       "input": narration, "response_format": "wav"}) as response:
                 return _pcm(_response_bytes(response, MAX_AUDIO_BYTES))
         except Exception as error:
-            LOGGER.warning("Video narration unavailable provider=openai error_type=%s", type(error).__name__)
+            LOGGER.warning("Video narration unavailable provider=openai error_type=%s status=%s",
+                           type(error).__name__, getattr(getattr(error, "response", None), "status_code", None))
     raise RuntimeError("VIDEO_NARRATION_UNAVAILABLE")
 
 
