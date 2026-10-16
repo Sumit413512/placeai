@@ -6,6 +6,7 @@ import logging
 from datetime import timedelta
 from uuid import uuid4
 
+from pydantic import ValidationError
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import defer
 
@@ -17,6 +18,36 @@ from app.models import User, UserRole, VideoCourse, VideoLesson, utcnow
 
 LOGGER = logging.getLogger("placeai.learning.video.worker")
 STORAGE_BUDGET = 150 * 1024 * 1024
+
+
+def validate_script(raw, evidence, sources):
+    """Repair one provider formatting/layout deviation before spending on narration."""
+    from app.learning_video_media import slide
+    for attempt in range(2):
+        try:
+            script = LessonScript.model_validate(raw)
+            if any(i < 1 or i > len(sources) for scene in script.scenes for i in scene.source_ids):
+                raise ValueError("Citations must reference retrieved source IDs")
+            for index, scene in enumerate(script.scenes):
+                try:
+                    slide(scene.model_dump(), index + 1, len(script.scenes))
+                except ValueError as error:
+                    raise ValueError(f"Scene {index + 1}: {error}") from error
+            return script
+        except (ValidationError, ValueError) as error:
+            if attempt:
+                raise
+            problems = ([{"path":list(item["loc"]), "type":item["type"], "message":item["msg"]}
+                         for item in error.errors()] if isinstance(error, ValidationError)
+                        else [{"message":str(error)}])
+            raw, _ = learning_ai.generate_json(
+                LESSON_PROMPT + "\nRepair the complete lesson to match the schema and fix ONLY the "
+                "listed formatting or layout problems. Preserve accurate teaching and citations. "
+                "Use empty strings for absent code, not null. Keep slide points short. "
+                "For overflow, shorten slide text or split the scene without shortening the explanation. "
+                "Return the COMPLETE corrected lesson.\nPROBLEMS: " + json.dumps(problems)
+                + "\nLESSON: " + json.dumps(raw) + "\nEVIDENCE: " + evidence
+                + "\nSOURCES: " + json.dumps(sources), LessonScript.model_json_schema(), max_output_tokens=6500)
 
 
 def claim(db):
@@ -92,9 +123,7 @@ def process(item, sessions=Session):
                     + "\nCOURSE: " + json.dumps(plan) + "\nCURRENT LESSON: " + json.dumps(outline)
                     + "\nEVIDENCE: " + memo + "\nSOURCES: " + json.dumps(numbered),
                     LessonScript.model_json_schema(), max_output_tokens=6500)
-                script = LessonScript.model_validate(raw)
-                if any(i < 1 or i > len(fresh_sources) for scene in script.scenes for i in scene.source_ids):
-                    raise ValueError("Video citations must refer to retrieved references")
+                script = validate_script(raw, memo, numbered)
                 review, _ = learning_ai.generate_json(
                     "Review the lesson against the evidence: factual correctness, code/dialect and "
                     "expected-output consistency, diagram relationships, supported citations, readable "
@@ -107,10 +136,7 @@ def process(item, sessions=Session):
                 if review.get("approved") is not True or review.get("issues") != []:
                     raise ValueError("Lesson did not pass its content review")
                 content = {**script.model_dump(), "sources": fresh_sources}
-                # Check every slide before paying for speech. Persist approved script for retries.
-                from app.learning_video_media import slide
-                for index, scene in enumerate(content["scenes"]):
-                    slide(scene, index + 1, len(content["scenes"]))
+                # Persist the checked script so narration retries do not repeat authoring.
                 with sessions() as db:
                     changed = db.query(VideoLesson).filter_by(id=identifier, lease_token=token).update(
                         {"content_json": json.dumps(content)})
@@ -131,7 +157,8 @@ def process(item, sessions=Session):
             row.state, row.error_code, row.lease_token, row.lease_until = "ready", None, None, None
             db.commit()
     except Exception as error:
-        LOGGER.warning("Video preparation deferred stage=%s error_type=%s", kind, type(error).__name__)
+        fields = [".".join(map(str, item["loc"])) for item in error.errors()] if isinstance(error, ValidationError) else []
+        LOGGER.warning("Video preparation deferred stage=%s error_type=%s validation_fields=%s", kind, type(error).__name__, fields)
         with sessions() as db:
             row = db.query(model).filter_by(id=identifier).with_for_update().first()
             if not row or row.lease_token != token:

@@ -23,6 +23,7 @@
     const active = () => alive && hub.isConnected && ctx.state.view === 'learning-hub';
     const status = message => { if (active()) panel.querySelector('[data-video-status]').textContent = message; };
     const isCurrent = (id, version) => active() && current === id && playerEpoch === version;
+    const libraryLabel = data => data.lessons.length ? `${data.videos_completed}/${data.lessons.length} viewed · ${data.status === 'ready' ? 'Ready' : data.status}` : data.status === 'failed' ? 'Preparation unavailable' : 'Preparing learning path';
     const lessonPath = (id, index) => `${apiBase}/${encodeURIComponent(id)}/lessons/${index}`;
     function stopPlayer() {
       playerEpoch += 1;
@@ -48,6 +49,8 @@
       data.videos_completed = data.lessons.filter(item => item.video_completed).length;
       data.practice_completed = data.lessons.filter(item => item.practice_completed).length;
       course = data;
+      const saved = [...panel.querySelectorAll('[data-video-id]')].find(item => item.dataset.videoId === data.id);
+      if (saved) saved.innerHTML = `<span>${esc(data.title)}</span><small>${esc(libraryLabel(data))}</small>`;
       const pending = ['queued', 'running', 'retrying'];
       const progress = `${data.videos_completed} of ${data.lessons.length} videos viewed · ${data.practice_completed} practices completed`;
       panel.querySelector('[data-video-course]').innerHTML = `<section class="panel"><h2>${esc(data.title)}</h2><p>${esc(data.introduction || (data.status === 'failed' ? 'We could not prepare this learning path after retries. Your existing courses are safe. Please try a new topic later.' : 'Researching sources and preparing your learning path. You can return later.'))}</p>${data.retry_available ? '<button type="button" class="button button-secondary" data-video-retry-course>Retry learning path</button>' : ''}${data.lessons.length ? `<p class="learning-meta">${esc(progress)}</p><progress aria-label="Videos viewed" max="${data.lessons.length}" value="${data.videos_completed}"></progress><ol class="learning-video-lessons">${data.lessons.map(item => `<li><div><h3>${esc(item.title)}</h3><p>${esc(item.objective)}</p><small>${item.video_completed ? 'Viewed' : 'Not completed'} · ${item.practice_completed ? 'Practice complete' : 'Practice pending'}${item.duration_seconds ? ` · ${Math.ceil(item.duration_seconds / 60)} min` : ''}</small></div><button type="button" class="button button-secondary" data-video-lesson="${item.position}" ${pending.includes(item.status) || (item.status === 'failed' && !item.retry_available) ? 'disabled' : ''}>${item.status === 'ready' ? (item.position_seconds ? 'Resume lesson' : 'Watch lesson') : item.status === 'failed' ? (item.retry_available ? 'Retry preparation' : 'Preparation unavailable') : pending.includes(item.status) ? 'Preparing…' : 'Prepare video'}</button></li>`).join('')}</ol>` : ''}<p class="learning-meta">AI-generated lessons use researched references and automated content checks. Examples have not been executed. Viewing progress is separate from practice completion.</p></section>`;
@@ -60,7 +63,7 @@
     async function library() {
       const data = await ctx.api(apiBase);
       if (!active()) return;
-      panel.querySelector('[data-video-library]').innerHTML = data.items.length ? data.items.map(item => `<button type="button" class="learning-library-item" data-video-id="${esc(item.id)}"><span>${esc(item.title)}</span><small>${item.videos_completed}/${item.lessons.length} viewed · ${esc(item.status)}</small></button>`).join('') : '<p>Your saved video courses will appear here.</p>';
+      panel.querySelector('[data-video-library]').innerHTML = data.items.length ? data.items.map(item => `<button type="button" class="learning-library-item" data-video-id="${esc(item.id)}"><span>${esc(item.title)}</span><small>${esc(libraryLabel(item))}</small></button>`).join('') : '<p>Your saved video courses will appear here.</p>';
       if (!data.generation_available) status('New video preparation is temporarily unavailable. Your saved lessons remain accessible.');
       return data;
     }
