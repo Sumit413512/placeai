@@ -228,8 +228,8 @@ def board_frame(scene, number, total, phase, base=None):
     image = (base or slide(scene, number, total)).copy()
     draw = ImageDraw.Draw(image)
     # Keep whole labels readable: reveal complete board rows, never half-cut text.
-    rows = [144]
     y = 72 + len(_lines(scene['title'], _font(30), 870)) * 38 + 14
+    rows = [y - 2]
     for point in scene['bullets']:
         y += len(_lines(point, _font(23), 850)) * 30 + 8
         rows.append(y + 3)
