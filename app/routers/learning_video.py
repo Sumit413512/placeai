@@ -183,7 +183,7 @@ def prepare(course_id: str, position: int, request: Request, tasks: BackgroundTa
     lessons = json.loads(course.plan_json).get("lessons", [])
     if course.state != "ready" or not 0 <= position < len(lessons):
         raise HTTPException(409, "Wait for the learning path before preparing a lesson")
-    existing = db.query(VideoLesson).options(defer(VideoLesson.video_data)).filter_by(course_id=course.id, position=position).first()
+    existing = db.query(VideoLesson).options(defer(VideoLesson.video_data)).populate_existing().filter_by(course_id=course.id, position=position).first()
     if existing and existing.state != "failed":
         return course_data(db, course, user)
     if existing and existing.attempts >= 4:
@@ -194,7 +194,7 @@ def prepare(course_id: str, position: int, request: Request, tasks: BackgroundTa
     # The limiter committed; reacquire the global course lock and recheck after
     # another student's possible concurrent prepare request.
     db.query(VideoCourse).filter_by(id=course.id).with_for_update().one()
-    existing = db.query(VideoLesson).options(defer(VideoLesson.video_data)).filter_by(course_id=course.id, position=position).first()
+    existing = db.query(VideoLesson).options(defer(VideoLesson.video_data)).populate_existing().filter_by(course_id=course.id, position=position).first()
     if existing and existing.state != "failed":
         return course_data(db, course, user)
     if existing and existing.attempts >= 4:
