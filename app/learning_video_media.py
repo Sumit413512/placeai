@@ -355,6 +355,7 @@ def inspect_video(data, content, duration):
                 raise ValueError("A lesson needs one video and one audio track")
             stream = streams[0]
             count, previous, finish = 0, -1, 0
+            pcm_check = av.AudioResampler(format="s16", layout="mono", rate=RATE) if kind == "audio" else None
             for frame in container.decode(stream):
                 if frame.pts is None:
                     raise ValueError("Media timestamps are missing")
@@ -366,7 +367,12 @@ def inspect_video(data, content, duration):
                         raise ValueError("Video frames do not match the presentation clock")
                     finish = stamp + 1 / FPS
                 else:
-                    audible = audible or bool(frame.to_ndarray().any())
+                    if abs(stamp - finish) > .002:
+                        raise ValueError("The audio track contains a timestamp gap")
+                    # Inspect native PCM planes; ndarray conversion silently adds
+                    # an optional NumPy dependency absent from production.
+                    for pcm_frame in pcm_check.resample(frame):
+                        audible = audible or any(bytes(pcm_frame.planes[0])[:pcm_frame.samples * 2])
                     finish = stamp + frame.samples / frame.sample_rate
                 count += 1
                 previous = stamp

@@ -442,7 +442,9 @@ def test_new_full_course_publishes_only_after_every_lesson_passes_checks(video):
     assert video.api.get(path).status_code==404
 
 
-def test_actual_media_recheck_rejects_silent_and_broken_output():
+def test_actual_media_recheck_rejects_silent_and_broken_output(monkeypatch):
+    import sys
+    monkeypatch.setitem(sys.modules, 'numpy', None)  # Production has no optional ndarray dependency.
     from app.learning_video_media import inspect_video
     content=script()
     data,duration,timings=render_video(content,narrate=lambda _:b'\x10\x01'*24000)
