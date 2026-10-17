@@ -12,6 +12,8 @@ class VideoRequest(ContentModel):
 class LessonOutline(ContentModel):
     title: str = Field(min_length=3, max_length=160)
     objective: str = Field(min_length=20, max_length=500)
+    module_title: str = Field(min_length=3, max_length=120,
+                              description="Group consecutive lessons into a named module, e.g. Query foundations.")
 
 
 class CoursePlan(ContentModel):
@@ -24,6 +26,16 @@ class CoursePlan(ContentModel):
     def distinct(self):
         if len({lesson.title.casefold() for lesson in self.lessons}) != len(self.lessons):
             raise ValueError("Lessons must have distinct titles")
+        seen, previous = set(), None
+        for lesson in self.lessons:
+            name = lesson.module_title.strip().casefold()
+            if name and name != previous and name in seen:
+                raise ValueError("Lessons in the same module must be consecutive")
+            if name:
+                seen.add(name)
+            previous = name
+        if not 2 <= len(seen) <= 5:
+            raise ValueError("A course needs two to five named subtopic modules")
         return self
 
 

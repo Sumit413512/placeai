@@ -22,7 +22,8 @@ from app.routers import learning_video
 def course_plan():
     return {"title": "SQL foundations", "introduction": "Learn relational queries through focused lessons and practice.",
             "prerequisites": ["Basic computer familiarity"], "lessons": [
-                {"title": f"Query concept {i}", "objective": "Understand and apply one relational query concept."}
+                {"title": f"Query concept {i}", "objective": "Understand and apply one relational query concept.",
+                 "module_title":"Query foundations" if i<2 else "Applied queries"}
                 for i in range(4)]}
 
 
@@ -361,3 +362,45 @@ def test_practice_during_playback_does_not_reset_the_watch_clock(video):
     assert video.db.get(VideoViewerProgress,(video.owner.id,lesson_id)).updated_at == clock
     saved = video.api.put(path+'/progress',json={'position_seconds':20}).json()
     assert saved['watched_seconds'] == 20 and saved['practice_completed']
+
+
+def test_course_numbers_readiness_and_combined_completion(video):
+    identifier, lesson_id, path = ready_lesson(video)
+    legacy = course_plan()
+    for item in legacy['lessons']:item.pop('module_title')
+    row = video.db.get(VideoCourse,identifier);row.plan_json=json.dumps(legacy);video.db.commit()
+    data = video.api.get(f'/learning-hub/video/{identifier}').json()
+    assert [item['number'] for item in data['lessons']] == ['1.1','1.2','2.1','2.2']
+    assert not data['course_ready'] and data['ready_parts'] == 1 and data['completion_percent'] == 0
+    assert data['modules'][0]['title'] == 'Module 1'
+    row = video.db.get(VideoCourse,identifier)
+    plan = course_plan()
+    for index,item in enumerate(plan['lessons']):
+        item['module_title'] = 'Query foundations' if index < 2 else 'Applied queries'
+    row.plan_json = json.dumps(plan)
+    for index in range(1,4):
+        video.db.add(VideoLesson(course_id=identifier,position=index,title=f'Part {index}',state='ready'))
+    video.db.commit()
+    data = video.api.get(f'/learning-hub/video/{identifier}').json()
+    assert data['course_ready'] and data['preparation_status'] == 'ready'
+    assert [module['title'] for module in data['modules']] == ['Query foundations','Applied queries']
+    video.api.put(path+'/progress',json={'position_seconds':0})
+    video.db.expire_all(); record=video.db.get(VideoViewerProgress,(video.owner.id,lesson_id))
+    record.video_completed=True; video.db.commit()
+    assert video.api.get(f'/learning-hub/video/{identifier}').json()['completion_percent'] == 0
+    video.api.post(path+'/practice',json={'answers':[0,0,0]})
+    assert video.api.get(f'/learning-hub/video/{identifier}').json()['completion_percent'] == 25
+
+
+def test_background_replenishes_all_course_parts_once(video):
+    identifier = new_course(video)
+    course = video.db.get(VideoCourse,identifier)
+    course.state,course.plan_json='ready',json.dumps(course_plan());video.db.commit()
+    with video.sessions() as db:
+        worker.fill_pending_parts(db)
+        worker.fill_pending_parts(db)
+    assert video.db.query(VideoLesson).count() == 4
+    assert {row.position for row in video.db.query(VideoLesson)} == {0,1,2,3}
+    invalid = course_plan()
+    for index,item in enumerate(invalid['lessons']):item['module_title']=['One','Two','One','Two'][index]
+    with pytest.raises(ValidationError):CoursePlan.model_validate(invalid)

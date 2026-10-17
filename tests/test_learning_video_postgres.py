@@ -103,6 +103,10 @@ def test_matching_students_share_one_course_and_one_generation_job(monkeypatch):
             list(pool.map(prepare, users))
         with sessions() as db:
             assert db.query(VideoLesson).count() == 1
+            from app.learning_video_worker import fill_pending_parts
+            fill_pending_parts(db)
+            fill_pending_parts(db)
+            assert db.query(VideoLesson).count() == 4
     finally:
         with engine.begin() as db:
             db.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))

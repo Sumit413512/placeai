@@ -22,6 +22,20 @@ These indicators are learning aids, not proctored attendance or mastery certific
 
 ## Operations and limits
 
+- The course player has a module outline with stable lesson numbers (1.1, 1.2),
+  completion ticks, overall progress, a video followed directly by its quick quiz,
+  and previous/next navigation. A lesson counts toward course completion only after
+  its video viewing and practice are both complete. Ready lessons can be reviewed
+  freely; quizzes do not gate access to already prepared lessons.
+- A ready research outline is distinct from a ready course. `course_ready` becomes
+  true only when every planned MP4 is ready. Partial preparation and quota waits
+  are stated explicitly. Existing flat outlines get neutral two-part modules,
+  preserving lesson IDs, media bytes and student progress; new plans name modules.
+- The worker periodically fills missing shared-course parts when admission/storage
+  limits permit. Students need not prepare each part individually. Generation and
+  quota recovery continue server-side when the worker is running; a free Render
+  instance can suspend when idle, so no exact completion time is promised.
+
 - Board reveals and the AI tutor activity indicator are rendered at eight frames
   per second. They are illustrations, not a human presenter or photorealistic avatar.
   Scene boundaries follow measured audio; within-scene reveals are approximate.
