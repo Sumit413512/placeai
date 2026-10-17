@@ -48,7 +48,8 @@ def serialize(row, *, detail=False):
               "completed_chapters": len(chapters), "total_chapters": request["chapters"],
               "created_at": row.created_at.isoformat(), "updated_at": row.updated_at.isoformat(),
               "error_code": row.error_code, "retry_after_seconds": 8,
-              "pdf_available": row.state == "ready"}
+              "pdf_available": row.state == "ready" and len(chapters) == request["chapters"],
+              "ready_to_begin": row.state == "ready" and len(chapters) == request["chapters"]}
     if detail:
         result.update(input={k: v for k, v in request.items() if k != "request_id"},
                       plan=json.loads(row.plan_json), chapters=chapters,
@@ -116,7 +117,7 @@ def retry(notebook_id: str, background_tasks: BackgroundTasks,
 @router.get("/{notebook_id}/pdf")
 def download(notebook_id: str, user: User = Depends(require_student), db: Session = Depends(get_db)):
     row = owned(db, notebook_id, user)
-    if row.state != "ready":
+    if not serialize(row)["ready_to_begin"]:
         raise HTTPException(409, "The complete PDF will be available when all chapters are ready")
     from app.learning_pdf import render_notebook
     data = render_notebook(serialize(row, detail=True))

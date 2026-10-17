@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  let context = null, selected = null, timer = null, epoch = 0;
+  let context = null, selected = null, timer = null, libraryTimer = null, epoch = 0;
   const root = () => document.querySelector('#learning-hub');
   const active = version => version === epoch && context?.state.view === 'learning-hub' && root();
   const e = value => context.esc(String(value ?? ''));
@@ -21,17 +21,18 @@
       `<section><h3>${e(sub.title)}</h3>${prose(sub.explanation)}<p class="learning-citations">Sources: ${sub.source_ids.map(id => `<a href="#learning-source-${Number(id)}">[${Number(id)}]</a>`).join(' ')}</p></section>`
     ).join('')}${chapter.examples.map(example => `<section><h3>Worked example: ${e(example.title)}</h3>${example.code ? `<small>${e(example.language)}</small><pre><code>${e(example.code)}</code></pre>` : ''}${prose(example.explanation)}<h4>Expected result</h4>${prose(example.expected_result)}</section>`).join('')}${chapter.diagrams.map(diagramHtml).join('')}<h3>Common mistakes</h3>${list(chapter.common_mistakes)}<h3>Practice and solutions</h3>${chapter.exercises.map(exercise => `<div class="learning-exercise">${prose(exercise.question)}<details><summary>Show solution and reasoning</summary>${prose(exercise.solution)}</details></div>`).join('')}<h3>Key takeaways</h3>${list(chapter.key_takeaways)}</div></details>`;
   }
+  const isReady = book => book.status === 'ready' && book.total_chapters > 0 && book.completed_chapters === book.total_chapters && book.pdf_available !== false;
+  const badge = book => `<small class="learning-status" data-state="${isReady(book) ? 'ready' : 'processing'}">${isReady(book) ? 'Ready to begin' : 'Processing'}</small>`;
   function notebookHtml(book) {
-    const ready = book.status === 'ready', failed = book.status === 'failed';
-    const progress = Math.round(100 * book.completed_chapters / book.total_chapters);
-    const message = ready ? 'Your complete notes are ready to read and download.' : failed ?
-      'Research or content checks could not finish. Your completed chapters are saved. Retry to continue from where preparation stopped.' :
-      book.status === 'retrying' ? 'A research or writing step is being retried. Your completed chapters are saved.' :
-      'Researching and preparing detailed chapters. You can leave this page and return later; your progress is saved. Large topics can take several minutes or longer.';
-    return `<article class="panel learning-notebook"><div class="panel-head"><div><span class="section-kicker">Your learning notebook</span><h2>${e(book.title)}</h2></div>${ready ? '<button class="button button-primary" data-learning-action="pdf">Download complete PDF</button>' : failed ? '<button class="button button-secondary" data-learning-action="retry">Retry remaining chapters</button>' : ''}</div><p role="status">${e(message)}</p><div class="learning-progress" role="progressbar" aria-label="Chapters completed" aria-valuemin="0" aria-valuemax="${book.total_chapters}" aria-valuenow="${book.completed_chapters}"><span style="width:${progress}%"></span></div><p class="learning-meta">${book.completed_chapters} of ${book.total_chapters} chapters ready</p>${book.plan?.introduction ? `<div class="learning-introduction">${prose(book.plan.introduction)}<h3>Before you begin</h3>${list(book.plan.prerequisites)}<details class="learning-outline"><summary>Full chapter outline</summary><ol>${book.plan.chapters.map(ch => `<li>${e(ch.title)}${list(ch.subtopics)}</li>`).join('')}</ol></details></div>` : ''}<div id="learning-chapters">${(book.chapters || []).map(chapterHtml).join('')}</div>${book.sources?.length ? `<section class="learning-sources"><h3>Research sources</h3><p>AI-authored explanations use the references below. Consult official documentation for version-specific details. Code examples are illustrative and have not been executed by PlaceAI.</p><ol>${book.sources.map((s, i) => { const url = sourceUrl(s.url); return `<li id="learning-source-${i + 1}">${url ? `<a href="${e(url)}" target="_blank" rel="noopener noreferrer">${e(s.title)}</a>` : e(s.title)}</li>`; }).join('')}</ol></section>` : ''}</article>`;
+    const ready = isReady(book);
+    if (!ready) return `<article class="panel learning-notebook"><div class="panel-head"><h2>${e(book.title)}</h2>${badge(book)}</div><p role="status">Your complete notes are being prepared and checked. You can leave this page and return later.</p></article>`;
+    return `<article class="panel learning-notebook"><div class="panel-head"><div><span class="section-kicker">Your learning notebook</span><h2>${e(book.title)}</h2></div>${ready ? '<button class="button button-primary" data-learning-action="pdf">Download complete PDF</button>' : ''}</div><p role="status">Ready to begin</p>${book.plan?.introduction ? `<div class="learning-introduction">${prose(book.plan.introduction)}<h3>Before you begin</h3>${list(book.plan.prerequisites)}<details class="learning-outline"><summary>Full chapter outline</summary><ol>${book.plan.chapters.map(ch => `<li>${e(ch.title)}${list(ch.subtopics)}</li>`).join('')}</ol></details></div>` : ''}<div id="learning-chapters">${(book.chapters || []).map(chapterHtml).join('')}</div>${book.sources?.length ? `<section class="learning-sources"><h3>Research sources</h3><p>AI-authored explanations use the references below. Consult official documentation for version-specific details. Code examples are illustrative and have not been executed by PlaceAI.</p><ol>${book.sources.map((s, i) => { const url = sourceUrl(s.url); return `<li id="learning-source-${i + 1}">${url ? `<a href="${e(url)}" target="_blank" rel="noopener noreferrer">${e(s.title)}</a>` : e(s.title)}</li>`; }).join('')}</ol></section>` : ''}</article>`;
   }
   function showBook(book) {
+    if (book.status === 'failed') { selected = null; clearTimeout(timer); document.querySelector('#learning-notebook-result')?.replaceChildren(); refreshLibrary(epoch).catch(() => {}); return; }
     selected = book.id;
+    const saved = [...document.querySelectorAll('[data-learning-id]')].find(item => item.dataset.learningId === book.id);
+    if (saved) saved.innerHTML = `<span>${e(book.title)}</span>${badge(book)}`;
     const output = document.querySelector('#learning-notebook-result');
     if (!output) return;
     const signature = [book.id, book.status, book.completed_chapters, book.sources?.length, book.plan?.title].join('|');
@@ -43,7 +44,7 @@
     output.dataset.learningSignature = signature;
     }
     clearTimeout(timer);
-    if (!['ready', 'failed'].includes(book.status)) {
+    if (!isReady(book)) {
       const version = epoch;
       const notebookId = selected;
       timer = setTimeout(async () => {
@@ -56,13 +57,16 @@
   async function refreshLibrary(version) {
     const library = await context.api('/learning-hub');
     if (!active(version)) return;
+    library.items = library.items.filter(book => book.status !== 'failed');
+    clearTimeout(libraryTimer);
+    if (library.items.some(book => !isReady(book))) libraryTimer = setTimeout(() => { if (active(version)) refreshLibrary(version).catch(() => {}); }, 8000);
     document.querySelector('#learning-library').innerHTML = library.items.length ? library.items.map(book =>
-      `<button type="button" class="learning-library-item" data-learning-id="${e(book.id)}"><span>${e(book.title)}</span><small>${book.completed_chapters}/${book.total_chapters} chapters · ${e(book.status)}</small></button>`).join('') : '<p>Your saved notebooks will appear here.</p>';
+      `<button type="button" class="learning-library-item" data-learning-id="${e(book.id)}"><span>${e(book.title)}</span>${badge(book)}</button>`).join('') : '<p>Your saved notebooks will appear here.</p>';
     document.querySelector('#learning-service-status').textContent = library.generation_available ? '' : 'Research is temporarily unavailable. You can still read and download your saved notes.';
     return library;
   }
   async function render(ctx) {
-    context = ctx; epoch += 1; clearTimeout(timer);
+    context = ctx; epoch += 1; clearTimeout(timer); clearTimeout(libraryTimer);
     const version = epoch;
     ctx.setPage('Learning Hub', 'Student workspace'); ctx.setContextAction();
     document.querySelector('#app-content').innerHTML = `${ctx.pageHead('Learning Hub', 'Learn a language, technology or field through detailed notes and video lessons tailored to your goal.')}<div id="learning-hub"><section class="panel"><div class="panel-head"><div><span class="section-kicker">Build your study notebook</span><h2>What would you like to learn?</h2><p>Web research, detailed explanations, worked examples, diagrams and solved exercises.</p></div></div><form id="learning-hub-form"><div class="learning-form-grid"><label>Topic or subject<input name="topic" required minlength="2" maxlength="180" placeholder="SQL, Python, data analysis, networking…"></label><label>Field or career direction<input name="field" maxlength="180" placeholder="Backend development, data engineering…"></label><label>Programming language or tool<input name="programming_language" maxlength="120" placeholder="PostgreSQL, Java, Python…"></label><label>Current level<select name="level"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></label><label>Depth<select name="chapters"><option value="8">Detailed · 8 chapters</option><option value="12" selected>Comprehensive · 12 chapters</option><option value="16">Extended · 16 chapters</option></select></label><label class="learning-wide">What should your notes cover?<textarea name="goals" maxlength="2000" rows="4" placeholder="For example: learn SQL from foundations to joins, subqueries, indexes and transactions, with explained queries and practical exercises."></textarea></label></div><p>Notes are written in English, chapter by chapter. The full PDF becomes available after every chapter is complete.</p><p id="learning-service-status" role="status"></p><p id="learning-form-status" role="status"></p><button class="button button-primary" type="submit">Research and create detailed notes</button></form></section><section class="panel"><div class="panel-head"><h2>Your notebooks</h2><button class="button button-secondary" data-learning-action="refresh">Refresh</button></div><p id="learning-refresh-status" role="status"></p><div id="learning-library">Loading saved notebooks…</div></section><div id="learning-notebook-result"></div></div>`;

@@ -55,7 +55,7 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
         elif path == '/billing/status': data = {"student_kind":"university","premium_access":True,"access_mode":"institution_sponsored"}
         elif path == '/learning-hub': data = {"items":[],"generation_available":True}
         elif path == '/learning-hub/video':
-            data = {"items":[course],"generation_available":True}
+            data = {"items":[course,{**deepcopy(course),"id":"failed-course","title":"Failed video course","status":"failed"}],"generation_available":True}
             if route.request.method == 'POST': calls.append(route.request.post_data_json); data = course
         elif path.endswith('/progress'):
             calls.append(route.request.post_data_json)
@@ -81,10 +81,17 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
     page.get_by_role('button',name='Find or create course',exact=True).click()
     expect(page.get_by_role('heading',name='Course overview',exact=True)).to_be_visible()
     expect(page.locator('.learning-video-study-layout')).not_to_be_visible()
-    page.get_by_role('button',name='Continue available lessons',exact=True).click()
+    expect(page.locator('[data-video-library]')).not_to_contain_text('Failed video course')
+    expect(page.locator('[data-video-begin]')).to_have_count(0)
+    expect(page.locator('[data-video-library]')).to_contain_text('Processing')
+    expect(page.locator('.learning-video-preparation')).to_have_text('Processing')
+    page.get_by_role('button',name='All courses',exact=True).click()
+    for item in course['lessons']:item['status']='ready'
+    page.locator('[data-video-id="video-browser-course"]').click()
+    page.get_by_role('button',name='Begin learning',exact=True).click()
     expect(page.locator('.learning-video-lessons').first).to_be_visible()
-    expect(page.locator('[data-video-library]')).to_contain_text('2/4 ready')
-    expect(page.locator('.learning-video-preparation')).to_contain_text('Preparing your course')
+    expect(page.locator('[data-video-library]')).to_contain_text('Ready to begin')
+    expect(page.locator('.learning-video-preparation')).to_contain_text('Ready to begin')
     expect(page.locator('[data-video-outline]')).to_contain_text('1.1 Query concept 0')
     expect(page.locator('[data-video-outline]')).to_contain_text('1.2 Query concept 1')
     expect(page.locator('[data-video-outline]')).to_contain_text('2.1 Query concept 2')
@@ -112,7 +119,7 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
     page.locator('[data-video-move="1"]').click()
     expect(page.locator('.learning-video-player')).to_have_attribute('aria-label','Query concept 1')
     expect(page.locator('[data-video-outline] [data-video-lesson="1"]')).to_have_attribute('aria-current','step')
-    expect(page.locator('[data-video-move="1"]')).to_be_disabled()  # Part 2.1 is queued.
+    expect(page.locator('[data-video-move="1"]')).to_be_enabled()
     output=Path(__file__).resolve().parents[3]/'output/design'
     output.mkdir(parents=True,exist_ok=True)
     for width in (1440,736,390,320):
@@ -129,11 +136,11 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
     page.locator('[data-video-id="video-browser-course"]').click()
     expect(page.locator('.learning-video-study-layout')).not_to_be_visible()
     expect(page.locator('[data-video-begin]')).to_have_count(0)
-    expect(page.get_by_role('region',name='Course preparation checks')).to_contain_text('0 of 4 lessons passed')
+    expect(page.get_by_role('region',name='Course preparation checks')).to_contain_text('Processing quality checks')
     for item in course['lessons']:item['quality_checked']=True
     page.get_by_role('button',name='All courses',exact=True).click()
     page.locator('[data-video-id="video-browser-course"]').click()
-    expect(page.locator('.learning-video-preparation')).to_have_text('Your course is ready')
+    expect(page.locator('.learning-video-preparation')).to_have_text('Ready to begin')
     page.get_by_role('button',name='Continue learning',exact=True).click()
     page.locator('[data-video-outline] [data-video-lesson="1"]').click()
     video = page.locator('.learning-video-player')

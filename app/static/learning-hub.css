@@ -41,3 +41,13 @@
   .learning-diagram { padding:14px; }
 }
 @media(prefers-reduced-motion:reduce) { .learning-progress span { transition:none; } }
+
+#learning-hub :is(#learning-library,[data-video-library]) { display:grid; gap:12px; }
+#learning-hub .learning-library-item { align-items:center; border-color:#dbe3ee; background:#fff; border-radius:8px; padding:18px 20px; }
+#learning-hub .learning-library-item:hover { border-color:#94a3b8; background:#f8fafc; }
+#learning-hub .learning-library-item>span { min-width:0; overflow-wrap:anywhere; }
+#learning-hub .learning-status { display:inline-flex; align-items:center; flex-shrink:0; gap:7px; border-radius:999px; padding:6px 11px; font-size:13px; line-height:1.4; font-weight:400; white-space:nowrap; }
+#learning-hub .learning-status::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
+#learning-hub .learning-status[data-state="processing"] { color:#1e40af; background:#eff6ff; }
+#learning-hub .learning-status[data-state="ready"] { color:#166534; background:#e8f5ec; }
+@media(max-width:650px) { #learning-hub .learning-library-item { flex-wrap:wrap; padding:16px; } }
