@@ -6,6 +6,7 @@ import io
 import logging
 import math
 import os
+import re
 import time
 import wave
 from fractions import Fraction
@@ -19,6 +20,13 @@ LOGGER = logging.getLogger("placeai.learning.video.media")
 RATE = 24000
 MAX_VIDEO_BYTES = 3 * 1024 * 1024
 MAX_AUDIO_BYTES = 6 * 1024 * 1024
+FPS = 8
+
+
+class NarrationCapacityError(RuntimeError):
+    def __init__(self, retry_seconds=3600):
+        super().__init__("VIDEO_NARRATION_CAPACITY")
+        self.retry_seconds = max(60, min(int(retry_seconds), 86400))
 
 
 def _response_bytes(response, limit):
@@ -50,7 +58,14 @@ def quota_delay(response):
             data.extend(chunk)
             if len(data) > 65536:
                 return None
-        details = json.loads(data).get('error', {}).get('details', [])
+        error = json.loads(data).get('error', {})
+        details = error.get('details', [])
+        message = str(error.get('message', '')).lower()
+        if 'requests per day' in message or 'daily quota' in message:
+            match = re.search(r'retry in\s+(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?', message)
+            seconds = sum(int(value or 0) * scale for value, scale in zip(match.groups(), (3600, 60, 1))) if match else 86400
+            response.extensions['video_retry_seconds'] = seconds + 60
+            return None
         for detail in details:
             for violation in detail.get('violations', []):
                 if 'perday' in str(violation.get('quotaId','')).lower() or str(violation.get('quotaValue')) == '0':
@@ -65,6 +80,7 @@ def quota_delay(response):
 def speak(narration):
     """Only the approved lesson transcript is sent to speech providers, never identity data."""
     key = ai_provider._gemini_key()
+    capacity = None
     if key:
         try:
             import json
@@ -77,9 +93,13 @@ def speak(narration):
                                   "annotations": [{"type": "speech_metadata", "style": "Clear, calm educational narration"}]}]}],
                               "response_format": {"type": "audio"}, "store": False,
                               "generation_config": {"speech_config": [{"voice": "Kore"}]}}) as response:
-                        if response.status_code == 429 and attempt < 2:
+                        if response.status_code == 429:
                             delay = quota_delay(response)
-                            if delay is not None:
+                            if delay is None:
+                                # The provider may return a plain message rather than RetryInfo.
+                                # Fail promptly and keep already generated scene audio in the DB.
+                                raise NarrationCapacityError(response.extensions.get('video_retry_seconds', 86400))
+                            if attempt < 2:
                                 LOGGER.info("Video narration waiting for provider quota retry_seconds=%s", delay)
                                 time.sleep(delay)
                                 continue
@@ -99,9 +119,12 @@ def speak(narration):
                             return _pcm(base64.b64decode(item["data"], validate=True))
             raise ValueError("Narration provider returned no audio")
         except Exception as error:
+            if isinstance(error, NarrationCapacityError):
+                capacity = error
             LOGGER.warning("Video narration unavailable provider=gemini error_type=%s status=%s",
                            type(error).__name__, getattr(getattr(error, "response", None), "status_code", None))
-    for key in ai_provider._openai_keys():
+    # Free mode never silently opts the operator into paid speech.
+    for key in (ai_provider._openai_keys() if os.getenv("LEARNING_TTS_ALLOW_PAID_FALLBACK") == "true" else []):
         try:
             with httpx.stream("POST", "https://api.openai.com/v1/audio/speech", timeout=100,
                 headers={"Authorization": f"Bearer {key}"},
@@ -111,14 +134,22 @@ def speak(narration):
         except Exception as error:
             LOGGER.warning("Video narration unavailable provider=openai error_type=%s status=%s",
                            type(error).__name__, getattr(getattr(error, "response", None), "status_code", None))
+    if capacity:
+        raise capacity
     raise RuntimeError("VIDEO_NARRATION_UNAVAILABLE")
 
 
 def _font(size, mono=False):
     import reportlab
     from PIL import ImageFont
-    return ImageFont.truetype(str(Path(reportlab.__file__).parent / "fonts" /
-                                  "Vera.ttf"), size)
+    font = Path(reportlab.__file__).parent / "fonts" / "Vera.ttf"
+    # ReportLab does not bundle a mono face on every host; use a known system face
+    # where available, without downloading assets at runtime.
+    if mono:
+        for candidate in (Path("C:/Windows/Fonts/consola.ttf"), Path("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf")):
+            if candidate.is_file():
+                font = candidate; break
+    return ImageFont.truetype(str(font), size)
 
 
 def _lines(text, font, width):
@@ -187,16 +218,61 @@ def slide(scene, number, total):
     return image
 
 
+def board_frame(scene, number, total, phase, base=None):
+    """Animated board reveal and instructor pointer on the measured narration timeline.
+
+    Scene boundaries follow actual speech duration. Within-scene drawing is a visual
+    aid, not a claim of word alignment or a recording of a human instructor.
+    """
+    from PIL import ImageDraw
+    image = (base or slide(scene, number, total)).copy()
+    draw = ImageDraw.Draw(image)
+    # Keep whole labels readable: reveal complete board rows, never half-cut text.
+    rows = [144]
+    y = 72 + len(_lines(scene['title'], _font(30), 870)) * 38 + 14
+    for point in scene['bullets']:
+        y += len(_lines(point, _font(23), 850)) * 30 + 8
+        rows.append(y + 3)
+    if scene.get('code'):
+        y += 6
+        for _line in scene['code'].splitlines():
+            y += 27; rows.append(y + 3)
+    if scene.get('diagram'):
+        labels = {node['id']:node['label'] for node in scene['diagram']['nodes']}
+        y += 6
+        for edge in scene['diagram']['edges']:
+            height = max(48, max(len(_lines(labels[edge['source']],_font(18),350)),
+                                len(_lines(labels[edge['target']],_font(18),350))) * 23 + 10)
+            y += height + 3 + len(_lines(edge.get('label',''),_font(14),850)) * 19 + 8
+            rows.append(y + 3)
+    step = min(len(rows)-1, int(phase / .65 * len(rows)))
+    bottom = min(488, rows[step])
+    if step < len(rows)-1:
+        draw.rectangle((42, bottom, 920, 488), fill="#f7f9fc")
+    # Instructor audio activity and a board pointer follow actual scene duration.
+    draw.rounded_rectangle((755, 20, 916, 53), radius=8, fill="#e8efff")
+    draw.text((767, 27), "AI tutor", font=_font(16), fill="#1e40af")
+    for index in range(5):
+        height = 4 + int(abs(math.sin(phase * 95 + index * .8)) * 13)
+        x = 852 + index * 10
+        draw.line((x, 37-height//2, x, 37+height//2), fill="#2563eb", width=3)
+    pointer_y = min(481, bottom-8)
+    draw.ellipse((20, pointer_y-4, 28, pointer_y+4), fill="#2563eb")
+    draw.line((28, pointer_y, 39, pointer_y), fill="#2563eb", width=2)
+    draw.line((44, 499, 44 + int(872 * phase), 499), fill="#2563eb", width=3)
+    return image
+
+
 def render_video(script, narrate=speak):
     """One scene at a time: bounded RAM, one encoding thread and exact scene boundaries."""
     import av
     output = io.BytesIO()
-    deadline = time.monotonic() + 600
+    deadline = time.monotonic() + 900
     timings = []
     # Playback fetches the bounded file as an authenticated blob, so an end-of-file
     # moov atom is safe and avoids FFmpeg's filesystem-only faststart rewrite.
     with av.open(output, "w", format="mp4") as container:
-        video = container.add_stream("libx264", rate=1)
+        video = container.add_stream("libx264", rate=FPS)
         video.width, video.height, video.pix_fmt = 960, 540, "yuv420p"
         video.codec_context.thread_count = 1
         video.options = {"preset": "ultrafast", "crf": "28", "tune": "stillimage"}
@@ -214,11 +290,17 @@ def render_video(script, narrate=speak):
                 raise ValueError("Lesson duration exceeds the rendering limit")
             pcm = pcm.ljust(duration * RATE * 2, b"\0")
             timings.append({"start": seconds, "end": seconds + duration})
-            for offset in range(duration):
-                frame = av.VideoFrame.from_image(image)
-                frame.pts, frame.time_base = seconds + offset, Fraction(1, 1)
+            for tick in range(duration * FPS):
+                if time.monotonic() > deadline:
+                    raise RuntimeError("VIDEO_RENDER_DEADLINE")
+                animated = board_frame(scene, index + 1, len(script["scenes"]), tick / max(1, duration * FPS - 1), image)
+                frame = av.VideoFrame.from_image(animated)
+                frame.pts, frame.time_base = seconds * FPS + tick, Fraction(1, FPS)
                 for packet in video.encode(frame):
                     container.mux(packet)
+                if tick % FPS:
+                    continue
+                offset = tick // FPS
                 start = offset * RATE * 2
                 for pos in range(start, start + RATE * 2, 2048):
                     chunk = pcm[pos:min(pos + 2048, start + RATE * 2)]

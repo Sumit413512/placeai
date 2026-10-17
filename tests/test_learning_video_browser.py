@@ -72,10 +72,11 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
     page.locator('#app-nav [data-view="learning-hub"]').click()
     page.get_by_role('button',name='Video learning',exact=True).click()
     page.get_by_label('Video topic',exact=True).fill('SQL')
-    page.get_by_role('button',name='Create video learning path',exact=True).click()
+    page.get_by_role('button',name='Find or create course',exact=True).click()
     expect(page.locator('.learning-video-lessons')).to_be_visible()
     expect(page.locator('[data-video-library]')).to_contain_text('Ready')
-    assert calls[0]['topic']=='SQL' and calls[0]['level']=='beginner'
+    assert calls[0]['topic']=='SQL' and 'level' not in calls[0] and 'goal' not in calls[0]
+    assert page.get_by_label('Starting level',exact=True).count() == 0
     assert not page.locator('#learning-hub-form').is_visible()
     page.get_by_role('button',name='Resume lesson',exact=True).click()
     video = page.locator('.learning-video-player')

@@ -15,7 +15,7 @@ from test_learning_hub import hub  # noqa: F401
 from app import learning_ai, learning_video_worker as worker
 from app.learning_video_content import CoursePlan, LessonScript, VideoScene
 from app.learning_video_media import captions, render_video, slide
-from app.models import VideoCourse, VideoLesson, VideoProgress, utcnow
+from app.models import VideoCourse, VideoLesson, VideoProgress, VideoViewerProgress, VideoNarration, utcnow
 from app.routers import learning_video
 
 
@@ -39,7 +39,8 @@ def script():
 
 
 @pytest.fixture
-def video(hub):  # noqa: F811
+def video(hub, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(learning_video, 'student_ai_guard', lambda *_args: None)
     app = FastAPI(); app.include_router(learning_video.router)
     app.dependency_overrides.update(hub.client.app.dependency_overrides)
     with TestClient(app) as client:
@@ -72,8 +73,8 @@ def test_course_idempotency_budgets_and_owner_isolation(video):
     assert new_course(video) == identifier
     assert video.api.post('/learning-hub/video', json={"topic":"Python", "request_id":"video-request-00000001"}).status_code == 409
     for i in range(2):
-        assert video.api.post('/learning-hub/video', json={"topic":"SQL", "request_id":f"video-request-new-00{i}"}).status_code == 202
-    assert video.api.post('/learning-hub/video', json={"topic":"SQL", "request_id":"video-request-limited"}).status_code == 429
+        assert video.api.post('/learning-hub/video', json={"topic":f"SQL {i}", "request_id":f"video-request-new-00{i}"}).status_code == 202
+    assert video.api.post('/learning-hub/video', json={"topic":"New topic", "request_id":"video-request-limited"}).status_code == 429
     video.actor[0] = video.other
     assert video.api.get('/learning-hub/video').json()['items'] == []
     assert video.api.get(f'/learning-hub/video/{identifier}').status_code == 404
@@ -111,7 +112,7 @@ def test_seeking_does_not_award_completion_and_coverage_survives_reload(video):
     video.api.put(path+'/progress', json={"position_seconds":0})
     for end in (25,50,75,95):
         video.db.expire_all()
-        record = video.db.get(VideoProgress, lesson_id)
+        record = video.db.get(VideoViewerProgress, (video.owner.id, lesson_id))
         record.updated_at = utcnow() - timedelta(seconds=15)
         video.db.commit()
         saved = video.api.put(path+'/progress', json={"position_seconds":end}).json()
@@ -132,11 +133,17 @@ def test_worker_saves_real_playable_media_and_recovers_expired_lease(video, monk
     with video.sessions() as db: assert worker.claim(db) is None
     worker.process(item, video.sessions)
     assert video.api.get(f'/learning-hub/video/{identifier}').json()['status'] == 'ready'
+    assert video.db.query(VideoLesson).count() == 4  # One queued set for every student.
     video.api.post(f'/learning-hub/video/{identifier}/lessons/0')
     def author(task, *_a, **_k):
-        return ({"approved":True, "issues":[]} if task.startswith('Review') else script(), 'test')
+        content = script()
+        content['scenes'][-1].update(code='', bullets=['Trace the selected column'], diagram={
+            'title':'Projection', 'nodes':[{'id':'a','label':'Students'},{'id':'b','label':'Names'}],
+            'edges':[{'source':'a','target':'b','label':'Select name'}],
+            'explanation':'The query reads the students table and projects the name column into the result. Each selected name comes from one source row.'})
+        return ({"approved":True, "issues":[]} if task.startswith('Review') else content, 'test')
     monkeypatch.setattr(learning_ai, 'generate_json', author)
-    monkeypatch.setattr(worker, 'render_video', lambda content: render_video(content, narrate=lambda _: b'\0'*48000))
+    monkeypatch.setattr(worker, 'render_video', lambda content, **_kw: render_video(content, narrate=lambda _: b'\0'*48000))
     with video.sessions() as db: first = worker.claim(db)
     with video.sessions() as db:
         row = db.get(VideoLesson, first[1]); row.lease_until = utcnow() - timedelta(seconds=1); db.commit()
@@ -147,7 +154,7 @@ def test_worker_saves_real_playable_media_and_recovers_expired_lease(video, monk
     response = video.api.get(f'/learning-hub/video/{identifier}/lessons/0/media')
     with av.open(io.BytesIO(response.content)) as container:
         assert {stream.type for stream in container.streams} == {'audio','video'}
-        assert sum(1 for _ in container.decode(video=0)) == 4
+        assert sum(1 for _ in container.decode(video=0)) == 32
 
 
 def test_worker_failure_is_honest_and_no_media_is_published(video, monkeypatch):
@@ -268,3 +275,75 @@ def test_speech_quota_wait_keeps_completed_scene_work_and_has_a_bound(monkeypatc
     monkeypatch.setattr(media.httpx,'stream',interrupted)
     assert media.speak('Retry only the interrupted narration scene.') == b'\0'*48000
     assert delays == [3, 1]
+
+
+def test_shared_course_reuses_media_but_never_another_students_progress(video, monkeypatch):
+    identifier, lesson_id, path = ready_lesson(video)
+    video.api.put(path+'/progress', json={'position_seconds':12})
+    video.api.post(path+'/practice', json={'answers':[0,0,0]})
+    video.actor[0] = video.other
+    assert video.api.get(path+'/media').status_code == 404  # Must join first.
+    monkeypatch.setattr(learning_video, 'generation_available', lambda _db:False)
+    monkeypatch.setattr(learning_video, 'student_ai_guard', lambda *_args:pytest.fail('Cache hit used AI budget'))
+    joined = video.api.post('/learning-hub/video', json={'topic':'  sQl  ', 'request_id':'another-student-0001'})
+    assert joined.status_code == 202 and joined.json()['id'] == identifier
+    assert video.db.query(VideoCourse).count() == 1
+    assert video.api.get(path+'/media').content == b'private-video-test'
+    assert video.api.post(path).status_code == 202  # Ready lesson is never regenerated.
+    fresh = video.api.get(path).json()
+    assert fresh['position_seconds'] == 0 and not fresh['practice_completed']
+    video.api.put(path+'/progress', json={'position_seconds':3})
+    video.actor[0] = video.owner
+    mine = video.api.get(path).json()
+    assert mine['position_seconds'] == 12 and mine['practice_completed']
+    assert video.api.get(f'/learning-hub/video/{identifier}').json()['practice_completed'] == 1
+    assert video.db.query(VideoViewerProgress).count() == 2
+
+
+def test_audio_checkpoint_survives_retry_and_daily_quota_is_not_retried_in_a_loop(video, monkeypatch):
+    _, lesson_id, _ = ready_lesson(video)
+    row = video.db.get(VideoLesson, lesson_id)
+    row.state, row.lease_token, row.lease_until = 'running', 'checkpoint-test', utcnow()+timedelta(minutes=5)
+    video.db.commit()
+    calls = []
+    monkeypatch.setattr(worker, 'speak', lambda text: calls.append(text) or b'\0'*48000)
+    first = worker.cached_narrator(lesson_id, 'checkpoint-test', video.sessions)
+    assert first('One explanation') == b'\0'*48000
+    second = worker.cached_narrator(lesson_id, 'checkpoint-test', video.sessions)
+    assert second('One explanation') == b'\0'*48000
+    assert calls == ['One explanation'] and video.db.query(VideoNarration).count() == 1
+    from app import learning_video_media as media
+    import httpx
+    response = httpx.Response(429, json={'error':{'message':'Rate limit exceeded (10 requests per day). Please retry in 2h3m4s'}})
+    assert media.quota_delay(response) is None
+    assert response.extensions['video_retry_seconds'] == 7444
+
+
+def test_board_frames_change_during_explanation():
+    from PIL import ImageChops
+    from app.learning_video_media import board_frame
+    scene = script()['scenes'][0]
+    assert ImageChops.difference(board_frame(scene,1,4,.1),board_frame(scene,1,4,.9)).getbbox()
+
+
+def test_legacy_personalised_course_never_enters_shared_cache(video):
+    legacy = VideoCourse(user_id=video.owner.id, request_id='legacy-private-00001', title='Personal SQL',
+        input_json=json.dumps({'topic':'SQL','goal':'Private learner goal'}), state='ready', plan_json=json.dumps(course_plan()))
+    video.db.add(legacy); video.db.commit()
+    video.actor[0] = video.other
+    joined = video.api.post('/learning-hub/video', json={'topic':'SQL','request_id':'fresh-shared-request1'}).json()
+    assert joined['id'] != legacy.id
+    assert video.api.get(f'/learning-hub/video/{legacy.id}').status_code == 404
+    assert video.api.get('/learning-hub/video').json()['items'][0]['id'] == joined['id']
+
+
+def test_daily_quota_pauses_pending_lessons_without_losing_audio(video):
+    identifier, lesson_id, _ = ready_lesson(video)
+    row = video.db.get(VideoLesson, lesson_id)
+    row.state, row.error_code, row.available_at = 'retrying', 'NARRATION_CAPACITY', utcnow()+timedelta(hours=2)
+    video.db.add(VideoLesson(course_id=identifier, position=1, title='Next part'))
+    video.db.commit()
+    with video.sessions() as db:
+        assert worker.claim(db) is None
+    course = video.api.get(f'/learning-hub/video/{identifier}').json()
+    assert 'provider capacity' in course['preparation_notice']
