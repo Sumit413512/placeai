@@ -1,22 +1,42 @@
 # PlaceAI Video Learning
 
-Learning Hub now contains Detailed notes and Video learning. A topic and starting
-level create a researched 4–12 lesson path. Students prepare each lesson on demand.
+Learning Hub contains Detailed notes and Video learning. A topic alone creates a
+researched 4–12 part course from foundations through practical applications.
+Matching normalized topics join one durable shared course, even while it is queued.
+Parts are queued once within global generation/storage budgets. Saved MP4s are reused
+for every enrolled student without an AI call. No level or personal goal preferences
+are collected. Legacy personalised courses remain private and are never promoted.
 The course and approved scripts survive deploys; an interrupted worker lease can
 be reclaimed. Generation stops after three unsuccessful or interrupted attempts. One explicit student retry is available afterward, for at most four attempts in total.
 
-Each lesson is an actual H.264/AAC MP4 made from precisely rendered slides, code
+Each lesson is an actual H.264/AAC MP4 made from an animated teaching board, code
 and diagrams with AI-generated narration. References and an independent automated
 content review precede speech generation. Examples are illustrative, never executed.
 English automatically timed captions and a descriptive transcript accompany playback.
 Caption cues are estimated within measured scene audio boundaries; they are not word-aligned.
 
-Progress is private and durable. Resume position and unique watched intervals are
+Enrollments and progress are private and durable. Resume position and unique watched intervals are
 saved separately from server-graded practice. Seeking does not award watched time;
 90% coverage marks a video viewed. Three correct answers mark practice complete.
 These indicators are learning aids, not proctored attendance or mastery certificates.
 
 ## Operations and limits
+
+- Board reveals and the AI tutor activity indicator are rendered at eight frames
+  per second. They are illustrations, not a human presenter or photorealistic avatar.
+  Scene boundaries follow measured audio; within-scene reveals are approximate.
+- Narration is checkpointed scene by scene in the database. Retrying generates only
+  missing audio. A completed MP4 replaces its temporary compressed audio chunks.
+  Daily speech capacity errors pause generation until the provider retry time;
+  saved lessons stay playable and quota waits do not exhaust failure attempts.
+- Free mode never silently uses paid speech. OpenAI speech requires the operator to
+  explicitly set `LEARNING_TTS_ALLOW_PAID_FALLBACK=true`. No billing is enabled.
+  Replay uses no AI requests, but hosting, storage and bandwidth limits still apply.
+  Unlimited free creation of new topics cannot be guaranteed.
+- Enrollment gates every shared-course endpoint; progress is keyed to the current
+  student and lesson. Legacy courses retain owner-only authorization. No creator IDs
+  or other students' progress are returned. A versioned unique topic key and database
+  locks prevent concurrent duplicate generation.
 
 - Render's existing learning-worker setting also starts a separate video worker.
   Video generation has its own admission lock, independent from assessment grading.

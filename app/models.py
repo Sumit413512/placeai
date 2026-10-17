@@ -927,7 +927,8 @@ class VideoCourse(Base):
     __table_args__ = (UniqueConstraint("user_id", "request_id", name="uq_video_course_request"),
                      Index("ix_video_course_owner", "user_id", "created_at"))
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    shared_key = Column(String(64), unique=True, nullable=True)
     request_id = Column(String(80), nullable=False)
     title = Column(String(240), nullable=False)
     input_json = Column(Text, nullable=False)
@@ -975,3 +976,32 @@ class VideoProgress(Base):
     video_completed = Column(Boolean, nullable=False, default=False)
     practice_completed = Column(Boolean, nullable=False, default=False)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class VideoEnrollment(Base):
+    __tablename__ = "learning_video_enrollments"
+    __table_args__ = (UniqueConstraint("user_id", "request_id", name="uq_video_enrollment_request"),)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    course_id = Column(String, ForeignKey("learning_video_courses.id", ondelete="CASCADE"), primary_key=True)
+    request_id = Column(String(80), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+
+class VideoViewerProgress(Base):
+    __tablename__ = "learning_video_viewer_progress"
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    lesson_id = Column(String, ForeignKey("learning_video_lessons.id", ondelete="CASCADE"), primary_key=True)
+    position_seconds = Column(Float, nullable=False, default=0)
+    watched_seconds = Column(Float, nullable=False, default=0)
+    coverage_json = Column(Text, nullable=False, default="[]")
+    video_completed = Column(Boolean, nullable=False, default=False)
+    practice_completed = Column(Boolean, nullable=False, default=False)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class VideoNarration(Base):
+    __tablename__ = "learning_video_narration"
+    lesson_id = Column(String, ForeignKey("learning_video_lessons.id", ondelete="CASCADE"), primary_key=True)
+    scene_key = Column(String(64), primary_key=True)
+    audio_data = Column(LargeBinary, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utcnow)

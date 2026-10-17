@@ -1,11 +1,14 @@
-"""Private video learning, admission budgets and server-graded knowledge checks."""
+"""Shared topic-only video lessons; private enrollments and viewing/practice progress."""
 from __future__ import annotations
 
 import json
+import hashlib
+import unicodedata
 from datetime import timedelta
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, Request
 from pydantic import Field
+from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session, defer
 
 from app.ai_rate_limit import student_ai_guard
@@ -14,7 +17,7 @@ from app.dependencies import require_student
 from app.learning_content import ContentModel
 from app.learning_video_content import VideoRequest
 from app.learning_video_media import captions
-from app.models import User, VideoCourse, VideoLesson, VideoProgress, utcnow
+from app.models import User, VideoCourse, VideoLesson, VideoProgress, VideoEnrollment, VideoViewerProgress, utcnow
 from app.routers.learning_hub import generation_available, wake_worker
 
 router = APIRouter(prefix="/learning-hub/video", tags=["Video Learning"])
@@ -22,7 +25,10 @@ PRIVATE = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosn
 
 
 def owner_course(db, course_id, user):
-    course = db.query(VideoCourse).filter_by(id=course_id, user_id=user.id).first()
+    course = db.query(VideoCourse).filter(VideoCourse.id == course_id, or_(
+        and_(VideoCourse.shared_key.is_(None), VideoCourse.user_id == user.id),
+        and_(VideoCourse.shared_key.is_not(None), db.query(VideoEnrollment).filter(
+            VideoEnrollment.course_id == VideoCourse.id, VideoEnrollment.user_id == user.id).exists()))).first()
     if not course:
         raise HTTPException(404, "Video course not found")
     return course
@@ -44,13 +50,18 @@ def progress_data(progress):
             "practice_completed": bool(progress and progress.practice_completed)}
 
 
-def course_data(db, course):
-    rows = db.query(VideoLesson, VideoProgress).options(defer(VideoLesson.video_data)).outerjoin(
-        VideoProgress, VideoProgress.lesson_id == VideoLesson.id).filter(
+def course_data(db, course, user):
+    progress_model = VideoViewerProgress if course.shared_key else VideoProgress
+    rows = db.query(VideoLesson, progress_model).options(defer(VideoLesson.video_data)).outerjoin(
+        progress_model, and_(progress_model.lesson_id == VideoLesson.id,
+            progress_model.user_id == user.id) if course.shared_key else progress_model.lesson_id == VideoLesson.id).filter(
         VideoLesson.course_id == course.id).all()
     lessons = {row.position: (row, progress) for row, progress in rows}
     plan = json.loads(course.plan_json)
     result = {"id": course.id, "title": course.title, "status": course.state,
+              "preparation_notice": ("Audio preparation is waiting for provider capacity. Saved videos remain available."
+                  if db.query(VideoLesson.id).filter(VideoLesson.error_code == "NARRATION_CAPACITY",
+                      VideoLesson.available_at > utcnow()).first() else ""),
               "retry_available": course.state == "failed" and course.attempts < 4,
               "error_code": course.error_code, "introduction": plan.get("introduction", ""),
               "prerequisites": plan.get("prerequisites", []), "lessons": [],
@@ -60,6 +71,8 @@ def course_data(db, course):
         result["lessons"].append({**outline, "position": position,
             "status": row.state if row else "not_started", "duration_seconds": row.duration_seconds if row else 0,
             "retry_available": bool(row and row.state == "failed" and row.attempts < 4),
+            "error_code": row.error_code if row else None,
+            "available_at": row.available_at.isoformat() + "Z" if row else None,
             **progress_data(progress)})
     result["videos_completed"] = sum(item["video_completed"] for item in result["lessons"])
     result["practice_completed"] = sum(item["practice_completed"] for item in result["lessons"])
@@ -90,33 +103,58 @@ def budget(db, user, *, lesson=False):
         raise HTTPException(429, "Video learning path preparation is busy. Please try tomorrow.")
 
 
+def topic_key(topic):
+    normalized = " ".join(unicodedata.normalize("NFKC", topic).split()).casefold()
+    if len(normalized) < 2:
+        raise HTTPException(422, "Enter a topic with at least two characters")
+    return normalized, hashlib.sha256(("shared-board-v1:en:" + normalized).encode()).hexdigest()
+
+
 @router.get("")
 def library(user: User = Depends(require_student), db: Session = Depends(get_db)):
-    rows = db.query(VideoCourse).filter_by(user_id=user.id).order_by(VideoCourse.created_at.desc()).limit(30).all()
-    return {"items": [course_data(db, row) for row in rows], "generation_available": generation_available(db)}
+    rows = db.query(VideoCourse).filter(or_(
+        and_(VideoCourse.shared_key.is_(None), VideoCourse.user_id == user.id),
+        db.query(VideoEnrollment).filter(VideoEnrollment.course_id == VideoCourse.id,
+            VideoEnrollment.user_id == user.id).exists())).order_by(VideoCourse.created_at.desc()).limit(100).all()
+    return {"items": [course_data(db, row, user) for row in rows], "generation_available": generation_available(db)}
 
 
-@router.post("", status_code=202, dependencies=[Depends(student_ai_guard)])
-def create(body: VideoRequest, tasks: BackgroundTasks,
+@router.post("", status_code=202)
+def create(body: VideoRequest, request: Request, tasks: BackgroundTasks,
            user: User = Depends(require_student), db: Session = Depends(get_db)):
+    normalized, key = topic_key(body.topic)
+    # Rate-limit only possible cache misses, before acquiring transaction locks:
+    # the durable limiter commits its own counters.
+    if not db.query(VideoCourse.id).filter_by(shared_key=key).first():
+        student_ai_guard(request, user, db)
     db.query(User).filter_by(id=user.id).with_for_update().one()
-    existing = db.query(VideoCourse).filter_by(user_id=user.id, request_id=body.request_id).first()
-    if existing:
-        if json.loads(existing.input_json) != body.model_dump():
+    from app.models import LearningRuntime
+    db.query(LearningRuntime).filter_by(id=1).with_for_update().one()
+    prior = db.query(VideoEnrollment).filter_by(user_id=user.id, request_id=body.request_id).first()
+    if prior:
+        row = db.get(VideoCourse, prior.course_id)
+        if row.shared_key != key:
             raise HTTPException(409, "This request identifier belongs to another topic")
-        return course_data(db, existing)
-    if not generation_available(db):
-        raise HTTPException(503, "Video research is temporarily unavailable. Try again later.")
-    budget(db, user)
-    row = VideoCourse(user_id=user.id, request_id=body.request_id, title=body.topic, input_json=body.model_dump_json())
-    db.add(row); db.commit(); db.refresh(row)
-    tasks.add_task(wake_worker)
-    return course_data(db, row)
+        return course_data(db, row, user)
+    row = db.query(VideoCourse).filter_by(shared_key=key).first()
+    if not row:
+        if not generation_available(db):
+            raise HTTPException(503, "Video research is temporarily unavailable. Saved lessons remain available.")
+        budget(db, user)
+        row = VideoCourse(user_id=user.id, shared_key=key, request_id=body.request_id,
+            title=normalized, input_json=json.dumps({"topic": normalized}))
+        db.add(row); db.flush()
+        tasks.add_task(wake_worker)
+    enrollment = db.get(VideoEnrollment, (user.id, row.id))
+    if not enrollment:
+        db.add(VideoEnrollment(user_id=user.id, course_id=row.id, request_id=body.request_id))
+    db.commit()
+    return course_data(db, row, user)
 
 
 @router.get("/{course_id}")
 def get_course(course_id: str, user: User = Depends(require_student), db: Session = Depends(get_db)):
-    return course_data(db, owner_course(db, course_id, user))
+    return course_data(db, owner_course(db, course_id, user), user)
 
 
 @router.post("/{course_id}/retry", dependencies=[Depends(student_ai_guard)])
@@ -125,7 +163,7 @@ def retry_course(course_id: str, tasks: BackgroundTasks,
     db.query(User).filter_by(id=user.id).with_for_update().one()
     course = owner_course(db, course_id, user)
     if course.state != "failed":
-        return course_data(db, course)
+        return course_data(db, course, user)
     if course.attempts >= 4:
         raise HTTPException(409, "Preparation could not finish after retries. Please try a new path later.")
     if not generation_available(db):
@@ -133,35 +171,63 @@ def retry_course(course_id: str, tasks: BackgroundTasks,
     budget(db, user)
     course.state, course.error_code, course.available_at = "queued", None, utcnow()
     db.commit(); tasks.add_task(wake_worker)
-    return course_data(db, course)
+    return course_data(db, course, user)
 
 
-@router.post("/{course_id}/lessons/{position}", status_code=202, dependencies=[Depends(student_ai_guard)])
-def prepare(course_id: str, position: int, tasks: BackgroundTasks,
+@router.post("/{course_id}/lessons/{position}", status_code=202)
+def prepare(course_id: str, position: int, request: Request, tasks: BackgroundTasks,
             user: User = Depends(require_student), db: Session = Depends(get_db)):
     db.query(User).filter_by(id=user.id).with_for_update().one()
     course = owner_course(db, course_id, user)
+    db.query(VideoCourse).filter_by(id=course.id).with_for_update().one()
     lessons = json.loads(course.plan_json).get("lessons", [])
     if course.state != "ready" or not 0 <= position < len(lessons):
         raise HTTPException(409, "Wait for the learning path before preparing a lesson")
-    existing = db.query(VideoLesson).options(defer(VideoLesson.video_data)).filter_by(course_id=course.id, position=position).first()
+    existing = db.query(VideoLesson).options(defer(VideoLesson.video_data)).populate_existing().filter_by(course_id=course.id, position=position).first()
     if existing and existing.state != "failed":
-        return course_data(db, course)
+        return course_data(db, course, user)
     if existing and existing.attempts >= 4:
         raise HTTPException(409, "Lesson preparation could not finish after retries. Please try again with a new course later.")
     if not generation_available(db):
         raise HTTPException(503, "Video preparation is temporarily unavailable")
+    student_ai_guard(request, user, db)
+    # The limiter committed; reacquire the global course lock and recheck after
+    # another student's possible concurrent prepare request.
+    db.query(VideoCourse).filter_by(id=course.id).with_for_update().one()
+    existing = db.query(VideoLesson).options(defer(VideoLesson.video_data)).populate_existing().filter_by(course_id=course.id, position=position).first()
+    if existing and existing.state != "failed":
+        return course_data(db, course, user)
+    if existing and existing.attempts >= 4:
+        raise HTTPException(409, "Lesson preparation could not finish after retries")
     budget(db, user, lesson=True)
     if existing:
         existing.state, existing.error_code, existing.available_at = "queued", None, utcnow()
         db.commit(); tasks.add_task(wake_worker)
-        return course_data(db, course)
+        return course_data(db, course, user)
     row = VideoLesson(course_id=course.id, position=position, title=lessons[position]["title"])
     db.add(row); db.flush()
-    db.add(VideoProgress(lesson_id=row.id))
+    if not course.shared_key:
+        db.add(VideoProgress(lesson_id=row.id))
     db.commit()
     tasks.add_task(wake_worker)
-    return course_data(db, course)
+    return course_data(db, course, user)
+
+
+def viewer_record(db, row, user, *, lock=False):
+    course = db.get(VideoCourse, row.course_id)
+    if not course.shared_key:
+        query = db.query(VideoProgress).filter_by(lesson_id=row.id)
+    else:
+        # Account lock serializes the first progress insert across tabs.
+        if lock:
+            db.query(User).filter_by(id=user.id).with_for_update().one()
+        query = db.query(VideoViewerProgress).filter_by(user_id=user.id, lesson_id=row.id)
+    record = (query.with_for_update() if lock else query).first()
+    if record is None and lock:
+        record = (VideoViewerProgress(user_id=user.id, lesson_id=row.id) if course.shared_key
+                  else VideoProgress(lesson_id=row.id))
+        db.add(record); db.flush()
+    return record
 
 
 @router.get("/{course_id}/lessons/{position}")
@@ -171,7 +237,7 @@ def lesson(course_id: str, position: int, user: User = Depends(require_student),
     content.pop("solution", None)
     content["quiz"] = [{"question": q["question"], "options": q["options"]} for q in content.get("quiz", [])]
     return {"title": row.title, "status": row.state, "duration_seconds": row.duration_seconds,
-            "content": content, **progress_data(db.get(VideoProgress, row.id))}
+            "content": content, **progress_data(viewer_record(db, row, user))}
 
 
 @router.get("/{course_id}/lessons/{position}/media")
@@ -203,7 +269,7 @@ def progress(course_id: str, position: int, body: Playback,
     row = owner_lesson(db, course_id, position, user)
     if row.state != "ready":
         raise HTTPException(409, "Lesson is not ready")
-    record = db.query(VideoProgress).filter_by(lesson_id=row.id).with_for_update().one()
+    record = viewer_record(db, row, user, lock=True)
     now = utcnow()
     endpoint = min(body.position_seconds, row.duration_seconds)
     distance = endpoint - record.position_seconds
@@ -243,7 +309,7 @@ def practice(course_id: str, position: int, body: Answers,
             raise HTTPException(422, "Select one of the available answers")
         results.append({"correct": answer == question["answer"], "answer": question["answer"],
                         "explanation": question["explanation"]})
-    record = db.query(VideoProgress).filter_by(lesson_id=row.id).with_for_update().one()
+    record = viewer_record(db, row, user, lock=True)
     record.practice_completed = record.practice_completed or all(item["correct"] for item in results)
     db.commit()
     return {"results": results, "solution": content["solution"], **progress_data(record)}
