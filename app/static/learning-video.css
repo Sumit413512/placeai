@@ -63,3 +63,13 @@
   .learning-video-lesson-panel h2 { font-size:23px; }
   .learning-video-panel .panel { padding:18px; }
 }
+
+.learning-video-breadcrumb { display:flex; flex-wrap:wrap; gap:10px; }
+.learning-video-quality { border:1px solid #cbd5e1; background:#f8fafc; border-radius:6px; padding:18px; margin:24px 0; }
+.learning-video-quality ol { display:grid; gap:8px; padding-left:24px; }
+.learning-video-quality p { font-size:15px; line-height:1.6; }
+.learning-video-syllabus details { border-top:1px solid #dbe3ee; }
+.learning-video-syllabus summary { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; color:#172554; }
+.learning-video-syllabus small { display:block; font-size:14px; line-height:1.5; margin-top:6px; }
+.learning-video-syllabus li { padding:12px 0; overflow-wrap:anywhere; }
+[data-video-overview] { min-width:0; }

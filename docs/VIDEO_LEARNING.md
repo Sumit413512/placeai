@@ -1,7 +1,7 @@
 # PlaceAI Video Learning
 
 Learning Hub contains Detailed notes and Video learning. A topic alone creates a
-researched 4–12 part course from foundations through practical applications.
+researched full course of 12–64 focused parts from foundations through advanced applications.
 Matching normalized topics join one durable shared course, even while it is queued.
 Parts are queued once within global generation/storage budgets. Saved MP4s are reused
 for every enrolled student without an AI call. No level or personal goal preferences
@@ -25,10 +25,11 @@ These indicators are learning aids, not proctored attendance or mastery certific
 - The course player has a module outline with stable lesson numbers (1.1, 1.2),
   completion ticks, overall progress, a video followed directly by its quick quiz,
   and previous/next navigation. A lesson counts toward course completion only after
-  its video viewing and practice are both complete. Ready lessons can be reviewed
-  freely; quizzes do not gate access to already prepared lessons.
+  its video viewing and practice are both complete. Published lessons can be reviewed
+  freely; quizzes do not gate the next prepared lesson. New full courses open only
+  after every part passes checks; legacy partial courses remain accessible.
 - A ready research outline is distinct from a ready course. `course_ready` becomes
-  true only when every planned MP4 is ready. Partial preparation and quota waits
+  true only when every planned MP4 is ready and, for new full courses, quality checked. Partial preparation and quota waits
   are stated explicitly. Existing flat outlines get neutral two-part modules,
   preserving lesson IDs, media bytes and student progress; new plans name modules.
 - The worker periodically fills missing shared-course parts when admission/storage
@@ -83,3 +84,39 @@ budgets, grading, seek protection, lease recovery, provider failure, content bou
 caption escaping and actual MP4 decoding. The browser test exercises creation,
 native video loading, captions, resume, speed, practice, mobile widths and cleanup.
 The PostgreSQL test checks concurrent admission and exhausted-lease handling.
+
+
+## Full-course publication (curriculum v2)
+
+New topic requests use a versioned comprehensive cache, preserving older saved courses.
+The planner creates 12–64 focused videos across 4–16 prerequisite-ordered modules,
+with at least two videos per module. Broad SQL uses fourteen required modules (at
+least 28 lessons), covering foundations through transactions, window functions,
+query plans, safe access and a capstone. A separate evidence-based syllabus review
+must approve coverage before lessons are admitted. A full course is not a mastery
+or certification guarantee.
+
+The course overview shows scope, prerequisites, syllabus, preparation and check
+counts. Begin learning appears only after every video passes checks. The separate
+learning view has a numbered module outline, video, quiz and previous/next controls;
+Back to course returns to the overview and All courses returns to the library.
+Older saved partial courses remain playable without being relabelled comprehensive.
+
+Before publication, scripts pass factual/citation/layout/quiz review and actual
+encoded media is decoded and checked for readable dimensions, every frame timestamp,
+measured scene boundaries, audible output and audio/video duration drift (50ms limit).
+The check report and content approval are saved with the lesson. Full-course lesson
+APIs also reject access until every planned lesson is ready and checked. These checks
+can miss semantic errors; within-scene reveals/captions are estimated, not word-aligned.
+After the operator approved this integration, new generated lesson MP4s and their
+scene scripts are sent to Google Gemini for a separate audiovisual review. Every
+scene must be returned and approved. No student recordings, account details or
+progress are included. Missing, rejected or interrupted reviews do not publish
+media. Review-capacity limits pause the worker without consuming failure attempts;
+cached scene narration is retained. This adds a provider review request at creation,
+never on replay. LEARNING_VIDEO_REVIEW_MODEL can override the existing learning
+Gemini model; the default is gemini-3.5-flash-lite. No new paid fallback is enabled.
+
+All parts prepare in the background within existing storage and provider budgets.
+Full courses may take several days on free speech allowances. No completion ETA is
+promised and no billing or quota bypass is enabled. Playback uses cached media.
