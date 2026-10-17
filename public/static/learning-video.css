@@ -73,3 +73,9 @@
 .learning-video-syllabus small { display:block; font-size:14px; line-height:1.5; margin-top:6px; }
 .learning-video-syllabus li { padding:12px 0; overflow-wrap:anywhere; }
 [data-video-overview] { min-width:0; }
+
+.learning-video-syllabus summary { display:list-item; list-style:disclosure-closed inside; }
+.learning-video-syllabus details[open]>summary { list-style-type:disclosure-open; }
+.learning-video-syllabus summary small { display:inline-block; margin-left:12px; }
+.learning-video-syllabus ol { padding-left:0; }
+.learning-video-syllabus li::marker { content:""; }
