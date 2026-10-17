@@ -73,6 +73,9 @@ def course_data(db, course, user):
               "sources": json.loads(course.sources_json), "created_at": course.created_at.isoformat(),
               "requires_full_preparation": json.loads(course.input_json).get("curriculum_version") == 2}
     modules, previous, in_module = [], None, 0
+    if db.query(VideoLesson.id).filter(VideoLesson.error_code == "REVIEW_CAPACITY",
+            VideoLesson.available_at > utcnow()).first():
+        result["preparation_notice"] = "Lesson quality review is waiting for provider capacity. Preparation will resume automatically."
     for position, outline in enumerate(plan.get("lessons", [])):
         # Old flat outlines get neutral two-part sections without changing their
         # media, lesson IDs or student history. New plans have authored subtopics.
@@ -88,7 +91,8 @@ def course_data(db, course, user):
         row, progress = lessons.get(position, (None, None))
         checks = json.loads(row.content_json) if row and row.state == "ready" else {}
         quality_checked = (checks.get("content_review", {}).get("passed") is True
-                           and checks.get("media_review", {}).get("passed") is True)
+                           and checks.get("media_review", {}).get("passed") is True
+                           and checks.get("audiovisual_review", {}).get("passed") is True)
         result["lessons"].append({**outline, "position": position,
             "module_title": modules[-1]["title"], "module_number": len(modules),
             "number": f"{len(modules)}.{in_module}",

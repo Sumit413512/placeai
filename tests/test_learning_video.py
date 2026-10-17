@@ -433,7 +433,7 @@ def test_new_full_course_publishes_only_after_every_lesson_passes_checks(video):
     assert video.api.get(f'/learning-hub/video/{identifier}').json()['checked_parts']==0
     for row in video.db.query(VideoLesson).filter_by(course_id=identifier):
         content=json.loads(row.content_json)
-        content.update(content_review={'passed':True},media_review={'passed':True})
+        content.update(content_review={'passed':True},media_review={'passed':True},audiovisual_review={'passed':True})
         row.content_json=json.dumps(content)
     video.db.commit()
     assert video.api.get(f'/learning-hub/video/{identifier}').json()['course_ready']

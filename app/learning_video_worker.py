@@ -18,6 +18,7 @@ from sqlalchemy.orm import defer
 from app import learning_ai
 from app.learning_video_content import CoursePlan, FullCoursePlan, SQL_MODULES, validate_full_plan, LessonScript, LESSON_PROMPT
 from app.learning_video_media import render_video, inspect_video, speak, NarrationCapacityError, MAX_AUDIO_BYTES
+from app.learning_video_review import review_video, ReviewCapacityError
 from app.learning_worker import Session, heartbeat
 from app.models import User, UserRole, VideoCourse, VideoLesson, VideoNarration, utcnow
 
@@ -146,7 +147,7 @@ def claim(db):
             db.commit(); return None
     for kind, model in (("course", VideoCourse), ("lesson", VideoLesson)):
         if kind == "lesson" and db.query(VideoLesson.id).filter(
-                VideoLesson.error_code == "NARRATION_CAPACITY", VideoLesson.available_at > now).first():
+                VideoLesson.error_code.in_(["NARRATION_CAPACITY", "REVIEW_CAPACITY"]), VideoLesson.available_at > now).first():
             continue
         query = db.query(model)
         if kind == "lesson":
@@ -343,6 +344,8 @@ def _process(item, sessions):
             data, duration, timings = render_video(content, narrate=cached_narrator(identifier, token, sessions))
             content["timings"] = timings
             content["media_review"] = inspect_video(data, content, duration)
+            if preferences.get("curriculum_version") == 2:
+                content["audiovisual_review"] = review_video(data, content)
             update = {"content_json": json.dumps(content), "video_data": data, "duration_seconds": duration}
         with sessions() as db:
             row = db.query(model).filter_by(id=identifier).with_for_update().first()
@@ -383,6 +386,8 @@ def _process(item, sessions):
             row.available_at = utcnow() + timedelta(seconds=60 * 2 ** row.attempts)
             if isinstance(error, NarrationCapacityError):
                 row.state, row.error_code = "retrying", "NARRATION_CAPACITY"
+                if isinstance(error, ReviewCapacityError):
+                    row.error_code = "REVIEW_CAPACITY"
                 row.attempts = max(0, row.attempts - 1)
                 row.available_at = utcnow() + timedelta(seconds=error.retry_seconds)
             db.commit()

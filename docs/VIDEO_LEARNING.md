@@ -108,7 +108,14 @@ measured scene boundaries, audible output and audio/video duration drift (50ms l
 The check report and content approval are saved with the lesson. Full-course lesson
 APIs also reject access until every planned lesson is ready and checked. These checks
 can miss semantic errors; within-scene reveals/captions are estimated, not word-aligned.
-No external video-analysis upload or additional paid provider is introduced.
+After the operator approved this integration, new generated lesson MP4s and their
+scene scripts are sent to Google Gemini for a separate audiovisual review. Every
+scene must be returned and approved. No student recordings, account details or
+progress are included. Missing, rejected or interrupted reviews do not publish
+media. Review-capacity limits pause the worker without consuming failure attempts;
+cached scene narration is retained. This adds a provider review request at creation,
+never on replay. LEARNING_VIDEO_REVIEW_MODEL can override the existing learning
+Gemini model; the default is gemini-3.5-flash-lite. No new paid fallback is enabled.
 
 All parts prepare in the background within existing storage and provider budgets.
 Full courses may take several days on free speech allowances. No completion ETA is
