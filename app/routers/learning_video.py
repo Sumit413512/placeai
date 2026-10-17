@@ -10,6 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 from pydantic import Field
 from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session, defer
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.ai_rate_limit import student_ai_guard
 from app.database import get_db
@@ -311,5 +312,8 @@ def practice(course_id: str, position: int, body: Answers,
                         "explanation": question["explanation"]})
     record = viewer_record(db, row, user, lock=True)
     record.practice_completed = record.practice_completed or all(item["correct"] for item in results)
+    # This timestamp is the playback clock. A practice submission must not reset
+    # it or the next legitimate timeupdate looks like a seek and loses coverage.
+    flag_modified(record, "updated_at")
     db.commit()
     return {"results": results, "solution": content["solution"], **progress_data(record)}
