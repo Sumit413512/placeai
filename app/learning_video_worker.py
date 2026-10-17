@@ -152,7 +152,8 @@ def claim(db):
             query = query.options(defer(VideoLesson.video_data))
         row = query.filter(model.attempts < 4, model.available_at <= now, or_(model.state.in_(["queued", "retrying"]),
             (model.state == "running") & (model.lease_until <= now))).order_by(
-            model.created_at).with_for_update(skip_locked=True).first()
+            model.created_at, VideoLesson.position if kind == "lesson" else model.id,
+            model.id).with_for_update(skip_locked=True).first()
         if row:
             row.state, row.lease_token = "running", uuid4().hex
             row.lease_until = now + timedelta(seconds=LEASE_SECONDS)

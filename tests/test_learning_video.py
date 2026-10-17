@@ -347,3 +347,17 @@ def test_daily_quota_pauses_pending_lessons_without_losing_audio(video):
         assert worker.claim(db) is None
     course = video.api.get(f'/learning-hub/video/{identifier}').json()
     assert 'provider capacity' in course['preparation_notice']
+
+
+def test_practice_during_playback_does_not_reset_the_watch_clock(video):
+    _, lesson_id, path = ready_lesson(video)
+    video.api.put(path+'/progress',json={'position_seconds':0})
+    video.db.expire_all()
+    record = video.db.get(VideoViewerProgress,(video.owner.id,lesson_id))
+    clock = utcnow()-timedelta(seconds=12)
+    record.updated_at = clock; video.db.commit()
+    assert video.api.post(path+'/practice',json={'answers':[0,0,0]}).json()['practice_completed']
+    video.db.expire_all()
+    assert video.db.get(VideoViewerProgress,(video.owner.id,lesson_id)).updated_at == clock
+    saved = video.api.put(path+'/progress',json={'position_seconds':20}).json()
+    assert saved['watched_seconds'] == 20 and saved['practice_completed']

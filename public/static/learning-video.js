@@ -23,7 +23,7 @@
     const active = () => alive && hub.isConnected && ctx.state.view === 'learning-hub';
     const status = message => { if (active()) panel.querySelector('[data-video-status]').textContent = message; };
     const isCurrent = (id, version) => active() && current === id && playerEpoch === version;
-    const libraryLabel = data => data.lessons.length ? `${data.videos_completed}/${data.lessons.length} viewed · ${data.status === 'ready' ? 'Ready' : data.status}` : data.status === 'failed' ? 'Preparation unavailable' : 'Preparing learning path';
+    const libraryLabel = data => data.lessons.length ? `${data.videos_completed}/${data.lessons.length} viewed · ${data.status === 'ready' ? `${data.lessons.filter(item => item.status === 'ready').length}/${data.lessons.length} ready` : data.status}` : data.status === 'failed' ? 'Preparation unavailable' : 'Preparing learning path';
     const lessonPath = (id, index) => `${apiBase}/${encodeURIComponent(id)}/lessons/${index}`;
     function stopPlayer() {
       playerEpoch += 1;
@@ -117,7 +117,7 @@
           const data = await ctx.api(apiBase, {method:'POST', body:JSON.stringify({...fields, request_id:form.dataset.requestId})});
           if (!active()) return;
           stopPlayer(); current = data.id; showCourse(data); await library();
-          status(data.status === 'ready' ? 'Course found. Saved videos are ready to reuse.' : 'Your course is saved. Matching requests share the same preparation.');
+          status(data.lessons.some(item => item.status === 'ready') ? 'Course found. Ready videos are saved for reuse; other parts continue preparing.' : 'Course found. Its videos are prepared once for everyone; you can return later.');
           delete form.dataset.fingerprint; delete form.dataset.requestId;
         } else if (form.matches('[data-video-practice]') && index !== null) {
           const values = new FormData(form);
