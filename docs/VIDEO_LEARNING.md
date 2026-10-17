@@ -26,8 +26,8 @@ These indicators are learning aids, not proctored attendance or mastery certific
   completion ticks, overall progress, a video followed directly by its quick quiz,
   and previous/next navigation. A lesson counts toward course completion only after
   its video viewing and practice are both complete. Published lessons can be reviewed
-  freely; quizzes do not gate the next prepared lesson. New full courses open only
-  after every part passes checks; legacy partial courses remain accessible.
+  freely; quizzes do not gate the next prepared lesson. Student course entries open only after the whole course is prepared; existing
+  content and private progress remain stored.
 - A ready research outline is distinct from a ready course. `course_ready` becomes
   true only when every planned MP4 is ready and, for new full courses, quality checked. Partial preparation and quota waits
   are stated explicitly. Existing flat outlines get neutral two-part modules,
@@ -100,7 +100,8 @@ The course overview shows scope, prerequisites, syllabus, preparation and check
 counts. Begin learning appears only after every video passes checks. The separate
 learning view has a numbered module outline, video, quiz and previous/next controls;
 Back to course returns to the overview and All courses returns to the library.
-Older saved partial courses remain playable without being relabelled comprehensive.
+Older saved courses retain their content and progress without being relabelled
+comprehensive. Their student-facing entry stays Processing until complete.
 
 Before publication, scripts pass factual/citation/layout/quiz review and actual
 encoded media is decoded and checked for readable dimensions, every frame timestamp,
@@ -120,3 +121,14 @@ Gemini model; the default is gemini-3.5-flash-lite. No new paid fallback is enab
 All parts prepare in the background within existing storage and provider budgets.
 Full courses may take several days on free speech allowances. No completion ETA is
 promised and no billing or quota bypass is enabled. Playback uses cached media.
+
+
+## Student library statuses
+
+Both notes and video libraries show Processing during preparation and Ready to begin
+only after the whole item is ready. Preparation fractions and partial content are
+not exposed in the student interface. Learning progress is separate and remains
+available after a course opens. Failed notebooks or courses (including a failed
+video part) are hidden from student lists and selected views without deleting data.
+Background refresh keeps status badges current. Completed notes require the exact
+expected chapter count before either the ready indicator or full PDF is available.

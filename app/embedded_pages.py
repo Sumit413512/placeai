@@ -31,7 +31,7 @@ INDEX_HTML = '''<!doctype html>
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/static/privacy-preferences.css"><script src="/static/privacy-preferences.js" defer></script>
 <link rel="stylesheet" href="/static/selected-theme.css?v=20261016-account-controls">
-  <link rel="stylesheet" href="/static/learning-hub.css?v=20261012-2">
+  <link rel="stylesheet" href="/static/learning-hub.css?v=20261017-status1">
 </head>
 <body>
   <div id="toast-region" class="toast-region" aria-live="polite"></div>
@@ -237,8 +237,8 @@ INDEX_HTML = '''<!doctype html>
 
   <script src="/static/app.js?v=20261016-interface-guidelines" defer></script>
   <link rel="stylesheet" href="/static/learning-video.css?v=20261017-full-course4">
-  <script src="/static/learning-video.js?v=20261017-full-course3" defer></script>
-  <script src="/static/learning-hub.js?v=20261016-video2" defer></script>
+  <script src="/static/learning-video.js?v=20261017-status1" defer></script>
+  <script src="/static/learning-hub.js?v=20261017-status1" defer></script>
 </body>
 </html>
 '''

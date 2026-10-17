@@ -228,3 +228,11 @@ def test_frontend_and_static_copies_are_synchronized():
         assert (root / "app/static" / filename).read_bytes() == (root / "public/static" / filename).read_bytes()
     assert (root / "app/static/app.js").read_bytes() == (root / "public/static/app-core.js").read_bytes()
     assert "['Career','learning-hub','Learning Hub']" in (root / "app/static/app.js").read_text(encoding="utf-8")
+
+
+def test_incomplete_notebook_never_exposes_ready_status_or_complete_pdf(hub):
+    book=hub.client.post('/learning-hub',json=preferences()).json()
+    row=hub.db.get(LearningNotebook,book['id']);row.state='ready';hub.db.commit()
+    result=hub.client.get(f"/learning-hub/{book['id']}").json()
+    assert not result['ready_to_begin'] and not result['pdf_available']
+    assert hub.client.get(f"/learning-hub/{book['id']}/pdf").status_code==409
