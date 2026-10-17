@@ -67,9 +67,23 @@ def course_data(db, course, user):
               "error_code": course.error_code, "introduction": plan.get("introduction", ""),
               "prerequisites": plan.get("prerequisites", []), "lessons": [],
               "sources": json.loads(course.sources_json), "created_at": course.created_at.isoformat()}
+    modules, previous, in_module = [], None, 0
     for position, outline in enumerate(plan.get("lessons", [])):
+        # Old flat outlines get neutral two-part sections without changing their
+        # media, lesson IDs or student history. New plans have authored subtopics.
+        title = outline.get("module_title", "").strip()
+        key = title.casefold() if title else f"legacy-{position // 2}"
+        if key != previous:
+            modules.append({"title": title or f"Module {len(modules)+1}",
+                            "number": len(modules)+1, "positions": []})
+            in_module = 0
+        previous = key
+        in_module += 1
+        modules[-1]["positions"].append(position)
         row, progress = lessons.get(position, (None, None))
         result["lessons"].append({**outline, "position": position,
+            "module_title": modules[-1]["title"], "module_number": len(modules),
+            "number": f"{len(modules)}.{in_module}",
             "status": row.state if row else "not_started", "duration_seconds": row.duration_seconds if row else 0,
             "retry_available": bool(row and row.state == "failed" and row.attempts < 4),
             "error_code": row.error_code if row else None,
@@ -77,6 +91,15 @@ def course_data(db, course, user):
             **progress_data(progress)})
     result["videos_completed"] = sum(item["video_completed"] for item in result["lessons"])
     result["practice_completed"] = sum(item["practice_completed"] for item in result["lessons"])
+    result["modules"] = modules
+    result["ready_parts"] = sum(item["status"] == "ready" for item in result["lessons"])
+    result["completed_parts"] = sum(item["video_completed"] and item["practice_completed"] for item in result["lessons"])
+    result["course_ready"] = bool(result["lessons"]) and result["ready_parts"] == len(result["lessons"])
+    result["course_completed"] = bool(result["lessons"]) and result["completed_parts"] == len(result["lessons"])
+    result["completion_percent"] = round(100 * result["completed_parts"] / len(result["lessons"])) if result["lessons"] else 0
+    result["preparation_status"] = ("ready" if result["course_ready"] else "needs_attention"
+        if course.state == "failed" or any(item["status"] == "failed" for item in result["lessons"])
+        else "waiting_capacity" if result["preparation_notice"] else "preparing")
     return result
 
 

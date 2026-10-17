@@ -5,6 +5,7 @@
 .learning-video-panel :is(p,li,small,legend,label) { color:#334155; }
 .learning-video-panel h2 { color:#172554; font-weight:400; }
 .learning-video-panel h3 { font-size:20px; font-weight:400; color:#172554; }
+#app-shell .learning-video-panel :is(h2,h3) { font-family:var(--font-body, Calibri, "Segoe UI", sans-serif) !important; }
 .learning-video-panel progress { width:100%; accent-color:#2563eb; }
 .learning-video-lessons { list-style:none; padding:0; margin:16px 0; }
 .learning-video-lessons>li { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:20px 0; border-top:1px solid #dbe3ee; }
@@ -21,4 +22,44 @@
 .learning-video-panel a { color:#1e40af; text-decoration:underline; overflow-wrap:anywhere; }
 .learning-video-panel summary { cursor:pointer; padding:12px 0; }
 [data-video-player] { scroll-margin-top:100px; min-width:0; }
-@media(max-width:650px) { .learning-video-lessons>li { align-items:flex-start; flex-direction:column; gap:12px; } }
+.learning-video-panel [data-video-status]:empty { display:none; }
+[data-video-discovery] { display:grid; gap:24px; }
+[data-video-workspace] { display:grid; gap:20px; min-width:0; }
+.learning-video-course-header { display:grid; grid-template-columns:minmax(0,1fr) 240px; align-items:center; gap:28px; }
+.learning-video-course-header h2 { margin:16px 0 10px; }
+.learning-video-course-progress { display:grid; gap:10px; }
+.learning-video-course-progress strong { color:#1e3a8a; font-weight:500; font-size:22px; }
+.learning-video-course-progress small { line-height:1.5; }
+.learning-video-preparation { color:#1e40af !important; margin:8px 0; }
+.learning-video-study-layout { display:grid; grid-template-columns:minmax(240px,290px) minmax(0,1fr); gap:24px; align-items:start; min-width:0; }
+[data-video-outline] { position:sticky; top:92px; min-width:0; max-height:calc(100vh - 110px); overflow:auto; border:1px solid #dbe3ee; border-radius:8px; background:#fff; }
+.learning-video-outline-disclosure>summary { padding:18px; font-size:18px; color:#172554; }
+.learning-video-module { border-top:1px solid #e2e8f0; padding:16px 10px 10px; }
+.learning-video-module h3 { font-size:16px; line-height:1.45; margin:0 8px 10px; font-weight:500; overflow-wrap:anywhere; }
+.learning-video-lessons { display:grid; gap:6px; margin:0; }
+.learning-video-lessons>li { display:block; padding:0; border:0; min-width:0; }
+.learning-video-lessons>li>button { display:grid; grid-template-columns:30px minmax(0,1fr); gap:10px; align-items:start; width:100%; text-align:left; padding:12px 10px; min-height:58px; border:1px solid transparent; background:transparent; color:#1e293b; border-radius:6px; font:inherit; cursor:pointer; white-space:normal; }
+.learning-video-lessons>li>button[aria-current="step"] { background:#eff6ff; border-color:#93b4e8; }
+.learning-video-lessons>li>button:hover:not(:disabled) { background:#f1f5f9; }
+.learning-video-lessons>li>button:focus-visible { outline:3px solid #2563eb; outline-offset:2px; }
+.learning-video-lessons>li>button:disabled { cursor:default; opacity:1 !important; background:#f8fafc; color:#475569 !important; }
+.learning-video-step { display:grid; place-items:center; width:28px; height:28px; background:#edf2f9; border-radius:50%; color:#334155; font-size:12px; }
+[data-complete="true"] .learning-video-step { background:#e1f3e9; color:#166534; font-size:17px; }
+.learning-video-lesson-title { display:block; font-size:15px; line-height:1.5; overflow-wrap:anywhere; }
+.learning-video-lessons small { display:block; margin-top:5px; font-size:13px; line-height:1.4; }
+.learning-video-lesson-panel { min-width:0; }
+.learning-video-lesson-panel h2 { font-size:25px; line-height:1.35; margin-top:8px; }
+.learning-video-playback-tools { display:flex; flex-wrap:wrap; gap:16px; justify-content:space-between; align-items:center; }
+.learning-video-quiz { border-top:1px solid #e2e8f0; padding-top:20px; margin-top:24px; }
+.learning-video-lesson-navigation { display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; margin:24px 0; }
+.learning-video-lesson-navigation button { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+.learning-video-lesson-panel>details { border-top:1px solid #e2e8f0; padding:8px 0; }
+@media(max-width:1100px) {
+  .learning-video-study-layout { grid-template-columns:minmax(0,1fr); }
+  [data-video-outline] { position:static; max-height:420px; }
+}
+@media(max-width:650px) {
+  .learning-video-course-header { grid-template-columns:minmax(0,1fr); gap:20px; }
+  .learning-video-lesson-panel h2 { font-size:23px; }
+  .learning-video-panel .panel { padding:18px; }
+}

@@ -15,7 +15,7 @@
     hub.prepend(navigation);
     const panel = document.createElement('section');
     panel.className = 'learning-video-panel'; panel.hidden = true;
-    panel.innerHTML = `<section class="panel"><span class="section-kicker">Video learning</span><h2>A topic. A clear learning path.</h2><p>Learn in short narrated lessons with visual explanations, practice and saved progress.</p><form id="learning-video-form"><div class="learning-form-grid"><label>Video topic<input name="video_topic" required minlength="2" maxlength="180" placeholder="SQL for placement interviews"></label></div><p>Shared topic library: enter a subject, not personal information. From foundations to practical applications. Saved videos are reused for everyone; your progress stays private.</p><button class="button button-primary" type="submit">Find or create course</button></form><p data-video-status role="status"></p></section><section class="panel"><div class="panel-head"><h2>Your video courses</h2><button type="button" class="button button-secondary" data-video-refresh>Refresh</button></div><div data-video-library>Loading your courses…</div></section><div data-video-course></div><div data-video-player></div>`;
+    panel.innerHTML = `<div data-video-discovery><section class="panel"><span class="section-kicker">Video learning</span><h2>A topic. A clear learning path.</h2><p>Learn in short narrated lessons with visual explanations, practice and saved progress.</p><form id="learning-video-form"><div class="learning-form-grid"><label>Video topic<input name="video_topic" required minlength="2" maxlength="180" placeholder="SQL for placement interviews"></label></div><p>Shared topic library: enter a subject, not personal information. From foundations to practical applications. Saved videos are reused for everyone; your progress stays private.</p><button class="button button-primary" type="submit">Find or create course</button></form></section><section class="panel"><div class="panel-head"><h2>Your video courses</h2><button type="button" class="button button-secondary" data-video-refresh>Refresh</button></div><div data-video-library>Loading your courses…</div></section></div><p data-video-status role="status"></p><section data-video-workspace hidden><div data-video-course></div><div class="learning-video-study-layout"><aside data-video-outline aria-label="Course outline"></aside><div data-video-player></div></div></section>`;
     hub.append(panel);
     let alive = true, current = null, course = null, poll = null, player = null, position = null;
     let urls = [], playerEpoch = 0, saving = false, lastSaved = 0, observer;
@@ -45,19 +45,59 @@
       } catch { if (active()) { const text = panel.querySelector('[data-video-save-status]'); if (text) text.textContent = 'Progress could not be saved. Check your connection.'; } }
       finally { saving = false; }
     }
-    function showCourse(data) {
+    function structure(data) {
+      const modules = [];
+      data.lessons.forEach((item, index) => {
+        const number = item.module_number || Math.floor(index / 2) + 1;
+        let group = modules.find(module => module.number === number);
+        if (!group) { group = {number, title:item.module_title || `Module ${number}`, positions:[]}; modules.push(group); }
+        group.positions.push(index);
+        item.number ||= `${number}.${group.positions.length}`;
+      });
+      data.modules = modules;
       data.videos_completed = data.lessons.filter(item => item.video_completed).length;
       data.practice_completed = data.lessons.filter(item => item.practice_completed).length;
-      course = data;
+      data.completed_parts = data.lessons.filter(item => item.video_completed && item.practice_completed).length;
+      data.ready_parts = data.lessons.filter(item => item.status === 'ready').length;
+      data.course_ready = data.lessons.length > 0 && data.ready_parts === data.lessons.length;
+      data.completion_percent = data.lessons.length ? Math.round(100 * data.completed_parts / data.lessons.length) : 0;
+      return data;
+    }
+    function updateLessonNavigation() {
+      if (!course || position === null) return;
+      for (const direction of [-1, 1]) {
+        const button = panel.querySelector(`[data-video-move="${direction}"]`);
+        if (!button) continue;
+        const next = course.lessons[position + direction];
+        button.disabled = !next || next.status !== 'ready';
+        button.textContent = direction < 0 ? 'Previous lesson' : next ? `Next: ${next.number} ${next.title}` : 'End of course';
+        button.title = next && next.status !== 'ready' ? 'This part is still being prepared. Saved lessons remain available.' : '';
+      }
+    }
+    function showCourse(data) {
+      course = structure(data);
+      panel.querySelector('[data-video-discovery]').hidden = true;
+      panel.querySelector('[data-video-workspace]').hidden = false;
       const saved = [...panel.querySelectorAll('[data-video-id]')].find(item => item.dataset.videoId === data.id);
       if (saved) saved.innerHTML = `<span>${esc(data.title)}</span><small>${esc(libraryLabel(data))}</small>`;
       const pending = ['queued', 'running', 'retrying'];
-      const progress = `${data.videos_completed} of ${data.lessons.length} videos viewed · ${data.practice_completed} practices completed`;
-      panel.querySelector('[data-video-course]').innerHTML = `<section class="panel"><h2>${esc(data.title)}</h2><p>${esc(data.introduction || (data.status === 'failed' ? 'We could not prepare this learning path after retries. Your existing courses are safe. Please try a new topic later.' : 'Researching sources and preparing your learning path. You can return later.'))}</p>${data.preparation_notice ? `<p role="status">${esc(data.preparation_notice)}</p>` : ''}${data.retry_available ? '<button type="button" class="button button-secondary" data-video-retry-course>Retry learning path</button>' : ''}${data.lessons.length ? `<p class="learning-meta">${esc(progress)}</p><progress aria-label="Videos viewed" max="${data.lessons.length}" value="${data.videos_completed}"></progress><ol class="learning-video-lessons">${data.lessons.map(item => `<li><div><h3>${esc(item.title)}</h3><p>${esc(item.objective)}</p><small>${item.video_completed ? 'Viewed' : 'Not completed'} · ${item.practice_completed ? 'Practice complete' : 'Practice pending'}${item.duration_seconds ? ` · ${Math.ceil(item.duration_seconds / 60)} min` : ''}</small></div><button type="button" class="button button-secondary" data-video-lesson="${item.position}" ${pending.includes(item.status) || (item.status === 'failed' && !item.retry_available) ? 'disabled' : ''}>${item.status === 'ready' ? (item.position_seconds ? 'Resume lesson' : 'Watch lesson') : item.status === 'failed' ? (item.retry_available ? 'Retry preparation' : 'Preparation unavailable') : pending.includes(item.status) ? (item.error_code === 'NARRATION_CAPACITY' ? 'Waiting for narration capacity' : 'Preparing…') : 'Prepare video'}</button></li>`).join('')}</ol>` : ''}<p class="learning-meta">AI-generated lessons use researched references and automated content checks. Examples have not been executed. Viewing progress is separate from practice completion.</p></section>`;
+      const preparation = data.course_ready ? 'Your course is ready' : (data.status === 'failed' || data.lessons.some(item => item.status === 'failed')) ? 'Course preparation needs attention' : `Preparing your course · ${data.ready_parts} of ${data.lessons.length || '…'} videos ready`;
+      panel.querySelector('[data-video-course]').innerHTML = `<header class="panel learning-video-course-header"><div><button type="button" class="button button-secondary" data-video-browse>All courses</button><h2>${esc(data.title)}</h2><p class="learning-video-preparation">${esc(preparation)}</p>${data.preparation_notice && !data.course_ready ? `<p class="learning-meta">${esc(data.preparation_notice)}</p>` : ''}${data.retry_available ? '<button type="button" class="button button-secondary" data-video-retry-course>Retry learning path</button>' : ''}</div><div class="learning-video-course-progress"><strong>${data.completion_percent}% complete</strong><progress aria-label="Course completion" max="100" value="${data.completion_percent}"></progress><small>${data.lessons.length ? `${data.completed_parts} of ${data.lessons.length} lessons complete · Video + quiz` : 'Your outline is being researched'}</small></div></header>`;
+      panel.querySelector('[data-video-outline]').innerHTML = `<details class="learning-video-outline-disclosure" open><summary>Course outline</summary><nav aria-label="Course lessons">${data.modules.map(module => `<section class="learning-video-module"><h3>${esc(module.title)}</h3><ol class="learning-video-lessons">${module.positions.map(index => {
+        const item = data.lessons[index], complete = item.video_completed && item.practice_completed;
+        const waiting = pending.includes(item.status), unavailable = item.status === 'failed' && !item.retry_available;
+        const label = item.status === 'ready' ? complete ? 'Complete' : item.video_completed ? 'Video viewed · Quiz pending' : item.position_seconds ? 'Resume lesson' : 'Watch lesson' : item.status === 'failed' ? item.retry_available ? 'Retry preparation' : 'Preparation unavailable' : waiting ? item.error_code === 'NARRATION_CAPACITY' ? 'Waiting for capacity' : 'Preparing' : 'Prepare video';
+        return `<li><button type="button" data-video-lesson="${index}" ${waiting || unavailable ? 'disabled' : ''} ${position === index ? 'aria-current="step"' : ''} data-complete="${complete}"><span class="learning-video-step" aria-hidden="true">${complete ? '✓' : item.status === 'ready' ? '▶' : '○'}</span><span><span class="learning-video-lesson-title">${esc(item.number)} ${esc(item.title)}</span><small>${esc(label)}${item.duration_seconds ? ` · ${Math.ceil(item.duration_seconds / 60)} min` : ''}</small></span></button></li>`;
+      }).join('')}</ol></section>`).join('')}</nav></details>`;
+      if (!player && position === null) {
+        const first = data.lessons.find(item => item.status === 'ready' && !(item.video_completed && item.practice_completed)) || data.lessons.find(item => item.status === 'ready');
+        panel.querySelector('[data-video-player]').innerHTML = `<section class="panel learning-video-course-intro"><h2>${data.course_ready ? 'Start learning' : 'Your course is being prepared'}</h2><p>${esc(data.introduction || 'We are researching the topic and preparing its lessons in order. You can return later.')}</p><p>${data.course_ready ? 'Follow the modules on the left. Each lesson includes a video and a quick quiz.' : 'Videos, narration and quizzes are prepared in the background. Ready parts can be watched while the rest finish.'}</p>${first ? `<button type="button" class="button button-primary" data-video-lesson="${first.position}">Continue learning</button>` : ''}</section>`;
+      }
+      updateLessonNavigation();
       clearTimeout(poll);
       if (pending.includes(data.status) || data.lessons.some(item => pending.includes(item.status))) {
         const id = current;
-        poll = setTimeout(async () => { try { const next = await ctx.api(`${apiBase}/${encodeURIComponent(id)}`); if (active() && current === id) showCourse(next); } catch { status('Could not refresh preparation progress. Use Refresh to try again.'); } }, 8000);
+        poll = setTimeout(async () => { try { const next = await ctx.api(`${apiBase}/${encodeURIComponent(id)}`); if (active() && current === id) showCourse(next); } catch { status('Could not refresh preparation progress. Use All courses to refresh.'); } }, 8000);
       }
     }
     async function library() {
@@ -84,13 +124,17 @@
       const videoUrl = URL.createObjectURL(media), captionUrl = URL.createObjectURL(captions); urls.push(videoUrl, captionUrl);
       const content = data.content;
       const host = panel.querySelector('[data-video-player]');
-      host.innerHTML = `<section class="panel"><h2>${esc(data.title)}</h2><p>${esc(content.objective)}</p><p class="learning-meta">AI-generated narration · Automatically timed captions · Full transcript below</p><video class="learning-video-player" controls playsinline preload="metadata" aria-label="${esc(data.title)}"><track kind="captions" srclang="en" label="English" default></video><label>Playback speed <select data-video-speed aria-label="Playback speed"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><p data-video-save-status role="status">Resume position is saved while you watch.</p><details><summary>Transcript and visual explanations</summary>${content.scenes.map(scene => `<section><h3>${esc(scene.title)}</h3><p>${esc(scene.narration)}</p>${scene.code ? `<pre><code>${esc(scene.code)}</code></pre>` : ''}${scene.diagram ? `<p>${esc(scene.diagram.explanation)}</p>` : ''}</section>`).join('')}</details><h3>Key takeaways</h3><ul>${content.takeaways.map(item => `<li>${esc(item)}</li>`).join('')}</ul><h3>Check your understanding</h3><form data-video-practice>${content.quiz.map((q,i) => `<fieldset><legend>${esc(q.question)}</legend>${q.options.map((option,j) => `<label class="learning-video-option"><input type="radio" name="q${i}" value="${j}" required> ${esc(option)}</label>`).join('')}</fieldset>`).join('')}<button class="button button-primary" type="submit">Check answers</button></form><div data-video-feedback aria-live="polite"></div><h3>Try it yourself</h3><p>${esc(content.exercise)}</p><div data-video-solution></div><h3>References</h3><ul>${content.sources.map(source => { let url; try { url = new URL(source.url); } catch { return ''; } return url.protocol === 'https:' && !url.username && !url.password ? `<li><a href="${esc(url.href)}" target="_blank" rel="noopener noreferrer">${esc(source.title)}</a></li>` : ''; }).join('')}</ul></section>`;
+      const outline = course.lessons[index];
+      host.innerHTML = `<section class="panel learning-video-lesson-panel"><p class="learning-meta">Lesson ${esc(outline.number)}</p><h2>${esc(data.title)}</h2><p>${esc(content.objective)}</p><video class="learning-video-player" controls playsinline preload="metadata" aria-label="${esc(data.title)}"><track kind="captions" srclang="en" label="English" default></video><div class="learning-video-playback-tools"><label>Playback speed <select data-video-speed aria-label="Playback speed"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><small>AI narration · Captions available</small></div><p data-video-save-status role="status">Resume position is saved while you watch.</p><section class="learning-video-quiz" aria-label="Quick quiz"><h3>Quick quiz</h3><p>Check what you learned in this lesson.</p><form data-video-practice>${content.quiz.map((q,i) => `<fieldset><legend>${esc(q.question)}</legend>${q.options.map((option,j) => `<label class="learning-video-option"><input type="radio" name="q${i}" value="${j}" required> ${esc(option)}</label>`).join('')}</fieldset>`).join('')}<button class="button button-primary" type="submit">Check answers</button></form><div data-video-feedback aria-live="polite"></div></section><div class="learning-video-lesson-navigation" aria-label="Lesson navigation"><button type="button" class="button button-secondary" data-video-move="-1">Previous lesson</button><button type="button" class="button button-primary" data-video-move="1">Next lesson</button></div><details><summary>Key takeaways and practice exercise</summary><ul>${content.takeaways.map(item => `<li>${esc(item)}</li>`).join('')}</ul><h3>Try it yourself</h3><p>${esc(content.exercise)}</p><div data-video-solution></div></details><details><summary>Transcript and visual explanations</summary>${content.scenes.map(scene => `<section><h3>${esc(scene.title)}</h3><p>${esc(scene.narration)}</p>${scene.code ? `<pre><code>${esc(scene.code)}</code></pre>` : ''}${scene.diagram ? `<p>${esc(scene.diagram.explanation)}</p>` : ''}</section>`).join('')}</details><details><summary>Research references</summary><p class="learning-meta">AI-authored explanations use these references. Examples have not been executed.</p><ul>${content.sources.map(source => { let url; try { url = new URL(source.url); } catch { return ''; } return url.protocol === 'https:' && !url.username && !url.password ? `<li><a href="${esc(url.href)}" target="_blank" rel="noopener noreferrer">${esc(source.title)}</a></li>` : ''; }).join('')}</ul></details></section>`;
       player = host.querySelector('video'); position = index;
       player.src = videoUrl; player.querySelector('track').src = captionUrl;
       player.addEventListener('loadedmetadata', () => { if (player && isCurrent(id, version)) player.currentTime = data.position_seconds < data.duration_seconds - 2 ? data.position_seconds : 0; }, {once:true});
       player.addEventListener('error', () => status('Your browser could not play this video. Try an updated browser; the transcript and practice remain available below.'));
       player.addEventListener('timeupdate', () => { if (Date.now() - lastSaved >= 10000 && !player?.paused) saveProgress(); });
-      player.addEventListener('pause', saveProgress); player.addEventListener('ended', saveProgress);
+      const mounted = player;
+      const saveMounted = () => { if (isCurrent(id, version) && player === mounted) saveProgress(); };
+      player.addEventListener('pause', saveMounted); player.addEventListener('ended', saveMounted);
+      showCourse(course);
       status('');
       host.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches ? 'instant' : 'smooth', block:'start'});
     }
@@ -117,7 +161,7 @@
           const data = await ctx.api(apiBase, {method:'POST', body:JSON.stringify({...fields, request_id:form.dataset.requestId})});
           if (!active()) return;
           stopPlayer(); current = data.id; showCourse(data); await library();
-          status(data.lessons.some(item => item.status === 'ready') ? 'Course found. Ready videos are saved for reuse; other parts continue preparing.' : 'Course found. Its videos are prepared once for everyone; you can return later.');
+          status('');
           delete form.dataset.fingerprint; delete form.dataset.requestId;
         } else if (form.matches('[data-video-practice]') && index !== null) {
           const values = new FormData(form);
@@ -131,14 +175,16 @@
       finally { if (button.isConnected) button.disabled = false; }
     });
     panel.addEventListener('click', async event => {
-      const button = event.target.closest('[data-video-id],[data-video-lesson],[data-video-refresh],[data-video-retry-course]');
+      const button = event.target.closest('[data-video-id],[data-video-lesson],[data-video-refresh],[data-video-retry-course],[data-video-move],[data-video-browse]');
       if (!button || button.disabled) return; button.disabled = true;
       try {
-        if (button.dataset.videoId) { await saveProgress(); stopPlayer(); current = button.dataset.videoId; const id = current; const data = await ctx.api(`${apiBase}/${encodeURIComponent(id)}`); if (active() && current === id) showCourse(data); }
+        if (button.hasAttribute('data-video-browse')) { await saveProgress(); stopPlayer(); clearTimeout(poll); current = null; course = null; panel.querySelector('[data-video-discovery]').hidden = false; panel.querySelector('[data-video-workspace]').hidden = true; status(''); await library(); }
+        else if (button.hasAttribute('data-video-move')) { const next = position + Number(button.dataset.videoMove); if (course?.lessons[next]?.status === 'ready') await openLesson(next); }
+        else if (button.dataset.videoId) { await saveProgress(); stopPlayer(); current = button.dataset.videoId; const id = current; const data = await ctx.api(`${apiBase}/${encodeURIComponent(id)}`); if (active() && current === id) showCourse(data); }
         else if (button.hasAttribute('data-video-refresh')) { await library(); const id = current; if (id) { const data = await ctx.api(`${apiBase}/${encodeURIComponent(id)}`); if (active() && current === id) showCourse(data); } }
         else if (button.hasAttribute('data-video-retry-course')) { const id = current; const data = await ctx.api(`${apiBase}/${encodeURIComponent(id)}/retry`, {method:'POST'}); if (active() && current === id) showCourse(data); }
         else { const index = Number(button.dataset.videoLesson); const item = course.lessons[index];
-          if (item.status === 'ready') await openLesson(index);
+          if (item.status === 'ready') { if (!player || position !== index) await openLesson(index); }
           else { const id = current; const data = await ctx.api(lessonPath(id,index), {method:'POST'}); if (active() && current === id) { showCourse(data); status('Your video is queued. Preparation can take several minutes; you can return later.'); } }
         }
       } catch (error) { status(error.message); }
