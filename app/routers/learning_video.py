@@ -37,6 +37,10 @@ def owner_course(db, course_id, user):
 
 def owner_lesson(db, course_id, position, user):
     course = owner_course(db, course_id, user)
+    if json.loads(course.input_json).get("curriculum_version") == 2:
+        publication = course_data(db, course, user)
+        if not publication["course_ready"]:
+            raise HTTPException(409, "Your full course is still being prepared and checked. Return to the course overview.")
     lesson = db.query(VideoLesson).options(defer(VideoLesson.video_data)).filter_by(
         course_id=course.id, position=position).first()
     if not lesson:
@@ -66,7 +70,8 @@ def course_data(db, course, user):
               "retry_available": course.state == "failed" and course.attempts < 4,
               "error_code": course.error_code, "introduction": plan.get("introduction", ""),
               "prerequisites": plan.get("prerequisites", []), "lessons": [],
-              "sources": json.loads(course.sources_json), "created_at": course.created_at.isoformat()}
+              "sources": json.loads(course.sources_json), "created_at": course.created_at.isoformat(),
+              "requires_full_preparation": json.loads(course.input_json).get("curriculum_version") == 2}
     modules, previous, in_module = [], None, 0
     for position, outline in enumerate(plan.get("lessons", [])):
         # Old flat outlines get neutral two-part sections without changing their
@@ -81,10 +86,14 @@ def course_data(db, course, user):
         in_module += 1
         modules[-1]["positions"].append(position)
         row, progress = lessons.get(position, (None, None))
+        checks = json.loads(row.content_json) if row and row.state == "ready" else {}
+        quality_checked = (checks.get("content_review", {}).get("passed") is True
+                           and checks.get("media_review", {}).get("passed") is True)
         result["lessons"].append({**outline, "position": position,
             "module_title": modules[-1]["title"], "module_number": len(modules),
             "number": f"{len(modules)}.{in_module}",
             "status": row.state if row else "not_started", "duration_seconds": row.duration_seconds if row else 0,
+            "quality_checked": quality_checked,
             "retry_available": bool(row and row.state == "failed" and row.attempts < 4),
             "error_code": row.error_code if row else None,
             "available_at": row.available_at.isoformat() + "Z" if row else None,
@@ -94,7 +103,10 @@ def course_data(db, course, user):
     result["modules"] = modules
     result["ready_parts"] = sum(item["status"] == "ready" for item in result["lessons"])
     result["completed_parts"] = sum(item["video_completed"] and item["practice_completed"] for item in result["lessons"])
-    result["course_ready"] = bool(result["lessons"]) and result["ready_parts"] == len(result["lessons"])
+    result["checked_parts"] = sum(item["status"] == "ready" and item["quality_checked"] for item in result["lessons"])
+    result["course_ready"] = (course.state == "ready" and bool(result["lessons"])
+        and result["ready_parts"] == len(result["lessons"])
+        and (not result["requires_full_preparation"] or result["checked_parts"] == len(result["lessons"])))
     result["course_completed"] = bool(result["lessons"]) and result["completed_parts"] == len(result["lessons"])
     result["completion_percent"] = round(100 * result["completed_parts"] / len(result["lessons"])) if result["lessons"] else 0
     result["preparation_status"] = ("ready" if result["course_ready"] else "needs_attention"
@@ -131,7 +143,7 @@ def topic_key(topic):
     normalized = " ".join(unicodedata.normalize("NFKC", topic).split()).casefold()
     if len(normalized) < 2:
         raise HTTPException(422, "Enter a topic with at least two characters")
-    return normalized, hashlib.sha256(("shared-board-v1:en:" + normalized).encode()).hexdigest()
+    return normalized, hashlib.sha256(("shared-full-course-v2:en:" + normalized).encode()).hexdigest()
 
 
 @router.get("")
@@ -166,7 +178,7 @@ def create(body: VideoRequest, request: Request, tasks: BackgroundTasks,
             raise HTTPException(503, "Video research is temporarily unavailable. Saved lessons remain available.")
         budget(db, user)
         row = VideoCourse(user_id=user.id, shared_key=key, request_id=body.request_id,
-            title=normalized, input_json=json.dumps({"topic": normalized}))
+            title=normalized, input_json=json.dumps({"topic": normalized, "curriculum_version": 2}))
         db.add(row); db.flush()
         tasks.add_task(wake_worker)
     enrollment = db.get(VideoEnrollment, (user.id, row.id))

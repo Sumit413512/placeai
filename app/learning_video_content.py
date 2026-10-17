@@ -20,7 +20,7 @@ class CoursePlan(ContentModel):
     title: str = Field(min_length=3, max_length=180)
     introduction: str = Field(min_length=40, max_length=1800)
     prerequisites: list[str] = Field(max_length=8)
-    lessons: list[LessonOutline] = Field(min_length=4, max_length=12)
+    lessons: list[LessonOutline] = Field(min_length=4, max_length=64)
 
     @model_validator(mode="after")
     def distinct(self):
@@ -34,9 +34,46 @@ class CoursePlan(ContentModel):
             if name:
                 seen.add(name)
             previous = name
-        if not 2 <= len(seen) <= 5:
-            raise ValueError("A course needs two to five named subtopic modules")
+        if not 2 <= len(seen) <= 16:
+            raise ValueError("A course needs two to sixteen named subtopic modules")
         return self
+
+
+class FullCoursePlan(CoursePlan):
+    """New comprehensive courses; older saved short courses remain compatible."""
+    lessons: list[LessonOutline] = Field(min_length=12, max_length=64)
+
+    @model_validator(mode="after")
+    def sufficient_depth(self):
+        modules = {}
+        for lesson in self.lessons:
+            key = lesson.module_title.strip().casefold()
+            modules[key] = modules.get(key, 0) + 1
+        if len(modules) < 4 or any(count < 2 for count in modules.values()):
+            raise ValueError("Use at least four modules with two or more focused lessons each")
+        return self
+
+
+SQL_MODULES = [
+    "Relational foundations and setup", "Selecting, filtering and sorting",
+    "Expressions, functions and nulls", "Aggregation and grouping",
+    "Joins and relationships", "Subqueries and common table expressions",
+    "Set operations", "Window functions", "Creating and changing data",
+    "Constraints and relational design", "Transactions and concurrency",
+    "Views, functions and triggers", "Indexes, query plans and safe access",
+    "Applied SQL capstone",
+]
+
+
+def validate_full_plan(raw, topic):
+    """A broad SQL request must cover the full prescribed sequence, not SELECT alone."""
+    import re
+    plan = FullCoursePlan.model_validate(raw)
+    if re.search(r"\b(sql|structured query language)\b", topic, re.I):
+        modules = list(dict.fromkeys(lesson.module_title for lesson in plan.lessons))
+        if modules != SQL_MODULES:
+            raise ValueError("The SQL syllabus must cover every required module in prerequisite order")
+    return plan
 
 
 class VideoDiagram(Diagram):

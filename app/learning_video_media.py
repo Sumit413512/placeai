@@ -327,6 +327,61 @@ def render_video(script, narrate=speak):
     return data, seconds, timings
 
 
+def inspect_video(data, content, duration):
+    """Decode the actual output before publishing, using the shared media clock.
+
+    This detects broken/truncated media, silent output, missing frames and timeline
+    drift. It is not a claim of word-level alignment or independent fact checking.
+    """
+    import av
+    import hashlib
+    if not data or len(data) > MAX_VIDEO_BYTES or not 0 < duration <= 480:
+        raise ValueError("Video exceeds its validated media bounds")
+    timings = content.get("timings", [])
+    if len(timings) != len(content.get("scenes", [])) or not timings:
+        raise ValueError("Every scene needs a measured audio boundary")
+    end = 0
+    for timing in timings:
+        if timing["start"] != end or timing["end"] <= end:
+            raise ValueError("Scene boundaries must be contiguous and increasing")
+        end = timing["end"]
+    if abs(end - duration) > 1 / FPS:
+        raise ValueError("Scene boundaries do not cover the video")
+    tracks, audible = {}, False
+    for kind in ("video", "audio"):
+        with av.open(io.BytesIO(data)) as container:
+            streams = [stream for stream in container.streams if stream.type == kind]
+            if len(streams) != 1:
+                raise ValueError("A lesson needs one video and one audio track")
+            stream = streams[0]
+            count, previous, finish = 0, -1, 0
+            for frame in container.decode(stream):
+                if frame.pts is None:
+                    raise ValueError("Media timestamps are missing")
+                stamp = float(frame.pts * frame.time_base)
+                if stamp <= previous or stamp < 0:
+                    raise ValueError("Media timestamps must increase")
+                if kind == "video":
+                    if frame.width != 960 or frame.height != 540 or abs(stamp-count/FPS) > .002:
+                        raise ValueError("Video frames do not match the presentation clock")
+                    finish = stamp + 1 / FPS
+                else:
+                    audible = audible or bool(frame.to_ndarray().any())
+                    finish = stamp + frame.samples / frame.sample_rate
+                count += 1
+                previous = stamp
+            if not count or abs(finish - duration) > .05:
+                raise ValueError("A media track is incomplete or out of sync")
+            tracks[kind] = {"frames": count, "end_seconds": round(finish, 6)}
+    if not audible:
+        raise ValueError("Silent lessons cannot be published")
+    if abs(tracks["video"]["end_seconds"] - tracks["audio"]["end_seconds"]) > .05:
+        raise ValueError("Audio and video timelines have drifted")
+    return {"passed": True, "version": 1, "sha256": hashlib.sha256(data).hexdigest(),
+            "tracks": tracks, "scene_boundaries": len(timings),
+            "timing_scope": "Measured scene boundaries; within-scene timing is estimated"}
+
+
 def captions(content):
     """Readable automatic cues, estimated within measured per-scene audio boundaries."""
     def stamp(seconds):

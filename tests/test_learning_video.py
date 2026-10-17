@@ -58,6 +58,7 @@ def ready_lesson(video):
     identifier = new_course(video)
     course = video.db.get(VideoCourse, identifier)
     course.state, course.plan_json = 'ready', json.dumps(course_plan())
+    course.input_json = json.dumps({'topic':'SQL'})  # Existing short-course compatibility.
     video.db.commit()
     assert video.api.post(f'/learning-hub/video/{identifier}/lessons/0').status_code == 202
     lesson = video.db.query(VideoLesson).filter_by(course_id=identifier).one()
@@ -127,6 +128,7 @@ def test_seeking_does_not_award_completion_and_coverage_survives_reload(video):
 
 def test_worker_saves_real_playable_media_and_recovers_expired_lease(video, monkeypatch):
     identifier = new_course(video)
+    row = video.db.get(VideoCourse, identifier); row.input_json = json.dumps({'topic':'SQL'}); video.db.commit()
     references = [{"title":"PostgreSQL", "url":"https://www.postgresql.org/docs/current/sql-select.html"}]
     monkeypatch.setattr(learning_ai, 'research', lambda _: ('Official query evidence', references, 'test'))
     monkeypatch.setattr(learning_ai, 'generate_json', lambda *_a, **_k: (course_plan(), 'test'))
@@ -144,7 +146,7 @@ def test_worker_saves_real_playable_media_and_recovers_expired_lease(video, monk
             'explanation':'The query reads the students table and projects the name column into the result. Each selected name comes from one source row.'})
         return ({"approved":True, "issues":[]} if task.startswith('Review') else content, 'test')
     monkeypatch.setattr(learning_ai, 'generate_json', author)
-    monkeypatch.setattr(worker, 'render_video', lambda content, **_kw: render_video(content, narrate=lambda _: b'\0'*48000))
+    monkeypatch.setattr(worker, 'render_video', lambda content, **_kw: render_video(content, narrate=lambda _: b'\x10\x01'*24000))
     with video.sessions() as db: first = worker.claim(db)
     with video.sessions() as db:
         row = db.get(VideoLesson, first[1]); row.lease_until = utcnow() - timedelta(seconds=1); db.commit()
@@ -404,3 +406,50 @@ def test_background_replenishes_all_course_parts_once(video):
     invalid = course_plan()
     for index,item in enumerate(invalid['lessons']):item['module_title']=['One','Two','One','Two'][index]
     with pytest.raises(ValidationError):CoursePlan.model_validate(invalid)
+
+
+def test_full_sql_curriculum_has_depth_and_cannot_drop_an_advanced_module():
+    from app.learning_video_content import SQL_MODULES, validate_full_plan
+    raw=course_plan()
+    raw['lessons']=[{'title':f'{name} example {part}',
+        'objective':f'Understand and apply {name.lower()} through a focused worked example.',
+        'module_title':name} for name in SQL_MODULES for part in (1,2)]
+    assert len(validate_full_plan(raw,'Full SQL course').lessons)==28
+    raw['lessons']=raw['lessons'][:-2]
+    with pytest.raises(ValueError):validate_full_plan(raw,'Full SQL course')
+    with pytest.raises(ValueError):validate_full_plan(course_plan(),'SQL')
+
+
+def test_new_full_course_publishes_only_after_every_lesson_passes_checks(video):
+    identifier,lesson_id,path=ready_lesson(video)
+    course=video.db.get(VideoCourse,identifier)
+    course.input_json=json.dumps({'topic':'SQL','curriculum_version':2})
+    for position in range(1,4):
+        video.db.add(VideoLesson(course_id=identifier,position=position,title=f'Part {position}',
+            state='ready',video_data=b'test-checked-media',content_json=json.dumps(script())))
+    video.db.commit()
+    assert video.api.get(path).status_code==409
+    assert video.api.get(path+'/media').status_code==409
+    assert video.api.get(f'/learning-hub/video/{identifier}').json()['checked_parts']==0
+    for row in video.db.query(VideoLesson).filter_by(course_id=identifier):
+        content=json.loads(row.content_json)
+        content.update(content_review={'passed':True},media_review={'passed':True})
+        row.content_json=json.dumps(content)
+    video.db.commit()
+    assert video.api.get(f'/learning-hub/video/{identifier}').json()['course_ready']
+    assert video.api.get(path).status_code==200
+    video.actor[0]=video.other
+    assert video.api.get(path).status_code==404
+
+
+def test_actual_media_recheck_rejects_silent_and_broken_output():
+    from app.learning_video_media import inspect_video
+    content=script()
+    data,duration,timings=render_video(content,narrate=lambda _:b'\x10\x01'*24000)
+    content['timings']=timings
+    report=inspect_video(data,content,duration)
+    assert report['passed'] and report['tracks']['video']['frames']==32
+    with pytest.raises(Exception):inspect_video(data[:100],content,duration)
+    with pytest.raises(ValueError):inspect_video(data,content,duration+1)
+    silent,duration,timings=render_video(content,narrate=lambda _:b'\0'*48000)
+    with pytest.raises(ValueError,match='Silent'):inspect_video(silent,content,duration)
