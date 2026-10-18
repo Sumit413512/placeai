@@ -30,4 +30,7 @@ DEPLOYMENT_PREP_STATUS.md
 
 # GitHub Pages-only public site artifacts
 pages/
+.cache/
+work/
+requirements-video.txt
 index.html

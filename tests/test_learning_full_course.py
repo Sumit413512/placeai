@@ -71,7 +71,8 @@ def test_unapproved_actual_video_never_publishes_and_quota_keeps_its_attempt(vid
     worker.process(item, video.sessions)
     video.db.expire_all()
     lesson = video.db.get(VideoLesson, lesson_id)
-    assert lesson.video_data is None and lesson.state == 'retrying'
+    assert lesson.state == 'retrying'
+    assert bool(lesson.video_data) == capacity  # Waiting media is private; rejected media is discarded.
     assert lesson.error_code == ('REVIEW_CAPACITY' if capacity else 'CONTENT_CHECK')
     assert lesson.attempts == (0 if capacity else 1)
     assert not video.api.get(f'/learning-hub/video/{identifier}').json()['course_ready']

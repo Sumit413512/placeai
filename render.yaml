@@ -5,7 +5,7 @@ services:
     region: singapore
     plan: free
     branch: main
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt -r requirements-video.txt && python scripts/prepare_learning_voice.py --verify
     startCommand: >-
       sh -c 'export BASE_URL="${BASE_URL:-https://${RENDER_EXTERNAL_HOSTNAME}}";
       export ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-$BASE_URL}";
@@ -14,6 +14,8 @@ services:
     healthCheckPath: /health
     autoDeploy: true
     envVars:
+      - key: LEARNING_TTS_PROVIDER
+        value: piper
       - key: APP_NAME
         value: PlaceAI
       - key: ENVIRONMENT

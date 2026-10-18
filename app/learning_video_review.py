@@ -44,7 +44,8 @@ def review_video(data, content):
             "generationConfig": {"responseMimeType": "application/json", "maxOutputTokens": 3500}},
     )
     if response.status_code in (429, 503):
-        raise ReviewCapacityError(quota_delay(response))
+        delay = quota_delay(response)
+        raise ReviewCapacityError(delay or response.extensions.get("video_retry_seconds", 86400))
     response.raise_for_status()
     payload = response.json()
     candidates = payload.get("candidates", [])
