@@ -102,13 +102,10 @@ def main():
     options.enable_mem_pattern = False
     options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
     options.add_session_config_entry("session.disable_prepacking", "1")
-    options.add_session_config_entry("session.use_ort_model_bytes_directly", "1")
-    options.add_session_config_entry("session.use_ort_model_bytes_for_initializers", "1")
-    # Keep the immutable backing bytes alive until inference finishes. This avoids
-    # both protobuf parsing and a second copy of the voice weights at runtime.
-    model_bytes = path.with_suffix(".ort").read_bytes()
+    # Let the native file loader own the backing buffer. Python's bytes binding
+    # does not guarantee the lifetime required by the direct-buffer C++ options.
     voice = PiperVoice(config=PiperConfig.from_dict(json.loads(Path(str(path)+".json").read_text(encoding="utf-8"))),
-        session=onnxruntime.InferenceSession(model_bytes, sess_options=options, providers=["CPUExecutionProvider"]))
+        session=onnxruntime.InferenceSession(str(path.with_suffix(".ort")), sess_options=options, providers=["CPUExecutionProvider"]))
     output = io.BytesIO()
     with wave.open(output, "wb") as wav:
         for index, chunk in enumerate(narration_chunks(text)):

@@ -3,9 +3,8 @@
 Render installs `requirements-video.txt` and runs `scripts/prepare_learning_voice.py`
 at build time. The downloader pins the model repository revision and SHA-256 of
 both artifacts. Set `LEARNING_TTS_PROVIDER=piper` on the Render worker host.
-The build converts the verified model to ORT format. Runtime inference retains
-one immutable backing buffer and reuses its initializers directly, avoiding
-protobuf parsing and duplicate weight copies on the 512 MB service. This uses
+The build converts the verified model to ORT format. Runtime inference uses the
+native file loader, avoiding protobuf parsing on the 512 MB service. This uses
 the same voice weights without quantization or a change to lesson content.
 Vercel continues using the normal requirements; it does not synthesize narration.
 
