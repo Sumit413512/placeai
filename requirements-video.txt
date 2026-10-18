@@ -1,3 +1,2 @@
-# Render-only CPU narration; intentionally excluded from Vercel's API dependencies.
-piper-tts==1.8.0
-onnxruntime==1.31.0
+# Render-only offline narration; excluded from Vercel's API dependencies.
+espeakng-loader==0.2.4

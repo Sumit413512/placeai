@@ -1,50 +1,34 @@
-"""Offline lesson narration. No external speech requests, keys or student data."""
+"""Bounded offline eSpeak NG narration; no network requests or API quotas."""
 from __future__ import annotations
 
 import io
-import json
 import os
-import re
 from pathlib import Path
+import re
 import subprocess
 import sys
 import wave
 
-MODEL_SHA256 = "1899f98e5fb8310154f3c2973f4b8a929ba7245e722b3d3a85680b833d95f10d"
-CONFIG_SHA256 = "e262c16d7f192f69d4edd6b4ef8a5915379e67495fcc402f1ab15eeb33da3d36"
-VOICE_REVISION = "c10ece1aade47bb51c153c893d14e5bf8e5b7117"
-VOICE_NAME = "en_GB-cori-medium"
-
-
-def model_path():
-    return Path(os.getenv("LEARNING_LOCAL_VOICE_PATH") or
-                Path(__file__).resolve().parents[1] / ".cache" / "placeai-voice" / (VOICE_NAME + ".onnx"))
-
 
 def available():
-    path = model_path()
-    return path.with_suffix(".ort").is_file() and Path(str(path) + ".json").is_file()
+    try:
+        from espeakng_loader import get_library_path, get_data_path
+        return Path(get_library_path()).is_file() and Path(get_data_path()).is_dir()
+    except (ImportError, RuntimeError):
+        return False
 
 
 def enabled():
-    return os.getenv("LEARNING_TTS_PROVIDER", "gemini") == "piper"
+    # The old provider value is accepted during the rolling deployment only.
+    return os.getenv("LEARNING_TTS_PROVIDER", "gemini") in {"espeak", "piper"}
 
 
 def signature():
-    return "piper-cori-2:" + MODEL_SHA256 if enabled() else "board-voice-v1"
-
-
-def narration_chunks(text):
-    """Bound neural inference activations, including long unpunctuated sentences."""
-    for sentence in re.split(r"(?<=[.!?;:])\s+", text.strip()):
-        words = sentence.split()
-        for start in range(0, len(words), 12):
-            yield " ".join(words[start:start + 12])
+    return "espeak-ng-0.2.4:en:165:v1" if enabled() else "board-voice-v1"
 
 
 def linux_peak_mib():
-    # getrusage's high-water mark survives exec and can include the build
-    # launcher's memory. VmHWM belongs to this executable's address space.
+    # VmHWM measures this executable, excluding a launcher's pre-exec usage.
     status = Path("/proc/self/status").read_text(encoding="ascii")
     measured = re.search(r"^VmHWM:\s+(\d+)\s+kB$", status, re.MULTILINE)
     if not measured:
@@ -53,22 +37,14 @@ def linux_peak_mib():
 
 
 def synthesize(narration):
-    if not isinstance(narration, str) or not narration.strip() or len(narration) > 8000:
+    if not isinstance(narration, str) or not narration.strip() or len(narration) > 8000 or "\0" in narration:
         raise ValueError("Invalid lesson narration length")
     if not available():
         raise RuntimeError("LOCAL_SPEECH_NOT_CONFIGURED")
-    # A bounded child releases native model memory before video rendering starts.
-    # User text is stdin data; it is never a shell command or command-line option.
     result = subprocess.run([sys.executable, "-m", "app.learning_speech"],
         input=narration.encode("utf-8"), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        timeout=90, check=False, cwd=str(Path(__file__).resolve().parents[1]))
-    if result.returncode:
-        # Expose only our numeric memory diagnostic, never native stderr/text.
-        budget = re.search(rb"LOCAL_SPEECH_MEMORY_(\d+)MiB", result.stderr)
-        if budget:
-            raise RuntimeError(budget.group(0).decode("ascii"))
-        raise RuntimeError("LOCAL_SPEECH_UNAVAILABLE")
-    if not 44 < len(result.stdout) <= 6 * 1024 * 1024:
+        timeout=30, check=False, cwd=str(Path(__file__).resolve().parents[1]))
+    if result.returncode or not 44 < len(result.stdout) <= 6 * 1024 * 1024:
         raise RuntimeError("LOCAL_SPEECH_UNAVAILABLE")
     import av
     with av.open(io.BytesIO(result.stdout)) as audio:
@@ -76,55 +52,63 @@ def synthesize(narration):
         pcm = bytearray()
         for frame in audio.decode(audio=0):
             for chunk in resampler.resample(frame):
-                pcm.extend(chunk.to_ndarray().tobytes())
+                pcm.extend(bytes(chunk.planes[0])[:chunk.samples * 2])
                 if len(pcm) > 24000 * 2 * 90:
                     raise ValueError("Narration exceeds the scene duration limit")
         for chunk in resampler.resample(None):
-            pcm.extend(chunk.to_ndarray().tobytes())
+            pcm.extend(bytes(chunk.planes[0])[:chunk.samples * 2])
     if not 24000 <= len(pcm) <= 24000 * 2 * 90:
         raise ValueError("Invalid synthesized narration duration")
     return bytes(pcm)
 
 
 def main():
-    import onnxruntime
-    path = model_path()
-    if "--prepare-runtime" in sys.argv[1:]:
-        # Convert in the larger build container, never alongside the web server.
-        options = onnxruntime.SessionOptions()
-        options.intra_op_num_threads = 1
-        options.optimized_model_filepath = str(path.with_suffix(".ort"))
-        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_BASIC
-        options.add_session_config_entry("session.save_model_format", "ORT")
-        options.add_session_config_entry("session.disable_prepacking", "1")
-        onnxruntime.InferenceSession(str(path), sess_options=options, providers=["CPUExecutionProvider"])
-        print("Compact offline voice runtime prepared")
-        return
-    from piper import PiperVoice
-    from piper.config import PiperConfig
+    import ctypes as ct
+    from espeakng_loader import get_library_path, get_data_path
     text = sys.stdin.buffer.read(32001).decode("utf-8")
-    if not text.strip() or len(text) > 8000:
+    if not text.strip() or len(text) > 8000 or "\0" in text:
         raise ValueError("Invalid narration")
-    options = onnxruntime.SessionOptions()
-    options.intra_op_num_threads = 1
-    options.inter_op_num_threads = 1
-    options.enable_cpu_mem_arena = False
-    options.enable_mem_pattern = False
-    options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
-    options.add_session_config_entry("session.disable_prepacking", "1")
-    # Let the native file loader own the backing buffer. Python's bytes binding
-    # does not guarantee the lifetime required by the direct-buffer C++ options.
-    voice = PiperVoice(config=PiperConfig.from_dict(json.loads(Path(str(path)+".json").read_text(encoding="utf-8"))),
-        session=onnxruntime.InferenceSession(str(path.with_suffix(".ort")), sess_options=options, providers=["CPUExecutionProvider"]))
+    lib = ct.CDLL(get_library_path())
+    lib.espeak_Initialize.argtypes = [ct.c_int, ct.c_int, ct.c_char_p, ct.c_int]
+    lib.espeak_Initialize.restype = ct.c_int
+    rate = lib.espeak_Initialize(2, 60, os.fsencode(Path(get_data_path()).parent), 0x8000)
+    if not 8000 <= rate <= 48000:
+        raise RuntimeError("Offline voice initialization failed")
+    callback_type = ct.CFUNCTYPE(ct.c_int, ct.POINTER(ct.c_short), ct.c_int, ct.c_void_p)
+    pcm = bytearray()
+    overflow = False
+
+    @callback_type
+    def receive(samples, count, _events):
+        nonlocal overflow
+        if count < 0 or count > rate or len(pcm) + count * 2 > rate * 2 * 90:
+            overflow = True
+            return 1
+        if samples and count:
+            pcm.extend(ct.string_at(samples, count * 2))
+        return 0
+
+    lib.espeak_SetSynthCallback.argtypes = [callback_type]
+    lib.espeak_SetSynthCallback(receive)
+    lib.espeak_SetVoiceByName.argtypes = [ct.c_char_p]
+    lib.espeak_SetParameter.argtypes = [ct.c_int, ct.c_int, ct.c_int]
+    lib.espeak_Synth.argtypes = [ct.c_void_p, ct.c_size_t, ct.c_uint, ct.c_int,
+                               ct.c_uint, ct.c_uint, ct.c_void_p, ct.c_void_p]
+    if lib.espeak_SetVoiceByName(b"en") != 0 or lib.espeak_SetParameter(1, 165, 0) != 0:
+        raise RuntimeError("Offline voice configuration failed")
+    encoded = text.encode("utf-8") + b"\0"
+    result = lib.espeak_Synth(encoded, len(encoded), 0, 1, 0, 1, None, None)
+    lib.espeak_Terminate()
+    if result != 0 or overflow or not pcm:
+        raise ValueError("Offline narration could not finish within its bounds")
+    if sys.platform == "linux" and linux_peak_mib() > 240:
+        raise RuntimeError("Offline speech exceeds the worker memory budget")
     output = io.BytesIO()
     with wave.open(output, "wb") as wav:
-        for index, chunk in enumerate(narration_chunks(text)):
-            voice.synthesize_wav(chunk, wav, set_wav_format=index == 0)
-    if sys.platform == "linux":
-        peak_mib = linux_peak_mib()
-        if peak_mib > 240:
-            raise RuntimeError(f"LOCAL_SPEECH_MEMORY_{peak_mib:.0f}MiB")
-        print(f"Offline voice peak memory: {peak_mib:.1f} MiB", file=sys.stderr)
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes(pcm)
     sys.stdout.buffer.write(output.getvalue())
 
 

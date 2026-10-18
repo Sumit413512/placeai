@@ -58,11 +58,9 @@ def test_crashed_admitted_lease_ignores_pre_admission_cooldown(video):
         assert worker.claim(db)[1] == lesson_id
 
 
-def test_neural_chunks_preserve_all_words_and_bound_inference():
-    text = ' '.join(['PostgreSQL joins preserve related records'] * 20)
-    chunks = list(learning_speech.narration_chunks(text))
-    assert all(len(chunk.split()) <= 12 for chunk in chunks)
-    assert ' '.join(chunks) == text
+def test_narration_rejects_embedded_null_without_running_native_code():
+    with pytest.raises(ValueError, match='Invalid lesson narration'):
+        learning_speech.synthesize('SQL\0 hidden text')
 
 
 @pytest.mark.skipif(sys.platform != 'linux', reason='Linux runtime memory accounting')

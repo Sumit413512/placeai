@@ -419,7 +419,7 @@ def _process(item, sessions):
 
 def run(stop):
     LOGGER.info("Video speech provider=%s local_voice_ready=%s",
-                "piper" if learning_speech.enabled() else "gemini", learning_speech.available())
+                "espeak-ng" if learning_speech.enabled() else "gemini", learning_speech.available())
     next_fill = 0
     while not stop.is_set():
         try:
