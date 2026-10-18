@@ -42,6 +42,16 @@ def narration_chunks(text):
             yield " ".join(words[start:start + 12])
 
 
+def linux_peak_mib():
+    # getrusage's high-water mark survives exec and can include the build
+    # launcher's memory. VmHWM belongs to this executable's address space.
+    status = Path("/proc/self/status").read_text(encoding="ascii")
+    measured = re.search(r"^VmHWM:\s+(\d+)\s+kB$", status, re.MULTILINE)
+    if not measured:
+        raise RuntimeError("LOCAL_SPEECH_MEMORY_UNAVAILABLE")
+    return int(measured.group(1)) / 1024
+
+
 def synthesize(narration):
     if not isinstance(narration, str) or not narration.strip() or len(narration) > 8000:
         raise ValueError("Invalid lesson narration length")
@@ -111,8 +121,7 @@ def main():
         for index, chunk in enumerate(narration_chunks(text)):
             voice.synthesize_wav(chunk, wav, set_wav_format=index == 0)
     if sys.platform == "linux":
-        import resource
-        peak_mib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+        peak_mib = linux_peak_mib()
         if peak_mib > 240:
             raise RuntimeError(f"LOCAL_SPEECH_MEMORY_{peak_mib:.0f}MiB")
         print(f"Offline voice peak memory: {peak_mib:.1f} MiB", file=sys.stderr)
