@@ -22,7 +22,7 @@
     '/static/workspace-runtime.js',
     '/static/api-errors.js',
     '/static/auth-protection.js',
-    '/static/access-portal.js',
+    '/static/access-portal.js?v=20261019-auth-session1',
     '/static/ui-state-fixes.js',
     '/static/account-security.js',
     '/static/provisioning-password-fix.js',
@@ -32,7 +32,7 @@
     '/static/workspace-experience.js?v=20261016-interface-guidelines',
     '/static/legal-links.js',
     '/static/career-roadmap.js?v=20261016-interface-guidelines',
-    '/static/app-core.js?v=20261018-workspace-ui1'
+    '/static/app-core.js?v=20261019-auth-session1'
   ];
 
   const loadNext = (index) => {

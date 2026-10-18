@@ -267,9 +267,9 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/google-config")
-def google_config(response: Response):
+def google_config(request: Request, response: Response):
     from app.google_login import challenge
-    return challenge(response)
+    return challenge(response, request)
 
 
 @router.post("/google", response_model=TokenSchema)

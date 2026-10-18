@@ -89,9 +89,24 @@ def test_challenge_is_private_short_lived_and_bound_to_auth_path(google_auth):
     assert result.json()["enabled"] is True
     assert result.headers["cache-control"] == "no-store"
     assert "HttpOnly" in cookie and "SameSite=strict" in cookie
-    assert "Max-Age=600" in cookie and "Path=/auth/google" in cookie
+    assert "Max-Age=600" in cookie and "Path=/auth" in cookie
     first_nonce = result.json()["nonce"]
-    assert google_auth.challenge().json()["nonce"] != first_nonce
+    assert google_auth.challenge().json()["nonce"] == first_nonce
+
+
+def test_reopening_google_config_does_not_invalidate_inflight_signup(google_auth):
+    nonce = google_auth.challenge().json()["nonce"]
+    assert google_auth.challenge().json()["nonce"] == nonce
+    assert google_auth.sign_in(fresh_challenge=False).status_code == 200
+    # The used cookie was deleted; the next sign-in gets a fresh challenge.
+    assert google_auth.challenge().json()["nonce"] != nonce
+
+
+def test_nearly_expired_google_config_gets_a_fresh_challenge(google_auth, monkeypatch):
+    nonce = google_auth.challenge().json()["nonce"]
+    timestamp = int(nonce.split(".", 1)[0])
+    monkeypatch.setattr(google_login.time, "time", lambda: timestamp + 481)
+    assert google_auth.challenge().json()["nonce"] != nonce
 
 
 def test_production_challenge_cookie_is_secure(google_auth, monkeypatch):
@@ -118,7 +133,7 @@ def test_invalid_nonce_never_creates_an_account(google_auth, monkeypatch, failur
     elif failure == "tampered":
         value = google_auth.client.cookies.get(google_login.COOKIE)
         google_auth.client.cookies.clear()
-        google_auth.client.cookies.set(google_login.COOKIE, value + "bad", path="/auth/google")
+        google_auth.client.cookies.set(google_login.COOKIE, value + "bad", path="/auth")
     elif failure in {"expired", "future"}:
         timestamp = int(google_auth.claims["nonce"].split(".", 1)[0])
         monkeypatch.setattr(google_login.time, "time", lambda: timestamp + (601 if failure == "expired" else -1))
@@ -311,7 +326,7 @@ def test_restoring_a_used_google_nonce_cookie_cannot_replay_signin(google_auth):
     challenge = google_auth.challenge()
     cookie = challenge.cookies.get(google_login.COOKIE)
     assert google_auth.sign_in(fresh_challenge=False).status_code == 200
-    google_auth.client.cookies.set(google_login.COOKIE, cookie, path='/auth/google')
+    google_auth.client.cookies.set(google_login.COOKIE, cookie, path='/auth')
     replay = google_auth.sign_in(fresh_challenge=False)
     assert replay.status_code == 401
     with google_auth.sessions() as db:

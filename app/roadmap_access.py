@@ -29,6 +29,13 @@ def roadmap_access_status(
         raise HTTPException(status_code=404, detail="Student profile not found")
 
     access_mode = access.get("access_mode")
+    if access_mode == "student_workspace":
+        return {
+            "allowed": True, "access_source": "student_workspace",
+            "feature_code": CAREER_ROADMAP_FEATURE_CODE, "price_inr": 0,
+            "payment_required": False, "checkout_enabled": False,
+            "message": "Career Roadmap is included in your PlaceAI student workspace.",
+        }
     if access_mode == "campus_sponsored":
         return {
             "allowed": True,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from datetime import timedelta
 
 from fastapi.testclient import TestClient
@@ -153,3 +155,10 @@ def test_live_checkout_is_not_faked_before_provider_selection() -> None:
     response = client.post("/billing/checkout", headers=headers)
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "PAYMENT_PROVIDER_NOT_ACTIVATED"
+
+
+@pytest.fixture(autouse=True)
+def segmented_policy_compatibility(monkeypatch):
+    """Keep coverage of the optional future segmented policy, explicitly disabled today."""
+    from app.config import get_settings
+    monkeypatch.setattr(get_settings(), "student_unified_access", False)

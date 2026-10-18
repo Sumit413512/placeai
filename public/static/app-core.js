@@ -410,6 +410,21 @@
     return run;
   }
 
+  // Complete every provider through the same verified, memory-only session handoff.
+  // Reloading here discarded the provider result and hid restoration failures.
+  window.PlaceAIAuth = Object.freeze({
+    async completeSignIn(session) {
+      if (!session?.access_token) throw new Error('Sign-in was not completed. Please try again.');
+      if (bootWorkspaceInFlight) await bootWorkspaceInFlight.catch(() => false);
+      state.token = session.access_token;
+      bootWorkspaceCompleted = false;
+      if (!await bootWorkspace()) {
+        throw new Error('Your session could not be opened. Please try signing in again.');
+      }
+      closeAuth();
+    }
+  });
+
   async function navigate(view) {
     const premiumViews = new Set(['readiness','mock-interview','resume','documents','assistant']);
     if (state.me?.role === 'student' && state.studentAccess?.student_kind === 'independent' && premiumViews.has(view) && !state.studentAccess.premium_access) {

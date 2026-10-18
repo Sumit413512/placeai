@@ -34,7 +34,7 @@ def billing_status(current_user: User = Depends(require_student), db: Session = 
 def billing_plans(current_user: User = Depends(require_student), db: Session = Depends(get_db)):
     status = student_access_status(current_user, db)
     roadmap = roadmap_access_status(current_user, db, base_access=status)
-    independent = status["student_kind"] != "university"
+    independent = status["student_kind"] == "independent"
     return {
         "student_kind": status["student_kind"],
         "plans": [] if not independent else [
@@ -74,6 +74,8 @@ def billing_plans(current_user: User = Depends(require_student), db: Session = D
 @router.post("/checkout")
 def create_checkout(current_user: User = Depends(require_student), db: Session = Depends(get_db)):
     status = student_access_status(current_user, db)
+    if status["access_mode"] == "student_workspace":
+        raise HTTPException(status_code=409, detail="Student tools are included in your PlaceAI workspace. Individual checkout is not available.")
     if status["student_kind"] == "university":
         raise HTTPException(status_code=409, detail="University-linked students are institution-sponsored and do not need a PlaceAI student subscription.")
     raise HTTPException(

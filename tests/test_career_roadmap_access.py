@@ -194,3 +194,10 @@ def test_roadmap_provider_label_distinguishes_grounded_fallbacks():
     assert '"vercel_ai_gateway"' in source
     assert '"gemini" if str(model).lower().startswith("gemini") else "openai"' in source
     assert 'removeprefix("gateway:")' in source
+
+
+@pytest.fixture(autouse=True)
+def segmented_policy_compatibility(monkeypatch):
+    """Keep coverage of the optional future segmented policy, explicitly disabled today."""
+    from app.config import get_settings
+    monkeypatch.setattr(get_settings(), "student_unified_access", False)

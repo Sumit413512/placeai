@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import re
 import secrets
 import time
@@ -17,19 +18,32 @@ from app.schemas import GoogleAuthRequest
 from app.utils import get_hashed_password, verify_password
 
 COOKIE = "placeai_google_nonce"
+logger = logging.getLogger("placeai.google_login")
 
 
-def challenge(response: Response) -> dict:
+def challenge(response: Response, request: Request | None = None) -> dict:
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
     settings = get_settings()
     if not settings.google_client_id:
         return {"enabled": False, "client_id": None}
+    # Opening another sign-in panel/tab must not invalidate an active Google
+    # popup by overwriting its double-submit cookie with a different nonce.
+    if request:
+        try:
+            nonce, signature = request.cookies.get(COOKIE, "").rsplit(".", 1)
+            expected = hmac.new(settings.jwt_secret_key.encode(), nonce.encode(), hashlib.sha256).hexdigest()
+            age = time.time() - int(nonce.split(".", 1)[0])
+            if hmac.compare_digest(signature, expected) and 0 <= age < 480:
+                return {"enabled": True, "client_id": settings.google_client_id, "nonce": nonce,
+                        "expires_in": max(0, int(600 - age))}
+        except (ValueError, TypeError):
+            pass
     nonce = f"{int(time.time())}.{secrets.token_urlsafe(32)}"
     signature = hmac.new(settings.jwt_secret_key.encode(), nonce.encode(), hashlib.sha256).hexdigest()
     response.set_cookie(COOKIE, f"{nonce}.{signature}", max_age=600, httponly=True,
-                        secure=settings.is_production, samesite="strict", path="/auth/google")
-    return {"enabled": True, "client_id": settings.google_client_id, "nonce": nonce}
+                        secure=settings.is_production, samesite="strict", path="/auth")
+    return {"enabled": True, "client_id": settings.google_client_id, "nonce": nonce, "expires_in": 600}
 
 
 def verify_credential(credential: str) -> dict:
@@ -43,16 +57,21 @@ def authenticate(payload: GoogleAuthRequest, request: Request, response: Respons
     enforce_rate_limit(db, request, scope="google-auth", limit=30, window_seconds=600, block_seconds=900)
     if not settings.google_client_id:
         raise HTTPException(503, "Google Sign-In is not configured")
+    verification_step = "challenge"
     try:
         nonce, signature = request.cookies.get(COOKIE, "").rsplit(".", 1)
         expected = hmac.new(settings.jwt_secret_key.encode(), nonce.encode(), hashlib.sha256).hexdigest()
         age = time.time() - int(nonce.split(".", 1)[0])
         if not hmac.compare_digest(signature, expected) or not 0 <= age <= 600:
             raise ValueError("Invalid challenge")
+        verification_step = "provider_identity"
         info = verify_credential(payload.credential)
+        verification_step = "nonce_binding"
         if not hmac.compare_digest(str(info.get("nonce", "")), nonce):
             raise ValueError("Challenge mismatch")
     except Exception as exc:
+        # Never log the credential, claims, email or upstream exception text.
+        logger.warning("Google sign-in verification failed: %s", verification_step)
         raise HTTPException(401, "Google sign-in expired or could not be verified. Please try again.") from exc
     email_claim = info.get("email")
     subject = info.get("sub")
@@ -118,5 +137,6 @@ def authenticate(payload: GoogleAuthRequest, request: Request, response: Respons
         raise HTTPException(401, "Google sign-in was already used. Please sign in again.")
     user.email_verified = True
     user.last_login_at = utcnow()
+    response.delete_cookie(COOKIE, path="/auth", secure=settings.is_production, httponly=True, samesite="strict")
     response.delete_cookie(COOKIE, path="/auth/google", secure=settings.is_production, httponly=True, samesite="strict")
     return user

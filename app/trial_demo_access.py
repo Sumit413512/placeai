@@ -96,14 +96,14 @@ def trial_demo_access_state(
             "access_mode": access["access_mode"],
         }
 
-    if access["access_mode"] in {"premium", "campus_sponsored"}:
+    if access["access_mode"] in {"premium", "campus_sponsored", "student_workspace"}:
         return {
             "is_trial_demo": True,
             "can_start": True,
             "attempts_used": attempts,
             "free_attempts_remaining": None,
             "access_mode": access["access_mode"],
-            "access_note": "Included with your paid or institution-sponsored PlaceAI access.",
+            "access_note": "Included with your PlaceAI student workspace.",
         }
 
     trial_active = access["access_mode"] == "trial" and bool(access["premium_access"])
