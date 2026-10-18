@@ -77,6 +77,9 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
     page.goto(BASE_URL,wait_until='networkidle')
     page.locator('#app-nav [data-view="learning-hub"]').click()
     page.get_by_role('button',name='Video learning',exact=True).click()
+    output = Path(__file__).resolve().parents[1] / 'work/ui-review'
+    output.mkdir(parents=True, exist_ok=True)
+    page.screenshot(path=str(output / 'video-catalogue-desktop.png'), full_page=True)
     page.get_by_label('Video topic',exact=True).fill('SQL')
     page.get_by_role('button',name='Find or create course',exact=True).click()
     expect(page.get_by_role('heading',name='Course overview',exact=True)).to_be_visible()
@@ -88,6 +91,14 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
     page.get_by_role('button',name='All courses',exact=True).click()
     for item in course['lessons']:item['status']='ready'
     page.locator('[data-video-id="video-browser-course"]').click()
+    expect(page.get_by_role('complementary', name='Course details')).to_contain_text('Video lessons')
+    page.screenshot(path=str(output / 'video-overview-desktop.png'), full_page=True)
+    for width in (390, 320):
+        page.set_viewport_size({'width': width, 'height': 1000})
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
+    page.wait_for_timeout(250)  # Allow the responsive sidebar transition to finish.
+    page.screenshot(path=str(output / 'video-overview-mobile.png'), full_page=True)
+    page.set_viewport_size({'width':1440, 'height':1000})
     page.get_by_role('button',name='Begin learning',exact=True).click()
     expect(page.locator('.learning-video-lessons').first).to_be_visible()
     expect(page.locator('[data-video-library]')).to_contain_text('Ready to begin')

@@ -42,3 +42,7 @@ The plugin-directory search did not return these exact packages. Public source g
 - `app/static/app.css`: replace an implicit all-property button transition with explicit visual properties.
 
 Source: https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md . This focused review is not a certification of complete guideline or WCAG conformance across every workflow. Existing assessment/media, authentication, permissions, payments deferral, typography and logo assets remain unchanged.
+
+
+## October 18 workspace refinement
+See root DESIGN.md for the getdesign.md review, feature-to-reference mapping, shared tokens and functional invariants. Course catalogue and overview use genuine course metadata; operations workspaces share consistent navigation, surfaces and table typography. No reference code or new UI dependency was imported.
