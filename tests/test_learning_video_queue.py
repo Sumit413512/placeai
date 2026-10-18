@@ -1,5 +1,7 @@
 """Quota isolation, offline recovery and unpublished render checkpoints."""
 import json
+import sys
+import subprocess
 from datetime import timedelta
 
 import pytest
@@ -61,6 +63,18 @@ def test_neural_chunks_preserve_all_words_and_bound_inference():
     chunks = list(learning_speech.narration_chunks(text))
     assert all(len(chunk.split()) <= 12 for chunk in chunks)
     assert ' '.join(chunks) == text
+
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='Linux runtime memory accounting')
+def test_voice_memory_measurement_excludes_the_build_launcher():
+    parent = """
+import subprocess, sys
+allocated = bytearray(128 * 1024 * 1024)
+print(subprocess.check_output([sys.executable, '-c',
+    'from app.learning_speech import linux_peak_mib; print(linux_peak_mib())'], text=True))
+"""
+    measured = float(subprocess.check_output([sys.executable, '-c', parent], text=True).strip())
+    assert 0 < measured < 80
 
 
 def test_all_narration_finishes_before_encoder_starts(monkeypatch):

@@ -23,7 +23,7 @@ def model_path():
 
 def available():
     path = model_path()
-    return path.is_file() and Path(str(path) + ".json").is_file()
+    return path.with_suffix(".ort").is_file() and Path(str(path) + ".json").is_file()
 
 
 def enabled():
@@ -40,6 +40,16 @@ def narration_chunks(text):
         words = sentence.split()
         for start in range(0, len(words), 12):
             yield " ".join(words[start:start + 12])
+
+
+def linux_peak_mib():
+    # getrusage's high-water mark survives exec and can include the build
+    # launcher's memory. VmHWM belongs to this executable's address space.
+    status = Path("/proc/self/status").read_text(encoding="ascii")
+    measured = re.search(r"^VmHWM:\s+(\d+)\s+kB$", status, re.MULTILINE)
+    if not measured:
+        raise RuntimeError("LOCAL_SPEECH_MEMORY_UNAVAILABLE")
+    return int(measured.group(1)) / 1024
 
 
 def synthesize(narration):
@@ -78,28 +88,40 @@ def synthesize(narration):
 
 def main():
     import onnxruntime
+    path = model_path()
+    if "--prepare-runtime" in sys.argv[1:]:
+        # Convert in the larger build container, never alongside the web server.
+        options = onnxruntime.SessionOptions()
+        options.intra_op_num_threads = 1
+        options.optimized_model_filepath = str(path.with_suffix(".ort"))
+        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_BASIC
+        options.add_session_config_entry("session.save_model_format", "ORT")
+        options.add_session_config_entry("session.disable_prepacking", "1")
+        onnxruntime.InferenceSession(str(path), sess_options=options, providers=["CPUExecutionProvider"])
+        print("Compact offline voice runtime prepared")
+        return
     from piper import PiperVoice
     from piper.config import PiperConfig
     text = sys.stdin.buffer.read(32001).decode("utf-8")
     if not text.strip() or len(text) > 8000:
         raise ValueError("Invalid narration")
-    path = model_path()
     options = onnxruntime.SessionOptions()
     options.intra_op_num_threads = 1
     options.inter_op_num_threads = 1
     options.enable_cpu_mem_arena = False
     options.enable_mem_pattern = False
-    options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_BASIC
+    options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
     options.add_session_config_entry("session.disable_prepacking", "1")
+    # Let the native file loader own the backing buffer. Python's bytes binding
+    # does not guarantee the lifetime required by the direct-buffer C++ options.
     voice = PiperVoice(config=PiperConfig.from_dict(json.loads(Path(str(path)+".json").read_text(encoding="utf-8"))),
-        session=onnxruntime.InferenceSession(str(path), sess_options=options, providers=["CPUExecutionProvider"]))
+        session=onnxruntime.InferenceSession(str(path.with_suffix(".ort")), sess_options=options, providers=["CPUExecutionProvider"]))
     output = io.BytesIO()
     with wave.open(output, "wb") as wav:
         for index, chunk in enumerate(narration_chunks(text)):
             voice.synthesize_wav(chunk, wav, set_wav_format=index == 0)
     if sys.platform == "linux":
-        import resource
-        peak_mib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+        peak_mib = linux_peak_mib()
         if peak_mib > 240:
             raise RuntimeError(f"LOCAL_SPEECH_MEMORY_{peak_mib:.0f}MiB")
         print(f"Offline voice peak memory: {peak_mib:.1f} MiB", file=sys.stderr)
