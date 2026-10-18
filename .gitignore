@@ -22,3 +22,5 @@ uploads/resumes/*
 
 # Vercel local project metadata
 .vercel/
+.cache/
+work/

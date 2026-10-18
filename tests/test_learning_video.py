@@ -340,16 +340,17 @@ def test_legacy_personalised_course_never_enters_shared_cache(video):
     assert video.api.get('/learning-hub/video').json()['items'][0]['id'] == joined['id']
 
 
-def test_daily_quota_pauses_pending_lessons_without_losing_audio(video):
+def test_daily_quota_defers_only_the_affected_lesson(video):
     identifier, lesson_id, _ = ready_lesson(video)
     row = video.db.get(VideoLesson, lesson_id)
     row.state, row.error_code, row.available_at = 'retrying', 'NARRATION_CAPACITY', utcnow()+timedelta(hours=2)
     video.db.add(VideoLesson(course_id=identifier, position=1, title='Next part'))
     video.db.commit()
     with video.sessions() as db:
-        assert worker.claim(db) is None
+        item = worker.claim(db)
+        assert item[0] == 'lesson' and item[1] != lesson_id
     course = video.api.get(f'/learning-hub/video/{identifier}').json()
-    assert 'provider capacity' in course['preparation_notice']
+    assert course['preparation_status'] == 'preparing'
 
 
 def test_practice_during_playback_does_not_reset_the_watch_clock(video):

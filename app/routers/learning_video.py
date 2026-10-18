@@ -64,18 +64,13 @@ def course_data(db, course, user):
     lessons = {row.position: (row, progress) for row, progress in rows}
     plan = json.loads(course.plan_json)
     result = {"id": course.id, "title": course.title, "status": course.state,
-              "preparation_notice": ("Audio preparation is waiting for provider capacity. Saved videos remain available."
-                  if db.query(VideoLesson.id).filter(VideoLesson.error_code == "NARRATION_CAPACITY",
-                      VideoLesson.available_at > utcnow()).first() else ""),
+              "preparation_notice": "",
               "retry_available": course.state == "failed" and course.attempts < 4,
               "error_code": course.error_code, "introduction": plan.get("introduction", ""),
               "prerequisites": plan.get("prerequisites", []), "lessons": [],
               "sources": json.loads(course.sources_json), "created_at": course.created_at.isoformat(),
               "requires_full_preparation": json.loads(course.input_json).get("curriculum_version") == 2}
     modules, previous, in_module = [], None, 0
-    if db.query(VideoLesson.id).filter(VideoLesson.error_code == "REVIEW_CAPACITY",
-            VideoLesson.available_at > utcnow()).first():
-        result["preparation_notice"] = "Lesson quality review is waiting for provider capacity. Preparation will resume automatically."
     for position, outline in enumerate(plan.get("lessons", [])):
         # Old flat outlines get neutral two-part sections without changing their
         # media, lesson IDs or student history. New plans have authored subtopics.
@@ -113,9 +108,30 @@ def course_data(db, course, user):
         and (not result["requires_full_preparation"] or result["checked_parts"] == len(result["lessons"])))
     result["course_completed"] = bool(result["lessons"]) and result["completed_parts"] == len(result["lessons"])
     result["completion_percent"] = round(100 * result["completed_parts"] / len(result["lessons"])) if result["lessons"] else 0
-    result["preparation_status"] = ("ready" if result["course_ready"] else "needs_attention"
-        if course.state == "failed" or any(item["status"] == "failed" for item in result["lessons"])
-        else "waiting_capacity" if result["preparation_notice"] else "preparing")
+    from app import learning_speech
+    now = utcnow()
+    pending = [row for row, _progress in rows if row.state in {"queued", "retrying"}]
+    offline = learning_speech.enabled() and learning_speech.available()
+    runnable = any(row.available_at <= now or offline and row.error_code == "NARRATION_CAPACITY" for row in pending)
+    running = course.state == "running" or any(row.state == "running" for row, _progress in rows)
+    waiting = [row for row in pending if row.available_at > now]
+    result["next_retry_at"] = None
+    if result["course_ready"]:
+        result["preparation_status"] = "ready"
+    elif course.state == "failed" or any(item["status"] == "failed" for item in result["lessons"]):
+        result["preparation_status"] = "needs_attention"
+    elif running:
+        result["preparation_status"] = "preparing"
+        result["preparation_notice"] = "Your course is being prepared and checked in the background. You can leave this page."
+    elif waiting and not runnable:
+        result["preparation_status"] = "waiting_capacity"
+        result["next_retry_at"] = min(row.available_at for row in waiting).isoformat() + "Z"
+        result["preparation_notice"] = ("Lesson quality review is waiting for provider capacity. Your prepared work is saved."
+            if any(row.error_code == "REVIEW_CAPACITY" for row in waiting) else
+            "Preparation is waiting to retry. Your completed work is saved.")
+    else:
+        result["preparation_status"] = "queued"
+        result["preparation_notice"] = "Your course is queued for background preparation. You can leave this page and return later."
     return result
 
 

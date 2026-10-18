@@ -79,6 +79,9 @@ def quota_delay(response):
 
 def speak(narration):
     """Only the approved lesson transcript is sent to speech providers, never identity data."""
+    from app import learning_speech
+    if learning_speech.enabled():
+        return learning_speech.synthesize(narration)
     key = ai_provider._gemini_key()
     capacity = None
     if key:

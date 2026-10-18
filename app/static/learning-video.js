@@ -25,7 +25,8 @@
     const status = message => { if (active()) panel.querySelector('[data-video-status]').textContent = message; };
     const isCurrent = (id, version) => active() && current === id && playerEpoch === version;
     const failedCourse = data => data.status === 'failed' || data.lessons.some(item => item.status === 'failed');
-    const libraryLabel = data => structure(data).course_ready ? 'Ready to begin' : 'Processing';
+    const libraryLabel = data => structure(data).course_ready ? 'Ready to begin' :
+      data.preparation_status === 'queued' ? 'Queued' : data.preparation_status === 'waiting_capacity' ? 'Waiting to retry' : 'Processing';
     const badge = data => `<small class="learning-status" data-state="${structure(data).course_ready ? 'ready' : 'processing'}">${libraryLabel(data)}</small>`;
     const lessonPath = (id, index) => `${apiBase}/${encodeURIComponent(id)}/lessons/${index}`;
     function stopPlayer() {
@@ -86,8 +87,10 @@
       const saved = [...panel.querySelectorAll('[data-video-id]')].find(item => item.dataset.videoId === data.id);
       if (saved) saved.innerHTML = `<span>${esc(data.title)}</span>${badge(data)}`;
       const pending = ['queued', 'running', 'retrying'];
-      const preparation = data.course_ready ? 'Ready to begin' : 'Processing';
-      panel.querySelector('[data-video-course]').innerHTML = `<header class="panel learning-video-course-header"><div><nav class="learning-video-breadcrumb" aria-label="Course navigation"><button type="button" class="button button-secondary" data-video-browse>All courses</button>${studying ? '<button type="button" class="button button-secondary" data-video-overview-back>Back to course</button>' : ''}</nav><h2>${esc(data.title)}</h2><p class="learning-video-preparation"><span class="learning-status" data-state="${data.course_ready ? 'ready' : 'processing'}">${esc(preparation)}</span></p>${data.preparation_notice && !data.course_ready ? `<p class="learning-meta">${esc(data.preparation_notice)}</p>` : ''}${data.retry_available ? '<button type="button" class="button button-secondary" data-video-retry-course>Retry learning path</button>' : ''}</div><div class="learning-video-course-progress" ${data.course_ready ? '' : 'hidden'}><strong>${data.completion_percent}% complete</strong><progress aria-label="Course completion" max="100" value="${data.completion_percent}"></progress><small>Your learning progress · Video + quiz</small></div></header>`;
+      const preparation = libraryLabel(data);
+      const retryDate = data.next_retry_at ? new Date(data.next_retry_at) : null;
+      const retryNotice = retryDate && Number.isFinite(retryDate.getTime()) ? ` Next automatic retry: ${retryDate.toLocaleString()}.` : '';
+      panel.querySelector('[data-video-course]').innerHTML = `<header class="panel learning-video-course-header"><div><nav class="learning-video-breadcrumb" aria-label="Course navigation"><button type="button" class="button button-secondary" data-video-browse>All courses</button>${studying ? '<button type="button" class="button button-secondary" data-video-overview-back>Back to course</button>' : ''}</nav><h2>${esc(data.title)}</h2><p class="learning-video-preparation"><span class="learning-status" data-state="${data.course_ready ? 'ready' : 'processing'}">${esc(preparation)}</span></p>${data.preparation_notice && !data.course_ready ? `<p class="learning-meta">${esc(data.preparation_notice + retryNotice)}</p>` : ''}${data.retry_available ? '<button type="button" class="button button-secondary" data-video-retry-course>Retry learning path</button>' : ''}</div><div class="learning-video-course-progress" ${data.course_ready ? '' : 'hidden'}><strong>${data.completion_percent}% complete</strong><progress aria-label="Course completion" max="100" value="${data.completion_percent}"></progress><small>Your learning progress · Video + quiz</small></div></header>`;
       panel.querySelector('[data-video-outline]').innerHTML = `<details class="learning-video-outline-disclosure" open><summary>Course outline</summary><nav aria-label="Course lessons">${data.modules.map(module => `<section class="learning-video-module"><h3>${esc(module.title)}</h3><ol class="learning-video-lessons">${module.positions.map(index => {
         const item = data.lessons[index], complete = item.video_completed && item.practice_completed;
         const waiting = pending.includes(item.status), unavailable = item.status === 'failed' && !item.retry_available;

@@ -16,6 +16,7 @@ from sqlalchemy import JSON, cast, func, or_, text, select
 from sqlalchemy.orm import defer
 
 from app import learning_ai
+from app import learning_speech
 from app.learning_video_content import CoursePlan, FullCoursePlan, SQL_MODULES, validate_full_plan, LessonScript, LESSON_PROMPT
 from app.learning_video_media import render_video, inspect_video, speak, NarrationCapacityError, MAX_AUDIO_BYTES
 from app.learning_video_review import review_video, ReviewCapacityError
@@ -146,18 +147,20 @@ def claim(db):
         if db.query(model.id).filter(model.state == "running", model.lease_until > now).first():
             db.commit(); return None
     for kind, model in (("course", VideoCourse), ("lesson", VideoLesson)):
-        if kind == "lesson" and db.query(VideoLesson.id).filter(
-                VideoLesson.error_code.in_(["NARRATION_CAPACITY", "REVIEW_CAPACITY"]), VideoLesson.available_at > now).first():
-            continue
         query = db.query(model)
         if kind == "lesson":
             query = query.options(defer(VideoLesson.video_data))
-        row = query.filter(model.attempts < 4, model.available_at <= now, or_(model.state.in_(["queued", "retrying"]),
+        due = model.available_at <= now
+        if kind == "lesson" and learning_speech.enabled() and learning_speech.available():
+            # A previous provider cooldown is irrelevant to the offline voice.
+            due = or_(due, model.error_code == "NARRATION_CAPACITY")
+        row = query.filter(model.attempts < 4, due, or_(model.state.in_(["queued", "retrying"]),
             (model.state == "running") & (model.lease_until <= now))).order_by(
             model.created_at, VideoLesson.position if kind == "lesson" else model.id,
             model.id).with_for_update(skip_locked=True).first()
         if row:
             row.state, row.lease_token = "running", uuid4().hex
+            row.error_code = None
             row.lease_until = now + timedelta(seconds=LEASE_SECONDS)
             row.attempts += 1
             db.commit()
@@ -205,7 +208,7 @@ def fill_pending_parts(db):
 def cached_narrator(identifier, token, sessions):
     """Durable per-scene checkpoints; a completed MP4 replaces temporary PCM chunks."""
     def narrate(text):
-        key = hashlib.sha256(("board-voice-v1:" + text).encode()).hexdigest()
+        key = hashlib.sha256((learning_speech.signature() + ":" + text).encode()).hexdigest()
         with sessions() as db:
             row = db.get(VideoNarration, (identifier, key))
             if row:
@@ -269,8 +272,10 @@ def _process(item, sessions):
             evidence, sources = course.evidence, json.loads(course.sources_json)
             plan = json.loads(course.plan_json)
             content = json.loads(row.content_json) if kind == "lesson" else {}
+            prepared_video = bytes(row.video_data) if kind == "lesson" and row.video_data else None
+            prepared_duration = row.duration_seconds if kind == "lesson" else None
             position = row.position if kind == "lesson" else None
-            if kind == "lesson" and storage_used(db) >= STORAGE_BUDGET:
+            if kind == "lesson" and not prepared_video and storage_used(db) >= STORAGE_BUDGET:
                 raise RuntimeError("VIDEO_STORAGE_CAPACITY")
         if kind == "course":
             evidence, sources, _ = learning_ai.research(json.dumps(preferences))
@@ -341,9 +346,23 @@ def _process(item, sessions):
                     db.commit()
                     if not changed:
                         return
-            data, duration, timings = render_video(content, narrate=cached_narrator(identifier, token, sessions))
-            content["timings"] = timings
-            content["media_review"] = inspect_video(data, content, duration)
+            if prepared_video and content.get("media_review", {}).get("passed") is True:
+                data, duration = prepared_video, prepared_duration
+            else:
+                data, duration, timings = render_video(content, narrate=cached_narrator(identifier, token, sessions))
+                content["timings"] = timings
+                content["media_review"] = inspect_video(data, content, duration)
+                # Checkpoint unlisted media before external review. Playback still
+                # requires ready state plus every existing publication check.
+                with sessions() as db:
+                    current = db.query(VideoLesson).filter_by(id=identifier, lease_token=token, state="running").with_for_update().first()
+                    if not current or current.lease_until <= utcnow():
+                        return
+                    if storage_used(db) - len(current.video_data or b"") + len(data) > STORAGE_BUDGET:
+                        raise RuntimeError("VIDEO_STORAGE_CAPACITY")
+                    current.content_json = json.dumps(content)
+                    current.video_data, current.duration_seconds = data, duration
+                    db.commit()
             if preferences.get("curriculum_version") == 2:
                 content["audiovisual_review"] = review_video(data, content)
             update = {"content_json": json.dumps(content), "video_data": data, "duration_seconds": duration}
@@ -351,7 +370,7 @@ def _process(item, sessions):
             row = db.query(model).filter_by(id=identifier).with_for_update().first()
             if not row or row.lease_token != token or row.lease_until <= utcnow():
                 return
-            if kind == "lesson" and storage_used(db) + len(update["video_data"]) > STORAGE_BUDGET:
+            if kind == "lesson" and storage_used(db) - len(row.video_data or b"") + len(update["video_data"]) > STORAGE_BUDGET:
                 raise RuntimeError("VIDEO_STORAGE_CAPACITY")
             for key, value in update.items():
                 setattr(row, key, value)
@@ -384,6 +403,9 @@ def _process(item, sessions):
             row.error_code = "CONTENT_CHECK" if isinstance(error, ValueError) else "GENERATION_UNAVAILABLE"
             row.lease_token, row.lease_until = None, None
             row.available_at = utcnow() + timedelta(seconds=60 * 2 ** row.attempts)
+            if kind == "lesson" and isinstance(error, ValueError):
+                # Rejected media must not be reused as a valid review checkpoint.
+                row.video_data, row.duration_seconds = None, 0
             if isinstance(error, NarrationCapacityError):
                 row.state, row.error_code = "retrying", "NARRATION_CAPACITY"
                 if isinstance(error, ReviewCapacityError):
@@ -394,6 +416,8 @@ def _process(item, sessions):
 
 
 def run(stop):
+    LOGGER.info("Video speech provider=%s local_voice_ready=%s",
+                "piper" if learning_speech.enabled() else "gemini", learning_speech.available())
     next_fill = 0
     while not stop.is_set():
         try:
