@@ -1,34 +1,36 @@
 # Offline lesson narration and queue recovery
 
-Render installs `requirements-video.txt` and runs `scripts/prepare_learning_voice.py`
-at build time. The downloader pins the model repository revision and SHA-256 of
-both artifacts. Set `LEARNING_TTS_PROVIDER=piper` on the Render worker host.
-The build converts the verified model to ORT format. Runtime inference uses the
-native file loader, avoiding protobuf parsing on the 512 MB service. This uses
-the same voice weights without quantization or a change to lesson content.
-Vercel continues using the normal requirements; it does not synthesize narration.
+Render installs the pinned `espeakng-loader==0.2.4` package through
+`requirements-video.txt` and verifies actual speech plus a decoded synchronized
+MP4 during every build. Set `LEARNING_TTS_PROVIDER=espeak` on the worker host.
+The previous `piper` setting is accepted as a rollout alias for the same offline
+engine; no neural voice model is loaded. Vercel uses the normal requirements.
 
-Piper 1.8.0 is GPL-3.0: https://github.com/OHF-Voice/piper1-gpl
-The Cori medium voice model card states that it was trained from scratch on
-public-domain LibriVox recordings:
-https://huggingface.co/rhasspy/piper-voices/blob/c10ece1aade47bb51c153c893d14e5bf8e5b7117/en/en_GB/cori/medium/MODEL_CARD
-Voice training information: https://brycebeattie.com/files/tts/
+The loader is MIT licensed: https://github.com/thewh1teagle/espeakng-loader
+The bundled eSpeak NG engine is GPL-3.0-or-later:
+https://github.com/espeak-ng/espeak-ng
 
-Speech runs offline in a bounded CPU subprocess with one inference thread. Native
-model memory is released before video rendering. Input is stdin, never shell
-code. Audio is normalized to the existing mono 24 kHz PCM contract. Playback uses
-the saved MP4 and does not invoke speech again. This removes speech API charges
-and quotas, but uses existing server compute; it does not make research and
-independent audiovisual review unlimited or provider-independent.
+Narration runs in a bounded subprocess using the synchronous retrieval API,
+with no playback device, SSML interpretation, network request or paid fallback.
+Text enters as stdin data, never a shell command. Native callbacks enforce a
+90-second scene limit. The engine uses English at 165 words per minute and
+normalizes output to the existing mono 24 kHz PCM contract. The voice is more
+synthetic than a neural narrator but fits the existing free server. A Linux
+240 MiB address-space peak check remains required.
 
-There remains one heavy generation slot to protect the current small host and
-assessment workload. A delayed lesson no longer pauses other due lesson jobs.
-Old speech-provider waits become immediately eligible when local speech is ready.
-Review waits retain unpublished rendered media and checked scripts, then resume
-the same review. No unreviewed media is playable. All existing syllabus, factual,
-quiz, media, audiovisual and whole-course publication gates remain mandatory.
+Audio is staged privately in a temporary file before opening video encoders,
+so speech and video encoding memory peaks never overlap. Temporary data is
+removed after rendering. Saved MP4 playback never invokes speech again.
 
-Course notices are scoped to that course. Students see Queued, Processing, Waiting
-to retry with a next retry time, or Ready to begin; preparation fractions remain
-hidden. Provider review quota can still delay publication and must not be hidden
-or bypassed to manufacture a ready course.
+One heavy generation slot protects the current host and assessment workload.
+A delayed lesson no longer pauses other due jobs. Old provider waits become
+eligible immediately when local speech is available, and expired admitted
+leases recover regardless of their old provider cooldown. Review retries reuse
+unpublished media and checked scripts. No unreviewed media is made playable.
+All existing syllabus, factual, quiz, media, audiovisual and whole-course
+publication gates remain required.
+
+Course-specific notices show Queued, Processing, Waiting to retry with the next
+retry time, or Ready to begin. Speech has no API charges or quota. Research and
+independent audiovisual review still use provider allowances, and Render's free
+compute/storage limits remain; this does not promise unlimited generation.

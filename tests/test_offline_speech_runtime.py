@@ -9,7 +9,7 @@ import pytest
 def test_real_offline_voice_encodes_a_checked_synchronized_lesson(monkeypatch):
     from app import learning_speech
     from app.learning_video_media import speak, render_video, inspect_video
-    monkeypatch.setenv('LEARNING_TTS_PROVIDER','piper')
+    monkeypatch.setenv('LEARNING_TTS_PROVIDER','espeak')
     assert learning_speech.available()
     pcm = speak('SQL joins connect related tables. Check the join condition and inspect the resulting rows.')
     assert 24000 < len(pcm) < 24000 * 2 * 90
