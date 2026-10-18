@@ -85,6 +85,8 @@ def test_every_workspace_page_remains_readable_and_operable(browser, layout_acco
             root = page.locator("#app-content")
         for width in (1440, 768, 390, 320):
             page.set_viewport_size({"width": width, "height": 1000})
+            # Chromium can acknowledge resize before the new layout is painted.
+            page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
             measurements = root.evaluate("""root => {
               const visible = el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden';
               const controls = [...root.querySelectorAll('button,input:not([type=hidden]),select,textarea')].filter(visible);
