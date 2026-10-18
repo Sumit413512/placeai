@@ -1148,10 +1148,15 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 #app-shell .trust-disclaimer { color: var(--pa-muted) !important; }
 @media(max-width:760px) {
   /* The card transformation must also remove the desktop table's min-width. */
-  #app-shell table[data-placeai-responsive="true"] { min-width: 0 !important; max-width: 100%; }
+  #app-shell table[data-placeai-responsive="true"] { display: block; width: 100%; min-width: 0 !important; max-width: 100%; }
   #app-shell table[data-placeai-responsive="true"] :is(tbody,tr,td) { min-width: 0; max-width: 100%; }
+  #app-shell table[data-placeai-responsive="true"] td > * { min-width: 0; max-width: 100%; }
   #app-shell table[data-placeai-responsive="true"] tbody { grid-template-columns: minmax(0,1fr); }
   #app-shell table[data-placeai-responsive="true"] :is(.table-primary,.table-secondary) { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
   #app-shell table[data-placeai-responsive="true"] tbody td::before { font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: normal; color: var(--pa-muted); }
   #app-shell table[data-placeai-responsive="true"] .status-pill { justify-self: start; }
+}
+
+@media(max-width:520px) {
+  #app-shell table[data-placeai-responsive="true"] tbody td { grid-template-columns: minmax(0,1fr); }
 }

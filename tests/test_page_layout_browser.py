@@ -96,7 +96,8 @@ def test_every_workspace_page_remains_readable_and_operable(browser, layout_acco
                     !el.closest('.table-wrap,.enterprise-table-wrap,pre');
                 }).slice(0,8).map(el => ({tag:el.tagName, cls:el.className})),
                 clippedMobileTables: innerWidth <= 760 ? [...root.querySelectorAll('table[data-placeai-responsive="true"]')]
-                  .filter(el => el.getBoundingClientRect().width > el.parentElement.clientWidth + 2).length : 0,
+                  .filter(el => el.getBoundingClientRect().width > el.parentElement.clientWidth + 2)
+                  .map(el => ({width:el.getBoundingClientRect().width, parentWidth:el.parentElement.clientWidth, display:getComputedStyle(el).display})) : [],
                 clippedButtons: controls.filter(el => el.tagName === 'BUTTON' && el.scrollWidth > el.clientWidth + 2 &&
                   getComputedStyle(el).textOverflow !== 'ellipsis').map(el => el.textContent.trim()),
                 tinyControls: controls.filter(el => {
@@ -112,7 +113,8 @@ def test_every_workspace_page_remains_readable_and_operable(browser, layout_acco
                 page.screenshot(path=str(output / f"{view}-{width}.png"), full_page=True)
     (output / "measurements.json").write_text(json.dumps({"pages": findings, "errors": errors}, indent=2), encoding="utf-8")
     assert not errors, errors
-    assert not [f for f in findings if f["overflow"] or f["clippedButtons"] or f["tinyControls"] or f["errorState"] or f["clippedMobileTables"]], findings
+    failures = [f for f in findings if f["overflow"] or f["clippedButtons"] or f["tinyControls"] or f["errorState"] or f["clippedMobileTables"]]
+    assert not failures, json.dumps(failures, indent=2)
     if role in {"platform_admin", "institution_admin", "recruiter"}:
         view = {"platform_admin": "organizations", "institution_admin": "students", "recruiter": "jobs"}[role]
         page.set_viewport_size({"width": 1440, "height": 1000})
