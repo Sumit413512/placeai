@@ -40,7 +40,9 @@ if __name__ == "__main__":
     if "--verify" in sys.argv[1:]:
         from app.learning_speech import synthesize
         from app.learning_video_media import render_video, inspect_video
-        narration = "SQL joins connect related tables. Check the join condition and inspect the resulting rows."
+        narration = ("SQL joins connect related tables and let us inspect matching records while preserving "
+            "the intended relationship between customers and orders using explicit join conditions "
+            "and carefully checking the resulting rows for missing or repeated values.")
         pcm = synthesize(narration)
         content = {"scenes": [{"title": "Connect related tables", "narration": narration,
             "bullets": ["Check the join condition", "Inspect the resulting rows"], "code": "", "diagram": None}]}

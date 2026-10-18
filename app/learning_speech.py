@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -30,7 +31,15 @@ def enabled():
 
 
 def signature():
-    return "piper-cori-1:" + MODEL_SHA256 if enabled() else "board-voice-v1"
+    return "piper-cori-2:" + MODEL_SHA256 if enabled() else "board-voice-v1"
+
+
+def narration_chunks(text):
+    """Bound neural inference activations, including long unpunctuated sentences."""
+    for sentence in re.split(r"(?<=[.!?;:])\s+", text.strip()):
+        words = sentence.split()
+        for start in range(0, len(words), 12):
+            yield " ".join(words[start:start + 12])
 
 
 def synthesize(narration):
@@ -73,11 +82,20 @@ def main():
     options.intra_op_num_threads = 1
     options.inter_op_num_threads = 1
     options.enable_cpu_mem_arena = False
+    options.enable_mem_pattern = False
+    options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
     voice = PiperVoice(config=PiperConfig.from_dict(json.loads(Path(str(path)+".json").read_text(encoding="utf-8"))),
         session=onnxruntime.InferenceSession(str(path), sess_options=options, providers=["CPUExecutionProvider"]))
     output = io.BytesIO()
     with wave.open(output, "wb") as wav:
-        voice.synthesize_wav(text, wav)
+        for index, chunk in enumerate(narration_chunks(text)):
+            voice.synthesize_wav(chunk, wav, set_wav_format=index == 0)
+    if sys.platform == "linux":
+        import resource
+        peak_mib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+        if peak_mib > 240:
+            raise RuntimeError("Offline voice exceeds the worker memory budget")
+        print(f"Offline voice peak memory: {peak_mib:.1f} MiB", file=sys.stderr)
     sys.stdout.buffer.write(output.getvalue())
 
 

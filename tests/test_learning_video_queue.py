@@ -45,6 +45,40 @@ def test_offline_voice_reclaims_old_speech_cooldown_immediately(video, monkeypat
         assert db.get(VideoLesson, lesson_id).error_code is None
 
 
+def test_crashed_admitted_lease_ignores_pre_admission_cooldown(video):
+    _, lesson_id, _ = ready_lesson(video)
+    row = video.db.get(VideoLesson, lesson_id)
+    row.state, row.error_code, row.attempts = 'running', None, 1
+    row.lease_until = utcnow() - timedelta(seconds=1)
+    row.available_at = utcnow() + timedelta(days=1)
+    video.db.commit()
+    with video.sessions() as db:
+        assert worker.claim(db)[1] == lesson_id
+
+
+def test_neural_chunks_preserve_all_words_and_bound_inference():
+    text = ' '.join(['PostgreSQL joins preserve related records'] * 20)
+    chunks = list(learning_speech.narration_chunks(text))
+    assert all(len(chunk.split()) <= 12 for chunk in chunks)
+    assert ' '.join(chunks) == text
+
+
+def test_all_narration_finishes_before_encoder_starts(monkeypatch):
+    from app import learning_video_media as media
+    events = []
+    def narrate(text):
+        events.append(text)
+        return b'\1\0' * media.RATE
+    def encode(content, read):
+        assert events == ['first scene', 'second scene']
+        assert read('first scene') == b'\1\0' * media.RATE
+        assert read('second scene') == b'\1\0' * media.RATE
+        return b'mp4', 2, []
+    monkeypatch.setattr(media, '_encode_video', encode)
+    assert media.render_video({'scenes':[{'narration':'first scene'},
+        {'narration':'second scene'}]}, narrate=narrate)[0] == b'mp4'
+
+
 def test_review_retry_reuses_checked_media_without_publishing_it(video, monkeypatch):
     course_id, lesson_id, path = ready_lesson(video)
     row = video.db.get(VideoLesson, lesson_id)

@@ -150,7 +150,9 @@ def claim(db):
         query = db.query(model)
         if kind == "lesson":
             query = query.options(defer(VideoLesson.video_data))
-        due = model.available_at <= now
+        # Once admitted, a crashed lease must not inherit its old provider delay.
+        due = or_(model.available_at <= now,
+                  (model.state == "running") & (model.lease_until <= now))
         if kind == "lesson" and learning_speech.enabled() and learning_speech.available():
             # A previous provider cooldown is irrelevant to the offline voice.
             due = or_(due, model.error_code == "NARRATION_CAPACITY")
