@@ -2,6 +2,7 @@
 import hashlib
 from pathlib import Path
 import sys
+import subprocess
 import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -33,6 +34,8 @@ def prepare():
         finally:
             temp.unlink(missing_ok=True)
     print("Pinned offline lesson voice verified")
+    subprocess.run([sys.executable, "-m", "app.learning_speech", "--prepare-runtime"],
+                   check=True, timeout=120, cwd=str(Path(__file__).resolve().parents[1]))
 
 
 if __name__ == "__main__":

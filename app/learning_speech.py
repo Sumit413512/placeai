@@ -23,7 +23,7 @@ def model_path():
 
 def available():
     path = model_path()
-    return path.is_file() and Path(str(path) + ".json").is_file()
+    return path.with_suffix(".ort").is_file() and Path(str(path) + ".json").is_file()
 
 
 def enabled():
@@ -78,21 +78,37 @@ def synthesize(narration):
 
 def main():
     import onnxruntime
+    path = model_path()
+    if "--prepare-runtime" in sys.argv[1:]:
+        # Convert in the larger build container, never alongside the web server.
+        options = onnxruntime.SessionOptions()
+        options.intra_op_num_threads = 1
+        options.optimized_model_filepath = str(path.with_suffix(".ort"))
+        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_BASIC
+        options.add_session_config_entry("session.save_model_format", "ORT")
+        options.add_session_config_entry("session.disable_prepacking", "1")
+        onnxruntime.InferenceSession(str(path), sess_options=options, providers=["CPUExecutionProvider"])
+        print("Compact offline voice runtime prepared")
+        return
     from piper import PiperVoice
     from piper.config import PiperConfig
     text = sys.stdin.buffer.read(32001).decode("utf-8")
     if not text.strip() or len(text) > 8000:
         raise ValueError("Invalid narration")
-    path = model_path()
     options = onnxruntime.SessionOptions()
     options.intra_op_num_threads = 1
     options.inter_op_num_threads = 1
     options.enable_cpu_mem_arena = False
     options.enable_mem_pattern = False
-    options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_BASIC
+    options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
     options.add_session_config_entry("session.disable_prepacking", "1")
+    options.add_session_config_entry("session.use_ort_model_bytes_directly", "1")
+    options.add_session_config_entry("session.use_ort_model_bytes_for_initializers", "1")
+    # Keep the immutable backing bytes alive until inference finishes. This avoids
+    # both protobuf parsing and a second copy of the voice weights at runtime.
+    model_bytes = path.with_suffix(".ort").read_bytes()
     voice = PiperVoice(config=PiperConfig.from_dict(json.loads(Path(str(path)+".json").read_text(encoding="utf-8"))),
-        session=onnxruntime.InferenceSession(str(path), sess_options=options, providers=["CPUExecutionProvider"]))
+        session=onnxruntime.InferenceSession(model_bytes, sess_options=options, providers=["CPUExecutionProvider"]))
     output = io.BytesIO()
     with wave.open(output, "wb") as wav:
         for index, chunk in enumerate(narration_chunks(text)):
