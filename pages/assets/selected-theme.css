@@ -1160,3 +1160,9 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 @media(max-width:520px) {
   #app-shell table[data-placeai-responsive="true"] tbody td { grid-template-columns: minmax(0,1fr); }
 }
+
+/* Native file pickers have different intrinsic widths across operating systems. */
+#app-shell input[type="file"] { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
+#app-shell #authorization-letter-form { display: grid; grid-template-columns: minmax(0,1fr); gap: 12px; }
+#app-shell #authorization-letter-form label { display: grid; gap: 8px; min-width: 0; }
+#app-shell #authorization-letter-form button { justify-self: start; max-width: 100%; white-space: normal; }
