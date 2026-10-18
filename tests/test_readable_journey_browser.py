@@ -1,6 +1,30 @@
 from test_browser_smoke import BASE_URL, browser, local_server  # noqa: F401
 
 
+def test_hero_message_aligns_with_photo_and_stacks_without_overlap(browser):
+    from pathlib import Path
+
+    page = browser.new_page(viewport={"width": 1920, "height": 1080}, reduced_motion="reduce")
+    page.add_init_script("localStorage.setItem('placeai.analytics.preference.v1','declined')")
+    page.goto(BASE_URL, wait_until="networkidle")
+    output = Path(__file__).resolve().parents[1] / "work/hero-alignment"
+    output.mkdir(parents=True, exist_ok=True)
+    for width in (1920, 1440, 1100, 1050, 768, 390, 320):
+        page.set_viewport_size({"width": width, "height": 1080})
+        page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+        copy = page.locator("#marketing-site .hero-copy").bounding_box()
+        photo = page.locator("#marketing-site .hero-photo-card").bounding_box()
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"), width
+        if photo["x"] >= copy["x"] + copy["width"]:
+            assert abs(copy["y"] - photo["y"]) <= 2, (width, copy, photo)
+        else:
+            assert photo["y"] >= copy["y"] + copy["height"], (width, copy, photo)
+        assert page.get_by_role("button", name="Sign in to PlaceAI", exact=True).is_visible()
+        if width in (1920, 1440, 390):
+            page.screenshot(path=str(output / f"hero-{width}.png"))
+    page.close()
+
+
 def test_learning_journey_is_readable_responsive_and_links_to_existing_flows(browser):  # noqa: F811
     page = browser.new_page(viewport={"width": 1440, "height": 1000})
     page.goto(BASE_URL, wait_until="networkidle")
