@@ -52,7 +52,13 @@ def synthesize(narration):
     result = subprocess.run([sys.executable, "-m", "app.learning_speech"],
         input=narration.encode("utf-8"), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         timeout=90, check=False, cwd=str(Path(__file__).resolve().parents[1]))
-    if result.returncode or not 44 < len(result.stdout) <= 6 * 1024 * 1024:
+    if result.returncode:
+        # Expose only our numeric memory diagnostic, never native stderr/text.
+        budget = re.search(rb"LOCAL_SPEECH_MEMORY_(\d+)MiB", result.stderr)
+        if budget:
+            raise RuntimeError(budget.group(0).decode("ascii"))
+        raise RuntimeError("LOCAL_SPEECH_UNAVAILABLE")
+    if not 44 < len(result.stdout) <= 6 * 1024 * 1024:
         raise RuntimeError("LOCAL_SPEECH_UNAVAILABLE")
     import av
     with av.open(io.BytesIO(result.stdout)) as audio:
@@ -83,7 +89,8 @@ def main():
     options.inter_op_num_threads = 1
     options.enable_cpu_mem_arena = False
     options.enable_mem_pattern = False
-    options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+    options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_BASIC
+    options.add_session_config_entry("session.disable_prepacking", "1")
     voice = PiperVoice(config=PiperConfig.from_dict(json.loads(Path(str(path)+".json").read_text(encoding="utf-8"))),
         session=onnxruntime.InferenceSession(str(path), sess_options=options, providers=["CPUExecutionProvider"]))
     output = io.BytesIO()
@@ -94,7 +101,7 @@ def main():
         import resource
         peak_mib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
         if peak_mib > 240:
-            raise RuntimeError("Offline voice exceeds the worker memory budget")
+            raise RuntimeError(f"LOCAL_SPEECH_MEMORY_{peak_mib:.0f}MiB")
         print(f"Offline voice peak memory: {peak_mib:.1f} MiB", file=sys.stderr)
     sys.stdout.buffer.write(output.getvalue())
 
