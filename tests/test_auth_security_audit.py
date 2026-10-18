@@ -292,7 +292,7 @@ def test_protected_route_inventory_has_explicit_public_allowlist():
                 assert operation.get('security'),(method,path)
 
 
-def test_claiming_a_college_code_does_not_grant_sponsored_features(secured):
+def test_claiming_a_college_code_does_not_grant_private_campus_access(secured):
     from app.models import Organization, StudentProfile
     from app.student_entitlements import student_access_status
     client,sessions=secured
@@ -304,8 +304,8 @@ def test_claiming_a_college_code_does_not_grant_sponsored_features(secured):
         user=db.get(User,created.json()['id']); user.created_at=protection.now()-timedelta(days=10)
         profile=db.query(StudentProfile).filter_by(user_id=user.id).one()
         db.commit()
-        assert student_access_status(user,db)['premium_access'] is False
+        assert student_access_status(user,db)['campus_access'] is False
         profile.is_verified=True; db.commit()
-        assert student_access_status(user,db)['access_mode']=='campus_sponsored'
+        assert student_access_status(user,db)['campus_access'] is True
         db.get(Organization,'audit-college').is_active=False; db.commit()
-        assert student_access_status(user,db)['premium_access'] is False
+        assert student_access_status(user,db)['campus_access'] is False

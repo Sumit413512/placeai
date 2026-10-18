@@ -37,6 +37,29 @@
   let loginRole = 'student';
   let createRole = 'student';
   let googleLibrary;
+  let googleConfiguration;
+  let googleConfiguredUntil = 0;
+  let googleNonce = '';
+  let googleHandler;
+
+  async function getGoogleConfiguration() {
+    if (!googleConfiguration || Date.now() >= googleConfiguredUntil) {
+      googleConfiguredUntil = Date.now() + 480000;
+      googleConfiguration = requestJson('/auth/google-config').then(config => {
+        googleConfiguredUntil = Date.now() + Math.max(0, Math.min(480, (config.expires_in ?? 600) - 60)) * 1000;
+        return config;
+      }).catch(error => {
+        googleConfiguration = null;
+        throw error;
+      });
+    }
+    return googleConfiguration;
+  }
+
+  async function completeSignIn(session) {
+    if (!window.PlaceAIAuth) throw new Error('The workspace is still loading. Please try again in a moment.');
+    await window.PlaceAIAuth.completeSignIn(session);
+  }
 
   function loadGoogleLibrary() {
     if (window.google?.accounts?.id) return Promise.resolve();
@@ -44,8 +67,10 @@
       const script = document.createElement('script');
       script.src = 'https://accounts.google.com/gsi/client';
       script.async = true;
-      script.onload = resolve;
-      script.onerror = () => { googleLibrary = null; script.remove(); reject(new Error('Google sign-in could not load. Please use your email and password.')); };
+      const failed = () => { clearTimeout(timer); googleLibrary = null; script.remove(); reject(new Error('Google sign-in could not load. Check your connection and retry.')); };
+      const timer = setTimeout(failed, 15000);
+      script.onload = () => { clearTimeout(timer); resolve(); };
+      script.onerror = failed;
       document.head.appendChild(script);
     });
     return googleLibrary;
@@ -58,7 +83,7 @@
     view.querySelector('.access-login-methods').append(area);
     area.textContent = 'Loading Google sign-in…';
     try {
-      const config = await requestJson('/auth/google-config');
+      const config = await getGoogleConfiguration();
       if (!area.isConnected) return;
       if (!config.enabled) {
         area.textContent = 'Google sign-in is being set up. Please use your email and password.';
@@ -70,11 +95,13 @@
       let resizeObserver;
       let linking = false;
       const signIn = async (credential, role, password) => {
+        const errorArea = $('#role-login-error', view);
+        if (errorArea) errorArea.textContent = '';
         try {
-          await requestJson('/auth/google', {method:'POST', body:JSON.stringify({credential, role, ...(password ? {password} : {})})});
-          location.reload();
+          const session = await requestJson('/auth/google', {method:'POST', body:JSON.stringify({credential, role, ...(password ? {password} : {})})});
+          await completeSignIn(session);
+          googleConfiguration = null;
         } catch (error) {
-          const errorArea = $('#role-login-error', view);
           if (errorArea) errorArea.textContent = error.message;
           if (error.code === 'GOOGLE_LINK_PASSWORD_REQUIRED') {
             linking = true;
@@ -89,8 +116,15 @@
           }
         }
       };
-      window.google.accounts.id.initialize({client_id:config.client_id, nonce:config.nonce, auto_select:false,
-        callback:result => signIn(result.credential, loginRole)});
+      googleHandler = result => {
+        if (area.isConnected) signIn(result.credential, loginRole);
+      };
+      if (googleNonce !== config.nonce) {
+        window.google.accounts.id.initialize({client_id:config.client_id, nonce:config.nonce, auto_select:false,
+          use_fedcm_for_button:true, button_auto_select:false,
+          callback:result => googleHandler?.(result)});
+        googleNonce = config.nonce;
+      }
       let renderedWidth = 0;
       const renderButton = () => {
         if (!area.isConnected) { resizeObserver?.disconnect(); return; }
@@ -99,14 +133,26 @@
         if (width === renderedWidth) return;
         renderedWidth = width;
         area.replaceChildren();
-        window.google.accounts.id.renderButton(area, {type:'standard', theme:'outline', size:'large', text:'signin_with', width});
+        window.google.accounts.id.renderButton(area, {type:'standard', theme:'outline', size:'large', text:'continue_with', width,
+          click_listener:() => {
+            const errorArea = $('#role-login-error', view);
+            if (errorArea) errorArea.textContent = 'Complete sign-in in the Google window. If you closed it, select Google again to retry.';
+          }});
       };
       renderButton();
       if (window.ResizeObserver) {
         resizeObserver = new ResizeObserver(renderButton);
         resizeObserver.observe(area);
       }
-    } catch (error) { if (area.isConnected) area.textContent = error.message; }
+    } catch (error) {
+      if (!area.isConnected) return;
+      area.textContent = error.message;
+      const retry = document.createElement('button');
+      retry.type = 'button'; retry.className = 'button button-secondary button-full';
+      retry.textContent = 'Retry Google sign-in';
+      retry.onclick = () => { area.remove(); googleConfiguration = null; renderGoogleSignIn(view); };
+      area.append(retry);
+    }
   }
 
   function roleCards(selected, mode) {
@@ -124,8 +170,8 @@
     const view = $('#login-view');
     if (!view) return;
     const role = roles[loginRole];
-    view.innerHTML = `${modeTabs('login')}<span class="section-kicker">Secure workspace access</span><h2 id="auth-title">Choose your role and sign in</h2><p class="form-intro">Select your workspace to continue securely.</p>${roleCards(loginRole, 'login')}<div class="access-selection-summary"><span class="access-role-dot" aria-hidden="true"></span><div><b data-access-summary-label>${role.label}</b><span data-access-summary-short>${role.short}</span></div></div><div id="role-login-error" class="access-form-error" role="alert"></div><div class="access-login-methods"></div><div class="access-method-divider">or continue with email</div><form id="role-login-form" class="form-stack"><input type="hidden" name="role" value="${loginRole}"><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@organization.com"></label><label>Password<div class="password-wrap"><input type="password" name="password" autocomplete="current-password" required maxlength="128" placeholder="Enter your password"><button type="button" data-access-toggle-password>Show</button></div></label><div class="form-row-between"><span></span><button type="button" class="text-button" data-action="forgot-password">Forgot password?</button></div><button class="button button-primary button-full" type="submit">Continue to ${role.label}</button></form><div class="access-security-note"><strong>Workspace access:</strong> Recruiter, Institution Admin and Platform Admin accounts cannot be created publicly. They must be provisioned or approved by an authorized administrator.</div>`;
-    renderGoogleSignIn(view);
+    view.innerHTML = `${modeTabs('login')}<span class="section-kicker">Secure workspace access</span><h2 id="auth-title">Choose your role and sign in</h2><p class="form-intro">Students can continue with Google to create an account or sign in. No separate password is needed for a new Google account.</p>${roleCards(loginRole, 'login')}<div class="access-selection-summary"><span class="access-role-dot" aria-hidden="true"></span><div><b data-access-summary-label>${role.label}</b><span data-access-summary-short>${role.short}</span></div></div><div id="role-login-error" class="access-form-error" role="alert"></div><div class="access-login-methods"></div><div class="access-method-divider">or continue with email</div><form id="role-login-form" class="form-stack"><input type="hidden" name="role" value="${loginRole}"><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@organization.com"></label><label>Password<div class="password-wrap"><input type="password" name="password" autocomplete="current-password" required maxlength="128" placeholder="Enter your password"><button type="button" data-access-toggle-password>Show</button></div></label><div class="form-row-between"><span></span><button type="button" class="text-button" data-action="forgot-password">Forgot password?</button></div><button class="button button-primary button-full" type="submit">Continue to ${role.label}</button></form><div class="access-security-note"><strong>Workspace access:</strong> Recruiter, Institution Admin and Platform Admin accounts cannot be created publicly. They must be provisioned or approved by an authorized administrator.</div>`;
+    if (!$('#auth-overlay')?.classList.contains('hidden')) renderGoogleSignIn(view);
   }
 
   function updateLoginRole(roleKey) {
@@ -249,8 +295,8 @@
     setBusy(form, true);
     try {
       const body = Object.fromEntries(new FormData(form).entries());
-      await requestJson('/auth/login-role', {method: 'POST', body: JSON.stringify(body)});
-      location.reload();
+      const session = await requestJson('/auth/login-role', {method: 'POST', body: JSON.stringify(body)});
+      await completeSignIn(session);
     } catch (error) {
       apiErrors.applyToForm(form, error, $('#role-login-error'));
       setBusy(form, false);
@@ -287,7 +333,7 @@
       if (body.full_name && login.access_token) {
         await requestJson('/students/profile', {method: 'PUT', headers: {Authorization: `Bearer ${login.access_token}`}, body: JSON.stringify({full_name: body.full_name})});
       }
-      location.reload();
+      await completeSignIn(login);
     } catch (error) {
       apiErrors.applyToForm(form, error, $('#role-create-error'));
       setBusy(form, false);

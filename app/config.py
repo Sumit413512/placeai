@@ -138,6 +138,9 @@ class Settings:
         self.upload_dir = Path(os.getenv("UPLOAD_DIR", "uploads/resumes"))
         self.max_resume_mb = _bounded_env_int("MAX_RESUME_MB", 5, 1, 50)
         self.public_recruiter_signup = os.getenv("PUBLIC_RECRUITER_SIGNUP", "false").lower() == "true"
+        # Shared student workspace during the current B2B rollout. This controls
+        # feature availability only; institution membership still scopes records.
+        self.student_unified_access = os.getenv("STUDENT_UNIFIED_ACCESS", "true").lower() == "true"
         self.allow_talent_pool_search = os.getenv("ALLOW_TALENT_POOL_SEARCH", "false").lower() == "true"
         self.google_client_id = os.getenv("GOOGLE_CLIENT_ID", "")
         self.openai_api_key = os.getenv("OPENAI_API_KEY", "")

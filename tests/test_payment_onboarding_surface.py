@@ -28,11 +28,11 @@ def test_public_payment_onboarding_pages_are_present_and_linked():
         assert 'href="/terms"' in page
 
     assert "Request access" in contact
-    assert "₹299" in pricing
-    assert "₹20" in pricing
+    assert "Shared student workspace" in pricing
+    assert "AI Career Roadmap included" in pricing
     assert "No physical product is shipped" in service_delivery
-    assert "₹299" in refund
-    assert "₹20" in refund
+    assert "No individual student subscription is required" in refund
+    assert "No separate feature payment is collected" in refund
     assert "original payment" in refund
     assert "/static/pricing.html" in legal_links
     assert "/static/about.html" in legal_links

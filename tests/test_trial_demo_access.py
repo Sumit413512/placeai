@@ -202,3 +202,10 @@ def test_institution_sponsored_student_can_continue_after_demo_attempt():
         assert state["free_attempts_remaining"] is None
     finally:
         db.close()
+
+
+@pytest.fixture(autouse=True)
+def segmented_policy_compatibility(monkeypatch):
+    """Keep coverage of the optional future segmented policy, explicitly disabled today."""
+    from app.config import get_settings
+    monkeypatch.setattr(get_settings(), "student_unified_access", False)

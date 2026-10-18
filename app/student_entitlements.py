@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.billing_models import StudentSubscription
+from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import Organization, StudentProfile, User, UserRole
@@ -26,6 +27,21 @@ def student_access_status(user: User, db: Session) -> dict:
 
     # An institution code is a public identifier, never proof of sponsorship.
     institution = db.get(Organization, profile.organization_id) if profile.organization_id else None
+    if get_settings().student_unified_access:
+        return {
+            "student_kind": "student",
+            "access_mode": "student_workspace",
+            "premium_access": True,
+            "campus_access": bool(profile.is_verified and institution and institution.is_active
+                                  and user.organization_id == profile.organization_id),
+            "trial_started_at": None,
+            "trial_ends_at": None,
+            "trial_days": None,
+            "trial_remaining_seconds": None,
+            "plan_code": "student_workspace",
+            "price_inr": 0,
+            "payment_required": False,
+        }
     if (profile.is_verified and institution and institution.is_active
             and user.organization_id == profile.organization_id):
         return {
