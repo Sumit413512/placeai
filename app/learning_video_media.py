@@ -7,6 +7,7 @@ import logging
 import math
 import os
 import re
+import tempfile
 import time
 import wave
 from fractions import Fraction
@@ -267,6 +268,30 @@ def board_frame(scene, number, total, phase, base=None):
 
 
 def render_video(script, narrate=speak):
+    """Stage bounded audio before loading the encoder; never overlap neural inference."""
+    with tempfile.TemporaryFile() as staged:
+        locations = []
+        total_seconds = 0
+        for scene in script["scenes"]:
+            pcm = narrate(scene["narration"])
+            duration = math.ceil(len(pcm) / (RATE * 2))
+            total_seconds += duration
+            if not 1 <= duration <= 90 or total_seconds > 480:
+                raise ValueError("Lesson duration exceeds the rendering limit")
+            locations.append((staged.tell(), len(pcm)))
+            staged.write(pcm)
+            del pcm
+        positions = iter(locations)
+
+        def read_audio(_text):
+            offset, size = next(positions)
+            staged.seek(offset)
+            return staged.read(size)
+
+        return _encode_video(script, read_audio)
+
+
+def _encode_video(script, narrate):
     """One scene at a time: bounded RAM, one encoding thread and exact scene boundaries."""
     import av
     output = io.BytesIO()
