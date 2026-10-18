@@ -29,16 +29,23 @@
     '/static/release-ux-fixes.js',
     '/static/integration-readiness.js',
     '/static/ai-readiness.js',
-    '/static/workspace-experience.js?v=20261018-workspace-ui1',
+    '/static/workspace-experience.js?v=20261016-interface-guidelines',
     '/static/legal-links.js',
-    '/static/career-roadmap.js?v=20261018-workspace-ui1',
+    '/static/career-roadmap.js?v=20261016-interface-guidelines',
     '/static/app-core.js?v=20261018-workspace-ui1'
   ];
 
   const loadNext = (index) => {
     if (index >= scripts.length) return;
     const candidateSrc = new URL(scripts[index], document.baseURI).href;
-    const existing = [...document.scripts].find(script => script.src === candidateSrc);
+    // Cache-version queries identify releases, not distinct executable modules.
+    // The Python shell may already have scheduled another version of this asset.
+    const candidateUrl = new URL(candidateSrc);
+    const existing = [...document.scripts].find(script => {
+      if (!script.src) return false;
+      const url = new URL(script.src, document.baseURI);
+      return url.origin === candidateUrl.origin && url.pathname === candidateUrl.pathname;
+    });
     if (existing) {
       const state = existing.dataset.placeaiLoaderState;
       const parsedBeforeLoader = document.readyState !== 'loading' && !existing.async && existing !== document.currentScript;

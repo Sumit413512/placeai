@@ -1133,3 +1133,25 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 #app-shell .roadmap-summary-grid .metric-card span:not(.metric-symbol) { font-size: 14px !important; }
 
 #app-shell .learning-video-card-title { font-family: var(--font-body) !important; }
+
+/* A narrow desktop content column must wrap table actions before shrinking them. */
+#app-shell .data-toolbar { flex-wrap: wrap; }
+#app-shell .data-toolbar .search-box { flex: 1 1 220px; min-width: 0; max-width: 100%; }
+#app-shell .data-toolbar :is(.row-button,.button) { flex-shrink: 0; }
+
+/* Trust evidence is operational content, not miniature dashboard decoration. */
+#app-shell .trust-check { grid-template-columns: 26px minmax(0,1fr) auto; }
+#app-shell .trust-check strong { font-size: 14px !important; line-height: 1.5; }
+#app-shell .trust-check small { font-size: 13px !important; line-height: 1.6; color: var(--pa-muted) !important; }
+#app-shell .trust-check b, #app-shell .trust-disclaimer,
+#app-shell .trust-score-wrap > div > :is(p,small) { font-size: 13px !important; line-height: 1.6; }
+#app-shell .trust-disclaimer { color: var(--pa-muted) !important; }
+@media(max-width:760px) {
+  /* The card transformation must also remove the desktop table's min-width. */
+  #app-shell table[data-placeai-responsive="true"] { min-width: 0 !important; max-width: 100%; }
+  #app-shell table[data-placeai-responsive="true"] :is(tbody,tr,td) { min-width: 0; max-width: 100%; }
+  #app-shell table[data-placeai-responsive="true"] tbody { grid-template-columns: minmax(0,1fr); }
+  #app-shell table[data-placeai-responsive="true"] :is(.table-primary,.table-secondary) { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+  #app-shell table[data-placeai-responsive="true"] tbody td::before { font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: normal; color: var(--pa-muted); }
+  #app-shell table[data-placeai-responsive="true"] .status-pill { justify-self: start; }
+}
