@@ -5,20 +5,21 @@ isolated test server. Token signature/audience/nonce verification, provisioning,
 MFA, cookies, refresh, student tools and logout use production code.
 """
 import os
+import json
 from pathlib import Path
 import sqlite3
 import subprocess
 import sys
 import time
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import pytest
 from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 URL = "http://127.0.0.1:8766"
-RUNNER = '''
-import json, time
+RUNNER = r'''
+import json, time, os, re
 from types import SimpleNamespace
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
@@ -27,6 +28,17 @@ from google.auth.crypt import RSASigner
 from google.auth.transport import requests
 from app.app import app
 from app.config import get_settings
+from app import google_login
+
+mail = []
+def send_mail(settings, **kwargs):
+    mail.append(kwargs['body'])
+    return ('sent', None)
+google_login.send_transactional_email = send_mail
+
+@app.get('/__test_google/code')
+def code():
+    return {'code':re.search(r'code is (\d{6})',mail[-1])[1]}
 
 key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
@@ -42,7 +54,7 @@ requests.Request = Certificates
 def token(nonce: str, invalid: bool = False):
     claims = {'iss':'https://accounts.google.com','aud':get_settings().google_client_id,
               'iat':int(time.time()),'exp':int(time.time())+300,'sub':'isolated-browser-student',
-              'email':'browser.new.student@gmail.com','email_verified':True,'name':'Browser Student','nonce':nonce}
+              'email':os.environ['TEST_GOOGLE_EMAIL'],'email_verified':True,'name':'Browser Student','nonce':nonce}
     value = jwt.encode(signer, claims).decode()
     return {'credential':value + ('invalid' if invalid else '')}
 '''
@@ -66,8 +78,10 @@ window.google = {accounts:{id:{
 '''
 
 
-@pytest.fixture(scope="module")
-def google_server(tmp_path_factory):
+@pytest.fixture
+def google_server(tmp_path_factory, request):
+    kind = request.param
+    email = 'browser.new.student@example.com' if kind == 'third-party' else 'browser.new.student@gmail.com'
     directory = tmp_path_factory.mktemp("google-browser")
     runner = directory / "google_test_server.py"
     runner.write_text(RUNNER, encoding="utf-8")
@@ -77,7 +91,7 @@ def google_server(tmp_path_factory):
            "JWT_SECRET_KEY":"isolated-browser-google-access-secret-abcdefghijklmnopqrstuvwxyz",
            "JWT_REFRESH_SECRET_KEY":"isolated-browser-google-refresh-secret-abcdefghijklmnopqrstuvwxyz",
            "BASE_URL":URL, "ALLOWED_ORIGINS":URL, "STUDENT_UNIFIED_ACCESS":"true",
-           "PYTHONPATH":str(ROOT)+os.pathsep+str(directory)}
+           "PYTHONPATH":str(ROOT)+os.pathsep+str(directory), "TEST_GOOGLE_EMAIL":email}
     log_path = directory / 'server.log'
     log = log_path.open('w', encoding='utf-8')
     process = subprocess.Popen([sys.executable,"-m","uvicorn","google_test_server:app","--host","127.0.0.1","--port","8766"],
@@ -92,7 +106,11 @@ def google_server(tmp_path_factory):
                 time.sleep(.2)
         else:
             raise RuntimeError("Isolated Google auth server did not start: " + log_path.read_text(encoding='utf-8')[-4000:])
-        yield database
+        if kind != 'new':
+            seed = Request(URL+'/auth/signup', headers={'Content-Type':'application/json'},
+                           data=json.dumps({'username':'existing_student','email':email,'password':'Old unverified password 2026!'}).encode())
+            assert urlopen(seed, timeout=10).status == 201
+        yield database, kind, email
     finally:
         process.terminate()
         try:
@@ -102,7 +120,9 @@ def google_server(tmp_path_factory):
         log.close()
 
 
+@pytest.mark.parametrize('google_server', ['new', 'unverified', 'third-party'], indirect=True)
 def test_google_first_signup_returning_signin_refresh_and_logout(google_server):
+    database, kind, email = google_server
     with sync_playwright() as pw:
         executable = os.getenv("PLAYWRIGHT_CHROMIUM_EXECUTABLE", "")
         browser = pw.chromium.launch(headless=True, **({"executable_path":executable} if executable else {}))
@@ -124,19 +144,30 @@ def test_google_first_signup_returning_signin_refresh_and_logout(google_server):
         page.get_by_role("button",name="Continue with Google",exact=True).click()
         expect(page.locator('.google-sign-in [role=status]')).to_contain_text("could not be verified")
         assert page.locator('#auth-overlay').is_visible()
-        with sqlite3.connect(google_server) as db:
-            assert db.execute('select count(*) from users').fetchone()[0] == 0
+        with sqlite3.connect(database) as db:
+            assert db.execute('select count(*) from users').fetchone()[0] == int(kind != 'new')
         page.evaluate("window.__invalidGoogle=false")
         page.locator('#login-view [data-access-switch=create]').click()
         expect(page.locator('#auth-create-title')).to_have_text('Create your student account')
         # Google is independent of the email/password form and its constraints.
         page.locator('#role-student-signup-form [name=password]').fill('weak')
         page.get_by_role("button",name="Continue with Google",exact=True).click()
+        if kind == 'third-party':
+            field = page.get_by_label('Code sent to your email',exact=True)
+            field.wait_for()
+            field.fill('000000')
+            # Read the isolated mail transport, never bypass the actual verifier.
+            code = page.request.get(URL+'/__test_google/code').json()['code']
+            field.fill('999999' if code != '999999' else '000000')
+            page.get_by_role('button',name='Confirm email and sign in',exact=True).click()
+            expect(page.locator('#signup-view .google-sign-in [role=status]')).to_contain_text('incorrect, expired')
+            field.fill(code)
+            page.get_by_role('button',name='Confirm email and sign in',exact=True).click()
         choice = page.get_by_role("dialog",name="Add an extra layer of protection",exact=True)
         choice.get_by_role("button",name="Skip for now",exact=True).click()
         page.locator('#app-shell').wait_for(state="visible")
         page.locator('#auth-overlay').wait_for(state="hidden")
-        with sqlite3.connect(google_server) as db:
+        with sqlite3.connect(database) as db:
             assert db.execute('select count(*) from users').fetchone()[0] == 1
             assert db.execute('select count(*) from student_profiles').fetchone()[0] == 1
             assert db.execute('select count(*) from google_identities').fetchone()[0] == 1
@@ -161,14 +192,14 @@ def test_google_first_signup_returning_signin_refresh_and_logout(google_server):
         page.locator('.hero [data-open-auth=login]').click()
         # Password login failures also remain visible without navigation.
         form = page.locator('#role-login-form')
-        form.locator('[name=email]').fill('browser.new.student@gmail.com')
-        form.locator('[name=password]').fill('Incorrect local password 2026!')
+        form.locator('[name=email]').fill(email)
+        form.locator('[name=password]').fill('Old unverified password 2026!' if kind != 'new' else 'Incorrect local password 2026!')
         form.locator('button[type=submit]').click()
         expect(page.locator('#role-login-error')).to_contain_text('Incorrect email or password')
         page.get_by_role("button",name="Continue with Google",exact=True).click()
         choice.get_by_role("button",name="Skip for now",exact=True).click()
         page.locator('#app-shell').wait_for(state="visible")
-        with sqlite3.connect(google_server) as db:
+        with sqlite3.connect(database) as db:
             assert db.execute('select count(*) from users').fetchone()[0] == 1
         assert not errors, errors
         browser.close()

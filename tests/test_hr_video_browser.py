@@ -185,7 +185,7 @@ def test_continuous_hr_video_auto_submits_and_withholds_partial_results(browser)
     page.close()
 
 
-def test_google_sign_in_uses_selected_role_and_password_link_challenge(browser):
+def test_google_sign_in_uses_selected_role_and_email_link_challenge(browser):
     page = browser.new_page()
     page.route("**/auth/google-config", lambda route: route.fulfill(json={
         "enabled": True, "client_id": "test.apps.googleusercontent.com", "nonce": "test-nonce"}))
@@ -199,8 +199,8 @@ def test_google_sign_in_uses_selected_role_and_password_link_challenge(browser):
 
     def login(route):
         calls.append(route.request.post_data_json)
-        route.fulfill(status=409, json={"detail": "Confirm your existing PlaceAI password to link this account.",
-                                      "code": "GOOGLE_LINK_PASSWORD_REQUIRED"})
+        route.fulfill(status=202, json={"message": "Check your email for a one-time code. No PlaceAI password is needed.",
+                                      "email_link_required":True, "link_challenge":"synthetic-link-challenge-"+"x"*24})
 
     page.route("**/auth/google", login)
     page.goto(BASE_URL, wait_until="domcontentloaded")
@@ -222,11 +222,12 @@ def test_google_sign_in_uses_selected_role_and_password_link_challenge(browser):
         cards = page.locator('#login-view .access-role-card')
         assert cards.nth(0).bounding_box()["y"] == cards.nth(1).bounding_box()["y"]
     page.get_by_text("Test Google sign-in", exact=True).click()
-    page.get_by_text("Link Google account and sign in", exact=True).wait_for()
+    page.get_by_role('button',name='Confirm email and sign in',exact=True).wait_for()
     assert calls[-1]["role"] == "institution_admin"
     assert page.evaluate("googleConfig.nonce") == "test-nonce"
-    page.locator('#role-login-form [name="password"]').fill("Synthetic#Password123")
-    page.get_by_text("Link Google account and sign in", exact=True).click()
-    page.wait_for_function("() => document.querySelector('.google-sign-in button')?.textContent.includes('Link')")
-    assert calls[-1]["password"] == "Synthetic#Password123"
+    page.get_by_label('Code sent to your email',exact=True).fill('123456')
+    page.get_by_role('button',name='Confirm email and sign in',exact=True).click()
+    page.wait_for_function("() => document.querySelector('.google-sign-in input')?.value === ''")
+    assert calls[-1]["link_code"] == "123456"
+    assert 'password' not in calls[-1]
     page.close()

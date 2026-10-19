@@ -101,28 +101,55 @@
       area.append(buttonHost, feedback);
       let resizeObserver;
       let linking = false;
-      const signIn = async (credential, role, password) => {
+      let signingIn = false;
+      const signIn = async (credential, role, proof = {}) => {
+        if (signingIn) return;
+        signingIn = true;
         const errorArea = $(signup ? '#role-create-error' : '#role-login-error', view);
         if (errorArea) errorArea.textContent = '';
         feedback.textContent = 'Finishing Google sign-in…';
         try {
-          const session = await requestJson('/auth/google', {method:'POST', body:JSON.stringify({credential, role, ...(password ? {password} : {})})});
+          const session = await requestJson('/auth/google', {method:'POST', body:JSON.stringify({credential, role, ...proof})});
+          if (session.email_link_required) {
+            linking = true;
+            resizeObserver?.disconnect();
+            buttonHost.replaceChildren();
+            feedback.textContent = session.message;
+            const form = document.createElement('form');
+            form.className = 'access-form';
+            const label = document.createElement('label');
+            label.textContent = 'Code sent to your email';
+            const input = document.createElement('input');
+            input.name = 'google_link_code'; input.type = 'text'; input.inputMode = 'numeric';
+            input.autocomplete = 'one-time-code'; input.pattern = '[0-9]{6}';
+            input.minLength = 6; input.maxLength = 6; input.required = true;
+            label.append(input);
+            const confirm = document.createElement('button');
+            confirm.type = 'submit'; confirm.className = 'button button-primary button-full';
+            confirm.textContent = 'Confirm email and sign in';
+            form.append(label, confirm);
+            form.addEventListener('submit', async event => {
+              event.preventDefault();
+              if (!form.reportValidity()) return;
+              confirm.disabled = true;
+              try { await signIn(credential, role, {link_challenge:session.link_challenge, link_code:input.value}); }
+              finally { confirm.disabled = false; }
+            });
+            const restart = document.createElement('button');
+            restart.type = 'button'; restart.className = 'button button-secondary button-full';
+            restart.textContent = 'Restart Google sign-in';
+            restart.onclick = () => { area.remove(); googleConfiguration = null; renderGoogleSignIn(view); };
+            buttonHost.append(form, restart);
+            input.focus();
+            return;
+          }
           await completeSignIn(session);
           googleConfiguration = null;
         } catch (error) {
           feedback.textContent = error.message;
           feedback.scrollIntoView({block:'nearest'});
-          if (error.code === 'GOOGLE_LINK_PASSWORD_REQUIRED') {
-            linking = true;
-            resizeObserver?.disconnect();
-            buttonHost.textContent = '';
-            const link = document.createElement('button');
-            link.type = 'button'; link.className = 'button button-secondary button-full';
-            link.textContent = 'Link Google account and sign in';
-            link.onclick = () => signIn(credential, role, view.querySelector('[name="password"]')?.value);
-            buttonHost.append(link);
-            view.querySelector('[name="password"]')?.focus();
-          }
+        } finally {
+          signingIn = false;
         }
       };
       googleHandler = result => {

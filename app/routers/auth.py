@@ -278,6 +278,8 @@ def google_auth(payload: GoogleAuthRequest, request: Request, response: Response
     from app.google_login import authenticate
     try:
         user = authenticate(payload, request, response, db)
+        if isinstance(user, dict):
+            return JSONResponse(status_code=202, content=user, headers={"Cache-Control": "no-store"})
         return _token_response(user, response, db)
     except HTTPException as exc:
         _record_google_failure(db, request, exc.status_code)
