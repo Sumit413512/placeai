@@ -1,18 +1,19 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.email_delivery import send_transactional_email
-from app.models import AccountProtection, Organization, RecruiterProfile, RefreshSession, StudentProfile, User, UserRole
+from app.models import AccountProtection, AuditEvent, Organization, RecruiterProfile, RefreshSession, StudentProfile, User, UserRole
 from app.telemetry_models import EmailDeliveryEvent
 from app.rate_limit import enforce_auth_limits, enforce_rate_limit
 from app.schemas import (
@@ -278,11 +279,33 @@ def google_auth(payload: GoogleAuthRequest, request: Request, response: Response
     try:
         user = authenticate(payload, request, response, db)
         return _token_response(user, response, db)
+    except HTTPException as exc:
+        _record_google_failure(db, request, exc.status_code)
+        raise
     except IntegrityError as exc:
         # A concurrent first sign-in can win either unique account binding. Never
         # switch identities or issue a session from the losing transaction.
         db.rollback()
+        _record_google_failure(db, request, 409)
         raise HTTPException(409, "Google account linking changed. Please sign in again.") from exc
+
+
+def _record_google_failure(db: Session, request: Request, status_code: int) -> None:
+    """Security diagnostics without identity claims, credentials or request bodies."""
+    db.rollback()
+    if status_code == 429 or not hasattr(request.state, "google_auth_step"):
+        return
+    stage = getattr(request.state, "google_auth_step", "request_gate")
+    allowed = {"challenge", "provider_identity", "nonce_binding", "verified_identity_claims",
+               "existing_account", "workspace_role", "existing_account_link", "new_account", "identity_binding"}
+    try:
+        db.add(AuditEvent(action="auth.google.failure", entity_type="authentication",
+                          metadata_json=json.dumps({"provider":"google", "stage":stage if stage in allowed else "request_gate",
+                                                    "status_code":status_code})))
+        db.commit()
+    except SQLAlchemyError:
+        # A diagnostics failure must never alter the authentication decision.
+        db.rollback()
 
 
 def _send_reset_email(recipient: str, link: str) -> tuple[str, str | None]:

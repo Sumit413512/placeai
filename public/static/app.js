@@ -22,7 +22,7 @@
     '/static/workspace-runtime.js',
     '/static/api-errors.js',
     '/static/auth-protection.js',
-    '/static/access-portal.js?v=20261019-auth-session1',
+    '/static/access-portal.js?v=20261019-standard-auth2',
     '/static/ui-state-fixes.js',
     '/static/account-security.js',
     '/static/provisioning-password-fix.js',

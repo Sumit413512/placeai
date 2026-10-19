@@ -13,9 +13,9 @@ from sqlalchemy.pool import StaticPool
 
 from app import google_login
 from app.database import Base, get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_platform_admin
 from app.models import (
-    AccountProtection, GoogleIdentity, Organization, RateLimitBucket, RecruiterProfile, RefreshSession,
+    AccountProtection, AuditEvent, GoogleIdentity, Organization, RateLimitBucket, RecruiterProfile, RefreshSession,
     StudentProfile, User, UserRole,
 )
 from app.routers import auth
@@ -29,7 +29,7 @@ CREDENTIAL = "synthetic-google-id-token-for-tests"
 def google_auth(monkeypatch):
     """Exercise real endpoints, sessions, password hashes and rate limits in isolation."""
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    tables = [Organization, User, GoogleIdentity, StudentProfile, RecruiterProfile, RefreshSession, RateLimitBucket, AccountProtection]
+    tables = [Organization, User, GoogleIdentity, StudentProfile, RecruiterProfile, RefreshSession, RateLimitBucket, AccountProtection, AuditEvent]
     Base.metadata.create_all(engine, tables=[model.__table__ for model in tables])
     sessions = sessionmaker(bind=engine)
     monkeypatch.setattr(auth.settings, "google_client_id", "placeai-test.apps.googleusercontent.com")
@@ -50,6 +50,10 @@ def google_auth(monkeypatch):
 
     @app.get("/protected")
     def protected(user: User = Depends(get_current_user)):
+        return {"id": user.id}
+
+    @app.get("/admin")
+    def admin(user: User = Depends(require_platform_admin)):
         return {"id": user.id}
 
     password_hash = get_hashed_password(PASSWORD)
@@ -204,13 +208,26 @@ def test_google_sign_in_preserves_required_password_rotation(google_auth):
     assert protected.status_code == 428
 
 
-def test_role_mismatch_cannot_bind_or_upgrade_account(google_auth):
+def test_requested_role_cannot_upgrade_google_account(google_auth):
     user_id = google_auth.make_user()
-    assert google_auth.sign_in("platform_admin").status_code == 403
+    response = google_auth.sign_in("platform_admin")
+    assert response.status_code == 200
+    me = google_auth.client.get('/auth/me', headers={"Authorization":"Bearer "+response.json()['access_token']})
+    assert me.json()['role'] == 'student'
+    assert google_auth.client.get('/admin', headers={"Authorization":"Bearer "+response.json()['access_token']}).status_code == 403
     with google_auth.sessions() as db:
         assert db.get(User, user_id).role == UserRole.student
-        assert db.query(GoogleIdentity).count() == 0
-        assert db.query(RefreshSession).count() == 0
+        assert db.query(GoogleIdentity).one().user_id == user_id
+        assert db.query(RefreshSession).count() == 1
+
+
+@pytest.mark.parametrize('role', ['recruiter','institution_admin','platform_admin'])
+def test_google_discovers_existing_workspace_from_server(google_auth, role):
+    google_auth.make_user(role)
+    response = google_auth.sign_in('student')
+    assert response.status_code == 200
+    me = google_auth.client.get('/auth/me', headers={"Authorization":"Bearer "+response.json()['access_token']})
+    assert me.json()['role'] == role
 
 
 @pytest.mark.parametrize("bound", [False, True])
@@ -367,3 +384,14 @@ def test_google_token_verifier_supplies_configured_audience(monkeypatch):
     assert google_login.verify_credential(CREDENTIAL) == {"sub": "verified-subject"}
     assert verifier.call_args.args[0] == CREDENTIAL
     assert verifier.call_args.args[2] == "expected-client"
+
+
+def test_google_failures_record_only_safe_categories(google_auth):
+    google_auth.verifier.side_effect = ValueError("private provider diagnostics")
+    assert google_auth.sign_in().status_code == 401
+    with google_auth.sessions() as db:
+        event = db.query(AuditEvent).filter_by(action="auth.google.failure").one()
+        assert event.actor_user_id is None and event.organization_id is None
+        assert event.details == {"provider":"google", "stage":"provider_identity", "status_code":401}
+        assert CREDENTIAL not in event.metadata_json
+        assert google_auth.claims["email"] not in event.metadata_json
