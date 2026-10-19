@@ -218,12 +218,14 @@
   function renderCreate() {
     const view = $('#signup-view');
     if (!view) return;
-    if (createRole === 'student') {
-      view.innerHTML = `${modeTabs('create')}<span class="section-kicker">New to PlaceAI?</span><h2 id="auth-create-title">Create your student account</h2><p class="form-intro">Sign up with your Google account. No PlaceAI password is needed.</p><div class="access-login-methods"></div><div class="access-method-divider">or sign up with email</div>${studentSignupForm()}<p class="form-intro">Need a college or recruiter workspace? <button type="button" class="text-button" data-request-workspace>Request access</button></p>`;
-      if (!$('#auth-overlay')?.classList.contains('hidden')) renderGoogleSignIn(view);
-    } else {
-      view.innerHTML = `${modeTabs('create')}<span class="section-kicker">Organization access</span><h2 id="auth-create-title">Request your workspace</h2><p class="form-intro">College, recruiter and platform access is reviewed before activation.</p>${roleCards(createRole, 'create')}${controlledAccessForm(createRole)}`;
-    }
+    const student = createRole === 'student';
+    const form = createRole === 'student' ? studentSignupForm() : controlledAccessForm(createRole);
+    const title = student ? 'Create your student account' : 'Request your workspace';
+    const intro = student ? 'Sign up with your Google account. No PlaceAI password is needed.' : 'College, recruiter and platform access is reviewed before activation.';
+    const methods = student ? '<div class="access-login-methods"></div><div class="access-method-divider">or sign up with email</div>' : roleCards(createRole, 'create');
+    const requestLink = student ? '<p class="form-intro">Need a college or recruiter workspace? <button type="button" class="text-button" data-request-workspace>Request access</button></p>' : '';
+    view.innerHTML = `${modeTabs('create')}<span class="section-kicker">${student ? 'New to PlaceAI?' : 'Organization access'}</span><h2 id="auth-create-title">${title}</h2><p class="form-intro">${intro}</p>${methods}${form}${requestLink}`;
+    if (student && !$('#auth-overlay')?.classList.contains('hidden')) renderGoogleSignIn(view);
   }
 
   function normalizeAndFocusFirstInput(form) {
