@@ -78,8 +78,10 @@ def google_server(tmp_path_factory):
            "JWT_REFRESH_SECRET_KEY":"isolated-browser-google-refresh-secret-abcdefghijklmnopqrstuvwxyz",
            "BASE_URL":URL, "ALLOWED_ORIGINS":URL, "STUDENT_UNIFIED_ACCESS":"true",
            "PYTHONPATH":str(ROOT)+os.pathsep+str(directory)}
+    log_path = directory / 'server.log'
+    log = log_path.open('w', encoding='utf-8')
     process = subprocess.Popen([sys.executable,"-m","uvicorn","google_test_server:app","--host","127.0.0.1","--port","8766"],
-                               cwd=ROOT,env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                               cwd=ROOT,env=env,stdout=log,stderr=subprocess.STDOUT)
     try:
         deadline = time.monotonic()+30
         while time.monotonic() < deadline:
@@ -89,7 +91,7 @@ def google_server(tmp_path_factory):
             except Exception:
                 time.sleep(.2)
         else:
-            raise RuntimeError("Isolated Google auth server did not start")
+            raise RuntimeError("Isolated Google auth server did not start: " + log_path.read_text(encoding='utf-8')[-4000:])
         yield database
     finally:
         process.terminate()
@@ -97,6 +99,7 @@ def google_server(tmp_path_factory):
             process.wait(timeout=8)
         except subprocess.TimeoutExpired:
             process.kill()
+        log.close()
 
 
 def test_google_first_signup_returning_signin_refresh_and_logout(google_server):
@@ -119,11 +122,15 @@ def test_google_first_signup_returning_signin_refresh_and_logout(google_server):
         # A real signature failure must remain visible; no reload or empty login.
         page.evaluate("window.__invalidGoogle=true")
         page.get_by_role("button",name="Continue with Google",exact=True).click()
-        expect(page.locator('#role-login-error')).to_contain_text("could not be verified")
+        expect(page.locator('.google-sign-in [role=status]')).to_contain_text("could not be verified")
         assert page.locator('#auth-overlay').is_visible()
         with sqlite3.connect(google_server) as db:
             assert db.execute('select count(*) from users').fetchone()[0] == 0
         page.evaluate("window.__invalidGoogle=false")
+        page.locator('#login-view [data-access-switch=create]').click()
+        expect(page.locator('#auth-create-title')).to_have_text('Create your student account')
+        # Google is independent of the email/password form and its constraints.
+        page.locator('#role-student-signup-form [name=password]').fill('weak')
         page.get_by_role("button",name="Continue with Google",exact=True).click()
         choice = page.get_by_role("dialog",name="Add an extra layer of protection",exact=True)
         choice.get_by_role("button",name="Skip for now",exact=True).click()

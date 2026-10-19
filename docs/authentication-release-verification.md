@@ -35,3 +35,10 @@ Current rollout: `STUDENT_UNIFIED_ACCESS=true` by default. Students share featur
 availability without changing organization membership or private-record scopes.
 Payments and public creation of privileged accounts remain disabled. Changing
 the access mode later requires explicit product approval and regression checks.
+
+The public authentication dialog has separate Sign in and Sign up entry points.
+Student Google signup does not submit or validate the email/password form.
+Existing Google identities open the role stored on the server regardless of the
+role currently selected in the UI; requesting a different role cannot change
+permissions. Rejected Google attempts record only a safe failure stage and status
+in the security audit, without identity claims or credentials.

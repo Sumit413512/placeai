@@ -346,6 +346,7 @@ def test_privileged_role_rerender_focuses_visible_form_on_mobile(browser) -> Non
     page.locator('.hero button[data-open-auth="login"]').click()
     page.locator("#auth-overlay").wait_for(state="visible")
     page.locator('#login-view [data-access-switch="create"]').click()
+    page.locator('[data-request-workspace]').click()
     page.wait_for_timeout(50)
 
     for role in ("recruiter", "institution_admin", "platform_admin"):

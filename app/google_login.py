@@ -58,6 +58,7 @@ def authenticate(payload: GoogleAuthRequest, request: Request, response: Respons
     if not settings.google_client_id:
         raise HTTPException(503, "Google Sign-In is not configured")
     verification_step = "challenge"
+    request.state.google_auth_step = verification_step
     try:
         nonce, signature = request.cookies.get(COOKIE, "").rsplit(".", 1)
         expected = hmac.new(settings.jwt_secret_key.encode(), nonce.encode(), hashlib.sha256).hexdigest()
@@ -65,14 +66,17 @@ def authenticate(payload: GoogleAuthRequest, request: Request, response: Respons
         if not hmac.compare_digest(signature, expected) or not 0 <= age <= 600:
             raise ValueError("Invalid challenge")
         verification_step = "provider_identity"
+        request.state.google_auth_step = verification_step
         info = verify_credential(payload.credential)
         verification_step = "nonce_binding"
+        request.state.google_auth_step = verification_step
         if not hmac.compare_digest(str(info.get("nonce", "")), nonce):
             raise ValueError("Challenge mismatch")
     except Exception as exc:
         # Never log the credential, claims, email or upstream exception text.
         logger.warning("Google sign-in verification failed: %s", verification_step)
         raise HTTPException(401, "Google sign-in expired or could not be verified. Please try again.") from exc
+    request.state.google_auth_step = "verified_identity_claims"
     email_claim = info.get("email")
     subject = info.get("sub")
     if (
@@ -91,10 +95,11 @@ def authenticate(payload: GoogleAuthRequest, request: Request, response: Respons
     if identity and not user:
         raise HTTPException(403, "The linked account is unavailable")
     if user:
+        request.state.google_auth_step = "existing_account"
         if not user.is_active:
             raise HTTPException(403, "Account is inactive")
-        if user.role.value != payload.role:
-            raise HTTPException(403, "Google sign-in role does not match this account")
+        # Google proves the account identity. Route an existing user by the
+        # server-stored role; a UI role selection never grants or changes it.
         if not identity:
             bound = db.query(GoogleIdentity).filter(GoogleIdentity.user_id == user.id).first()
             if bound:
@@ -104,12 +109,14 @@ def authenticate(payload: GoogleAuthRequest, request: Request, response: Respons
             # Never turn an unverified pre-registered local account into an
             # automatically linked identity using only an email-string match.
             if not authoritative or not user.email_verified:
+                request.state.google_auth_step = "existing_account_link"
                 enforce_auth_limits(db, request, scope="login", identifier=email, limit=12, window_seconds=600, block_seconds=900)
                 if not payload.password:
                     raise HTTPException(403, {"code": "GOOGLE_LINK_PASSWORD_REQUIRED", "message": "Enter your PlaceAI password once to link this Google account. If you did not create the existing account or do not know its password, use Forgot password first."})
                 if not verify_password(payload.password, user.hashed_password):
                     raise HTTPException(401, "Incorrect password")
     else:
+        request.state.google_auth_step = "new_account"
         if payload.role in {"institution_admin", "platform_admin"} or (payload.role == "recruiter" and not settings.public_recruiter_signup):
             raise HTTPException(403, "This role requires an existing account provisioned by an administrator")
         username_base = re.sub(r"[^A-Za-z0-9_]", "_", email.split("@")[0])[:55] or "student"
@@ -122,6 +129,7 @@ def authenticate(payload: GoogleAuthRequest, request: Request, response: Respons
             db.add(StudentProfile(user_id=user.id, full_name=str(info.get("name", ""))[:200]))
         else:
             db.add(RecruiterProfile(user_id=user.id, full_name=str(info.get("name", ""))[:200], is_verified=False))
+    request.state.google_auth_step = "identity_binding"
     if not identity:
         db.add(GoogleIdentity(subject=subject, user_id=user.id))
     # The signed cookie alone is replayable if restored. Consume the verified nonce

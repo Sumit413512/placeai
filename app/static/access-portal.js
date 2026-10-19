@@ -77,6 +77,7 @@
   }
 
   async function renderGoogleSignIn(view) {
+    const signup = view.id === 'signup-view';
     const area = document.createElement('div');
     area.className = 'google-sign-in';
     area.setAttribute('aria-live', 'polite');
@@ -92,32 +93,40 @@
       await loadGoogleLibrary();
       if (!area.isConnected) return;
       area.textContent = '';
+      const buttonHost = document.createElement('div');
+      const feedback = document.createElement('p');
+      feedback.className = 'access-form-error';
+      feedback.setAttribute('role', 'status');
+      feedback.setAttribute('aria-live', 'polite');
+      area.append(buttonHost, feedback);
       let resizeObserver;
       let linking = false;
       const signIn = async (credential, role, password) => {
-        const errorArea = $('#role-login-error', view);
+        const errorArea = $(signup ? '#role-create-error' : '#role-login-error', view);
         if (errorArea) errorArea.textContent = '';
+        feedback.textContent = 'Finishing Google sign-in…';
         try {
           const session = await requestJson('/auth/google', {method:'POST', body:JSON.stringify({credential, role, ...(password ? {password} : {})})});
           await completeSignIn(session);
           googleConfiguration = null;
         } catch (error) {
-          if (errorArea) errorArea.textContent = error.message;
+          feedback.textContent = error.message;
+          feedback.scrollIntoView({block:'nearest'});
           if (error.code === 'GOOGLE_LINK_PASSWORD_REQUIRED') {
             linking = true;
             resizeObserver?.disconnect();
-            area.textContent = '';
+            buttonHost.textContent = '';
             const link = document.createElement('button');
             link.type = 'button'; link.className = 'button button-secondary button-full';
             link.textContent = 'Link Google account and sign in';
-            link.onclick = () => signIn(credential, role, view.querySelector('[name="password"]').value);
-            area.append(link);
-            view.querySelector('[name="password"]').focus();
+            link.onclick = () => signIn(credential, role, view.querySelector('[name="password"]')?.value);
+            buttonHost.append(link);
+            view.querySelector('[name="password"]')?.focus();
           }
         }
       };
       googleHandler = result => {
-        if (area.isConnected) signIn(result.credential, loginRole);
+        if (area.isConnected) signIn(result.credential, signup ? 'student' : loginRole);
       };
       if (googleNonce !== config.nonce) {
         window.google.accounts.id.initialize({client_id:config.client_id, nonce:config.nonce, auto_select:false,
@@ -132,11 +141,10 @@
         const width = Math.round(Math.min(400, area.clientWidth || Math.max(200, window.innerWidth - 96)));
         if (width === renderedWidth) return;
         renderedWidth = width;
-        area.replaceChildren();
-        window.google.accounts.id.renderButton(area, {type:'standard', theme:'outline', size:'large', text:'continue_with', width,
+        buttonHost.replaceChildren();
+        window.google.accounts.id.renderButton(buttonHost, {type:'standard', theme:'outline', size:'large', text:signup ? 'signup_with' : 'continue_with', width,
           click_listener:() => {
-            const errorArea = $('#role-login-error', view);
-            if (errorArea) errorArea.textContent = 'Complete sign-in in the Google window. If you closed it, select Google again to retry.';
+            feedback.textContent = 'Continue in the Google window. If it does not open, use your regular Chrome or Safari browser and try again.';
           }});
       };
       renderButton();
@@ -163,14 +171,14 @@
   }
 
   function modeTabs(active) {
-    return `<div class="access-mode-row" role="tablist" aria-label="Account access"><button type="button" class="${active === 'login' ? 'is-active' : ''}" data-access-switch="login">Sign in</button><button type="button" class="${active === 'create' ? 'is-active' : ''}" data-access-switch="create">Create / request access</button></div>`;
+    return `<div class="access-mode-row" role="tablist" aria-label="Account access"><button type="button" role="tab" aria-selected="${active === 'login'}" class="${active === 'login' ? 'is-active' : ''}" data-access-switch="login">Sign in</button><button type="button" role="tab" aria-selected="${active === 'create'}" class="${active === 'create' ? 'is-active' : ''}" data-access-switch="create">Sign up</button></div>`;
   }
 
   function renderLogin() {
     const view = $('#login-view');
     if (!view) return;
     const role = roles[loginRole];
-    view.innerHTML = `${modeTabs('login')}<span class="section-kicker">Secure workspace access</span><h2 id="auth-title">Choose your role and sign in</h2><p class="form-intro">Students can continue with Google to create an account or sign in. No separate password is needed for a new Google account.</p>${roleCards(loginRole, 'login')}<div class="access-selection-summary"><span class="access-role-dot" aria-hidden="true"></span><div><b data-access-summary-label>${role.label}</b><span data-access-summary-short>${role.short}</span></div></div><div id="role-login-error" class="access-form-error" role="alert"></div><div class="access-login-methods"></div><div class="access-method-divider">or continue with email</div><form id="role-login-form" class="form-stack"><input type="hidden" name="role" value="${loginRole}"><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@organization.com"></label><label>Password<div class="password-wrap"><input type="password" name="password" autocomplete="current-password" required maxlength="128" placeholder="Enter your password"><button type="button" data-access-toggle-password>Show</button></div></label><div class="form-row-between"><span></span><button type="button" class="text-button" data-action="forgot-password">Forgot password?</button></div><button class="button button-primary button-full" type="submit">Continue to ${role.label}</button></form><div class="access-security-note"><strong>Workspace access:</strong> Recruiter, Institution Admin and Platform Admin accounts cannot be created publicly. They must be provisioned or approved by an authorized administrator.</div>`;
+    view.innerHTML = `${modeTabs('login')}<span class="section-kicker">Secure workspace access</span><h2 id="auth-title">Choose your role and sign in</h2><p class="form-intro">Welcome back. Continue with Google or sign in with your email and password. Google opens your assigned workspace automatically.</p>${roleCards(loginRole, 'login')}<div class="access-selection-summary"><span class="access-role-dot" aria-hidden="true"></span><div><b data-access-summary-label>${role.label}</b><span data-access-summary-short>${role.short}</span></div></div><div id="role-login-error" class="access-form-error" role="alert"></div><div class="access-login-methods"></div><div class="access-method-divider">or continue with email</div><form id="role-login-form" class="form-stack"><input type="hidden" name="role" value="${loginRole}"><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@organization.com"></label><label>Password<div class="password-wrap"><input type="password" name="password" autocomplete="current-password" required maxlength="128" placeholder="Enter your password"><button type="button" data-access-toggle-password>Show</button></div></label><div class="form-row-between"><span></span><button type="button" class="text-button" data-action="forgot-password">Forgot password?</button></div><button class="button button-primary button-full" type="submit">Continue to ${role.label}</button></form><div class="access-security-note"><strong>Workspace access:</strong> Recruiter, Institution Admin and Platform Admin accounts cannot be created publicly. They must be provisioned or approved by an authorized administrator.</div>`;
     if (!$('#auth-overlay')?.classList.contains('hidden')) renderGoogleSignIn(view);
   }
 
@@ -210,7 +218,14 @@
   function renderCreate() {
     const view = $('#signup-view');
     if (!view) return;
-    view.innerHTML = `${modeTabs('create')}<span class="section-kicker">Account access</span><h2 id="auth-create-title">Create or request the right workspace</h2><p class="form-intro">Choose the role you need. Student registration is self-service; privileged roles follow controlled provisioning.</p>${roleCards(createRole, 'create')}${createRole === 'student' ? studentSignupForm() : controlledAccessForm(createRole)}`;
+    const student = createRole === 'student';
+    const form = createRole === 'student' ? studentSignupForm() : controlledAccessForm(createRole);
+    const title = student ? 'Create your student account' : 'Request your workspace';
+    const intro = student ? 'Sign up with your Google account. No PlaceAI password is needed.' : 'College, recruiter and platform access is reviewed before activation.';
+    const methods = student ? '<div class="access-login-methods"></div><div class="access-method-divider">or sign up with email</div>' : roleCards(createRole, 'create');
+    const requestLink = student ? '<p class="form-intro">Need a college or recruiter workspace? <button type="button" class="text-button" data-request-workspace>Request access</button></p>' : '';
+    view.innerHTML = `${modeTabs('create')}<span class="section-kicker">${student ? 'New to PlaceAI?' : 'Organization access'}</span><h2 id="auth-create-title">${title}</h2><p class="form-intro">${intro}</p>${methods}${form}${requestLink}`;
+    if (student && !$('#auth-overlay')?.classList.contains('hidden')) renderGoogleSignIn(view);
   }
 
   function normalizeAndFocusFirstInput(form) {
@@ -385,8 +400,14 @@
     if (switcher) {
       event.preventDefault();
       event.stopImmediatePropagation();
+      if (switcher.dataset.accessSwitch === 'create') createRole = 'student';
       showView(switcher.dataset.accessSwitch === 'create' ? 'create' : 'login', switcher);
       return;
+    }
+    const workspaceRequest = event.target.closest('[data-request-workspace]');
+    if (workspaceRequest) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      createRole = 'institution_admin'; showView('create', workspaceRequest); return;
     }
     const roleButton = event.target.closest('[data-access-role]');
     if (roleButton) {
