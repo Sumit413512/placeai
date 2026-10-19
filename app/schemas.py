@@ -111,6 +111,8 @@ class GoogleAuthRequest(BaseModel):
     credential: str = Field(min_length=20, max_length=8192)
     role: str = Field(default="student", pattern="^(student|recruiter|institution_admin|platform_admin)$")
     password: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    link_challenge: Optional[str] = Field(default=None, min_length=40, max_length=100)
+    link_code: Optional[str] = Field(default=None, pattern=r"^[0-9]{6}$")
 
 
 class StudentProfileCreate(BaseModel):

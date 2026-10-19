@@ -7,15 +7,17 @@ import logging
 import re
 import secrets
 import time
+from datetime import timedelta
 
 from fastapi import HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import GoogleIdentity, RateLimitBucket, RecruiterProfile, StudentProfile, User, UserRole, utcnow
+from app.models import AccountProtection, GoogleIdentity, RateLimitBucket, RecruiterProfile, StudentProfile, User, UserRole, utcnow
+from app.email_delivery import send_transactional_email
 from app.rate_limit import enforce_auth_limits, enforce_rate_limit
 from app.schemas import GoogleAuthRequest
-from app.utils import get_hashed_password, verify_password
+from app.utils import get_hashed_password
 
 COOKIE = "placeai_google_nonce"
 logger = logging.getLogger("placeai.google_login")
@@ -52,7 +54,69 @@ def verify_credential(credential: str) -> dict:
     return id_token.verify_oauth2_token(credential, requests.Request(), get_settings().google_client_id)
 
 
-def authenticate(payload: GoogleAuthRequest, request: Request, response: Response, db: Session) -> User:
+def _link_key(user: User, subject: str, challenge: str, code: str) -> str:
+    # Neither the code nor the Google subject/email is stored in plaintext.
+    return hashlib.sha256(f"google-link|{user.id}|{user.auth_version or 1}|{subject}|{challenge}|{code}".encode()).hexdigest()
+
+
+def _confirm_email_link(payload: GoogleAuthRequest, request: Request, db: Session, user: User, subject: str) -> dict | None:
+    """Fresh mailbox proof for Google accounts whose email Google does not host."""
+    if payload.link_challenge and payload.link_code:
+        enforce_auth_limits(db, request, scope="google-link-confirm", identifier=user.id,
+                            limit=6, window_seconds=900, block_seconds=900)
+        # The durable limiter commits. Reacquire the user lock before checking
+        # the version-bound proof and keep it through identity/session creation.
+        db.refresh(user, with_for_update=True)
+        if not user.is_active:
+            raise HTTPException(403, "Account is inactive")
+        key = _link_key(user, subject, payload.link_challenge, payload.link_code)
+        claimed = db.query(RateLimitBucket).filter(
+            RateLimitBucket.key_hash == key, RateLimitBucket.scope == "google-link-code",
+            RateLimitBucket.request_count == 0,
+            RateLimitBucket.window_started_at > utcnow() - timedelta(minutes=5),
+        ).update({RateLimitBucket.request_count: 1}, synchronize_session=False)
+        if claimed != 1:
+            raise HTTPException(401, "The email code is incorrect, expired or already used. Try again or restart Google sign-in.")
+        return None
+    enforce_auth_limits(db, request, scope="google-link-send", identifier=user.id,
+                        limit=3, window_seconds=900, block_seconds=900)
+    challenge = secrets.token_urlsafe(32)
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    key = _link_key(user, subject, challenge, code)
+    db.add(RateLimitBucket(key_hash=key, scope="google-link-code", request_count=0,
+                           window_started_at=utcnow(), updated_at=utcnow()))
+    db.commit()
+    outcome, _ = send_transactional_email(get_settings(), recipient=user.email,
+        subject="Confirm your PlaceAI Google sign-in",
+        body=f"Your one-time Google account linking code is {code}. It expires in 5 minutes.\n\n"
+             "Enter it only in the PlaceAI sign-in window you opened. No PlaceAI password is needed. "
+             "If you did not request this, ignore this email and do not share the code.")
+    if outcome != "sent":
+        raise HTTPException(503, "We could not send the confirmation code. Please try Google sign-in again shortly.")
+    return {"email_link_required": True, "link_challenge": challenge,
+            "message": "Check your email for a one-time code to securely connect your existing account. No PlaceAI password is needed."}
+
+
+def _reclaim_unverified_student(db: Session, user: User) -> None:
+    # A local registration without mailbox proof could have been planted by
+    # someone else. Do not retain its credentials after the real owner arrives.
+    from app.auth_protection import revoke_sessions
+    user.hashed_password = get_hashed_password(secrets.token_urlsafe(40), check_breach=False)
+    user.must_change_password = False
+    user.reset_token_hash = None
+    user.reset_token_expires = None
+    revoke_sessions(db, user)
+    row = db.get(AccountProtection, user.id)
+    if row:
+        row.email_token_hash = None
+        row.email_token_expires = None
+        row.verification_required = False
+        row.mfa_pending = None
+        row.mfa_pending_expires = None
+        # An already enrolled factor is still required by _token_response.
+
+
+def authenticate(payload: GoogleAuthRequest, request: Request, response: Response, db: Session) -> User | dict:
     settings = get_settings()
     enforce_rate_limit(db, request, scope="google-auth", limit=30, window_seconds=600, block_seconds=900)
     if not settings.google_client_id:
@@ -106,15 +170,16 @@ def authenticate(payload: GoogleAuthRequest, request: Request, response: Respons
                 raise HTTPException(403, "Use the Google account already linked to this account")
             # Google is authoritative for Gmail and verified Workspace domains only.
             authoritative = email.endswith("@gmail.com") or bool(info.get("hd"))
-            # Never turn an unverified pre-registered local account into an
-            # automatically linked identity using only an email-string match.
-            if not authoritative or not user.email_verified:
+            # Google's signed Gmail/Workspace claim is current mailbox proof.
+            # A third-party Google email needs fresh mailbox confirmation. An
+            # unverified privileged account also keeps this explicit proof step.
+            if not authoritative or (not user.email_verified and user.role != UserRole.student):
                 request.state.google_auth_step = "existing_account_link"
-                enforce_auth_limits(db, request, scope="login", identifier=email, limit=12, window_seconds=600, block_seconds=900)
-                if not payload.password:
-                    raise HTTPException(403, {"code": "GOOGLE_LINK_PASSWORD_REQUIRED", "message": "Enter your PlaceAI password once to link this Google account. If you did not create the existing account or do not know its password, use Forgot password first."})
-                if not verify_password(payload.password, user.hashed_password):
-                    raise HTTPException(401, "Incorrect password")
+                confirmation = _confirm_email_link(payload, request, db, user, subject)
+                if confirmation:
+                    return confirmation
+            if not user.email_verified and user.role == UserRole.student:
+                _reclaim_unverified_student(db, user)
     else:
         request.state.google_auth_step = "new_account"
         if payload.role in {"institution_admin", "platform_admin"} or (payload.role == "recruiter" and not settings.public_recruiter_signup):

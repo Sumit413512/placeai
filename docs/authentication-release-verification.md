@@ -42,3 +42,16 @@ Existing Google identities open the role stored on the server regardless of the
 role currently selected in the UI; requesting a different role cannot change
 permissions. Rejected Google attempts record only a safe failure stage and status
 in the security audit, without identity claims or credentials.
+
+Passwordless existing-account linking: Google's signed Gmail/Workspace identity
+can reclaim an unverified local student registration. The old password is replaced
+with an unknown random hash, existing sessions and reset/verification tokens are
+revoked, and pending MFA enrollment is cleared. Enrolled MFA remains enforced.
+Verified local accounts retain their password and assigned role/organization.
+Non-hosted Google email addresses need a fresh, five-minute email code, bound to
+the verified Google subject, local user, auth version and a random challenge.
+Only its digest is stored; confirmation is single-use and rate-limited. This flow
+never submits a PlaceAI password. Disabled accounts and conflicting Google
+bindings stay blocked. No data migration or mass account change is performed.
+The browser journey covers new, unverified Gmail and third-party email accounts,
+including invalid codes, signup with an invalid local password, reload and logout.

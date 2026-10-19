@@ -448,7 +448,7 @@ def root():
         '<script src="/static/workspace-runtime.js" defer></script>\n'
         '<script src="/static/api-errors.js" defer></script>\n'
         '<script src="/static/auth-protection.js" defer></script>\n'
-        '<script src="/static/access-portal.js?v=20261019-standard-auth2" defer></script>\n'
+        '<script src="/static/access-portal.js?v=20261019-google-link3" defer></script>\n'
         '<script src="/static/ui-state-fixes.js" defer></script>\n'
         '<script src="/static/account-security.js" defer></script>\n'
         '<script src="/static/provisioning-password-fix.js" defer></script>\n'

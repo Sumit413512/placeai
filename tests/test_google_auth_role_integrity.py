@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from datetime import timedelta
+import re
 from unittest.mock import Mock
 
 import pytest
@@ -38,6 +40,8 @@ def google_auth(monkeypatch):
     monkeypatch.setattr(google_login, "get_settings", lambda: auth.settings)
     claims = {"sub": "google-subject-1", "email": "student@gmail.com", "email_verified": True, "name": "Test Student"}
     verifier = Mock(side_effect=lambda credential: dict(claims))
+    delivery = Mock(return_value=("sent", None))
+    monkeypatch.setattr(google_login, "send_transactional_email", delivery)
     monkeypatch.setattr(google_login, "verify_credential", verifier)
     app = FastAPI()
     app.include_router(auth.router)
@@ -74,16 +78,16 @@ def google_auth(monkeypatch):
                 claims["nonce"] = result.json()["nonce"]
             return result
 
-        def sign_in(role="student", password=None, *, fresh_challenge=True):
+        def sign_in(role="student", password=None, *, fresh_challenge=True, **proof):
             if fresh_challenge:
                 challenge()
-            payload = {"credential": CREDENTIAL, "role": role}
+            payload = {"credential": CREDENTIAL, "role": role, **proof}
             if password is not None:
                 payload["password"] = password
             return client.post("/auth/google", json=payload)
 
         yield SimpleNamespace(client=client, sessions=sessions, claims=claims, verifier=verifier,
-                              make_user=make_user, challenge=challenge, sign_in=sign_in)
+                              make_user=make_user, challenge=challenge, sign_in=sign_in, delivery=delivery)
     engine.dispose()
 
 
@@ -274,22 +278,73 @@ def test_enabled_public_recruiter_signup_remains_unverified(google_auth, monkeyp
         assert db.query(StudentProfile).count() == 0
 
 
-def test_third_party_email_requires_correct_password_for_initial_binding(google_auth):
+def test_third_party_email_links_with_mailbox_code_without_local_password(google_auth):
     google_auth.claims["email"] = "student@example.com"
     user_id = google_auth.make_user()
     challenge = google_auth.sign_in()
-    assert challenge.status_code == 403
-    assert challenge.json()["detail"]["code"] == "GOOGLE_LINK_PASSWORD_REQUIRED"
-    rejected = google_auth.sign_in(password="incorrect", fresh_challenge=False)
+    assert challenge.status_code == 202
+    assert challenge.json()["email_link_required"] is True
+    assert 'placeai_refresh' not in challenge.cookies
+    code = re.search(r"code is (\d{6})", google_auth.delivery.call_args.kwargs['body'])[1]
+    proof = {"link_challenge":challenge.json()['link_challenge'], "link_code":code}
+    rejected = google_auth.sign_in(link_challenge=proof['link_challenge'], link_code='999999' if code != '999999' else '000000', fresh_challenge=False)
     assert rejected.status_code == 401
     with google_auth.sessions() as db:
         assert db.query(GoogleIdentity).count() == 0
         assert db.query(RefreshSession).count() == 0
-    linked = google_auth.sign_in(password=PASSWORD, fresh_challenge=False)
+        row = db.query(RateLimitBucket).filter_by(scope='google-link-code').one()
+        assert code not in row.key_hash and row.request_count == 0
+    linked = google_auth.sign_in(**proof, fresh_challenge=False)
     assert linked.status_code == 200, linked.text
     with google_auth.sessions() as db:
         assert db.query(GoogleIdentity).one().user_id == user_id
     assert google_auth.sign_in().status_code == 200
+    google_auth.delivery.assert_called_once()
+
+
+@pytest.mark.parametrize('failure', ['expired', 'used', 'wrong-subject', 'version-changed', 'inactive'])
+def test_email_link_proof_cannot_be_replayed_or_transferred(google_auth, failure):
+    from app.models import utcnow
+    google_auth.claims['email'] = 'student@example.com'
+    user_id = google_auth.make_user()
+    sent = google_auth.sign_in()
+    code = re.search(r"code is (\d{6})", google_auth.delivery.call_args.kwargs['body'])[1]
+    proof = {'link_challenge':sent.json()['link_challenge'], 'link_code':code}
+    with google_auth.sessions() as db:
+        row = db.query(RateLimitBucket).filter_by(scope='google-link-code').one()
+        if failure == 'expired': row.window_started_at = utcnow() - timedelta(minutes=6)
+        if failure == 'used': row.request_count = 1
+        if failure == 'version-changed': db.get(User,user_id).auth_version += 1
+        if failure == 'inactive': db.get(User,user_id).is_active = False
+        db.commit()
+    if failure == 'wrong-subject': google_auth.claims['sub'] = 'other-google-subject'
+    rejected = google_auth.sign_in(**proof, fresh_challenge=False)
+    assert rejected.status_code in {401,403}
+    with google_auth.sessions() as db:
+        assert db.query(GoogleIdentity).count() == 0
+        assert db.query(RefreshSession).count() == 0
+
+
+def test_email_code_delivery_failure_does_not_link_or_issue_session(google_auth):
+    google_auth.claims['email'] = 'student@example.com'
+    google_auth.make_user()
+    google_auth.delivery.return_value = ('failed', 'synthetic_provider_failure')
+    assert google_auth.sign_in().status_code == 503
+    with google_auth.sessions() as db:
+        assert db.query(GoogleIdentity).count() == db.query(RefreshSession).count() == 0
+
+
+def test_email_link_send_and_confirmation_are_rate_limited(google_auth):
+    google_auth.claims['email'] = 'student@example.com'
+    google_auth.make_user()
+    sent = google_auth.sign_in()
+    for _ in range(2): assert google_auth.sign_in().status_code == 202
+    assert google_auth.sign_in().status_code == 429
+    code = re.search(r"code is (\d{6})", google_auth.delivery.call_args.kwargs['body'])[1]
+    wrong = '999999' if code != '999999' else '000000'
+    for _ in range(6):
+        assert google_auth.sign_in(link_challenge=sent.json()['link_challenge'], link_code=wrong).status_code == 401
+    assert google_auth.sign_in(link_challenge=sent.json()['link_challenge'], link_code=code).status_code == 429
 
 
 def test_workspace_email_can_link_without_password(google_auth):
@@ -365,15 +420,120 @@ def test_google_login_cannot_skip_an_enrolled_authenticator(google_auth):
         assert db.query(RefreshSession).count() == 0
 
 
-def test_unverified_existing_account_requires_explicit_password_or_recovery_before_google_link(google_auth):
-    user_id=google_auth.make_user(email_verified=False)
-    response=google_auth.sign_in()
-    assert response.status_code==403
-    assert response.json()['detail']['code']=='GOOGLE_LINK_PASSWORD_REQUIRED'
+@pytest.mark.parametrize('workspace', [False, True])
+def test_verified_google_owner_reclaims_unverified_student_without_password(google_auth, workspace):
+    from app.models import utcnow
+    from app.utils import create_access_token
+    if workspace: google_auth.claims.update(email='student@institution.example', hd='institution.example')
+    user_id=google_auth.make_user(email_verified=False, must_change_password=True,
+                                  reset_token_hash='old-reset', reset_token_expires=utcnow()+timedelta(minutes=10))
+    old_access = create_access_token(google_auth.claims['email'], 1)
     with google_auth.sessions() as db:
-        assert db.get(User,user_id).email_verified is False
-        assert db.query(GoogleIdentity).count()==0
-    assert google_auth.sign_in(password=PASSWORD).status_code==200
+        db.add(RefreshSession(jti='old-session', user_id=user_id, auth_version=1, expires_at=utcnow()+timedelta(days=1)))
+        db.add(AccountProtection(user_id=user_id, email_token_hash='old-verification', email_token_expires=utcnow()+timedelta(minutes=10),
+                                 mfa_pending='unconfirmed-factor', verification_required=True))
+        db.commit()
+    response=google_auth.sign_in()
+    assert response.status_code==200, response.text
+    with google_auth.sessions() as db:
+        user=db.get(User,user_id)
+        assert user.email_verified is True
+        assert user.auth_version==2
+        assert not verify_password(PASSWORD,user.hashed_password)
+        assert user.reset_token_hash is user.reset_token_expires is None
+        assert user.must_change_password is False
+        assert db.get(RefreshSession,'old-session').revoked_at is not None
+        row=db.get(AccountProtection,user_id)
+        assert row.email_token_hash is row.email_token_expires is row.mfa_pending is None
+        assert row.verification_required is False
+        assert db.query(GoogleIdentity).one().user_id==user_id
+        assert db.query(User).count()==1
+    google_auth.delivery.assert_not_called()
+    assert google_auth.client.get('/protected',headers={'Authorization':'Bearer '+old_access}).status_code==401
+    assert google_auth.sign_in().status_code==200
+
+
+def test_local_password_cannot_replace_required_fresh_mailbox_proof(google_auth):
+    google_auth.claims['email']='student@example.com'
+    google_auth.make_user()
+    result=google_auth.sign_in(password=PASSWORD)
+    assert result.status_code==202
+    assert result.json()['email_link_required'] is True
+    with google_auth.sessions() as db:
+        assert db.query(GoogleIdentity).count()==db.query(RefreshSession).count()==0
+
+
+def test_email_link_confirmation_is_single_use_on_postgresql():
+    """Exercise concurrent code consumption on the production database dialect."""
+    from concurrent.futures import ThreadPoolExecutor
+    import os
+    from uuid import uuid4
+    from fastapi import HTTPException, Request
+    from sqlalchemy import text
+    from sqlalchemy.orm import Session
+    from app.models import utcnow
+    from app.schemas import GoogleAuthRequest
+
+    url=os.getenv('TEST_POSTGRES_URL')
+    if not url:
+        pytest.skip('Dedicated PostgreSQL service is required')
+    engine=create_engine(url,pool_size=4,max_overflow=0)
+    schema='google_link_'+uuid4().hex
+    scoped=engine.execution_options(schema_translate_map={None:schema})
+    try:
+        with engine.begin() as connection:
+            connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+        with scoped.begin() as connection:
+            for model in (Organization,User,RateLimitBucket):
+                model.__table__.create(connection)
+        proof=GoogleAuthRequest(credential=CREDENTIAL,link_challenge='x'*43,link_code='123456')
+        with Session(scoped) as db:
+            user=User(id='code-user',email='code@example.com',username='code-user',
+                      hashed_password='unused-test-only',role=UserRole.student,auth_version=1)
+            db.add(user);db.flush()
+            key=google_login._link_key(user,'subject',proof.link_challenge,proof.link_code)
+            db.add(RateLimitBucket(key_hash=key,scope='google-link-code',request_count=0,window_started_at=utcnow()))
+            db.commit()
+        def confirm(_):
+            request=Request({'type':'http','headers':[],'client':('192.0.2.5',1234)})
+            with Session(scoped) as db:
+                try:
+                    user=db.get(User,'code-user')
+                    assert google_login._confirm_email_link(proof,request,db,user,'subject') is None
+                    db.commit()
+                    return 200
+                except HTTPException as exc:
+                    db.rollback()
+                    return exc.status_code
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            assert sorted(pool.map(confirm,range(3)))==[200,401,401]
+    finally:
+        with engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        engine.dispose()
+
+
+def test_unverified_student_reclaim_preserves_enrolled_mfa(google_auth):
+    from app.auth_protection import encrypt_secret
+    user_id=google_auth.make_user(email_verified=False)
+    with google_auth.sessions() as db:
+        db.add(AccountProtection(user_id=user_id,mfa_secret=encrypt_secret(user_id,'JBSWY3DPEHPK3PXP')))
+        db.commit()
+    response=google_auth.sign_in()
+    assert response.status_code==200
+    assert response.json()['mfa_required'] is True
+    assert 'placeai_refresh' not in response.cookies
+
+
+def test_unverified_privileged_account_needs_email_proof_and_keeps_role(google_auth):
+    user_id=google_auth.make_user(role='platform_admin',email_verified=False)
+    sent=google_auth.sign_in()
+    assert sent.status_code==202
+    code=re.search(r"code is (\d{6})",google_auth.delivery.call_args.kwargs['body'])[1]
+    result=google_auth.sign_in(link_challenge=sent.json()['link_challenge'],link_code=code)
+    assert result.status_code==200
+    with google_auth.sessions() as db:
+        assert db.get(User,user_id).role==UserRole.platform_admin
 
 
 def test_google_token_verifier_supplies_configured_audience(monkeypatch):
