@@ -1,7 +1,8 @@
 from playwright.sync_api import expect
 
 from test_browser_smoke import BASE_URL, browser, local_server  # noqa: F401
-from test_learning_hub import chapter_data, plan_data, preferences
+from test_learning_hub import plan_data, preferences
+from test_learning_notes_advanced import advanced_chapter
 
 
 def test_student_can_create_read_and_download_notes_without_leaving_workspace(browser):  # noqa: F811
@@ -11,8 +12,9 @@ def test_student_can_create_read_and_download_notes_without_leaving_workspace(br
     phase = ["running"]
     ready = {"id": "browser-notebook-001", "title": "SQL study notebook", "status": "ready",
              "completed_chapters": 8, "total_chapters": 8, "input": preferences(),
-             "pdf_available": True, "plan": plan_data(), "chapters": [chapter_data()],
+             "pdf_available": True, "plan": plan_data(), "chapters": [advanced_chapter()],
              "sources": [{"title": "PostgreSQL SELECT", "url": "https://www.postgresql.org/docs/current/sql-select.html"}]}
+    ready["chapters"][0]["overview"] += " **Safe term** <img src=x onerror=window.notesInjected=true>"
     def api(route):
         path = route.request.url.split(BASE_URL)[-1].split("?")[0]
         if route.request.resource_type not in {"fetch", "xhr"}:
@@ -47,6 +49,14 @@ def test_student_can_create_read_and_download_notes_without_leaving_workspace(br
     assert submitted[0]["chapters"] == 12 and submitted[0]["programming_language"] == "PostgreSQL"
     assert len(submitted) == 1
     assert page.locator(".learning-relationship").count() == 2
+    assert page.locator(".learning-chapter strong").filter(has_text="Predicate").first.inner_text() == "Predicate"
+    assert page.locator(".learning-chapter ol li").count() >= 2
+    assert page.get_by_role("columnheader", name="Clause", exact=True).is_visible()
+    assert page.get_by_role("heading", name="Matching row percentage", exact=True).is_visible()
+    assert page.get_by_role("heading", name="Quick revision", exact=True).is_visible()
+    assert page.get_by_role("heading", name="What to learn next", exact=True).is_visible()
+    assert page.locator(".learning-chapter img").count() == 0
+    assert page.evaluate("window.notesInjected === undefined")
     assert page.locator(".learning-chapter code").first.inner_text().startswith("SELECT name")
     assert page.locator(".learning-citations a").first.get_attribute("href") == "#learning-source-1"
     page.get_by_text("Show solution and reasoning", exact=True).first.click()

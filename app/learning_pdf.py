@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import io
-import re
 from html import escape
 from pathlib import Path
 from textwrap import wrap
@@ -14,8 +13,9 @@ from reportlab.lib.utils import simpleSplit
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, PageBreak,
-                                Preformatted)
+                                Preformatted, LongTable, TableStyle)
 from reportlab.graphics.shapes import Drawing, Rect, String, Line, Polygon
+from app.learning_format import blocks, inline
 
 ACCENT = colors.HexColor("#59416f")
 INK = colors.HexColor("#272330")
@@ -25,6 +25,8 @@ def _fonts():
     font_root = Path(reportlab.__file__).parent / "fonts"
     if "LearningSans" not in pdfmetrics.getRegisteredFontNames():
         pdfmetrics.registerFont(TTFont("LearningSans", str(font_root / "Vera.ttf")))
+        pdfmetrics.registerFont(TTFont("LearningSansBold", str(font_root / "VeraBd.ttf")))
+        pdfmetrics.registerFontFamily("LearningSans", normal="LearningSans", bold="LearningSansBold")
 
 
 
@@ -86,9 +88,8 @@ def render_notebook(notebook: dict) -> bytes:
     story = []
 
     def prose(value, style=body):
-        for part in re.split(r"\n\s*\n|\n", str(value)):
-            if part.strip():
-                story.append(Paragraph(escape(part.strip()), style))
+        for prefix, part in blocks(value):
+            story.append(Paragraph(escape(prefix) + inline(part), style))
 
     def bullet_list(values):
         for value in values:
@@ -136,6 +137,40 @@ def render_notebook(notebook: dict) -> bytes:
             story.append(Paragraph("Diagram: " + escape(diagram["title"]), h2))
             story.extend(diagram_rows(diagram))
             prose(diagram["explanation"])
+        for comparison in chapter.get("comparisons", []):
+            story.append(Paragraph(escape(comparison["title"]), h2))
+            cells = [[Paragraph(inline(cell), small) for cell in row]
+                     for row in [comparison["columns"], *comparison["rows"]]]
+            table = LongTable(cells, colWidths=[490 / len(comparison["columns"])] * len(comparison["columns"]), repeatRows=1, hAlign="LEFT")
+            table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f2eaf0")),
+                                       ("GRID", (0, 0), (-1, -1), .5, colors.HexColor("#ded8e4")),
+                                       ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                                       ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                                       ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                                       ("TOPPADDING", (0, 0), (-1, -1), 8),
+                                       ("BOTTOMPADDING", (0, 0), (-1, -1), 8)]))
+            story.extend([table, Spacer(1, 12)])
+        for formula in chapter.get("formulas", []):
+            story.append(Paragraph(escape(formula["title"]), h2))
+            prose(formula["expression"])
+            for variable in formula["variables"]:
+                prose("**" + variable["term"] + "**: " + variable["meaning"])
+            story.append(Paragraph("Worked calculation", h3))
+            prose(formula["worked_example"])
+            story.append(Paragraph("Interpretation", h3))
+            prose(formula["interpretation"])
+        if chapter.get("key_terms"):
+            story.append(Paragraph("Key terms", h2))
+            for term in chapter["key_terms"]:
+                prose("**" + term["term"] + "**: " + term["meaning"])
+        if chapter.get("exam_focus"):
+            story.append(Paragraph("Important for exams", h2))
+            bullet_list(chapter["exam_focus"])
+        if chapter.get("interview_questions"):
+            story.append(Paragraph("Interview insight", h2))
+            for question in chapter["interview_questions"]:
+                prose(question["question"])
+                prose(question["solution"])
         story.append(Paragraph("Common mistakes", h2))
         bullet_list(chapter["common_mistakes"])
         story.append(Paragraph("Practice and solutions", h2))
@@ -143,8 +178,11 @@ def render_notebook(notebook: dict) -> bytes:
             prose(f"{number}. {exercise['question']}")
             story.append(Paragraph("Solution and reasoning", h3))
             prose(exercise["solution"])
-        story.append(Paragraph("Key takeaways", h2))
+        story.append(Paragraph("Quick revision", h2))
         bullet_list(chapter["key_takeaways"])
+        if chapter.get("next_topics"):
+            story.append(Paragraph("What to learn next", h2))
+            bullet_list(chapter["next_topics"])
     story.append(PageBreak())
     story.append(Paragraph("Sources and further reading", h1))
     prose("References retrieved during this notebook's research. Chapter citations link to the source numbers below.")

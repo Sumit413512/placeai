@@ -51,3 +51,15 @@
 #learning-hub .learning-status[data-state="processing"] { color:#1e40af; background:#eff6ff; }
 #learning-hub .learning-status[data-state="ready"] { color:#166534; background:#e8f5ec; }
 @media(max-width:650px) { #learning-hub .learning-library-item { flex-wrap:wrap; padding:16px; } }
+
+/* Notes use a small safe formatting vocabulary shared with PDF export. */
+.learning-chapter strong { font-weight: 600 !important; }
+.learning-chapter :is(ul, ol) { padding-inline-start: 26px; margin-block: 12px 20px; }
+.learning-chapter li + li { margin-top: 8px; }
+.learning-table-wrap { overflow-x: auto; max-width: 100%; margin-block: 20px; }
+.learning-comparison { width: 100%; border-collapse: collapse; min-width: 320px; }
+.learning-comparison :is(th, td) { padding: 12px; border: 1px solid var(--pa-border,#ded8e4); text-align: left; vertical-align: top; font-size: 16px; line-height: 1.6; overflow-wrap: anywhere; }
+.learning-comparison th { background: #f2eaf0; color: #302b32; font-weight: 600; }
+.learning-comparison caption { text-align: left; font-size: 15px; padding-bottom: 8px; }
+.learning-key-terms dt, .learning-formula dt { font-weight: 600; margin-top: 12px; }
+.learning-key-terms dd, .learning-formula dd { margin-inline-start: 0; }

@@ -10,6 +10,7 @@ import httpx
 
 from app import ai_provider
 from app.config import get_settings
+from app.learning_notes_prompt import notes_task
 from app.roadmap_market import _extract_sources, _extract_gemini_sources
 from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
 
@@ -121,12 +122,14 @@ def review_chapter(chapter: dict, evidence: str, preferences: dict):
               "issues": {"type": "array", "items": {"type": "string"}}},
               "required": ["approved", "issues"], "additionalProperties": False}
     result, _ = generate_json(
-        "Review this teaching chapter against the research evidence. Check factual accuracy, "
+        notes_task("Review this teaching chapter against the research evidence. Check factual accuracy, "
         "code syntax/dialect, explanation-output consistency, diagram relationships, "
         "source support, learner level, duplicated filler and meaningful depth. "
+        "Check comparison rows, formula variables/calculations/interpretation, prerequisites, "
+        "common-mistake corrections and exam/interview guidance when appropriate. "
         "Reject material mistakes or unsupported claims. Examples are illustrative, not executed. "
         "Return approved=true only if there are no material issues.\nLEARNER:\n" + json.dumps(preferences)
-        + "\nEVIDENCE:\n" + evidence + "\nCHAPTER:\n" + json.dumps(chapter),
+        + "\nEVIDENCE:\n" + evidence + "\nCHAPTER:\n" + json.dumps(chapter)),
         schema, max_output_tokens=1500,
     )
     if result.get("approved") is not True or result.get("issues") != []:
