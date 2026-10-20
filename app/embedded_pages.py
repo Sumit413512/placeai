@@ -14,7 +14,6 @@ INDEX_HTML = '''<!doctype html>
   <meta name="theme-color" content="#2459c4">
   <title>PlaceAI — Campus placement operations</title>
   <link rel="icon" type="image/png" sizes="96x96" href="/static/placeai-favicon-96.png">
-<link rel="icon" type="image/svg+xml" href="/static/placeai-icon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
