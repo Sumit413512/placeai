@@ -1064,7 +1064,11 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 #app-shell .learning-chapter p { line-height: 1.8; font-size: 17px; letter-spacing: normal; }
 #app-shell .learning-chapter :is(h3,h4) { color: var(--pa-ink); }
 /* Public pages: editorial spacing and a legible product story. */
-#marketing-site { background: #fff !important; }
+#marketing-site {
+  --pa-ink: #302b32; --pa-muted: #605a63;
+  --pa-border: #e3dde2; --pa-canvas: #f7f5f2;
+  background: #fff !important;
+}
 #marketing-site .site-header { min-height: 76px; padding-inline: max(24px,calc((100vw - 1280px)/2)); }
 #marketing-site .marketing-nav a { font-size: 15px; font-weight: 400; }
 /* Align the message with the photo, not the full height of the product column. */
