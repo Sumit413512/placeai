@@ -21,14 +21,6 @@
       mark.setAttribute('aria-hidden', 'true');
       mark.style.backgroundImage = "url('/static/placeai-logo.webp')";
     });
-    if (!document.querySelector('link[data-placeai-brand-icon]')) {
-      const icon = document.createElement('link');
-      icon.rel = 'icon';
-      icon.type = 'image/webp';
-      icon.href = '/static/placeai-logo.webp';
-      icon.dataset.placeaiBrandIcon = '';
-      document.head.appendChild(icon);
-    }
   }
 
   function addPreparationNavigation() {

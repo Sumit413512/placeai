@@ -83,8 +83,10 @@ def test_public_shell_auth_modal_and_mobile_layout(browser) -> None:
     page.goto(BASE_URL, wait_until="domcontentloaded")
     assert "PlaceAI" in page.title()
     assert page.locator(".site-header .brand").is_visible()
+    page.wait_for_function('() => window.__PLACEAI_SITE_REFRESH_LOADED__ === true')
     assert page.locator('link[rel="icon"][href="/static/placeai-favicon-96.png"]').count() == 1
-    assert page.locator('link[rel="icon"]').count() == 1
+    icons = page.locator('link[rel="icon"]').evaluate_all('els => els.map(el => el.getAttribute("href"))')
+    assert len(icons) == 1, icons
 
     # The compact header intentionally hides desktop actions. Exercise the visible
     # hero CTA that mobile users actually receive instead of forcing a hidden node.
