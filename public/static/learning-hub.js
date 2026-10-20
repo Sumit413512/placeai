@@ -4,8 +4,30 @@
   const root = () => document.querySelector('#learning-hub');
   const active = version => version === epoch && context?.state.view === 'learning-hub' && root();
   const e = value => context.esc(String(value ?? ''));
-  const prose = value => String(value || '').split(/\n+/).filter(Boolean).map(p => `<p>${e(p)}</p>`).join('');
-  const list = values => `<ul>${(values || []).map(value => `<li>${e(value)}</li>`).join('')}</ul>`;
+  // Escape first. Only this small formatting vocabulary can create markup.
+  const inline = value => e(value).replace(/\*\*([^*\n]{1,200})\*\*/g, '<strong>$1</strong>');
+  function prose(value) {
+    const lines = String(value || '').split(/\n+/).filter(line => line.trim());
+    let html = '', mode = '';
+    for (const line of lines) {
+      const bullet = line.match(/^\s*[-•]\s+(.+)/), step = line.match(/^\s*\d+[.)]\s+(.+)/);
+      const next = bullet ? 'ul' : step ? 'ol' : '';
+      if (mode && mode !== next) html += `</${mode}>`;
+      if (next && mode !== next) html += `<${next}>`;
+      html += next ? `<li>${inline((bullet || step)[1])}</li>` : `<p>${inline(line)}</p>`;
+      mode = next;
+    }
+    return html + (mode ? `</${mode}>` : '');
+  }
+  const list = values => `<ul>${(values || []).map(value => `<li>${inline(value)}</li>`).join('')}</ul>`;
+  function teachingExtras(chapter) {
+    const tables = (chapter.comparisons || []).map(table => `<section><h3>${e(table.title)}</h3><div class="learning-table-wrap" role="region" aria-label="${e(table.title)}" tabindex="0"><table class="learning-comparison"><caption>${e(table.title)}</caption><thead><tr>${table.columns.map(column => `<th scope="col">${e(column)}</th>`).join('')}</tr></thead><tbody>${table.rows.map(row => `<tr>${row.map(cell => `<td>${inline(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`).join('');
+    const formulas = (chapter.formulas || []).map(formula => `<section class="learning-formula"><h3>${e(formula.title)}</h3><pre aria-label="Formula"><code>${e(formula.expression)}</code></pre><h4>Variables</h4><dl>${formula.variables.map(v => `<dt>${e(v.term)}</dt><dd>${prose(v.meaning)}</dd>`).join('')}</dl><h4>Worked calculation</h4>${prose(formula.worked_example)}<h4>Interpretation</h4>${prose(formula.interpretation)}</section>`).join('');
+    const terms = chapter.key_terms?.length ? `<section><h3>Key terms</h3><dl class="learning-key-terms">${chapter.key_terms.map(term => `<dt>${e(term.term)}</dt><dd>${prose(term.meaning)}</dd>`).join('')}</dl></section>` : '';
+    const exams = chapter.exam_focus?.length ? `<section><h3>Important for exams</h3>${list(chapter.exam_focus)}</section>` : '';
+    const interviews = chapter.interview_questions?.length ? `<section><h3>Interview insight</h3>${chapter.interview_questions.map(item => `<details class="learning-exercise"><summary>${e(item.question)}</summary>${prose(item.solution)}</details>`).join('')}</section>` : '';
+    return tables + formulas + terms + exams + interviews;
+  }
   function sourceUrl(value) {
     try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password ? url.href : ''; }
     catch { return ''; }
@@ -19,7 +41,7 @@
   function chapterHtml(chapter, index) {
     return `<details class="learning-chapter" ${index === 0 ? 'open' : ''}><summary>${String(index + 1).padStart(2, '0')}. ${e(chapter.title)}</summary><div class="learning-chapter-body">${prose(chapter.overview)}${chapter.subtopics.map(sub =>
       `<section><h3>${e(sub.title)}</h3>${prose(sub.explanation)}<p class="learning-citations">Sources: ${sub.source_ids.map(id => `<a href="#learning-source-${Number(id)}">[${Number(id)}]</a>`).join(' ')}</p></section>`
-    ).join('')}${chapter.examples.map(example => `<section><h3>Worked example: ${e(example.title)}</h3>${example.code ? `<small>${e(example.language)}</small><pre><code>${e(example.code)}</code></pre>` : ''}${prose(example.explanation)}<h4>Expected result</h4>${prose(example.expected_result)}</section>`).join('')}${chapter.diagrams.map(diagramHtml).join('')}<h3>Common mistakes</h3>${list(chapter.common_mistakes)}<h3>Practice and solutions</h3>${chapter.exercises.map(exercise => `<div class="learning-exercise">${prose(exercise.question)}<details><summary>Show solution and reasoning</summary>${prose(exercise.solution)}</details></div>`).join('')}<h3>Key takeaways</h3>${list(chapter.key_takeaways)}</div></details>`;
+    ).join('')}${chapter.examples.map(example => `<section><h3>Worked example: ${e(example.title)}</h3>${example.code ? `<small>${e(example.language)}</small><pre><code>${e(example.code)}</code></pre>` : ''}${prose(example.explanation)}<h4>Expected result</h4>${prose(example.expected_result)}</section>`).join('')}${chapter.diagrams.map(diagramHtml).join('')}${teachingExtras(chapter)}<h3>Common mistakes</h3>${list(chapter.common_mistakes)}<h3>Practice and solutions</h3>${chapter.exercises.map(exercise => `<div class="learning-exercise">${prose(exercise.question)}<details><summary>Show solution and reasoning</summary>${prose(exercise.solution)}</details></div>`).join('')}<h3>Quick revision</h3>${list(chapter.key_takeaways)}${chapter.next_topics?.length ? `<h3>What to learn next</h3>${list(chapter.next_topics)}` : ''}</div></details>`;
   }
   const isReady = book => book.status === 'ready' && book.total_chapters > 0 && book.completed_chapters === book.total_chapters && book.pdf_available !== false;
   const badge = book => `<small class="learning-status" data-state="${isReady(book) ? 'ready' : 'processing'}">${isReady(book) ? 'Ready to begin' : 'Processing'}</small>`;

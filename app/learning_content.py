@@ -75,6 +75,7 @@ class DiagramEdge(ContentModel):
 
 
 class Diagram(ContentModel):
+    kind: Literal["flowchart", "architecture", "sequence", "hierarchy", "lifecycle", "pipeline", "network", "timeline", "entity_relationship"] = "flowchart"
     title: str = Field(min_length=3, max_length=180)
     nodes: list[DiagramNode] = Field(min_length=2, max_length=8)
     edges: list[DiagramEdge] = Field(min_length=1, max_length=12)
@@ -97,15 +98,55 @@ class Exercise(ContentModel):
                           description="The answer plus at least three explanatory sentences; never code alone")
 
 
+class KeyTerm(ContentModel):
+    term: str = Field(min_length=1, max_length=100)
+    meaning: str = Field(min_length=10, max_length=800)
+
+
+class Comparison(ContentModel):
+    title: str = Field(min_length=3, max_length=180)
+    columns: list[str] = Field(min_length=2, max_length=4)
+    rows: list[list[str]] = Field(min_length=2, max_length=12)
+
+    @model_validator(mode="after")
+    def bounded_table(self):
+        if any(not c.strip() or len(c) > 100 for c in self.columns):
+            raise ValueError("Comparison columns need concise labels")
+        if any(len(row) != len(self.columns) or any(not c.strip() or len(c) > 400 for c in row) for row in self.rows):
+            raise ValueError("Comparison rows must match their columns with concise cells")
+        return self
+
+
+class Formula(ContentModel):
+    title: str = Field(min_length=3, max_length=180)
+    expression: str = Field(min_length=3, max_length=600)
+    variables: list[KeyTerm] = Field(min_length=1, max_length=12)
+    worked_example: str = Field(min_length=100, max_length=5000)
+    interpretation: str = Field(min_length=20, max_length=2000)
+
+
 class LearningChapter(ContentModel):
     title: str = Field(min_length=3, max_length=180)
     overview: str = Field(min_length=100, max_length=2500)
     subtopics: list[Subtopic] = Field(min_length=3, max_length=6)
     examples: list[Example] = Field(min_length=2, max_length=4)
-    diagrams: list[Diagram] = Field(min_length=1, max_length=3)
+    diagrams: list[Diagram] = Field(default_factory=list, max_length=3)
     common_mistakes: list[str] = Field(min_length=2, max_length=8)
     exercises: list[Exercise] = Field(min_length=2, max_length=5)
     key_takeaways: list[str] = Field(min_length=3, max_length=8)
+
+    comparisons: list[Comparison] = Field(default_factory=list, max_length=4)
+    formulas: list[Formula] = Field(default_factory=list, max_length=4)
+    key_terms: list[KeyTerm] = Field(default_factory=list, max_length=20)
+    exam_focus: list[str] = Field(default_factory=list, max_length=12)
+    interview_questions: list[Exercise] = Field(default_factory=list, max_length=8)
+    next_topics: list[str] = Field(default_factory=list, max_length=8)
+
+    @model_validator(mode="after")
+    def bounded_supplements(self):
+        if any(not value.strip() or len(value) > 1200 for value in self.exam_focus + self.next_topics):
+            raise ValueError("Study guidance must be concise and meaningful")
+        return self
 
     @model_validator(mode="after")
     def detailed_teaching(self):

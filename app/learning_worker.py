@@ -17,6 +17,7 @@ from app.database import engine
 from app.models import LearningNotebook, LearningRuntime, User, UserRole, utcnow
 from app.learning_content import LearningRequest, LearningPlan, LearningChapter, Subtopic, validate_chapter
 from app import learning_ai
+from app.learning_notes_prompt import notes_task
 
 LOGGER = logging.getLogger("placeai.learning.worker")
 Session = sessionmaker(bind=engine, expire_on_commit=False)
@@ -178,12 +179,12 @@ def _process(item, sessions):
         if not plan_data:
             evidence, sources, research_model = learning_ai.research(json.dumps(preferences))
             raw, model = learning_ai.generate_json(
-                "Create a complete, progressively ordered textbook outline with EXACTLY "
+                notes_task("Create a complete, progressively ordered textbook outline with EXACTLY "
                 f"{request.chapters} chapters and 3-6 specific subtopics per chapter. "
                 "Cover foundations, practical use, pitfalls, deeper concepts and a concluding project. "
                 "SQL must distinguish the chosen dialect; if unspecified use PostgreSQL and explain portability. "
                 "No duplicate or filler chapters.\nLEARNER DATA:\n" + json.dumps(preferences)
-                + "\nLIVE RESEARCH:\n" + evidence, LearningPlan.model_json_schema(),
+                + "\nLIVE RESEARCH:\n" + evidence), LearningPlan.model_json_schema(),
             )
             plan = LearningPlan.model_validate(raw)
             if len(plan.chapters) != request.chapters:
@@ -203,21 +204,21 @@ def _process(item, sessions):
                     sources.append(source)
             numbered = [{"id": i, **s} for i, s in enumerate(sources, 1)]
             raw, model = learning_ai.generate_json(
-                "Write ONE complete textbook chapter, not a summary. Target 1,200-1,800 teaching words; "
+                notes_task("Write ONE complete textbook chapter, not a summary. Target 1,200-1,800 teaching words; "
                 "at least 800 words of explanation excluding code/exercises are required. "
                 "Explain every listed subtopic in the same order and with the EXACT title. "
                 "Write at least 300 words of substantive teaching in EACH subtopic explanation; do not compress the explanations. "
                 "Give definitions, why/how, step-by-step reasoning and realistic examples. "
                 "Include at least two worked examples (code for programming topics), "
                 "explain each important code statement and expected output. Do not execute code. "
-                "Include 1-3 accurate diagrams as node/edge data, explaining what each relationship means. "
+                "Include accurate node/edge diagrams only when useful, explaining each relationship. "
                 "Node labels must be readable and concise. Include pitfalls, solved exercises and takeaways. "
-                "Use plain text paragraphs separated by newlines; no HTML or Markdown styling in prose. "
+                "Use short paragraphs, bullet/numbered lines and selective **bold** terms; no HTML. "
                 "Use source_ids to cite numbered retrieved sources for each subtopic. "
                 "Preserve dialect/version caveats; distinguish sourced facts from illustrative examples. "
                 "Examples must be internally consistent.\nLEARNER DATA:\n" + json.dumps(preferences)
                 + "\nCHAPTER:\n" + planned.model_dump_json()
-                + "\nEVIDENCE:\n" + memo + "\nNUMBERED SOURCES:\n" + json.dumps(numbered),
+                + "\nEVIDENCE:\n" + memo + "\nNUMBERED SOURCES:\n" + json.dumps(numbered)),
                 LearningChapter.model_json_schema(),
             )
             raw = repair_structure(raw, memo)
