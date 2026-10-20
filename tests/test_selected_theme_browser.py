@@ -24,9 +24,9 @@ def test_selected_palette_survives_dynamic_styles_and_auth_dialog(browser):  # n
         submit = page.locator('#role-login-form button[type="submit"]')
         page.mouse.move(0, 0)
         page.wait_for_function(
-            "() => getComputedStyle(document.querySelector('#role-login-form button[type=submit]')).backgroundColor === 'rgb(40, 89, 79)'"
+            "() => getComputedStyle(document.querySelector('#role-login-form button[type=submit]')).backgroundColor === 'rgb(104, 73, 95)'"
         )
-        assert submit.evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(40, 89, 79)"
+        assert submit.evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(104, 73, 95)"
         assert submit.evaluate("el => getComputedStyle(el).color") == "rgb(255, 255, 255)"
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
     page.close()
@@ -84,12 +84,12 @@ def test_editorial_cards_and_footer_remain_readable_on_mobile_and_desktop(browse
         footer = page.locator("#marketing-site .placeai-footer")
         footer.wait_for(state="visible")
         footer_bg = footer.evaluate("el => getComputedStyle(el).backgroundColor")
-        assert footer_bg == "rgb(37, 59, 53)"
+        assert footer_bg == "rgb(48, 39, 51)"
         for label in footer.locator("p, h3, a").all():
             if label.is_visible():
                 colour = label.evaluate("el => getComputedStyle(el).color")
                 assert _contrast(colour, footer_bg) >= 4.5
-        assert page.locator(".hero h1 span").evaluate("el => getComputedStyle(el).color") == "rgb(23, 36, 59)"
+        assert page.locator(".hero h1 span").evaluate("el => getComputedStyle(el).color") == "rgb(48, 43, 50)"
         cards = page.locator(".journey-card")
         backgrounds = cards.evaluate_all("els => els.map(el => getComputedStyle(el).backgroundColor)")
         assert len(set(backgrounds)) == 3

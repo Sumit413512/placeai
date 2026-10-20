@@ -2,19 +2,19 @@
    This final presentation layer changes no visibility, media, timers or permissions.
    Important declarations reconcile the legacy, dynamically loaded visual layers. */
 :root {
-  --pa-tone-sage: #edf4ef;
+  --pa-tone-blush: #f7eef0;
   --pa-tone-sand: #f8f2e8;
-  --pa-tone-mauve: #f4eff3;
-  --pa-tone-stone: #f2f3f0;
+  --pa-tone-mauve: #f2eef7;
+  --pa-tone-stone: #f3f0ed;
   --pa-sidebar: #ffffff;
   --pa-canvas: #f6f8fc;
   --pa-surface: #ffffff;
-  --pa-accent: #28594f;
-  --pa-accent-hover: #1d453d;
+  --pa-accent: #68495f;
+  --pa-accent-hover: #503649;
   --pa-ink: #17243b;
   --pa-muted: #526177;
   --pa-border: #e0e6ef;
-  --pa-selected: #e9f2ee;
+  --pa-selected: #f2eaf0;
   --ink: var(--pa-ink) !important;
   --muted: var(--pa-muted) !important;
   --line: var(--pa-border) !important;
@@ -745,14 +745,14 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 /* Reference-led dashboard composition: colour belongs to categories and statuses,
    while workspace surfaces and typography remain quiet and consistent. */
 #app-shell {
-  --metric-blue-bg: #edf4ff;
-  --metric-blue-ink: #28594f;
-  --metric-mint-bg: #ecf8f2;
-  --metric-mint-ink: #17634a;
+  --metric-blue-bg: #f3f0ed;
+  --metric-blue-ink: #68495f;
+  --metric-mint-bg: #f7eef0;
+  --metric-mint-ink: #754559;
   --metric-amber-bg: #fff5e8;
   --metric-amber-ink: #8a500f;
-  --metric-violet-bg: #f4efff;
-  --metric-violet-ink: #6743a5;
+  --metric-violet-bg: #f2eef7;
+  --metric-violet-ink: #68495f;
 }
 #app-shell .app-sidebar { border-right: 1px solid var(--pa-border); }
 #app-shell .sidebar-brand { padding-block: 23px; border-bottom: 1px solid var(--pa-border); }
@@ -855,10 +855,10 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 #marketing-site .journey-card-top { display: flex; justify-content: space-between; align-items: center; }
 #marketing-site .journey-symbol {
   display: grid; place-items: center; width: 40px; height: 40px;
-  background: #eaf1ff; border-radius: 8px; font-size: 21px;
+  background: #f2eaf0; border-radius: 8px; font-size: 21px;
 }
-#marketing-site .journey-card:nth-child(2) .journey-symbol { background: #f4efff; }
-#marketing-site .journey-card:nth-child(3) .journey-symbol { background: #ecf8f2; }
+#marketing-site .journey-card:nth-child(2) .journey-symbol { background: #f2eef7; }
+#marketing-site .journey-card:nth-child(3) .journey-symbol { background: #f7eef0; }
 #marketing-site .journey-card a { margin-top: auto; padding-block: 8px; min-height: 24px; }
 #app-shell .workspace-shortcut-copy { display: grid; gap: 5px; min-width: 0; }
 #app-shell .workspace-shortcut-label { font-size: var(--type-body); line-height: 1.35; }
@@ -904,7 +904,7 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 #app-shell .sidebar-user strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #app-shell .sidebar-signout {
   grid-column:1/-1; width:100%; min-height:42px; padding:9px 12px;
-  border:1px solid #a5bbb3; border-radius:var(--radius-control,6px);
+  border:1px solid #bba9b6; border-radius:var(--radius-control,6px);
   background:#fff; color:var(--pa-accent); font:inherit; font-weight:400;
   text-align:center; white-space:nowrap; cursor:pointer;
 }
@@ -1011,7 +1011,7 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 #app-shell #learning-hub [data-video-library] { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(260px,100%),1fr)); gap: 20px; align-items: stretch; }
 #app-shell #learning-hub .learning-video-course-card { display: flex; flex-direction: column; align-items: stretch; gap: 0; padding: 0 !important; text-align: left; background: #fff !important; border: 1px solid var(--pa-border); border-radius: 10px !important; overflow: hidden; min-width: 0; height: 100%; cursor: pointer; }
 #app-shell #learning-hub .learning-video-course-card:hover { border-color: #91abcf; box-shadow: 0 3px 12px #17243b0a !important; }
-#app-shell .learning-video-card-art { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 96px; padding: 20px 24px; background: #eaf1ff; color: var(--pa-accent); border-bottom: 1px solid #dce6fa; }
+#app-shell .learning-video-card-art { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 96px; padding: 20px 24px; background: #f2eaf0; color: var(--pa-accent); border-bottom: 1px solid #dfd2dc; }
 #app-shell .learning-video-card-art svg { width: 48px; height: 48px; flex-shrink: 0; }
 #app-shell .learning-video-card-art>span { font-size: 12px !important; background: #fff; padding: 5px 9px; border-radius: 4px; }
 #app-shell .learning-video-card-content { display: flex; flex-direction: column; flex: 1; gap: 16px; padding: 22px; }
@@ -1130,7 +1130,7 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 
 /* Restrained semantic surfaces retain the dashboard's category cues. */
 #app-shell .metric-card:nth-child(4n+1) { background: var(--pa-tone-stone) !important; }
-#app-shell .metric-card:nth-child(4n+2) { background: var(--pa-tone-sage) !important; }
+#app-shell .metric-card:nth-child(4n+2) { background: var(--pa-tone-blush) !important; }
 #app-shell .metric-card:nth-child(4n+3) { background: var(--pa-tone-sand) !important; }
 #app-shell .metric-card:nth-child(4n+4) { background: var(--pa-tone-mauve) !important; }
 
@@ -1175,34 +1175,34 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 
 /* Editorial palette: quiet headings, coordinated surfaces, a distinct contact area.
    Scoped to presentation; preserve native control and workflow states. */
-#marketing-site .hero h1 span { color: var(--pa-ink) !important; }
-#marketing-site .hero-journey-line { color: #385b50 !important; }
-#marketing-site .hero .eyebrow { background: var(--pa-tone-sage) !important; border-color: #b9cfc2 !important; }
-#marketing-site .hero-photo-card { box-shadow: 0 12px 32px rgb(35 47 40 / 8%) !important; }
+#marketing-site :is(h1, h2, h3, .hero h1 span) { color: #302b32 !important; }
+#marketing-site .hero-journey-line { color: #68495f !important; }
+#marketing-site .hero .eyebrow { background: var(--pa-tone-blush) !important; border-color: #d8c6cf !important; }
+#marketing-site .hero-photo-card { box-shadow: 0 12px 32px rgb(48 39 51 / 8%) !important; }
 #marketing-site .hero-surface-card { background: var(--pa-tone-stone) !important; }
 #marketing-site :is(.journey-card, .bento-card, .prep-role-card, .preparation-grid > article) {
-  border-color: #d9dfd9 !important;
+  border-color: #e2d9de !important;
   box-shadow: none !important;
 }
-#marketing-site :is(.journey-card, .bento-card, .prep-role-card, .preparation-grid > article):nth-child(4n+1) { background: var(--pa-tone-sage) !important; }
+#marketing-site :is(.journey-card, .bento-card, .prep-role-card, .preparation-grid > article):nth-child(4n+1) { background: var(--pa-tone-blush) !important; }
 #marketing-site :is(.journey-card, .bento-card, .prep-role-card, .preparation-grid > article):nth-child(4n+2) { background: var(--pa-tone-sand) !important; }
 #marketing-site :is(.journey-card, .bento-card, .prep-role-card, .preparation-grid > article):nth-child(4n+3) { background: var(--pa-tone-mauve) !important; }
 #marketing-site :is(.journey-card, .bento-card, .prep-role-card, .preparation-grid > article):nth-child(4n+4) { background: var(--pa-tone-stone) !important; }
 #marketing-site .journey-card::before { background: var(--pa-accent); opacity: .5; }
-#marketing-site .journey-symbol { background: #fff !important; border: 1px solid #d9dfd9; }
+#marketing-site .journey-symbol { background: #fff !important; border: 1px solid #e2d9de; }
 #marketing-site .prep-lab-section { background: #faf9f6; border-color: #e3e2db; }
 #marketing-site .prep-role-badge { background: #fff !important; color: var(--pa-accent) !important; }
 #marketing-site .dark-section { background: var(--pa-tone-stone) !important; }
-#marketing-site .security-card { background: var(--pa-tone-sage) !important; }
-#marketing-site .cta-section { background: #e8eee8 !important; border-block: 1px solid #d4dfd5; }
+#marketing-site .security-card { background: var(--pa-tone-blush) !important; }
+#marketing-site .cta-section { background: #f1eaf0 !important; border-block: 1px solid #dfd2dc; }
 #marketing-site .cta-section :is(h2, span) { color: var(--pa-ink) !important; }
 #marketing-site .cta-section .button-light { background: var(--pa-accent) !important; color: #fff !important; border-color: var(--pa-accent) !important; }
-#marketing-site :is(.placeai-footer, .site-footer) { background: #253b35 !important; color: #f7f5ef !important; border-top: 1px solid #253b35; }
-#marketing-site :is(.placeai-footer, .site-footer) :is(p, a, span, small, strong, h3) { color: #f7f5ef !important; }
-#marketing-site .placeai-footer h3 { color: #c6d5cc !important; letter-spacing: .06em; font-weight: 500 !important; }
+#marketing-site :is(.placeai-footer, .site-footer) { background: #302733 !important; color: #faf6f1 !important; border-top: 1px solid #302733; }
+#marketing-site :is(.placeai-footer, .site-footer) :is(p, a, span, small, strong, h3) { color: #faf6f1 !important; }
+#marketing-site .placeai-footer h3 { color: #dfd1dc !important; letter-spacing: .06em; font-weight: 500 !important; }
 #marketing-site .placeai-footer .brand { width: fit-content; padding: 4px 12px; background: #fff; border-radius: 8px; }
-#marketing-site .placeai-footer .placeai-social-button { background: #304c43 !important; border-color: #829c90 !important; }
-#marketing-site .placeai-footer .placeai-social-button:hover { background: #3b5b50 !important; }
-#marketing-site .placeai-footer-bottom { border-top: 1px solid #758d80; }
-#marketing-site :is(.placeai-footer, .site-footer) a:focus-visible { outline: 2px solid #f7f5ef !important; outline-offset: 4px; }
+#marketing-site .placeai-footer .placeai-social-button { background: #49394b !important; border-color: #a391a1 !important; }
+#marketing-site .placeai-footer .placeai-social-button:hover { background: #5b475b !important; }
+#marketing-site .placeai-footer-bottom { border-top: 1px solid #8c7b8b; }
+#marketing-site :is(.placeai-footer, .site-footer) a:focus-visible { outline: 2px solid #faf6f1 !important; outline-offset: 4px; }
 #marketing-site :is(.placeai-footer, .site-footer) a:hover { text-decoration: underline; text-underline-offset: 4px; }
