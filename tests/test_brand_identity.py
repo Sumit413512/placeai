@@ -29,11 +29,11 @@ def test_every_public_html_surface_loads_the_official_brand_assets():
     mock_interview = _read("app/templates/mock-interview.html")
     public_site = _read("index.html")
 
-    assert 'href="/static/placeai-icon.svg"' in application
+    assert 'href="/static/placeai-favicon-96.png"' in application
     assert 'href="/static/brand.css"' in application
     assert 'href="/static/placeai-icon.svg"' in mock_interview
     assert 'href="/static/brand.css"' in mock_interview
-    assert 'href="./app/static/placeai-icon.svg"' in public_site
+    assert 'href="./app/static/placeai-favicon-96.png"' in public_site
     assert 'href="./app/static/brand.css"' in public_site
 
 
@@ -65,4 +65,7 @@ def test_search_favicon_is_square_crisp_and_mirrored():
     for name in ("app/templates/index.html", "public/index.html"):
         html = _read(name)
         assert 'type="image/png" sizes="96x96" href="/static/placeai-favicon-96.png"' in html
-        assert html.index("placeai-favicon-96.png") < html.index("placeai-icon.svg")
+        # Google discovers the icon from the homepage. Keep one stable PNG
+        # declaration rather than competing SVG/PNG icon candidates.
+        assert html.count('rel="icon"') == 1
+        assert 'href="/static/placeai-icon.svg"' not in html
