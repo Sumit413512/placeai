@@ -1175,7 +1175,8 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 
 /* Editorial palette: quiet headings, coordinated surfaces, a distinct contact area.
    Scoped to presentation; preserve native control and workflow states. */
-#marketing-site :is(h1, h2, h3, .hero h1 span) { color: #302b32 !important; }
+#marketing-site :is(h1, h2, h3) { color: #302b32 !important; }
+#marketing-site .hero h1 span { color: #302b32 !important; }
 #marketing-site .hero-journey-line { color: #68495f !important; }
 #marketing-site .hero .eyebrow { background: var(--pa-tone-blush) !important; border-color: #d8c6cf !important; }
 #marketing-site .hero-photo-card { box-shadow: 0 12px 32px rgb(48 39 51 / 8%) !important; }
