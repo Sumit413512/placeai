@@ -13,9 +13,12 @@ Reviewed getdesign.md and its public IBM and Linear reference documents. These a
 Sources: https://getdesign.md, https://getdesign.md/ibm/design-md, https://getdesign.md/linear.app/design-md, https://www.coursera.org/learn/learning-how-to-learn, https://joinhandshake.com/, https://www.carbondesignsystem.com/building-blocks/core/components/data-table/guidelines
 
 ## Tokens and composition
-White surfaces on #f6f8fc; primary blue #2459c4; text #17243b; secondary text #526177. Semantic status colours communicate meaning, always accompanied by text. Use Calibri/Carlito with system fallbacks, normal tracking, regular headings and medium action labels. Spacing: 8, 16, 24, 32 pixels. Controls use 6px corners; surfaces 10px. Keep focus indicators, readable labels and responsive layouts.
+White surfaces on #f6f8fc; primary plum #68495f; text #17243b; secondary text #526177. Semantic status colours communicate meaning, always accompanied by text. Use Calibri/Carlito with system fallbacks, normal tracking, regular headings and medium action labels. Spacing: 8, 16, 24, 32 pixels. Controls use 6px corners; surfaces 10px. Keep focus indicators, readable labels and responsive layouts.
 
 Use one primary action per section. Keep supporting details in meaningful disclosures, not duplicated role badges. Tables retain all data and mobile responsive treatment. Learning cards use actual course metadata and saved completion, never invented readiness.
 
 ## Functional invariants
 Never change authentication, permissions, API contracts, timers, media lifecycle, progress persistence, generation/review gates, exam recording or payments as part of styling. Only fully prepared courses allow learning to begin. Retain keyboard controls, native labels, reduced-motion support and hidden/disabled states. No third-party component runtime or tracking is added.
+
+## October 20 palette refinement
+21st.dev was reviewed for component and footer composition. Keep the existing native HTML/CSS rather than introducing a React runtime. Use charcoal hero typography, plum actions and coordinated blush, sand, lilac and stone card surfaces. The dark charcoal-plum footer uses warm-white text and a white plaque for the unchanged wordmark. Colours distinguish content groups; status labels retain their semantics.

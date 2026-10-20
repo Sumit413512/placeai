@@ -112,7 +112,7 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
         if role == 'student':
             assert page.locator('#page-eyebrow').is_hidden()
         assert page.locator('#app-nav button[aria-current="page"]').get_attribute('data-view') == 'applications'
-        assert page.locator('.status-applied').evaluate('el => getComputedStyle(el).color') == 'rgb(36, 89, 196)'
+        assert page.locator('.status-applied').evaluate('el => getComputedStyle(el).color') == 'rgb(104, 73, 95)'
     if role == 'student':
         page.locator('#app-nav button[data-view="learning-hub"]').click()
         page.locator('#learning-hub').wait_for()

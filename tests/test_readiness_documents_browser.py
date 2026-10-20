@@ -54,7 +54,7 @@ def test_readiness_evidence_and_document_vault_accessibility(browser, width):
     active = page.locator('#app-nav button[aria-current="page"]')
     assert active.count() == 1
     assert active.get_attribute('data-view') == 'readiness'
-    assert active.evaluate("el => getComputedStyle(el, '::after').backgroundColor") == 'rgb(36, 89, 196)'
+    assert active.evaluate("el => getComputedStyle(el, '::after').backgroundColor") == 'rgb(104, 73, 95)'
     assert page.locator('.ai-box-head').inner_text() == 'Evidence → action'
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
     output = Path(__file__).resolve().parents[1] / 'work/accessibility-review'

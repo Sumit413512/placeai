@@ -24,9 +24,9 @@ def test_selected_palette_survives_dynamic_styles_and_auth_dialog(browser):  # n
         submit = page.locator('#role-login-form button[type="submit"]')
         page.mouse.move(0, 0)
         page.wait_for_function(
-            "() => getComputedStyle(document.querySelector('#role-login-form button[type=submit]')).backgroundColor === 'rgb(36, 89, 196)'"
+            "() => getComputedStyle(document.querySelector('#role-login-form button[type=submit]')).backgroundColor === 'rgb(104, 73, 95)'"
         )
-        assert submit.evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(36, 89, 196)"
+        assert submit.evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(104, 73, 95)"
         assert submit.evaluate("el => getComputedStyle(el).color") == "rgb(255, 255, 255)"
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
     page.close()
@@ -58,4 +58,59 @@ def test_theme_covers_assessment_and_legal_pages_without_revealing_hidden_panels
                 == "rgb(255, 255, 255)"
             )
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+    page.close()
+
+
+def _contrast(foreground, background):
+    import re
+
+    def luminance(colour):
+        values = [int(v) / 255 for v in re.findall(r"[\d.]+", colour)[:3]]
+        channels = [v / 12.92 if v <= .04045 else ((v + .055) / 1.055) ** 2.4 for v in values]
+        return sum(v * weight for v, weight in zip(channels, (.2126, .7152, .0722)))
+
+    light, dark = sorted((luminance(foreground), luminance(background)), reverse=True)
+    return (light + .05) / (dark + .05)
+
+
+def test_editorial_cards_and_footer_remain_readable_on_mobile_and_desktop(browser):  # noqa: F811
+    import os
+    from pathlib import Path
+
+    page = browser.new_page()
+    for width in (390, 1440):
+        page.set_viewport_size({"width": width, "height": 900})
+        page.goto(BASE_URL, wait_until="networkidle")
+        footer = page.locator("#marketing-site .placeai-footer")
+        footer.wait_for(state="visible")
+        footer_bg = footer.evaluate("el => getComputedStyle(el).backgroundColor")
+        assert footer_bg == "rgb(48, 39, 51)"
+        for label in footer.locator("p, h3, a").all():
+            if label.is_visible():
+                colour = label.evaluate("el => getComputedStyle(el).color")
+                assert _contrast(colour, footer_bg) >= 4.5
+        assert page.locator(".hero h1 span").evaluate("el => getComputedStyle(el).color") == "rgb(48, 43, 50)"
+        cards = page.locator(".journey-card")
+        backgrounds = cards.evaluate_all("els => els.map(el => getComputedStyle(el).backgroundColor)")
+        assert len(set(backgrounds)) == 3
+        for card, background in zip(cards.all(), backgrounds):
+            colour = card.locator("p").evaluate("el => getComputedStyle(el).color")
+            assert _contrast(colour, background) >= 4.5
+        primary = page.locator('.hero button[data-open-auth="login"]')
+        colours = primary.evaluate("el => [getComputedStyle(el).color, getComputedStyle(el).backgroundColor]")
+        assert _contrast(*colours) >= 4.5
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+        assert page.locator("#auth-overlay").is_hidden()
+        assert page.locator("#app-shell").is_hidden()
+        directory = os.getenv("PLACEAI_DESIGN_SCREENSHOTS")
+        if directory:
+            Path(directory).mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(Path(directory) / f"homepage-{width}.png"), full_page=True)
+            consent = page.get_by_role("button", name="Essential only", exact=True)
+            if consent.is_visible():
+                consent.click()
+            page.locator(".hero").scroll_into_view_if_needed()
+            page.screenshot(path=str(Path(directory) / f"hero-{width}.png"))
+            footer.scroll_into_view_if_needed()
+            page.screenshot(path=str(Path(directory) / f"footer-{width}.png"))
     page.close()
