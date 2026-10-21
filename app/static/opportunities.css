@@ -64,3 +64,6 @@
  #app-shell .opportunity-back { left:16px;top:16px; }
  #app-shell .opportunity-image-label { top:76px;bottom:auto; }
 }
+
+/* Keep privacy controls reachable without covering an opportunity action. */
+body:has(.opportunity-detail) .privacy-settings-button { position:static; display:block; width:fit-content; margin:0 16px 16px auto; }

@@ -59,6 +59,7 @@ def test_opportunity_detail_demo_and_application_flow(browser):
         page.set_viewport_size({"width": width, "height": 1050})
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), width
         assert page.get_by_role('button', name='Apply now', exact=True).is_visible()
+        assert page.locator('.privacy-settings-button').evaluate("el=>getComputedStyle(el).position") == 'static'
     page.set_viewport_size({"width": 1600, "height": 1050})
     page.get_by_role('button', name='Apply now', exact=True).click()
     page.get_by_role('textbox', name='Cover note optional').fill('Interested in the published role')
