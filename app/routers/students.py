@@ -170,6 +170,22 @@ def browse_jobs(search: Optional[str] = Query(None), skills: Optional[str] = Que
     return [job_out(j) for j in jobs]
 
 
+@router.get("/opportunity-demo")
+def opportunity_demo(current_user: User = Depends(require_student)):
+    from app.opportunity_detail import demo_opportunity
+    return demo_opportunity()
+
+
+@router.get("/jobs/{job_id}")
+def get_job_detail(job_id: str, current_user: User = Depends(require_student), db: Session = Depends(get_db)):
+    from app.opportunity_detail import opportunity_detail
+    profile = get_or_create_profile(current_user, db)
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job_is_visible_to_student(profile, job, db):
+        raise HTTPException(status_code=404, detail="Opportunity not found or no longer available")
+    return opportunity_detail(job, profile, db)
+
+
 @router.get("/drives", response_model=List[PlacementDriveOut])
 def my_placement_drives(current_user: User = Depends(require_student), db: Session = Depends(get_db)):
     profile = get_or_create_profile(current_user, db)
