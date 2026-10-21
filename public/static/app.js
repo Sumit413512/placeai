@@ -32,7 +32,7 @@
     '/static/workspace-experience.js?v=20261016-interface-guidelines',
     '/static/legal-links.js',
     '/static/career-roadmap.js?v=20261016-interface-guidelines',
-    '/static/app-core.js?v=20261019-auth-session1'
+    '/static/app-core.js?v=20261021-opportunities1'
   ];
 
   const loadNext = (index) => {

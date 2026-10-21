@@ -235,7 +235,9 @@ INDEX_HTML = '''<!doctype html>
     </section>
   </div>
 
-  <script src="/static/app.js?v=20261019-google-link3" defer></script>
+  <script src="/static/app.js?v=20261021-opportunities1" defer></script>
+  <script src="/static/opportunities.js?v=20261021-detail1" defer></script>
+  <link rel="stylesheet" href="/static/opportunities.css?v=20261021-detail1">
   <link rel="stylesheet" href="/static/learning-video.css?v=20261017-full-course4">
   <script src="/static/learning-video.js?v=20261018-course-ui1" defer></script>
   <script src="/static/learning-hub.js?v=20261020-notes1" defer></script>
