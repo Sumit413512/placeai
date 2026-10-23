@@ -6,6 +6,16 @@
   const e = value => context.esc(String(value ?? ''));
   // Escape first. Only this small formatting vocabulary can create markup.
   const inline = value => e(value).replace(/\*\*([^*\n]{1,200})\*\*/g, '<strong>$1</strong>');
+  function paragraphs(value) {
+    const result = []; let group = [], words = 0;
+    for (const sentence of value.trim().split(/(?<=[.!?])\s+(?=[A-Z])/)) {
+      const count = sentence.trim().split(/\s+/).length;
+      if (group.length && (group.length >= 3 || words + count > 90)) { result.push(group.join(' ')); group = []; words = 0; }
+      group.push(sentence); words += count;
+    }
+    if (group.length) result.push(group.join(' '));
+    return result;
+  }
   function prose(value) {
     const lines = String(value || '').split(/\n+/).filter(line => line.trim());
     let html = '', mode = '';
@@ -14,7 +24,7 @@
       const next = bullet ? 'ul' : step ? 'ol' : '';
       if (mode && mode !== next) html += `</${mode}>`;
       if (next && mode !== next) html += `<${next}>`;
-      html += next ? `<li>${inline((bullet || step)[1])}</li>` : `<p>${inline(line)}</p>`;
+      html += next ? `<li>${inline((bullet || step)[1])}</li>` : paragraphs(line).map(part => `<p>${inline(part)}</p>`).join('');
       mode = next;
     }
     return html + (mode ? `</${mode}>` : '');
@@ -50,7 +60,7 @@
   function notebookHtml(book) {
     const ready = isReady(book);
     if (!ready) return `<article class="panel learning-notebook"><div class="panel-head"><h2>${e(book.title)}</h2>${badge(book)}</div><p role="status">${book.preparation_stage === 'checking' ? 'Your complete notebook is undergoing its final checks.' : 'Your notes are being researched and written in the background.'} You can leave this page and return later.</p></article>`;
-    return `<article class="panel learning-notebook"><div class="panel-head"><div><span class="section-kicker">Your learning notebook</span><h2>${e(book.title)}</h2></div>${ready ? '<button class="button button-primary" data-learning-action="pdf">Download complete PDF</button>' : ''}</div><p role="status">Ready to read</p>${book.plan?.introduction ? `<div class="learning-introduction">${prose(book.plan.introduction)}<h3>Before you begin</h3>${list(book.plan.prerequisites)}<details class="learning-outline"><summary>Full chapter outline</summary><ol>${book.plan.chapters.map(ch => `<li>${e(ch.title)}${list(ch.subtopics)}</li>`).join('')}</ol></details></div>` : ''}<div id="learning-chapters">${(book.chapters || []).map(chapterHtml).join('')}</div>${book.sources?.length ? `<section class="learning-sources"><h3>Research sources</h3><p>AI-authored explanations use the references below. Consult official documentation for version-specific details. Code examples are illustrative and have not been executed by PlaceAI.</p><ol>${book.sources.map((s, i) => { const url = sourceUrl(s.url); return `<li id="learning-source-${i + 1}">${url ? `<a href="${e(url)}" target="_blank" rel="noopener noreferrer">${e(s.title)}</a>` : e(s.title)}</li>`; }).join('')}</ol></section>` : ''}</article>`;
+    return `<article class="panel learning-notebook"><div class="panel-head"><div><span class="section-kicker">Your learning notebook</span><h2>${e(book.title)}</h2></div>${ready ? '<button class="button button-primary" data-learning-action="pdf">Download complete PDF</button>' : ''}</div><p role="status">Ready to read</p>${book.plan?.introduction ? `<div class="learning-introduction">${prose(book.plan.introduction)}<h3>Before you begin</h3>${list(book.plan.prerequisites)}<details class="learning-outline"><summary>Full chapter outline</summary><ol>${book.plan.chapters.map(ch => `<li>${e(ch.title)}${list(ch.subtopics)}</li>`).join('')}</ol></details></div>` : ''}<div id="learning-chapters">${(book.chapters || []).map(chapterHtml).join('')}</div>${book.sources?.length ? `<section class="learning-sources"><h3>Research sources</h3><p>AI-authored explanations use the references below. Consult official documentation for version-specific details. Code examples are illustrative and have not been executed by PlaceAI.</p><ol>${book.sources.map((s, i) => { const url = sourceUrl(s.url); return `<li id="learning-source-${i + 1}">${url ? `<a href="${e(url)}" target="_blank" rel="noopener noreferrer">${e(s.title)}</a>` : e(s.title)}${s.researched_at ? `<small> · Research date: ${e(String(s.researched_at).slice(0,10))}</small>` : ''}</li>`; }).join('')}</ol></section>` : ''}</article>`;
   }
   function showBook(book) {
     if (book.status === 'failed') { selected = null; clearTimeout(timer); document.querySelector('#learning-notebook-result')?.replaceChildren(); document.querySelector('#learning-form-status').textContent = 'Your notebook needs a preparation repair. Saved chapters are preserved. Please contact PlaceAI support with reference ' + book.id + '.'; refreshLibrary(epoch).catch(() => {}); return; }

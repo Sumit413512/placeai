@@ -218,6 +218,8 @@ def render_notebook(notebook: dict) -> bytes:
         url = escape(source["url"], quote=True)
         story.append(Paragraph(f'<a name="source-{index}"/>[{index}] {escape(source["title"])}', h3))
         story.append(Paragraph(f'<link href="{url}" color="#59416f">{url}</link>', small))
+        if source.get("researched_at"):
+            prose("Research date: " + str(source["researched_at"])[:10], small)
     buffer = io.BytesIO()
     doc = NotesDocument(buffer, pagesize=(595.28, 841.89), leftMargin=52, rightMargin=52,
                             topMargin=54, bottomMargin=52, title=notebook["title"], author="PlaceAI Learning Hub")

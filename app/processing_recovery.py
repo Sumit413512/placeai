@@ -51,7 +51,7 @@ def recover(db, actor, kind, identifier):
         from app.learning_video_worker import STORAGE_BUDGET, storage_used
         from app.learning_video_media import MAX_VIDEO_BYTES
         pending = db.query(VideoLesson).filter(VideoLesson.state.in_(['queued','running','retrying'])).count()
-        recent = db.query(AuditEvent).filter(AuditEvent.action == 'processing.recovery',
+        recent = db.query(AuditEvent).filter(AuditEvent.action == 'processing.recovery', AuditEvent.entity_type == 'courses',
             AuditEvent.created_at > now-timedelta(days=1)).limit(1000).all()
         used = sum(json.loads(event.metadata_json or '{}').get('requeued_parts', 0) for event in recent)
         capacity = min(max(0, 40-used), max(0, (STORAGE_BUDGET-storage_used(db))//MAX_VIDEO_BYTES-pending))

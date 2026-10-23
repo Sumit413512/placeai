@@ -44,6 +44,16 @@ def test_new_requests_have_no_depth_but_saved_requests_keep_their_contract():
     assert old.standard_version == 1 and old.chapters == 8
 
 
+def test_client_cannot_downgrade_new_notebook_or_choose_a_depth(hub):
+    payload = {"topic": "SQL", "standard_version": 1, "chapters": 8,
+               "level": "advanced", "goals": "Condense it", "request_id": "server-standard-policy-001"}
+    response = hub.client.post('/learning-hub', json=payload)
+    assert response.status_code == 202
+    book = response.json()
+    assert book['input']['standard_version'] == 2 and book['input']['chapters'] is None
+    assert hub.client.post('/learning-hub', json=payload).json()['id'] == book['id']
+
+
 def test_v2_checks_and_pdf_must_finish_before_publication(hub, monkeypatch):
     book = hub.client.post("/learning-hub", json={"topic": "PostgreSQL predicates", "standard_version": 2,
         "request_id": "standard-worker-request-001"}).json()
@@ -56,7 +66,10 @@ def test_v2_checks_and_pdf_must_finish_before_publication(hub, monkeypatch):
         calls.append(task)
         props = schema["properties"]
         if "approved" in props: result = {"approved": True, "issues": []}
-        elif "chapters" in props: result = plan
+        elif "chapters" in props:
+            assert 'draft' not in props and 'publication_review' not in props
+            result = plan
+        elif "subtopics" in props and "examples" in props: result = chapter
         elif "additional_explanation" in props:
             result = {"additional_explanation": chapter["subtopics"][0]["explanation"]}
         elif "concept" in props:
@@ -68,7 +81,12 @@ def test_v2_checks_and_pdf_must_finish_before_publication(hub, monkeypatch):
         else: result = {k: v for k, v in chapter.items() if k not in {"subtopics", "examples"}}
         return result, "isolated:writer"
     monkeypatch.setattr(learning_ai, "generate_json", generate)
-    monkeypatch.setattr(learning_ai, "review_chapter", lambda *_: None)
+    review_calls = []
+    def review_chapter(*args):
+        review_calls.append(1)
+        if len(review_calls) == 1:
+            raise learning_ai.LearningReviewRejected(["Correct an unsupported expected-output claim"])
+    monkeypatch.setattr(learning_ai, "review_chapter", review_chapter)
     def step():
         with hub.sessions() as db: item = learning_worker.claim(db)
         assert item
@@ -88,7 +106,7 @@ def test_v2_checks_and_pdf_must_finish_before_publication(hub, monkeypatch):
     assert reader.outline and reader.pages
     assert any("Worked example" in page.extract_text() for page in reader.pages)
     # Finalization is local; it does not call the model again.
-    assert len(calls) == 7
+    assert len(calls) == 8 and len(review_calls) == 2
     assert ready["chapters"][0]["examples"][0]["code"] == chapter["examples"][0]["code"]
 
 

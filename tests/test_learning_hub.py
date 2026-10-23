@@ -177,6 +177,11 @@ def test_field_repair_cannot_overwrite_unrequested_content(monkeypatch):
 
 def test_worker_saves_each_stage_resumes_and_never_publishes_partial_pdf(hub, monkeypatch):
     book = hub.client.post("/learning-hub", json=preferences()).json()
+    # An already saved v1 notebook must resume its original contract after upgrade.
+    import json
+    legacy = hub.db.get(LearningNotebook, book["id"])
+    legacy.input_json = json.dumps(preferences())
+    hub.db.commit()
     sources = [{"url": "https://www.postgresql.org/docs/current/sql-select.html", "title": "SELECT"},
                {"url": "https://www.postgresql.org/docs/current/tutorial.html", "title": "Tutorial"},
                {"url": "https://www.postgresql.org/docs/current/queries.html", "title": "Queries"}]

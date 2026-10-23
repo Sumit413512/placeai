@@ -9,7 +9,7 @@ import pytest
 from test_learning_video import video, ready_lesson, course_plan, script  # noqa: F401
 from test_learning_hub import hub  # noqa: F401
 from app import learning_speech, learning_video_worker as worker, learning_video_review as review
-from app.models import VideoCourse, VideoLesson, utcnow
+from app.models import VideoCourse, VideoLesson, VideoNarration, utcnow
 
 
 def test_quota_wait_does_not_block_another_course(video):
@@ -91,7 +91,8 @@ def test_all_narration_finishes_before_encoder_starts(monkeypatch):
         {'narration':'second scene'}]}, narrate=narrate)[0] == b'mp4'
 
 
-def test_review_retry_reuses_checked_media_without_publishing_it(video, monkeypatch):
+@pytest.mark.parametrize('review_error', [review.ReviewCapacityError(60), RuntimeError('VIDEO_REVIEW_INCOMPLETE')])
+def test_review_retry_reuses_checked_media_without_publishing_it(video, monkeypatch, review_error):
     course_id, lesson_id, path = ready_lesson(video)
     row = video.db.get(VideoLesson, lesson_id)
     course = video.db.get(VideoCourse, course_id)
@@ -102,7 +103,7 @@ def test_review_retry_reuses_checked_media_without_publishing_it(video, monkeypa
     renders=[]
     monkeypatch.setattr(worker, 'render_video', lambda *_a, **_k: (renders.append(1) or b'checked-render', 12, []))
     monkeypatch.setattr(worker, 'inspect_video', lambda *_a: {'passed':True})
-    monkeypatch.setattr(worker, 'review_video', lambda *_a: (_ for _ in ()).throw(review.ReviewCapacityError(60)))
+    monkeypatch.setattr(worker, 'review_video', lambda *_a: (_ for _ in ()).throw(review_error))
     with video.sessions() as db: item = worker.claim(db)
     worker.process(item, video.sessions)
     video.db.expire_all(); row = video.db.get(VideoLesson, lesson_id)
@@ -133,3 +134,20 @@ def test_daily_review_quota_is_a_wait_not_a_type_error(monkeypatch):
     with pytest.raises(review.ReviewCapacityError) as error:
         review.review_video(b'teaching-media', {'objective':'SQL','scenes':[],'timings':[]})
     assert error.value.retry_seconds == 86400
+
+
+def test_rejected_lesson_keeps_correction_feedback_and_removes_only_its_generated_checkpoints(video, monkeypatch):
+    _, lesson_id, _ = ready_lesson(video)
+    row = video.db.get(VideoLesson, lesson_id)
+    row.state = 'queued'
+    video.db.add(VideoNarration(lesson_id=lesson_id, scene_key='obsolete-audio', audio_data=b'rejected-generated-audio'))
+    video.db.commit()
+    monkeypatch.setattr(worker, 'review_video', lambda *_: (_ for _ in ()).throw(
+        review.LessonReviewRejected(['Scene 2 diagram direction contradicts the explanation'])))
+    with video.sessions() as db: item = worker.claim(db)
+    worker.process(item, video.sessions)
+    video.db.expire_all(); row = video.db.get(VideoLesson, lesson_id)
+    assert row.state == 'retrying' and row.video_data is None
+    assert 'Scene 2' in json.loads(row.content_json)['revision_feedback'][0]
+    assert video.db.query(VideoNarration).filter_by(lesson_id=lesson_id).count() == 0
+    assert video.db.query(VideoLesson).filter_by(state='ready').count() == 3

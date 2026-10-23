@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import ipaddress
+import re
 import socket
+from datetime import datetime, timezone
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 
@@ -84,7 +86,8 @@ def fetch_document(url):
                 parser.feed(b"".join(chunks).decode("utf-8", errors="replace"))
                 text = "\n".join(" ".join(line.split()) for line in "".join(parser.parts).splitlines() if line.strip())
                 if len(text) < 500: raise ValueError("Reference has insufficient readable evidence")
-                return {"url": url, "title": " ".join(parser.title_parts).strip()[:240] or urlsplit(url).hostname}, text[:14000]
+                return {"url": url, "title": " ".join(parser.title_parts).strip()[:240] or urlsplit(url).hostname,
+                        "researched_at": datetime.now(timezone.utc).isoformat()}, text[:14000]
     raise ValueError("Reference has too many redirects")
 
 
@@ -101,7 +104,15 @@ def research_documents(subject, generate):
     sources, excerpts, seen = [], [], set()
     urls = selected.get("urls", [])
     if not isinstance(urls, list): raise ValueError("Reference candidates must be a list")
-    for url in urls[:8]:
+    # Fallback candidates are still fetched and subjected to the same public-host
+    # and evidence checks. A known URL alone never becomes a citation.
+    seeds = []
+    if re.search(r"\b(?:sql|postgresql|postgres)\b", subject, re.I):
+        seeds = ["https://www.postgresql.org/docs/current/" + name for name in
+                 ("tutorial-select.html", "queries-table-expressions.html", "sql-expressions.html")]
+    elif re.search(r"\bpython\b", subject, re.I):
+        seeds = ["https://docs.python.org/3/" + name for name in ("tutorial/", "reference/", "library/")]
+    for url in [*urls[:8], *seeds]:
         if not isinstance(url, str) or len(url) > 1800 or url in seen: continue
         seen.add(url)
         try:

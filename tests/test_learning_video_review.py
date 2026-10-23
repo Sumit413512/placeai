@@ -31,7 +31,8 @@ def test_audiovisual_review_requires_every_scene_and_transmits_only_teaching_med
         if change == 'mismatch': result['scene_checks'][0]['audio_matches_script'] = False
         if change == 'rejected': result['approved'] = False
         if change == 'issues': result['issues'] = ['Narration does not match the diagram at 00:02']
-        with pytest.raises(ValueError): review.review_video(b'generated-test-mp4', content)
+        with pytest.raises(RuntimeError if change in {'missing', 'duplicate'} else ValueError):
+            review.review_video(b'generated-test-mp4', content)
         result = good
 
 

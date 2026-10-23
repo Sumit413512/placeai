@@ -5,7 +5,7 @@ from pypdf import PdfReader
 
 from app import learning_ai
 from app.learning_content import LearningChapter
-from app.learning_format import inline, blocks
+from app.learning_format import inline, blocks, paragraphs
 from app.learning_notes_prompt import NOTES_AUTHORING_STANDARD
 from app.learning_pdf import render_notebook
 from test_learning_hub import chapter_data, plan_data, preferences
@@ -46,6 +46,14 @@ def test_emphasis_and_lists_cannot_introduce_active_markup():
     assert '<img' not in result and '<script>' not in result
     assert '&lt;img' in result and '&amp;' in result
     assert list(blocks('Intro\n- One\n1. First\n2. Second')) == [('', 'Intro'), ('• ', 'One'), ('1. ', 'First'), ('2. ', 'Second')]
+
+
+def test_saved_paragraphs_reflow_without_rewriting_their_content():
+    original = 'First explanation. Second explanation. Third explanation. Fourth explanation.'
+    result = list(paragraphs(original))
+    assert len(result) == 2 and ' '.join(result) == original
+    assert list(blocks('- Keep this list item. Another sentence.')) == [
+        ('• ', 'Keep this list item. Another sentence.')]
 
 
 def test_advanced_notes_are_preserved_in_pdf_and_html_stays_literal():

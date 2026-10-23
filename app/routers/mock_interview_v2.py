@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import math
 import os
@@ -33,6 +34,10 @@ from app.assessment_report_email import deliver_completed_report, delivery_statu
 router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])
 
 LOGGER = logging.getLogger("placeai.mock_interview")
+
+
+class CodeExecutionPending(RuntimeError):
+    pass
 
 FULL_MOCK_QUESTION_COUNT = 50
 ASSESSMENT_BLUEPRINT = (
@@ -587,6 +592,7 @@ def _judge0_execute_case(
     expected_output: str,
     time_limit_seconds: float,
     memory_limit_kb: int,
+    checkpoint=None,
 ) -> dict[str, Any]:
     language_meta = CODE_LANGUAGES.get(language)
     if not language_meta:
@@ -600,12 +606,24 @@ def _judge0_execute_case(
         "wall_time_limit": max(1.0, min(float(time_limit_seconds) * 2.5, 10.0)),
         "memory_limit": max(32000, min(int(memory_limit_kb), 256000)),
     }
-    url = f"{_judge0_base_url()}/submissions?base64_encoded=false&wait=true"
+    url = f"{_judge0_base_url()}/submissions?base64_encoded=false&wait=false"
     try:
-        response = httpx.post(url, headers=_judge0_headers(), json=payload, timeout=15.0)
-        response.raise_for_status()
-        data = response.json()
-        token = data.get("token")
+        key = hashlib.sha256(json.dumps([_judge0_base_url(), payload], sort_keys=True).encode()).hexdigest()
+        saved = checkpoint.get(key) if checkpoint else {}
+        if saved.get('result'):
+            return saved['result']
+        token = saved.get('token')
+        if token:
+            data = {'token': token}
+        else:
+            response = httpx.post(url, headers=_judge0_headers(), json=payload, timeout=15.0)
+            response.raise_for_status()
+            data = response.json()
+            token = data.get("token")
+            if token and not re.fullmatch(r'[a-fA-F0-9-]{36}', str(token)):
+                raise RuntimeError('Invalid execution receipt')
+            if token and checkpoint:
+                checkpoint.put(key, {'token': token})
         if token and not isinstance(data.get("status"), dict):
             for _ in range(8):
                 time.sleep(0.25)
@@ -621,6 +639,10 @@ def _judge0_execute_case(
                     break
         status_obj = data.get("status") if isinstance(data.get("status"), dict) else {}
         status_id = int(status_obj.get("id", 0) or 0)
+        if status_id in {1, 2}:
+            raise CodeExecutionPending('The execution provider is still processing this submission')
+        if status_id not in {*range(3, 13), 14}:
+            raise RuntimeError('The execution provider returned no usable result')
         stdout = str(data.get("stdout") or "")
         stderr = str(data.get("stderr") or "")
         compile_output = str(data.get("compile_output") or "")
@@ -628,7 +650,7 @@ def _judge0_execute_case(
             status_id == 3
             and _normalized_program_output(stdout) == _normalized_program_output(expected_output)
         )
-        return {
+        result = {
             "passed": passed,
             "status_id": status_id,
             "status": str(status_obj.get("description") or "Unknown")[:120],
@@ -638,6 +660,11 @@ def _judge0_execute_case(
             "time": str(data.get("time") or "")[:40],
             "memory": data.get("memory"),
         }
+        if checkpoint:
+            checkpoint.put(key, {'token': token, 'result': result})
+        return result
+    except CodeExecutionPending:
+        raise
     except Exception as exc:
         LOGGER.warning("Code runner unavailable error_type=%s", type(exc).__name__)
         raise RuntimeError("Code execution service is temporarily unavailable") from exc
@@ -665,6 +692,7 @@ def _run_code_tests(
     language: str,
     source_code: str,
     include_hidden: bool,
+    checkpoint=None,
 ) -> dict[str, Any]:
     spec = item.get("coding_spec") if isinstance(item.get("coding_spec"), dict) else {}
     allowed = spec.get("allowed_languages") or []
@@ -679,7 +707,7 @@ def _run_code_tests(
     results_by_index: dict[int, dict[str, Any]] = {}
 
     def run_one(index: int, case: dict[str, Any]) -> tuple[int, dict[str, Any]]:
-        result = _judge0_execute_case(
+        args = dict(
             language=language,
             source_code=source_code,
             stdin=str(case.get("input", "")),
@@ -687,6 +715,9 @@ def _run_code_tests(
             time_limit_seconds=float(spec.get("time_limit_seconds", 2.0) or 2.0),
             memory_limit_kb=int(spec.get("memory_limit_kb", 128000) or 128000),
         )
+        if checkpoint is not None:
+            args['checkpoint'] = checkpoint
+        result = _judge0_execute_case(**args)
         return index, {
             "index": index,
             "visibility": "sample" if index <= sample_count else "hidden",
@@ -1457,13 +1488,14 @@ SOURCE CODE
         }
 
 
-def _coding_evaluation(item: dict[str, Any], answer: str) -> dict[str, Any]:
+def _coding_evaluation(item: dict[str, Any], answer: str, *, checkpoint=None) -> dict[str, Any]:
     language, source_code = _parse_code_answer(answer)
     execution = _run_code_tests(
         item=item,
         language=language,
         source_code=source_code,
         include_hidden=True,
+        checkpoint=checkpoint,
     )
     total = max(1, int(execution["total"]))
     score = round(100 * int(execution["passed"]) / total)
@@ -2270,6 +2302,12 @@ def _evaluate_saved_answers(db, current_user, profile, interview, job, issued, s
     answers_payload: list[dict[str, Any]] = []
     evaluations: list[dict[str, Any]] = []
     subjective_items: list[dict[str, Any]] = []
+    coding_deferred = None
+    checkpoint = None
+    if db.info.get('assessment_lease'):
+        from sqlalchemy.orm import sessionmaker
+        from app.code_execution_checkpoint import CodeExecutionCheckpoint
+        checkpoint = CodeExecutionCheckpoint(sessionmaker(bind=db.get_bind(), expire_on_commit=False), db.info['assessment_lease'])
 
     for item in issued:
         qid = item["question_id"]
@@ -2337,7 +2375,7 @@ def _evaluate_saved_answers(db, current_user, profile, interview, job, issued, s
             continue
         if item.get("answer_type") == "code":
             try:
-                evaluations.append(_coding_evaluation(item, answer))
+                evaluations.append(_coding_evaluation(item, answer, checkpoint=checkpoint) if checkpoint else _coding_evaluation(item, answer))
             except ValueError as exc:
                 evaluations.append({
                     "question_id": qid,
@@ -2376,14 +2414,12 @@ def _evaluate_saved_answers(db, current_user, profile, interview, job, issued, s
                         "results": [],
                     },
                 })
-            except RuntimeError:
+            except RuntimeError as error:
                 LOGGER.warning("Final coding evaluation deferred because execution service is unavailable question_id=%s", qid)
-                if db.info.get("assessment_lease"):
-                    # The immutable queue payload already retains every answer.
-                    # Avoid repeating unavailable execution for the remaining tests
-                    # and then consuming another subjective/video analysis call.
-                    raise HTTPException(503, {"code": "CODE_EXECUTION_UNAVAILABLE",
-                        "message": "Your answers are saved. The code execution service is temporarily unavailable; analysis will retry."})
+                if not isinstance(error, CodeExecutionPending):
+                    coding_deferred = 'CODE_EXECUTION_UNAVAILABLE'
+                elif coding_deferred is None:
+                    coding_deferred = 'CODE_EXECUTION_PENDING'
             continue
 
         objective = _objective_evaluation(item, answer)
@@ -2398,6 +2434,9 @@ def _evaluate_saved_answers(db, current_user, profile, interview, job, issued, s
 
         subjective_items.append({**item, "answer": answer})
 
+    if coding_deferred and db.info.get('assessment_lease'):
+        raise HTTPException(503, {'code': coding_deferred,
+            'message': 'Your answers are saved. Coding execution is still processing; analysis will retry.'})
     if db.info.get("assessment_lease"):
         db.commit()
     subjective_evaluations, ai_meta = _evaluate_subjective_with_ai(
@@ -2466,10 +2505,13 @@ def _evaluate_saved_answers(db, current_user, profile, interview, job, issued, s
 
 
     assessment_queue.assert_lease(db)
+    db.refresh(interview, attribute_names=['evaluation_json'])
+    receipts = json.loads(interview.evaluation_json or '{}').get('_code_execution')
     interview.answers_json = json.dumps(answers_payload)
-    interview.evaluation_json = json.dumps(
-        {"analysis_status": "pending"} if recording and result["analysis_status"] != "complete" else result,
-    )
+    saved_evaluation = {"analysis_status": "pending"} if recording and result["analysis_status"] != "complete" else dict(result)
+    if receipts and result['analysis_status'] != 'complete':
+        saved_evaluation['_code_execution'] = receipts
+    interview.evaluation_json = json.dumps(saved_evaluation)
     if result["analysis_status"] == "complete":
         interview.overall_score = result["overall_score"]
         interview.overall_feedback = result["overall_feedback"]

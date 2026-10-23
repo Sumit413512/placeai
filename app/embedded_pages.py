@@ -240,7 +240,7 @@ INDEX_HTML = '''<!doctype html>
   <link rel="stylesheet" href="/static/opportunities.css?v=20261021-detail1">
   <link rel="stylesheet" href="/static/learning-video.css?v=20261017-full-course4">
   <script src="/static/learning-video.js?v=20261023-recovery1" defer></script>
-  <script src="/static/learning-hub.js?v=20261023-notes2" defer></script>
+  <script src="/static/learning-hub.js?v=20261023-notes3" defer></script>
 </body>
 </html>
 '''
