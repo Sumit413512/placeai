@@ -74,6 +74,15 @@ class Subtopic(ContentModel):
     source_ids: list[int] = Field(min_length=1, max_length=8)
 
 
+def plan_authoring_schema():
+    """Only educational fields belong in a provider's outline response."""
+    schema = LearningPlan.model_json_schema()
+    for field in ("publication_review", "draft"):
+        schema["properties"].pop(field, None)
+    schema.get("$defs", {}).pop("NotebookReview", None)
+    return schema
+
+
 class Example(ContentModel):
     subtopic: str = Field(default="", max_length=180, description="Exact subtopic title this example teaches")
     title: str = Field(min_length=3, max_length=180)

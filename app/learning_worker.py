@@ -16,7 +16,7 @@ from sqlalchemy.orm import sessionmaker
 from app.database import engine
 from app.models import LearningNotebook, LearningRuntime, User, UserRole, utcnow
 from app.learning_content import (LearningRequest, LearningPlan, LearningChapter, Subtopic,
-                                  ConceptPacket, LearningSupportingMaterial, validate_chapter)
+                                  ConceptPacket, LearningSupportingMaterial, validate_chapter, plan_authoring_schema)
 from app import learning_ai
 from app.learning_notes_prompt import notes_task
 from app.learning_quality import chapter_issues, validate_notebook, validate_standard
@@ -276,7 +276,7 @@ def _process(item, sessions):
                 "Cover foundations, practical use, pitfalls, deeper concepts and a concluding project. "
                 "SQL must distinguish the chosen dialect; if unspecified use PostgreSQL and explain portability. "
                 "No duplicate or filler chapters.\nLEARNER DATA:\n" + json.dumps(preferences)
-                + "\nLIVE RESEARCH:\n" + evidence), LearningPlan.model_json_schema(),
+                + "\nLIVE RESEARCH:\n" + evidence), plan_authoring_schema(),
             )
             plan = LearningPlan.model_validate(raw)
             plan.publication_review = None  # A model cannot approve its own publication.

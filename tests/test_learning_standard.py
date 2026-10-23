@@ -66,7 +66,9 @@ def test_v2_checks_and_pdf_must_finish_before_publication(hub, monkeypatch):
         calls.append(task)
         props = schema["properties"]
         if "approved" in props: result = {"approved": True, "issues": []}
-        elif "chapters" in props: result = plan
+        elif "chapters" in props:
+            assert 'draft' not in props and 'publication_review' not in props
+            result = plan
         elif "subtopics" in props and "examples" in props: result = chapter
         elif "additional_explanation" in props:
             result = {"additional_explanation": chapter["subtopics"][0]["explanation"]}
