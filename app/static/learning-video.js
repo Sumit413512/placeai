@@ -95,7 +95,7 @@
       const preparation = libraryLabel(data);
       const retryDate = data.next_retry_at ? new Date(data.next_retry_at) : null;
       const retryNotice = retryDate && Number.isFinite(retryDate.getTime()) ? ` Next automatic retry: ${retryDate.toLocaleString()}.` : '';
-      panel.querySelector('[data-video-course]').innerHTML = `<header class="panel learning-video-course-header"><div><nav class="learning-video-breadcrumb" aria-label="Course navigation"><button type="button" class="button button-secondary" data-video-browse>All courses</button>${studying ? '<button type="button" class="button button-secondary" data-video-overview-back>Back to course</button>' : ''}</nav><h2>${esc(data.title)}</h2><p class="learning-video-preparation"><span class="learning-status" data-state="${data.course_ready ? 'ready' : 'processing'}">${esc(preparation)}</span></p>${data.preparation_notice && !data.course_ready ? `<p class="learning-meta">${esc(data.preparation_notice + retryNotice)}</p>` : ''}${data.retry_available ? '<button type="button" class="button button-secondary" data-video-retry-course>Retry learning path</button>' : ''}</div><div class="learning-video-course-progress" ${data.course_ready ? '' : 'hidden'}><strong>${data.completion_percent}% complete</strong><progress aria-label="Course completion" max="100" value="${data.completion_percent}"></progress><small>Your learning progress · Video + quiz</small></div></header>`;
+      panel.querySelector('[data-video-course]').innerHTML = `<header class="panel learning-video-course-header"><div><nav class="learning-video-breadcrumb" aria-label="Course navigation"><button type="button" class="button button-secondary" data-video-browse>All courses</button>${data.course_ready ? '<button type="button" class="button button-secondary" data-video-track>Add to study plan</button>' : ''}${studying ? '<button type="button" class="button button-secondary" data-video-overview-back>Back to course</button>' : ''}</nav><h2>${esc(data.title)}</h2><p class="learning-video-preparation"><span class="learning-status" data-state="${data.course_ready ? 'ready' : 'processing'}">${esc(preparation)}</span></p>${data.preparation_notice && !data.course_ready ? `<p class="learning-meta">${esc(data.preparation_notice + retryNotice)}</p>` : ''}${data.retry_available ? '<button type="button" class="button button-secondary" data-video-retry-course>Retry learning path</button>' : ''}</div><div class="learning-video-course-progress" ${data.course_ready ? '' : 'hidden'}><strong>${data.completion_percent}% complete</strong><progress aria-label="Course completion" max="100" value="${data.completion_percent}"></progress><small>Your learning progress · Video + quiz</small></div></header>`;
       panel.querySelector('[data-video-outline]').innerHTML = `<details class="learning-video-outline-disclosure" open><summary>Course outline</summary><nav aria-label="Course lessons">${data.modules.map(module => `<section class="learning-video-module"><h3>${esc(module.title)}</h3><ol class="learning-video-lessons">${module.positions.map(index => {
         const item = data.lessons[index], complete = item.video_completed && item.practice_completed;
         const waiting = pending.includes(item.status), unavailable = item.status === 'failed' && !item.retry_available;
@@ -199,10 +199,11 @@
       finally { if (button.isConnected) button.disabled = false; }
     });
     panel.addEventListener('click', async event => {
-      const button = event.target.closest('[data-video-id],[data-video-lesson],[data-video-refresh],[data-video-retry-course],[data-video-move],[data-video-browse],[data-video-begin],[data-video-overview-back]');
+      const button = event.target.closest('[data-video-id],[data-video-lesson],[data-video-refresh],[data-video-retry-course],[data-video-move],[data-video-track], [data-video-browse],[data-video-begin],[data-video-overview-back]');
       if (!button || button.disabled) return; button.disabled = true;
       try {
-        if (button.hasAttribute('data-video-browse')) { await saveProgress(); stopPlayer(); clearTimeout(poll); current = null; course = null; studying = false; panel.querySelector('[data-video-discovery]').hidden = false; panel.querySelector('[data-video-workspace]').hidden = true; status(''); await library(); }
+        if (button.hasAttribute('data-video-track')) { await saveProgress(); window.PlaceAIStudy?.selectResource('video', current); await ctx.navigate('study-tracker'); }
+        else if (button.hasAttribute('data-video-browse')) { await saveProgress(); stopPlayer(); clearTimeout(poll); current = null; course = null; studying = false; panel.querySelector('[data-video-discovery]').hidden = false; panel.querySelector('[data-video-workspace]').hidden = true; status(''); await library(); }
         else if (button.hasAttribute('data-video-overview-back')) { await saveProgress(); stopPlayer(); studying = false; showCourse(course); panel.querySelector('[data-video-overview-title]').focus(); }
         else if (button.hasAttribute('data-video-begin')) { const first = course.lessons.find(item => item.status === 'ready' && !(item.video_completed && item.practice_completed)) || course.lessons.find(item => item.status === 'ready'); if (first) await openLesson(first.position); }
         else if (button.hasAttribute('data-video-move')) { const next = position + Number(button.dataset.videoMove); if (course?.lessons[next]?.status === 'ready') await openLesson(next); }
@@ -219,5 +220,13 @@
     cleanup = () => { alive = false; clearTimeout(poll); clearTimeout(libraryPoll); observer?.disconnect(); stopPlayer(); };
     observer = new MutationObserver(() => { if (!hub.isConnected) cleanup(); });
     observer.observe(document.querySelector('#app-content'), {childList:true});
+    const requested = window.PlaceAIStudySelection;
+    if (requested?.kind === 'video') {
+      window.PlaceAIStudySelection = null;
+      navigation.querySelector('[data-format="video"]').click();
+      ctx.api(`${apiBase}/${encodeURIComponent(requested.id)}`).then(data => {
+        if (active()) { current = data.id; showCourse(data); }
+      }).catch(error => status(error.message));
+    }
   }};
 })();

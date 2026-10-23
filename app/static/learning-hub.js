@@ -51,8 +51,8 @@
   function chapterHtml(chapter, index) {
     const exampleHtml = example => `<section class="learning-worked-example"><h4>Worked example: ${e(example.title)}</h4>${example.code ? `<small>${e(example.language)} · Illustrative code</small><pre><code>${e(example.code)}</code></pre>` : ''}${prose(example.explanation)}<h4>Expected result</h4>${prose(example.expected_result)}</section>`;
     const names = new Set(chapter.subtopics.map(sub => sub.title));
-    return `<details class="learning-chapter" ${index === 0 ? 'open' : ''}><summary>${String(index + 1).padStart(2, '0')}. ${e(chapter.title)}</summary><div class="learning-chapter-body">${prose(chapter.overview)}${chapter.subtopics.map(sub =>
-      `<section><h3>${e(sub.title)}</h3>${prose(sub.explanation)}<p class="learning-citations">Sources: ${sub.source_ids.map(id => `<a href="#learning-source-${Number(id)}">[${Number(id)}]</a>`).join(' ')}</p>${chapter.examples.filter(ex => ex.subtopic === sub.title).map(exampleHtml).join('')}${chapter.diagrams.filter(d => d.subtopics?.[0] === sub.title).map(diagramHtml).join('')}</section>`
+    return `<details class="learning-chapter" ${index === 0 ? 'open' : ''}><summary>${String(index + 1).padStart(2, '0')}. ${e(chapter.title)}</summary><div class="learning-chapter-body">${prose(chapter.overview)}${chapter.subtopics.map((sub, subIndex) =>
+      `<section data-note-section="${index + 1}.${subIndex + 1}"><h3>${e(sub.title)}</h3>${prose(sub.explanation)}<p class="learning-citations">Sources: ${sub.source_ids.map(id => `<a href="#learning-source-${Number(id)}">[${Number(id)}]</a>`).join(' ')}</p>${chapter.examples.filter(ex => ex.subtopic === sub.title).map(exampleHtml).join('')}${chapter.diagrams.filter(d => d.subtopics?.[0] === sub.title).map(diagramHtml).join('')}</section>`
     ).join('')}${chapter.examples.filter(ex => !names.has(ex.subtopic)).map(exampleHtml).join('')}${chapter.diagrams.filter(d => !names.has(d.subtopics?.[0])).map(diagramHtml).join('')}${teachingExtras(chapter)}<h3>Common mistakes</h3>${list(chapter.common_mistakes)}<h3>Practice and solutions</h3>${chapter.exercises.map(exercise => `<div class="learning-exercise">${prose(exercise.question)}<details><summary>Show solution and reasoning</summary>${prose(exercise.solution)}</details></div>`).join('')}<h3>Quick revision</h3>${list(chapter.key_takeaways)}${chapter.next_topics?.length ? `<h3>What to learn next</h3>${list(chapter.next_topics)}` : ''}</div></details>`;
   }
   const isReady = book => book.status === 'ready' && book.total_chapters > 0 && book.completed_chapters === book.total_chapters && book.pdf_available !== false;
@@ -76,6 +76,7 @@
     output.innerHTML = notebookHtml(book);
     output.querySelectorAll('.learning-chapter').forEach(item => { if (open.has(item.querySelector('summary').textContent)) item.open = true; });
     output.dataset.learningSignature = signature;
+    if (isReady(book)) window.PlaceAINotesReader?.mount(context, book, {prose, diagramHtml, teachingExtras});
     }
     clearTimeout(timer);
     if (!isReady(book)) {
@@ -91,11 +92,13 @@
   async function refreshLibrary(version) {
     const library = await context.api('/learning-hub');
     if (!active(version)) return;
+    const failed = library.items.filter(book => book.status === 'failed');
     library.items = library.items.filter(book => book.status !== 'failed');
     clearTimeout(libraryTimer);
     if (library.items.some(book => !isReady(book))) libraryTimer = setTimeout(() => { if (active(version)) refreshLibrary(version).catch(() => {}); }, 8000);
     document.querySelector('#learning-library').innerHTML = library.items.length ? library.items.map(book =>
-      `<button type="button" class="learning-library-item" data-learning-id="${e(book.id)}"><span>${e(book.title)}</span>${badge(book)}</button>`).join('') : '<p>Your saved notebooks will appear here.</p>';
+      `<div class="learning-library-row"><button type="button" class="learning-library-item" data-learning-id="${e(book.id)}"><span>${e(book.title)}</span>${badge(book)}</button><button type="button" class="notes-delete-button" data-learning-delete="${e(book.id)}" aria-label="Delete notebook: ${e(book.title)}">Delete</button></div>`).join('') : '<p>Your saved notebooks will appear here.</p>';
+    if (failed.length) document.querySelector('#learning-library').insertAdjacentHTML('beforeend', `<details><summary>Requests needing attention</summary>${failed.map(book => `<div class="learning-library-row"><span>${e(book.title)}</span><button type="button" class="notes-delete-button" data-learning-delete="${e(book.id)}" aria-label="Delete notebook: ${e(book.title)}">Delete</button></div>`).join('')}</details>`);
     document.querySelector('#learning-service-status').textContent = library.generation_available ? '' : 'Research is temporarily unavailable. You can still read and download your saved notes.';
     return library;
   }
@@ -103,11 +106,12 @@
     context = ctx; epoch += 1; clearTimeout(timer); clearTimeout(libraryTimer);
     const version = epoch;
     ctx.setPage('Learning Hub', 'Student workspace'); ctx.setContextAction();
-    document.querySelector('#app-content').innerHTML = `${ctx.pageHead('Learning Hub', 'Build understanding with detailed notes and guided video lessons.')}<div id="learning-hub"><section class="panel learning-create-panel" aria-labelledby="learning-create-title"><div class="panel-head"><div><h2 id="learning-create-title">Create study notes</h2><p>Clear explanations, worked examples and diagrams. Ready to read or download as a PDF.</p></div></div><form id="learning-hub-form"><div class="learning-form-grid"><label class="learning-wide">Topic or subject<input name="topic" required minlength="2" maxlength="180" placeholder="For example, SQL or computer networks" aria-describedby="learning-topic-help"></label><p id="learning-topic-help" class="learning-wide learning-field-help">Enter a focused concept or a full subject. We’ll organize the syllabus and cover it in depth.</p></div><details class="learning-context"><summary>Add subject context (optional)</summary><div class="learning-form-grid"><label>Subject context<input name="field" maxlength="180" placeholder="For example, data engineering"></label><label>Technology or version<input name="programming_language" maxlength="120" placeholder="For example, PostgreSQL 17"></label></div></details><div class="learning-create-actions"><button class="button button-primary" type="submit">Create notes</button><span>Prepared in the background.</span></div><p id="learning-service-status" role="status"></p><p id="learning-form-status" role="status" aria-live="polite"></p></form></section><section class="panel"><div class="panel-head"><h2>Your notebooks</h2><button class="button button-secondary" data-learning-action="refresh">Refresh</button></div><p id="learning-refresh-status" role="status"></p><div id="learning-library">Loading saved notebooks…</div></section><div id="learning-notebook-result"></div></div>`;
+    document.querySelector('#app-content').innerHTML = `${ctx.pageHead('Learning Hub', 'Build understanding with detailed notes and guided video lessons.')}<div id="learning-hub"><section class="panel learning-create-panel" aria-labelledby="learning-create-title"><div class="panel-head"><div><h2 id="learning-create-title">Create study notes</h2><p>Clear explanations, worked examples and diagrams. Ready to read or download as a PDF.</p></div></div><form id="learning-hub-form"><div class="learning-form-grid"><label class="learning-wide">Topic or subject<input name="topic" required minlength="2" maxlength="180" placeholder="For example, SQL or computer networks" aria-describedby="learning-topic-help"></label><p id="learning-topic-help" class="learning-wide learning-field-help">Enter a focused concept or a full subject. We’ll organize the syllabus and cover it in depth.</p></div><details class="learning-context"><summary>Add subject context (optional)</summary><div class="learning-form-grid"><label>Subject context<input name="field" maxlength="180" placeholder="For example, data engineering"></label><label>Technology or version<input name="programming_language" maxlength="120" placeholder="For example, PostgreSQL 17"></label></div></details><div class="learning-create-actions"><button class="button button-primary" type="submit">Create notes</button><span>Prepared in the background.</span></div><p id="learning-service-status" role="status"></p><p id="learning-form-status" role="status" aria-live="polite"></p></form></section><section class="panel"><div class="panel-head"><h2>Your notebooks</h2><div class="notes-library-actions"><button class="button button-secondary" data-learning-action="refresh">Refresh</button><button class="button button-secondary" data-learning-action="trash">Deleted notes</button></div></div><div id="learning-trash"></div><p id="learning-refresh-status" role="status"></p><div id="learning-library">Loading saved notebooks…</div></section><div id="learning-notebook-result"></div></div>`;
     window.PlaceAIVideoLearning?.mount(ctx);
     const library = await refreshLibrary(version);
     if (!active(version)) return;
-    const id = selected && library.items.some(book => book.id === selected) ? selected : library.items[0]?.id;
+    const resume = window.PlaceAIStudySelection;
+    const id = resume?.kind === 'notes' && library.items.some(book => book.id === resume.id) ? resume.id : selected && library.items.some(book => book.id === selected) ? selected : library.items[0]?.id;
     if (id) { const book = await ctx.api(`/learning-hub/${encodeURIComponent(id)}`); if (active(version)) showBook(book); }
   }
   function register() { return window.PlaceAIStudentViews?.register('learning-hub', render); }
@@ -128,14 +132,35 @@
     } catch (error) { if (active(version)) document.querySelector('#learning-form-status').textContent = error.message; }
     finally { if (form.isConnected) button.disabled = false; }
   });
+  function showDeleteDialog(identifier, opener) {
+    const dialog = document.createElement('dialog'); dialog.className = 'notes-delete-dialog';
+    dialog.setAttribute('aria-labelledby', 'notes-delete-title');
+    dialog.innerHTML = '<h2 id="notes-delete-title">Delete this notebook?</h2><p>It will move to Deleted notes and stop processing. You can restore it along with its reading progress.</p><p role="alert"></p><div class="notes-library-actions"><button class="button button-secondary" data-cancel-delete>Cancel</button><button class="button button-primary" data-confirm-delete>Delete notebook</button></div>';
+    document.body.append(dialog); dialog.showModal();
+    const close = () => { dialog.close(); dialog.remove(); if (opener.isConnected) opener.focus(); };
+    dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
+    dialog.querySelector('[data-cancel-delete]').onclick = close;
+    dialog.querySelector('[data-confirm-delete]').onclick = async event => {
+      event.target.disabled = true;
+      try {
+        await context.api(`/learning-hub/${encodeURIComponent(identifier)}`, {method:'DELETE'});
+        close(); epoch += 1; clearTimeout(timer); clearTimeout(libraryTimer);
+        if (selected === identifier) { selected = null; const result = document.querySelector('#learning-notebook-result'); if (result) { result.replaceChildren(); delete result.dataset.learningSignature; } }
+        if (root()) { await refreshLibrary(epoch); document.querySelector('#learning-refresh-status').textContent = 'Notebook deleted. You can restore it from Deleted notes.'; }
+      } catch (error) { dialog.querySelector('[role="alert"]').textContent = error.message; event.target.disabled = false; }
+    };
+  }
   document.addEventListener('click', async event => {
-    const button = event.target.closest('[data-learning-action], [data-learning-id]');
+    const button = event.target.closest('[data-learning-action], [data-learning-id], [data-learning-delete], [data-learning-restore]');
     if (!button || !root() || context?.state.view !== 'learning-hub') return;
     const version = epoch;
     if (button.disabled) return;
     button.disabled = true;
     try {
-      if (button.dataset.learningId) { selected = button.dataset.learningId; clearTimeout(timer); const book = await context.api(`/learning-hub/${encodeURIComponent(selected)}`); if (active(version) && selected === book.id) showBook(book); }
+      if (button.dataset.learningDelete) { showDeleteDialog(button.dataset.learningDelete, button); }
+      else if (button.dataset.learningRestore) { await context.api(`/learning-hub/${encodeURIComponent(button.dataset.learningRestore)}/restore`, {method:'POST'}); if (active(version)) { document.querySelector('#learning-trash').replaceChildren(); await refreshLibrary(version); document.querySelector('#learning-refresh-status').textContent = 'Notebook restored. Your reading progress is preserved.'; } }
+      else if (button.dataset.learningAction === 'trash') { const data = await context.api('/learning-hub?trash=true'); if (active(version)) document.querySelector('#learning-trash').innerHTML = `<section class="notes-trash"><h3>Deleted notes</h3><p>Deleted requests stop processing and leave your library. Restore them here when needed.</p>${data.items.length ? data.items.map(book => `<div class="learning-library-row"><span>${e(book.title)}</span><button type="button" class="button button-secondary" data-learning-restore="${e(book.id)}">Restore</button></div>`).join('') : '<p>No deleted notebooks.</p>'}</section>`; }
+      else if (button.dataset.learningId) { selected = button.dataset.learningId; clearTimeout(timer); const book = await context.api(`/learning-hub/${encodeURIComponent(selected)}`); if (active(version) && selected === book.id) showBook(book); }
       else if (button.dataset.learningAction === 'refresh') { await refreshLibrary(version); if (selected && active(version)) { const book = await context.api(`/learning-hub/${encodeURIComponent(selected)}`); if (active(version)) { showBook(book); document.querySelector('#learning-refresh-status').textContent = ''; } } }
       else if (button.dataset.learningAction === 'retry') { const book = await context.api(`/learning-hub/${encodeURIComponent(selected)}/retry`, {method:'POST'}); if (active(version)) showBook(book); }
       else if (button.dataset.learningAction === 'pdf') {

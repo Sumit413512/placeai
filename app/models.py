@@ -890,6 +890,9 @@ class ProfileChangeRequest(Base):
 
 class LearningNotebook(Base):
     __tablename__ = "learning_notebooks"
+    deleted_at = Column(DateTime)
+    deleted_state = Column(String(24))
+    last_read_section = Column(String(24))
     __table_args__ = (
         UniqueConstraint("user_id", "request_id", name="uq_learning_request"),
         Index("ix_learning_owner_created", "user_id", "created_at"),

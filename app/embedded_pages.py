@@ -235,12 +235,15 @@ INDEX_HTML = '''<!doctype html>
     </section>
   </div>
 
-  <script src="/static/app.js?v=20261024-auth1" defer></script>
+  <script src="/static/app.js?v=20261024-study1" defer></script>
   <script src="/static/opportunities.js?v=20261021-detail1" defer></script>
   <link rel="stylesheet" href="/static/opportunities.css?v=20261021-detail1">
   <link rel="stylesheet" href="/static/learning-video.css?v=20261017-full-course4">
-  <script src="/static/learning-video.js?v=20261023-notes4" defer></script>
-  <script src="/static/learning-hub.js?v=20261023-notes4" defer></script>
+  <script src="/static/learning-video.js?v=20261024-study1" defer></script>
+  <link rel="stylesheet" href="/static/study-tracker.css?v=20261024-study1">
+  <script src="/static/study-tracker.js?v=20261024-study1" defer></script>
+  <script src="/static/notes-reader.js?v=20261024-study1" defer></script>
+  <script src="/static/learning-hub.js?v=20261024-study1" defer></script>
 </body>
 </html>
 '''

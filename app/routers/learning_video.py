@@ -20,6 +20,7 @@ from app.learning_video_content import VideoRequest
 from app.learning_video_media import captions
 from app.models import User, VideoCourse, VideoLesson, VideoProgress, VideoEnrollment, VideoViewerProgress, utcnow
 from app.routers.learning_hub import generation_available, wake_worker
+from app.study_service import lock_owner, record_video_time
 
 router = APIRouter(prefix="/learning-hub/video", tags=["Video Learning"])
 PRIVATE = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
@@ -324,6 +325,7 @@ class Playback(ContentModel):
 @router.put("/{course_id}/lessons/{position}/progress")
 def progress(course_id: str, position: int, body: Playback,
              user: User = Depends(require_student), db: Session = Depends(get_db)):
+    lock_owner(db,user)
     row = owner_lesson(db, course_id, position, user)
     if row.state != "ready":
         raise HTTPException(409, "Lesson is not ready")
@@ -336,6 +338,7 @@ def progress(course_id: str, position: int, body: Playback,
     allowance = min(30, max(0, (now - record.updated_at).total_seconds()) * 2.5 + 2)
     if 0 < distance <= allowance:
         intervals.append([record.position_seconds, endpoint])
+        record_video_time(db,user,min(distance,max(0,(now-record.updated_at).total_seconds())),now)
     merged = []
     for start, end in sorted(intervals):
         if merged and start <= merged[-1][1] + .25:
