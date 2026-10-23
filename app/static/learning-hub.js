@@ -6,6 +6,16 @@
   const e = value => context.esc(String(value ?? ''));
   // Escape first. Only this small formatting vocabulary can create markup.
   const inline = value => e(value).replace(/\*\*([^*\n]{1,200})\*\*/g, '<strong>$1</strong>');
+  function paragraphs(value) {
+    const result = []; let group = [], words = 0;
+    for (const sentence of value.trim().split(/(?<=[.!?])\s+(?=[A-Z])/)) {
+      const count = sentence.trim().split(/\s+/).length;
+      if (group.length && (group.length >= 3 || words + count > 90)) { result.push(group.join(' ')); group = []; words = 0; }
+      group.push(sentence); words += count;
+    }
+    if (group.length) result.push(group.join(' '));
+    return result;
+  }
   function prose(value) {
     const lines = String(value || '').split(/\n+/).filter(line => line.trim());
     let html = '', mode = '';
@@ -14,7 +24,7 @@
       const next = bullet ? 'ul' : step ? 'ol' : '';
       if (mode && mode !== next) html += `</${mode}>`;
       if (next && mode !== next) html += `<${next}>`;
-      html += next ? `<li>${inline((bullet || step)[1])}</li>` : `<p>${inline(line)}</p>`;
+      html += next ? `<li>${inline((bullet || step)[1])}</li>` : paragraphs(line).map(part => `<p>${inline(part)}</p>`).join('');
       mode = next;
     }
     return html + (mode ? `</${mode}>` : '');

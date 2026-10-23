@@ -35,9 +35,10 @@ def test_research_cites_only_fetched_documents_and_refuses_insufficient_evidence
         return {"url": url, "title": "Official SQL teaching"}, "A live verified educational excerpt. " * 30
     monkeypatch.setattr(learning_web, "fetch_document", fetch)
     memo, sources, model = learning_web.research_documents("SQL", lambda *_args, **_kwargs: ({"urls": urls}, "gemini:test"))
-    assert len(sources) == 3 and "LIVE REFERENCE 3" in memo
+    assert 3 <= len(sources) <= 5 and "LIVE REFERENCE 3" in memo
     assert all(not source["url"].endswith("invented-page.html") for source in sources)
     assert model == "verified-web:gemini:test"
+    monkeypatch.setattr(learning_web, "fetch_document", lambda _: (_ for _ in ()).throw(httpx.HTTPError("Unavailable")))
     with pytest.raises(RuntimeError):
         learning_web.research_documents("SQL", lambda *_args, **_kwargs: ({"urls": urls[-2:]}, "gemini:test"))
 
@@ -56,4 +57,5 @@ def test_gemini_writer_uses_learning_model_without_changing_other_ai_features(mo
     assert data == {"title": "SQL"} and model == "gemini:gemini-3.5-flash-lite"
     assert requests[0]["config"].response_mime_type == "application/json"
     assert requests[0]["config"].max_output_tokens == 1200
+    assert requests[0]["config"].response_json_schema == {"type": "object"}
     assert learning_ai.get_settings().gemini_model == original

@@ -14,6 +14,12 @@ class ReviewCapacityError(NarrationCapacityError):
     pass
 
 
+class LessonReviewRejected(ValueError):
+    def __init__(self, issues):
+        super().__init__("The actual lesson did not pass its audiovisual review")
+        self.issues = [str(item)[:400] for item in issues[:5]]
+
+
 def review_video(data, content):
     key = ai_provider._gemini_key()
     if not key:
@@ -50,14 +56,25 @@ def review_video(data, content):
     payload = response.json()
     candidates = payload.get("candidates", [])
     if len(candidates) != 1 or candidates[0].get("finishReason") != "STOP":
-        raise ValueError("Video review did not complete")
-    result = json.loads("".join(part.get("text", "") for part in candidates[0].get("content", {}).get("parts", [])))
+        raise RuntimeError("VIDEO_REVIEW_INCOMPLETE")
+    try:
+        result = json.loads("".join(part.get("text", "") for part in candidates[0].get("content", {}).get("parts", [])))
+    except (ValueError, TypeError):
+        raise RuntimeError("VIDEO_REVIEW_INCOMPLETE") from None
+    if not isinstance(result, dict):
+        raise RuntimeError("VIDEO_REVIEW_INCOMPLETE")
     checks = result.get("scene_checks", [])
-    if (result.get("approved") is not True or result.get("issues") != []
+    if (not isinstance(result.get("approved"), bool) or not isinstance(result.get("issues"), list)
             or not isinstance(checks, list) or len(checks) != len(content["scenes"])
             or any(not isinstance(item, dict) for item in checks)
             or [item.get("scene") for item in checks] != list(range(1, len(checks) + 1))
-            or any(item.get("audio_matches_script") is not True or item.get("visual_matches_audio") is not True for item in checks)):
-        raise ValueError("The actual lesson did not pass its audiovisual review")
+            or any(not isinstance(item.get(key), bool) for item in checks
+                   for key in ("audio_matches_script", "visual_matches_audio"))):
+        raise RuntimeError("VIDEO_REVIEW_INCOMPLETE")
+    if (result["approved"] is not True or result["issues"]
+            or any(not item["audio_matches_script"] or not item["visual_matches_audio"] for item in checks)):
+        issues = result["issues"] or ["Correct audiovisual alignment in scene " + str(item["scene"])
+            for item in checks if not item["audio_matches_script"] or not item["visual_matches_audio"]]
+        raise LessonReviewRejected(issues or ["Correct the educational audiovisual presentation before publication."])
     return {"passed": True, "version": 1, "model": model, "scenes_checked": len(checks),
             "scope": "Automated audiovisual review; not a guarantee of word-level timing or correctness"}

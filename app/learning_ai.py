@@ -17,6 +17,12 @@ from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
 LOGGER = logging.getLogger("placeai.learning.ai")
 
 
+class LearningReviewRejected(ValueError):
+    def __init__(self, issues):
+        super().__init__("Learning chapter did not pass the content review")
+        self.issues = [str(item)[:400] for item in issues[:8]]
+
+
 def safe_error_status(error):
     status = getattr(error, "status_code", None) or getattr(error, "code", None)
     if not isinstance(status, int):
@@ -114,6 +120,7 @@ def generate_json(task: str, schema: dict, *, max_output_tokens: int = 8000) -> 
                                               http_options={"timeout": 55000, "retry_options": {"attempts": 1}})
             response = client.models.generate_content(model=model, contents=prompt,
                 config=types.GenerateContentConfig(response_mime_type="application/json",
+                                                    response_json_schema=schema,
                                                     max_output_tokens=max_output_tokens))
             candidates = getattr(response, "candidates", None) or []
             reason = getattr(candidates[0], "finish_reason", None) if candidates else None
@@ -151,4 +158,4 @@ def review_chapter(chapter: dict, evidence: str, preferences: dict):
         schema, max_output_tokens=1500,
     )
     if result.get("approved") is not True or result.get("issues") != []:
-        raise ValueError("Learning chapter did not pass the content review")
+        raise LearningReviewRejected(result.get("issues") or ["Correct unsupported or contradictory teaching before publication."])
