@@ -443,6 +443,10 @@ def _process(item, sessions):
                     row.error_code = "REVIEW_CAPACITY"
                 row.attempts = max(0, row.attempts - 1)
                 row.available_at = utcnow() + timedelta(seconds=error.retry_seconds)
+            if isinstance(error, learning_ai.LearningCapacityError):
+                row.state, row.error_code = "retrying", "AUTHOR_CAPACITY"
+                row.attempts = max(0, row.attempts - 1)
+                row.available_at = utcnow() + timedelta(seconds=error.retry_seconds)
             db.commit()
 
 

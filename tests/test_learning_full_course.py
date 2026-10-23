@@ -52,6 +52,24 @@ def test_failed_syllabus_review_does_not_admit_or_publish_lessons(video, monkeyp
     assert video.db.query(VideoLesson).count() == 0
 
 
+def test_author_capacity_does_not_fail_course_or_expose_unreviewed_lessons(video, monkeypatch):
+    from datetime import timedelta
+    from app.models import utcnow
+    identifier = new_course(video)
+    monkeypatch.setattr(learning_ai, 'research', lambda _: ('Official evidence', [], 'test'))
+    def limited(*args, **kwargs):
+        raise learning_ai.LearningCapacityError()
+    monkeypatch.setattr(learning_ai, 'generate_json', limited)
+    with video.sessions() as db: item = worker.claim(db)
+    worker.process(item, video.sessions)
+    video.db.expire_all()
+    row = video.db.get(VideoCourse, identifier)
+    assert row.state == 'retrying' and row.error_code == 'AUTHOR_CAPACITY' and row.attempts == 0
+    assert row.available_at >= utcnow() + timedelta(minutes=59)
+    assert video.db.query(VideoLesson).count() == 0
+    assert not video.api.get(f'/learning-hub/video/{identifier}').json()['course_ready']
+
+
 @pytest.mark.parametrize('capacity', [False, True])
 def test_unapproved_actual_video_never_publishes_and_quota_keeps_its_attempt(video, monkeypatch, capacity):
     from app.learning_video_media import render_video

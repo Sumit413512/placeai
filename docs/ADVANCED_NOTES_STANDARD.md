@@ -1276,3 +1276,12 @@ Quality is more important than unnecessary length.
 Clarity is more important than complex vocabulary.
 Structure is more important than large paragraphs.
 Understanding is more important than memorization.
+
+## Enforced recovery behavior
+
+New requests use the comprehensive standard without depth or page-count controls.
+Cross-field defects receive at most two targeted repair requests, followed by full
+validation and independent review. A locally validated revision is checkpointed
+before review, so a provider outage does not discard it. HTTP 429 responses wait
+one hour and retain the content-failure budget; the existing worker resumes them
+automatically. No quota bypass, alternative paid service or publication bypass is used.

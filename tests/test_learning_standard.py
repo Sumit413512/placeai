@@ -7,7 +7,7 @@ import pytest
 from pypdf import PdfReader
 
 from app import learning_ai, learning_worker
-from app.learning_content import LearningChapter, LearningRequest
+from app.learning_content import LearningChapter, LearningRequest, ChapterPlan
 from app.learning_quality import validate_standard
 from app.models import LearningNotebook, utcnow
 from test_learning_hub import hub, chapter_data, plan_data  # noqa: F401
@@ -42,6 +42,39 @@ def test_new_requests_have_no_depth_but_saved_requests_keep_their_contract():
     assert new.standard_version == 2 and new.chapters is None
     old = LearningRequest(topic="SQL", chapters=8, request_id="legacy-topic-request-001")
     assert old.standard_version == 1 and old.chapters == 8
+
+
+def test_cross_field_repair_preserves_valid_teaching_and_requires_real_code(monkeypatch):
+    valid = standard_chapter()
+    invalid = copy.deepcopy(valid)
+    invalid["examples"][0]["code"] = ""
+    planned = ChapterPlan.model_validate(plan_data()["chapters"][0])
+    calls = []
+    def repair(task, schema):
+        calls.append(task)
+        assert "Programming examples need code" in task
+        assert valid["subtopics"][0]["explanation"] in json.loads(task.split("\nCHAPTER: ")[1].split("\nOUTLINE: ")[0])["subtopics"][0]["explanation"]
+        return valid, "isolated:repair"
+    monkeypatch.setattr(learning_ai, "generate_json", repair)
+    chapter = learning_worker.validate_and_repair(invalid, planned, 1, True, "SQL evidence", [], 2)
+    assert len(calls) == 1
+    assert chapter.subtopics[0].explanation == valid["subtopics"][0]["explanation"]
+    assert chapter.examples[0].code == valid["examples"][0]["code"]
+    assert validate_standard(chapter)
+
+
+def test_cross_field_repair_is_bounded_and_does_not_accept_invalid_content(monkeypatch):
+    invalid = standard_chapter()
+    invalid["examples"][0]["code"] = ""
+    calls = []
+    def repair(task, schema):
+        calls.append(task)
+        return copy.deepcopy(invalid), "isolated:invalid"
+    monkeypatch.setattr(learning_ai, "generate_json", repair)
+    with pytest.raises(ValueError, match="Programming examples need code"):
+        learning_worker.validate_and_repair(invalid, ChapterPlan.model_validate(plan_data()["chapters"][0]),
+                                            1, True, "SQL evidence", [], 2)
+    assert len(calls) == 2
 
 
 def test_client_cannot_downgrade_new_notebook_or_choose_a_depth(hub):
@@ -153,3 +186,31 @@ def test_provider_interruption_resumes_after_saved_concept(hub, monkeypatch):
     assert authored == titles  # First completed concept was not regenerated.
     step()
     assert hub.client.get(f"/learning-hub/{row.id}").json()["ready_to_begin"]
+
+
+def test_capacity_wait_keeps_checked_draft_and_failure_budget(hub, monkeypatch):
+    from datetime import timedelta
+    book = hub.client.post('/learning-hub', json={'topic': 'SQL', 'request_id': 'capacity-resume-request-001'}).json()
+    plan = plan_data(); plan['chapters'] = plan['chapters'][:1]
+    row = hub.db.get(LearningNotebook, book['id'])
+    row.plan_json = json.dumps(plan)
+    row.sources_json = json.dumps([{'title': 'SQL', 'url': 'https://www.postgresql.org/docs/current/'}])
+    row.attempts = 3  # A capacity wait must not spend the final content-failure attempt.
+    hub.db.commit()
+    chapter = standard_chapter()
+    def author(sessions, identifier, token, plan_data, *args):
+        plan_data['draft'] = {'position': 0, 'concepts': []}
+        return chapter, 'SQL evidence', 'isolated:research', 'isolated:writer'
+    monkeypatch.setattr(learning_worker, 'author_concepts', author)
+    def unavailable(*args):
+        raise learning_ai.LearningCapacityError()
+    monkeypatch.setattr(learning_ai, 'review_chapter', unavailable)
+    with hub.sessions() as db: item = learning_worker.claim(db)
+    learning_worker.process(item, hub.sessions)
+    hub.db.refresh(row)
+    assert row.state == 'retrying' and row.attempts == 3
+    assert row.available_at >= utcnow() + timedelta(minutes=59)
+    assert json.loads(row.plan_json)['draft']['revision']['subtopics'] == chapter['subtopics']
+    result = hub.client.get(f'/learning-hub/{row.id}').json()
+    assert result['preparation_stage'] == 'waiting_capacity'
+    assert not result['pdf_available'] and result['chapters'] == [] and 'draft' not in result['plan']
