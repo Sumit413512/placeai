@@ -35,18 +35,19 @@ def test_student_can_create_read_and_download_notes_without_leaving_workspace(br
     page.goto(BASE_URL, wait_until="networkidle")
     page.locator('#app-nav [data-view="learning-hub"]').click()
     page.get_by_label("Topic or subject", exact=True).fill("SQL")
-    page.get_by_label("Programming language or tool", exact=True).fill("PostgreSQL")
-    page.get_by_label("What should your notes cover?", exact=True).fill("Queries, joins and transactions with explanations")
-    page.get_by_role("button", name="Research and create detailed notes", exact=True).click()
-    expect(page.locator("#learning-library")).to_contain_text("Processing")
+    page.get_by_text("Add subject context (optional)", exact=True).click()
+    page.get_by_label("Technology or version", exact=True).fill("PostgreSQL")
+    assert page.locator("[name=goals], [name=level], [name=chapters]").count() == 0
+    page.get_by_role("button", name="Create notes", exact=True).click()
+    expect(page.locator("#learning-library")).to_contain_text("Preparing")
     expect(page.locator("#learning-library")).not_to_contain_text("Failed notes")
     expect(page.locator(".learning-chapter")).to_have_count(0)
     expect(page.get_by_role("button",name="Download complete PDF",exact=True)).to_have_count(0)
     phase[0]="ready"
     page.get_by_role("button",name="Refresh",exact=True).click()
-    expect(page.locator("#learning-library")).to_contain_text("Ready to begin")
+    expect(page.locator("#learning-library")).to_contain_text("Ready to read")
     page.locator(".learning-chapter").first.wait_for(state="visible")
-    assert submitted[0]["chapters"] == 12 and submitted[0]["programming_language"] == "PostgreSQL"
+    assert submitted[0]["standard_version"] == 2 and "chapters" not in submitted[0] and submitted[0]["programming_language"] == "PostgreSQL"
     assert len(submitted) == 1
     assert page.locator(".learning-relationship").count() == 2
     assert page.locator(".learning-chapter strong").filter(has_text="Predicate").first.inner_text() == "Predicate"

@@ -17,6 +17,13 @@ from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
 LOGGER = logging.getLogger("placeai.learning.ai")
 
 
+def safe_error_status(error):
+    status = getattr(error, "status_code", None) or getattr(error, "code", None)
+    if not isinstance(status, int):
+        status = getattr(getattr(error, "response", None), "status_code", None)
+    return status if isinstance(status, int) and 100 <= status <= 599 else None
+
+
 def configured() -> bool:
     return bool(ai_provider._openai_keys() or (ai_provider._gemini_key() and ai_provider.genai))
 
@@ -108,12 +115,19 @@ def generate_json(task: str, schema: dict, *, max_output_tokens: int = 8000) -> 
             response = client.models.generate_content(model=model, contents=prompt,
                 config=types.GenerateContentConfig(response_mime_type="application/json",
                                                     max_output_tokens=max_output_tokens))
+            candidates = getattr(response, "candidates", None) or []
+            reason = getattr(candidates[0], "finish_reason", None) if candidates else None
+            reason = getattr(reason, "name", str(reason or ""))
+            if reason and reason != "STOP":
+                LOGGER.warning("Learning response incomplete finish_reason=%s",
+                               reason if reason in {"MAX_TOKENS", "SAFETY", "RECITATION"} else "OTHER")
+                raise RuntimeError("LEARNING_RESPONSE_INCOMPLETE")
             text = str(response.text or "")
             result = extract_json_from_response(text)
             if isinstance(result, dict):
                 return result, f"gemini:{model}"
         except Exception as error:
-            LOGGER.warning("Learning author unavailable provider=gemini error_type=%s", type(error).__name__)
+            LOGGER.warning("Learning author unavailable provider=gemini error_type=%s status=%s", type(error).__name__, safe_error_status(error))
     raise RuntimeError("LEARNING_AUTHOR_UNAVAILABLE")
 
 
@@ -127,6 +141,10 @@ def review_chapter(chapter: dict, evidence: str, preferences: dict):
         "source support, learner level, duplicated filler and meaningful depth. "
         "Check comparison rows, formula variables/calculations/interpretation, prerequisites, "
         "common-mistake corrections and exam/interview guidance when appropriate. "
+        "For standard_version 2, check that EACH subtopic has its own relevant worked example, "
+        "definitions, why/how reasoning, short paragraphs, useful lists and selective bold terms. "
+        "Check each diagram's stated subtopics and semantic agreement with labels, arrows and explanation. "
+        "Reject irrelevant/decorative diagrams, fabricated source support and contradictory expected outputs. "
         "Reject material mistakes or unsupported claims. Examples are illustrative, not executed. "
         "Return approved=true only if there are no material issues.\nLEARNER:\n" + json.dumps(preferences)
         + "\nEVIDENCE:\n" + evidence + "\nCHAPTER:\n" + json.dumps(chapter)),

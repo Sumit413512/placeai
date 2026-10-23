@@ -2378,6 +2378,12 @@ def _evaluate_saved_answers(db, current_user, profile, interview, job, issued, s
                 })
             except RuntimeError:
                 LOGGER.warning("Final coding evaluation deferred because execution service is unavailable question_id=%s", qid)
+                if db.info.get("assessment_lease"):
+                    # The immutable queue payload already retains every answer.
+                    # Avoid repeating unavailable execution for the remaining tests
+                    # and then consuming another subjective/video analysis call.
+                    raise HTTPException(503, {"code": "CODE_EXECUTION_UNAVAILABLE",
+                        "message": "Your answers are saved. The code execution service is temporarily unavailable; analysis will retry."})
             continue
 
         objective = _objective_evaluation(item, answer)

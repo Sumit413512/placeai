@@ -19,6 +19,7 @@ LOGGER = logging.getLogger(__name__)
 Session = sessionmaker(bind=engine, expire_on_commit=False)
 STOP = Event()
 PROVIDER_ERROR_CODES = frozenset({
+    "CODE_EXECUTION_UNAVAILABLE",
     "VIDEO_PROVIDER_BUSY",
     "VIDEO_PROVIDER_CAPACITY",
     "VIDEO_PROVIDER_ACCESS",

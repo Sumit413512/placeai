@@ -181,6 +181,18 @@ def test_capacity_rejection_defers_saved_exam_without_rapid_retries(queued):
     assert queued.interview.overall_score is None
 
 
+def test_execution_outage_has_explicit_status_and_bounded_backoff(queued):
+    queue.enqueue(queued.db, queued.interview, queued.user, body(queued))
+    item = queue.claim(queued.db, 1, 1)
+    before = utcnow()
+    queue.finish(queued.db, item[0], item[3], False, error_code="CODE_EXECUTION_UNAVAILABLE")
+    job = queued.db.get(AssessmentJob, queued.interview.id)
+    queued.db.refresh(job)
+    assert job.error_code == "CODE_EXECUTION_UNAVAILABLE"
+    assert job.available_at >= before + timedelta(minutes=15)
+    assert job.payload_json and queued.interview.overall_score is None
+
+
 def test_student_retry_revives_terminal_job_without_changing_answers(queued, monkeypatch):
     monkeypatch.setattr(exams.get_settings(), "assessment_queue_enabled", True)
     original = body(queued, "Immutable submitted answer")

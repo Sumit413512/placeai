@@ -44,15 +44,23 @@ def owned(db, notebook_id, user):
 def serialize(row, *, detail=False):
     chapters = json.loads(row.chapters_json)
     request = json.loads(row.input_json)
+    plan = json.loads(row.plan_json)
+    total = len(plan.get("chapters", [])) or request.get("chapters") or 0
+    review = plan.get("publication_review") or {}
+    checked = request.get("standard_version", 1) < 2 or (
+        review.get("passed") is True and review.get("version") == 2
+        and review.get("chapters_checked") == total)
+    ready = row.state == "ready" and total > 0 and len(chapters) == total and checked
     result = {"id": row.id, "title": row.title, "status": row.state,
-              "completed_chapters": len(chapters), "total_chapters": request["chapters"],
+              "completed_chapters": len(chapters), "total_chapters": total,
               "created_at": row.created_at.isoformat(), "updated_at": row.updated_at.isoformat(),
               "error_code": row.error_code, "retry_after_seconds": 8,
-              "pdf_available": row.state == "ready" and len(chapters) == request["chapters"],
-              "ready_to_begin": row.state == "ready" and len(chapters) == request["chapters"]}
+              "preparation_stage": "ready" if ready else "needs_attention" if row.state == "failed" else
+                  "checking" if total and len(chapters) == total else "preparing",
+              "pdf_available": ready, "ready_to_begin": ready}
     if detail:
         result.update(input={k: v for k, v in request.items() if k != "request_id"},
-                      plan=json.loads(row.plan_json), chapters=chapters,
+                      plan={k: v for k, v in plan.items() if k != "draft"}, chapters=chapters if ready else [],
                       sources=json.loads(row.sources_json))
     return result
 
@@ -74,7 +82,8 @@ def create(body: LearningRequest, background_tasks: BackgroundTasks,
     db.query(User).filter_by(id=user.id).with_for_update().one()
     existing = db.query(LearningNotebook).filter_by(user_id=user.id, request_id=body.request_id).first()
     if existing:
-        if json.loads(existing.input_json) != body.model_dump():
+        previous = LearningRequest.model_validate_json(existing.input_json).model_dump(exclude={"authoring_version"})
+        if previous != body.model_dump(exclude={"authoring_version"}):
             raise HTTPException(409, "This request identifier belongs to different learning preferences")
         return serialize(existing, detail=True)
     if not generation_available(db):

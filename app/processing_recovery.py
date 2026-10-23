@@ -70,6 +70,9 @@ def recover(db, actor, kind, identifier):
         row = db.query(LearningNotebook).filter_by(id=identifier, state='failed').with_for_update().first()
         if not row:
             raise HTTPException(409, 'Only a failed notebook can be recovered')
+        preferences = json.loads(row.input_json)
+        preferences['authoring_version'] = 2
+        row.input_json = json.dumps(preferences)
         row.state, row.attempts, row.error_code = 'queued', 0, None
         row.available_at, row.lease_until, row.lease_token = now, None, None
         changed = 1

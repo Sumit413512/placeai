@@ -21,6 +21,20 @@ ACCENT = colors.HexColor("#59416f")
 INK = colors.HexColor("#272330")
 
 
+class NotesDocument(SimpleDocTemplate):
+    """Clickable PDF outline without changing the visible heading order."""
+    def afterFlowable(self, flowable):
+        if isinstance(flowable, Paragraph) and flowable.style.name in {"LearningH1", "LearningH2", "LearningH3"}:
+            level = {"LearningH1": 0, "LearningH2": 1, "LearningH3": 2}[flowable.style.name]
+            # Supplements may follow a chapter heading directly.
+            level = min(level, getattr(self, "_outline_level", -1) + 1)
+            self._outline_level = level
+            key = "outline-" + str(getattr(self, "_outline_count", 0))
+            self._outline_count = getattr(self, "_outline_count", 0) + 1
+            self.canv.bookmarkPage(key)
+            self.canv.addOutlineEntry(flowable.getPlainText(), key, level=level, closed=level > 0)
+
+
 def _fonts():
     font_root = Path(reportlab.__file__).parent / "fonts"
     if "LearningSans" not in pdfmetrics.getRegisteredFontNames():
@@ -75,11 +89,11 @@ def diagram_rows(diagram, width=490):
 def render_notebook(notebook: dict) -> bytes:
     _fonts()
     body = ParagraphStyle("LearningBody", fontName="LearningSans", fontSize=11.5, leading=17,
-                          textColor=INK, spaceAfter=10, splitLongWords=True)
-    h1 = ParagraphStyle("LearningH1", parent=body, fontSize=24, leading=30, textColor=ACCENT, spaceAfter=18)
-    h2 = ParagraphStyle("LearningH2", parent=body, fontSize=18, leading=24, spaceBefore=16,
+                          textColor=INK, spaceAfter=10, splitLongWords=True, allowWidows=0, allowOrphans=0)
+    h1 = ParagraphStyle("LearningH1", parent=body, fontName="LearningSansBold", fontSize=24, leading=30, textColor=ACCENT, spaceAfter=18, keepWithNext=True)
+    h2 = ParagraphStyle("LearningH2", parent=body, fontName="LearningSansBold", fontSize=18, leading=24, spaceBefore=16,
                         spaceAfter=12, keepWithNext=True)
-    h3 = ParagraphStyle("LearningH3", parent=body, fontSize=14, leading=20, textColor=ACCENT,
+    h3 = ParagraphStyle("LearningH3", parent=body, fontName="LearningSansBold", fontSize=14, leading=20, textColor=ACCENT,
                         spaceBefore=14, keepWithNext=True)
     small = ParagraphStyle("LearningSmall", parent=body, fontSize=9, leading=14)
     code_style = ParagraphStyle("LearningCode", fontName="Courier", fontSize=9.5,
@@ -95,10 +109,28 @@ def render_notebook(notebook: dict) -> bytes:
         for value in values:
             prose("• " + value)
 
+    def worked_example(example):
+        story.append(Paragraph("Worked example: " + escape(example["title"]), h3))
+        if example["code"]:
+            prose(example["language"] + " | Illustrative code", small)
+            lines = []
+            for line in example["code"].expandtabs(4).splitlines():
+                lines.extend(wrap(line, width=77, replace_whitespace=False, drop_whitespace=False,
+                                  subsequent_indent="    ") or [""])
+            story.append(Preformatted("\n".join(lines), code_style))
+        prose(example["explanation"])
+        story.append(Paragraph("Expected result", h3))
+        prose(example["expected_result"])
+
+    def teaching_diagram(diagram):
+        story.append(Paragraph("Diagram: " + escape(diagram["title"]), h3))
+        story.extend(diagram_rows(diagram))
+        prose(diagram["explanation"])
+
     story.extend([Spacer(1, 75), Paragraph("PLACEAI / LEARNING HUB", small), Spacer(1, 18),
                   Paragraph(escape(notebook["title"]), h1)])
     request, plan = notebook["input"], notebook["plan"]
-    prose(f"{request['level'].capitalize()} · {request['chapters']} chapters · Detailed study notes")
+    prose(f"{len(plan['chapters'])} chapters | Detailed study notes")
     prose(plan["introduction"])
     prose("AI-authored learning material based on web research. Check the cited official documentation "
           "for version-specific details. Code examples are illustrative and have not been executed by PlaceAI.", small)
@@ -120,23 +152,19 @@ def render_notebook(notebook: dict) -> bytes:
             prose(subtopic["explanation"])
             refs = " ".join(f'<link href="#source-{n}" color="#59416f">[{n}]</link>' for n in subtopic["source_ids"])
             story.append(Paragraph("Sources: " + refs, small))
+            for example in chapter["examples"]:
+                if example.get("subtopic") == subtopic["title"]:
+                    worked_example(example)
+            for diagram in chapter["diagrams"]:
+                if (diagram.get("subtopics") or [None])[0] == subtopic["title"]:
+                    teaching_diagram(diagram)
+        names = {sub["title"] for sub in chapter["subtopics"]}
         for example in chapter["examples"]:
-            story.append(Paragraph("Worked example: " + escape(example["title"]), h2))
-            if example["code"]:
-                prose(example["language"], small)
-                lines = []
-                for line in example["code"].expandtabs(4).splitlines():
-                    # Never clip long SQL queries or collapse original line breaks.
-                    lines.extend(wrap(line, width=77, replace_whitespace=False, drop_whitespace=False,
-                                      subsequent_indent="    ") or [""])
-                story.append(Preformatted("\n".join(lines), code_style))
-            prose(example["explanation"])
-            story.append(Paragraph("Expected result", h3))
-            prose(example["expected_result"])
+            if example.get("subtopic") not in names:
+                worked_example(example)
         for diagram in chapter["diagrams"]:
-            story.append(Paragraph("Diagram: " + escape(diagram["title"]), h2))
-            story.extend(diagram_rows(diagram))
-            prose(diagram["explanation"])
+            if (diagram.get("subtopics") or [None])[0] not in names:
+                teaching_diagram(diagram)
         for comparison in chapter.get("comparisons", []):
             story.append(Paragraph(escape(comparison["title"]), h2))
             cells = [[Paragraph(inline(cell), small) for cell in row]
@@ -191,7 +219,7 @@ def render_notebook(notebook: dict) -> bytes:
         story.append(Paragraph(f'<a name="source-{index}"/>[{index}] {escape(source["title"])}', h3))
         story.append(Paragraph(f'<link href="{url}" color="#59416f">{url}</link>', small))
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=(595.28, 841.89), leftMargin=52, rightMargin=52,
+    doc = NotesDocument(buffer, pagesize=(595.28, 841.89), leftMargin=52, rightMargin=52,
                             topMargin=54, bottomMargin=52, title=notebook["title"], author="PlaceAI Learning Hub")
 
     def footer(canvas, document):
