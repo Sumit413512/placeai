@@ -411,13 +411,20 @@ def _process(item, sessions):
             db.commit()
     except Exception as error:
         fields = [".".join(map(str, item["loc"])) for item in error.errors()] if isinstance(error, ValidationError) else []
-        LOGGER.warning("Video preparation deferred stage=%s error_type=%s validation_fields=%s", kind, type(error).__name__, fields)
+        # Only fixed internal codes are logged, never provider bodies or prompts.
+        internal = str(error) if isinstance(error, RuntimeError) and str(error) in {
+            "VIDEO_STORAGE_CAPACITY", "VIDEO_RENDER_DEADLINE", "VIDEO_REVIEW_UNAVAILABLE",
+            "VIDEO_NARRATION_UNAVAILABLE", "LOCAL_SPEECH_NOT_CONFIGURED", "LOCAL_SPEECH_UNAVAILABLE",
+            "LEARNING_AUTHOR_UNAVAILABLE", "VIDEO_OWNER_UNAVAILABLE", "VIDEO_LEASE_LOST"} else None
+        LOGGER.warning("Video preparation deferred stage=%s error_type=%s error_code=%s validation_fields=%s", kind, type(error).__name__, internal or "CONTENT_OR_PROVIDER_CHECK", fields)
         with sessions() as db:
             row = db.query(model).filter_by(id=identifier).with_for_update().first()
             if not row or row.lease_token != token:
                 return
             row.state = "failed" if row.attempts >= 3 else "retrying"
             row.error_code = "CONTENT_CHECK" if isinstance(error, ValueError) else "GENERATION_UNAVAILABLE"
+            if internal:
+                row.error_code = internal
             row.lease_token, row.lease_until = None, None
             row.available_at = utcnow() + timedelta(seconds=60 * 2 ** row.attempts)
             if kind == "lesson" and isinstance(error, ValueError):

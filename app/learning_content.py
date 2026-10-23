@@ -17,8 +17,18 @@ class LearningRequest(ContentModel):
     programming_language: str = Field(default="", max_length=120)
     level: Literal["beginner", "intermediate", "advanced"] = "beginner"
     goals: str = Field(default="", max_length=2000)
-    chapters: Literal[8, 12, 16] = 12
+    chapters: Literal[8, 12, 16] | None = None
+    standard_version: Literal[1, 2] = 2
+    authoring_version: Literal[1, 2] = 1
     request_id: str = Field(pattern=r"^[a-zA-Z0-9_-]{16,80}$")
+
+    @model_validator(mode="before")
+    @classmethod
+    def preserve_saved_requests(cls, value):
+        # Saved v1 notebooks and older clients keep their original outline.
+        if isinstance(value, dict) and value.get("chapters") and "standard_version" not in value:
+            value = {**value, "standard_version": 1}
+        return value
 
 
 class ChapterPlan(ContentModel):
@@ -35,11 +45,20 @@ class ChapterPlan(ContentModel):
         return self
 
 
+class NotebookReview(ContentModel):
+    version: int = Field(ge=1, le=2)
+    passed: bool
+    chapters_checked: int = Field(ge=1, le=48)
+    pdf_pages: int = Field(ge=1)
+
+
 class LearningPlan(ContentModel):
     title: str = Field(min_length=3, max_length=180)
     introduction: str = Field(min_length=100, max_length=4000)
     prerequisites: list[str] = Field(max_length=12)
-    chapters: list[ChapterPlan] = Field(min_length=8, max_length=16)
+    chapters: list[ChapterPlan] = Field(min_length=1, max_length=48)
+    publication_review: NotebookReview | None = None
+    draft: dict = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def distinct_chapters(self):
@@ -56,11 +75,17 @@ class Subtopic(ContentModel):
 
 
 class Example(ContentModel):
+    subtopic: str = Field(default="", max_length=180, description="Exact subtopic title this example teaches")
     title: str = Field(min_length=3, max_length=180)
     code: str = Field(default="", max_length=8000)
     language: str = Field(default="", max_length=40)
     explanation: str = Field(min_length=200, max_length=8000)
     expected_result: str = Field(min_length=20, max_length=3000)
+
+
+class ConceptPacket(ContentModel):
+    concept: Subtopic
+    example: Example
 
 
 class DiagramNode(ContentModel):
@@ -75,6 +100,7 @@ class DiagramEdge(ContentModel):
 
 
 class Diagram(ContentModel):
+    subtopics: list[str] = Field(default_factory=list, max_length=6, description="Exact subtopic titles explained by this diagram")
     kind: Literal["flowchart", "architecture", "sequence", "hierarchy", "lifecycle", "pipeline", "network", "timeline", "entity_relationship"] = "flowchart"
     title: str = Field(min_length=3, max_length=180)
     nodes: list[DiagramNode] = Field(min_length=2, max_length=8)
@@ -125,11 +151,9 @@ class Formula(ContentModel):
     interpretation: str = Field(min_length=20, max_length=2000)
 
 
-class LearningChapter(ContentModel):
+class LearningSupportingMaterial(ContentModel):
     title: str = Field(min_length=3, max_length=180)
     overview: str = Field(min_length=100, max_length=2500)
-    subtopics: list[Subtopic] = Field(min_length=3, max_length=6)
-    examples: list[Example] = Field(min_length=2, max_length=4)
     diagrams: list[Diagram] = Field(default_factory=list, max_length=3)
     common_mistakes: list[str] = Field(min_length=2, max_length=8)
     exercises: list[Exercise] = Field(min_length=2, max_length=5)
@@ -147,6 +171,11 @@ class LearningChapter(ContentModel):
         if any(not value.strip() or len(value) > 1200 for value in self.exam_focus + self.next_topics):
             raise ValueError("Study guidance must be concise and meaningful")
         return self
+
+
+class LearningChapter(LearningSupportingMaterial):
+    subtopics: list[Subtopic] = Field(min_length=3, max_length=6)
+    examples: list[Example] = Field(min_length=2, max_length=8)
 
     @model_validator(mode="after")
     def detailed_teaching(self):

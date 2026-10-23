@@ -63,3 +63,23 @@
 .learning-comparison caption { text-align: left; font-size: 15px; padding-bottom: 8px; }
 .learning-key-terms dt, .learning-formula dt { font-weight: 600; margin-top: 12px; }
 .learning-key-terms dd, .learning-formula dd { margin-inline-start: 0; }
+
+/* Notes use the existing plum, ivory and charcoal system. */
+#learning-hub .learning-create-panel { border-top:3px solid #70536e; background:#fffdfb; }
+#learning-hub :is(h2,h3,h4,.learning-chapter>summary,.learning-diagram figcaption) { font-weight:600 !important; }
+#learning-hub .learning-field-help { font-size:14px; line-height:1.6; color:#59525f; margin:-8px 0 0; }
+#learning-hub .learning-context { margin-top:20px; border-block:1px solid #e5dfe3; padding:16px 0; }
+#learning-hub .learning-context>summary { cursor:pointer; color:#594357; font-size:15px; font-weight:600; }
+#learning-hub .learning-context .learning-form-grid { margin-top:18px; }
+#learning-hub .learning-create-actions { display:flex; align-items:center; flex-wrap:wrap; gap:16px; margin-top:24px; }
+#learning-hub .learning-create-actions>span { font-size:14px; color:#59525f; }
+#learning-hub .learning-status[data-state="processing"] { color:#594357; background:#f3edf2; }
+#learning-hub .learning-status[data-state="ready"] { color:#44363f; background:#eee8e2; }
+#learning-hub .learning-worked-example { border-inline-start:3px solid #b29aa9; padding:4px 20px; margin-block:24px; background:#fbf8fa; }
+#learning-hub .learning-worked-example>h4:first-child { margin-top:16px; }
+#learning-hub .learning-chapter-body>section { margin-bottom:32px; }
+@media(max-width:650px) {
+  #learning-hub .learning-create-actions { align-items:flex-start; flex-direction:column; }
+  #learning-hub .learning-create-actions .button { width:100%; }
+  #learning-hub .learning-worked-example { padding-inline:12px; }
+}

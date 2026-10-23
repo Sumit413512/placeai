@@ -15,13 +15,66 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import engine
 from app.models import LearningNotebook, LearningRuntime, User, UserRole, utcnow
-from app.learning_content import LearningRequest, LearningPlan, LearningChapter, Subtopic, validate_chapter
+from app.learning_content import (LearningRequest, LearningPlan, LearningChapter, Subtopic,
+                                  ConceptPacket, LearningSupportingMaterial, validate_chapter)
 from app import learning_ai
 from app.learning_notes_prompt import notes_task
+from app.learning_quality import chapter_issues, validate_notebook, validate_standard
 
 LOGGER = logging.getLogger("placeai.learning.worker")
 Session = sessionmaker(bind=engine, expire_on_commit=False)
 LEASE_SECONDS = 600
+
+
+def write_checkpoint(sessions, identifier, token, plan, sources):
+    with sessions() as db:
+        row = db.query(LearningNotebook).filter_by(id=identifier, lease_token=token, state="running").with_for_update().first()
+        if not row or row.lease_until <= utcnow():
+            raise RuntimeError("LEARNING_LEASE_LOST")
+        row.plan_json, row.sources_json = json.dumps(plan), json.dumps(sources)
+        db.commit()
+
+
+def author_concepts(sessions, identifier, token, plan_data, planned, index, preferences, sources):
+    """Small provider requests with durable per-concept checkpoints on free hosting."""
+    draft = plan_data.get("draft") or {}
+    if draft.get("position") != index:
+        memo, chapter_sources, research_model = learning_ai.research(json.dumps({
+            "learner": preferences, "chapter": planned.model_dump()}))
+        for source in chapter_sources:
+            if len(sources) < 160 and not any(s["url"] == source["url"] for s in sources):
+                sources.append(source)
+        draft = {"position": index, "memo": memo, "research_model": research_model, "concepts": []}
+        plan_data["draft"] = draft
+        write_checkpoint(sessions, identifier, token, plan_data, sources)
+    numbered = [{"id": i, **s} for i, s in enumerate(sources, 1)]
+    evidence = "\nEVIDENCE: " + draft["memo"] + "\nSOURCES: " + json.dumps(numbered)
+    for title in planned.subtopics[len(draft["concepts"]):]:
+        raw, model = learning_ai.generate_json(notes_task(
+            "Write ONE concept and its own worked example, not an entire chapter. "
+            "Use the EXACT concept title and example.subtopic below. Explain definition, why, how and edge cases "
+            "in 300-450 words using short paragraphs, meaningful lists and selective **bold** defined terms. "
+            "Include a realistic worked example with expected result and explained steps. Code is illustrative, "
+            "never claim execution; use code only where appropriate. Cite supporting source_ids. "
+            "Keep each paragraph/list item under 120 words.\nCONCEPT: " + title
+            + "\nREQUEST: " + json.dumps(preferences) + evidence), ConceptPacket.model_json_schema())
+        packet = ConceptPacket.model_validate(raw)
+        if packet.concept.title != title or packet.example.subtopic != title:
+            raise ValueError("Concept example must match its syllabus title")
+        draft["concepts"].append(packet.model_dump())
+        write_checkpoint(sessions, identifier, token, plan_data, sources)
+    if "support" not in draft:
+        support, model = learning_ai.generate_json(notes_task(
+            "Write supporting material for this chapter: overview, useful diagrams with exact subtopics, "
+            "mistakes, exercises with explained solutions, revision and key terms. Do not repeat the concept "
+            "explanations or their worked examples. Include only topic-relevant supplements. "
+            "All diagram nodes must connect and match the concept.\nCHAPTER: " + planned.model_dump_json()
+            + "\nTAUGHT CONCEPTS: " + json.dumps(draft["concepts"]) + evidence),
+            LearningSupportingMaterial.model_json_schema())
+        draft["support"] = LearningSupportingMaterial.model_validate(support).model_dump()
+        write_checkpoint(sessions, identifier, token, plan_data, sources)
+    return {**draft["support"], "subtopics": [p["concept"] for p in draft["concepts"]],
+            "examples": [p["example"] for p in draft["concepts"]]}, draft["memo"], draft["research_model"], "concept-author:v2"
 
 
 def repair_structure(raw, evidence):
@@ -176,52 +229,100 @@ def _process(item, sessions):
             sources = json.loads(row.sources_json)
             evidence = row.evidence
         preferences = request.model_dump(exclude={"request_id"})
+        if request.standard_version >= 2:
+            preferences = {k: v for k, v in preferences.items() if k not in {"level", "goals", "chapters"}}
+        programming = bool(request.programming_language) or request.topic.casefold() in {
+            "sql", "python", "java", "javascript", "typescript", "c", "c++", "c#", "rust", "go", "react",
+        }
+        finalizing = False
         if not plan_data:
             evidence, sources, research_model = learning_ai.research(json.dumps(preferences))
             raw, model = learning_ai.generate_json(
-                notes_task("Create a complete, progressively ordered textbook outline with EXACTLY "
-                f"{request.chapters} chapters and 3-6 specific subtopics per chapter. "
+                notes_task("Create a complete, progressively ordered textbook outline. "
+                + (f"Use EXACTLY {request.chapters} chapters and 3-6 specific subtopics per chapter. "
+                   if request.standard_version == 1 and request.chapters else
+                   "Choose the chapter count to cover this exact topic fully, with 3-6 focused subtopics per chapter. "
+                   "A narrow topic may need only a few chapters; a broad subject needs fundamentals through advanced applications. "
+                   "The schema's maximum is a safety bound, not a target. Never pad or compress to a page count. ") +
                 "Cover foundations, practical use, pitfalls, deeper concepts and a concluding project. "
                 "SQL must distinguish the chosen dialect; if unspecified use PostgreSQL and explain portability. "
                 "No duplicate or filler chapters.\nLEARNER DATA:\n" + json.dumps(preferences)
                 + "\nLIVE RESEARCH:\n" + evidence), LearningPlan.model_json_schema(),
             )
             plan = LearningPlan.model_validate(raw)
-            if len(plan.chapters) != request.chapters:
+            plan.publication_review = None  # A model cannot approve its own publication.
+            plan.draft = {}
+            if request.standard_version == 1 and request.chapters and len(plan.chapters) != request.chapters:
                 raise ValueError("Learning outline chapter count mismatch")
+            if request.standard_version >= 2:
+                review, _ = learning_ai.generate_json(notes_task(
+                    "Independently review this syllabus against the requested topic and retrieved evidence. "
+                    "Check prerequisite order, complete topic coverage, appropriate advanced material, "
+                    "duplicates and unnecessary filler. Do not approve an overview presented as a full course. "
+                    "Return approved=true only with no material omissions.\nREQUEST: " + json.dumps(preferences)
+                    + "\nSYLLABUS: " + plan.model_dump_json() + "\nEVIDENCE: " + evidence),
+                    {"type": "object", "properties": {"approved": {"type": "boolean"},
+                     "issues": {"type": "array", "items": {"type": "string"}}},
+                     "required": ["approved", "issues"], "additionalProperties": False})
+                if review.get("approved") is not True or review.get("issues") != []:
+                    raise ValueError("The notes syllabus did not pass its coverage review")
             update = {"plan_json": plan.model_dump_json(), "sources_json": json.dumps(sources),
                       "evidence": evidence, "title": plan.title, "provider": research_model + ";" + model}
+        elif len(completed) == len(plan_data.get("chapters", [])):
+            # A distinct resumable final stage: never publish a partially checked notebook.
+            import io
+            from pypdf import PdfReader
+            from app.learning_pdf import render_notebook
+            review = validate_notebook(plan_data, completed, len(sources), programming,
+                                       version=request.standard_version)
+            pdf = render_notebook({"title": row.title, "input": preferences,
+                                   "plan": plan_data, "chapters": completed, "sources": sources})
+            pages = PdfReader(io.BytesIO(pdf)).pages
+            if not pages or any(not (page.extract_text() or "").strip() for page in pages):
+                raise ValueError("PDF pages must contain readable teaching material")
+            plan_data["publication_review"] = {**review, "pdf_pages": len(pages)}
+            update = {"plan_json": json.dumps(plan_data)}
+            finalizing = True
         else:
             plan = LearningPlan.model_validate(plan_data)
             index = len(completed)
             planned = plan.chapters[index]
-            # Research each chapter separately so detailed explanations have relevant current evidence.
-            memo, chapter_sources, research_model = learning_ai.research(json.dumps({
-                "learner": preferences, "chapter": planned.model_dump(),
-            }))
-            for source in chapter_sources:
-                if len(sources) < 160 and not any(existing["url"] == source["url"] for existing in sources):
-                    sources.append(source)
-            numbered = [{"id": i, **s} for i, s in enumerate(sources, 1)]
-            raw, model = learning_ai.generate_json(
-                notes_task("Write ONE complete textbook chapter, not a summary. Target 1,200-1,800 teaching words; "
-                "at least 800 words of explanation excluding code/exercises are required. "
-                "Explain every listed subtopic in the same order and with the EXACT title. "
-                "Write at least 300 words of substantive teaching in EACH subtopic explanation; do not compress the explanations. "
-                "Give definitions, why/how, step-by-step reasoning and realistic examples. "
-                "Include at least two worked examples (code for programming topics), "
-                "explain each important code statement and expected output. Do not execute code. "
-                "Include accurate node/edge diagrams only when useful, explaining each relationship. "
-                "Node labels must be readable and concise. Include pitfalls, solved exercises and takeaways. "
-                "Use short paragraphs, bullet/numbered lines and selective **bold** terms; no HTML. "
-                "Use source_ids to cite numbered retrieved sources for each subtopic. "
-                "Preserve dialect/version caveats; distinguish sourced facts from illustrative examples. "
-                "Examples must be internally consistent.\nLEARNER DATA:\n" + json.dumps(preferences)
-                + "\nCHAPTER:\n" + planned.model_dump_json()
-                + "\nEVIDENCE:\n" + memo + "\nNUMBERED SOURCES:\n" + json.dumps(numbered)),
-                LearningChapter.model_json_schema(),
-            )
+            if request.standard_version >= 2 or request.authoring_version >= 2:
+                raw, memo, research_model, model = author_concepts(sessions, notebook_id, token,
+                    plan_data, planned, index, preferences, sources)
+            else:
+                # Research each chapter separately so detailed explanations have relevant current evidence.
+                memo, chapter_sources, research_model = learning_ai.research(json.dumps({
+                    "learner": preferences, "chapter": planned.model_dump(),
+                }))
+                for source in chapter_sources:
+                    if len(sources) < 160 and not any(existing["url"] == source["url"] for existing in sources):
+                        sources.append(source)
+                numbered = [{"id": i, **s} for i, s in enumerate(sources, 1)]
+                raw, model = learning_ai.generate_json(
+                    notes_task("Write ONE complete textbook chapter, not a summary. Target 1,200-1,800 teaching words; "
+                    "at least 800 words of explanation excluding code/exercises are required. "
+                    "Explain every listed subtopic in the same order and with the EXACT title. "
+                    "Write at least 300 words of substantive teaching in EACH subtopic explanation; do not compress the explanations. "
+                    "Give definitions, why/how, step-by-step reasoning and realistic examples. "
+                    "Include at least two worked examples (code for programming topics), "
+                    "explain each important code statement and expected output. Do not execute code. "
+                    "Include accurate node/edge diagrams only when useful, explaining each relationship. "
+                    "Node labels must be readable and concise. Include pitfalls, solved exercises and takeaways. "
+                    "Use short paragraphs, bullet/numbered lines and selective **bold** terms; no HTML. "
+                    + ("For EACH subtopic supply its own distinct worked example: set example.subtopic to its EXACT title. "
+                       "Use paragraphs and list items under 120 words. Include meaningful bullet/numbered teaching and a **defined key term** "
+                       "in every explanation. Set each diagram.subtopics to the EXACT concepts it explains. "
+                       "Every diagram node must connect to an explained edge. " if request.standard_version >= 2 else "") +
+                    "Use source_ids to cite numbered retrieved sources for each subtopic. "
+                    "Preserve dialect/version caveats; distinguish sourced facts from illustrative examples. "
+                    "Examples must be internally consistent.\nLEARNER DATA:\n" + json.dumps(preferences)
+                    + "\nCHAPTER:\n" + planned.model_dump_json()
+                    + "\nEVIDENCE:\n" + memo + "\nNUMBERED SOURCES:\n" + json.dumps(numbered)),
+                    LearningChapter.model_json_schema(),
+                )
             raw = repair_structure(raw, memo)
+            numbered = [{"id": i, **s} for i, s in enumerate(sources, 1)]
             for _ in range(2):
                 if not isinstance(raw.get("subtopics"), list):
                     break
@@ -251,13 +352,23 @@ def _process(item, sessions):
                         raise ValueError("Additional explanations must match their original subtopics")
                     subtopic["explanation"] += "\n\n" + addition["explanation"]
                     subtopic["source_ids"] = list(dict.fromkeys(subtopic["source_ids"] + addition["source_ids"]))
-            programming = bool(request.programming_language) or request.topic.casefold() in {
-                "sql", "python", "java", "javascript", "typescript", "c", "c++", "c#", "rust", "go", "react",
-            }
             chapter = validate_material(raw, planned, len(sources), programming, memo)
+            if request.standard_version >= 2:
+                for attempt in range(2):
+                    issues = chapter_issues(chapter)
+                    if not issues:
+                        break
+                    corrected, model = learning_ai.generate_json(notes_task(
+                        "Repair ONLY the listed educational/formatting issues, preserving correct depth, facts, code and citations. "
+                        "Return the full corrected chapter.\nISSUES: " + json.dumps(issues)
+                        + "\nCHAPTER: " + chapter.model_dump_json() + "\nEVIDENCE: " + memo),
+                        LearningChapter.model_json_schema())
+                    chapter = validate_material(corrected, planned, len(sources), programming, memo)
+                validate_standard(chapter)
             learning_ai.review_chapter(chapter.model_dump(), memo, preferences)
             completed.append(chapter.model_dump())
-            update = {"chapters_json": json.dumps(completed), "sources_json": json.dumps(sources),
+            plan_data["draft"] = {}
+            update = {"plan_json": json.dumps(plan_data), "chapters_json": json.dumps(completed), "sources_json": json.dumps(sources),
                       "provider": research_model + ";" + model}
         with sessions() as db:
             row = db.query(LearningNotebook).filter_by(id=notebook_id).with_for_update().first()
@@ -265,7 +376,9 @@ def _process(item, sessions):
                 return
             for key, value in update.items():
                 setattr(row, key, value)
-            row.state = "ready" if len(completed) == request.chapters else "queued"
+            # Legacy notebooks retain their original publication contract.
+            total = len(json.loads(row.plan_json).get("chapters", []))
+            row.state = "ready" if finalizing or (request.standard_version == 1 and total and len(completed) == total) else "queued"
             row.attempts = 0
             row.error_code = None
             row.lease_token = None
@@ -274,13 +387,22 @@ def _process(item, sessions):
             db.commit()
     except Exception as error:
         fields = [".".join(map(str, item["loc"])) for item in error.errors()] if isinstance(error, ValidationError) else []
-        LOGGER.warning("Learning stage deferred error_type=%s validation_fields=%s", type(error).__name__, fields)
+        internal = str(error) if isinstance(error, RuntimeError) and str(error) in {
+            "LEARNING_AUTHOR_UNAVAILABLE", "LEARNING_LIVE_REFERENCES_UNAVAILABLE", "LEARNING_LEASE_LOST",
+            "LEARNING_OWNER_UNAVAILABLE"} else None
+        LOGGER.warning("Learning stage deferred error_type=%s error_code=%s validation_fields=%s", type(error).__name__, internal or "CONTENT_OR_PROVIDER_CHECK", fields)
         with sessions() as db:
             row = db.query(LearningNotebook).filter_by(id=notebook_id).with_for_update().first()
             if not row or row.lease_token != token:
                 return
+            if isinstance(error, ValueError):
+                saved_plan = json.loads(row.plan_json)
+                saved_plan["draft"] = {}
+                row.plan_json = json.dumps(saved_plan)
             row.state = "failed" if row.attempts >= 4 else "retrying"
             row.error_code = "CONTENT_VALIDATION" if isinstance(error, ValueError) else "RESEARCH_OR_AUTHOR_UNAVAILABLE"
+            if internal:
+                row.error_code = internal
             row.available_at = utcnow() + timedelta(seconds=min(60 * 2 ** row.attempts, 600))
             row.lease_until = None
             row.lease_token = None
