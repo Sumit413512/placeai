@@ -59,3 +59,28 @@ def test_gemini_writer_uses_learning_model_without_changing_other_ai_features(mo
     assert requests[0]["config"].max_output_tokens == 1200
     assert requests[0]["config"].response_json_schema == {"type": "object"}
     assert learning_ai.get_settings().gemini_model == original
+
+
+def test_schema_transport_fallback_keeps_the_full_validation_contract_in_prompt(monkeypatch):
+    monkeypatch.setattr(learning_ai.ai_provider, '_openai_keys', lambda: [])
+    monkeypatch.setattr(learning_ai.ai_provider, '_gemini_key', lambda: 'isolated-test-key')
+    schema = {'type': 'object', 'properties': {'explanation': {'type': 'string', 'minLength': 1600}},
+              'required': ['explanation'], 'additionalProperties': False}
+    calls = []
+    def generate(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            response = httpx.Response(400, request=httpx.Request('POST', 'https://provider.invalid/'))
+            raise httpx.HTTPStatusError('Unsupported schema grammar', request=response.request, response=response)
+        return SimpleNamespace(text='{"explanation":"Draft requiring application validation"}')
+    monkeypatch.setattr(learning_ai.ai_provider, 'genai', SimpleNamespace(Client=lambda **_: SimpleNamespace(models=SimpleNamespace(generate_content=generate))))
+    result, _ = learning_ai.generate_json('Write teaching material', schema)
+    assert result['explanation']
+    assert '1600' in calls[0]['contents'] and '1600' in calls[1]['contents']
+    assert 'minLength' not in calls[0]['config'].response_json_schema['properties']['explanation']
+    assert calls[1]['config'].response_json_schema is None
+    assert schema['properties']['explanation']['minLength'] == 1600
+    shape = learning_ai.provider_schema({'type': 'object', 'title': 'Metadata', 'properties': {
+        'title': {'type': 'string', 'minLength': 3}, 'description': {'type': 'string'}},
+        'required': ['title', 'description']})
+    assert set(shape['properties']) == {'title', 'description'} and 'title' not in shape

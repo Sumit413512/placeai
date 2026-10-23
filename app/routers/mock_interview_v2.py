@@ -7,6 +7,7 @@ import math
 import os
 import re
 import time
+from urllib.parse import urlsplit
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
 from typing import Any
@@ -666,7 +667,9 @@ def _judge0_execute_case(
     except CodeExecutionPending:
         raise
     except Exception as exc:
-        LOGGER.warning("Code runner unavailable error_type=%s", type(exc).__name__)
+        LOGGER.warning("Code runner unavailable error_type=%s provider_host=%s status=%s", type(exc).__name__,
+                       urlsplit(_judge0_base_url()).hostname,
+                       getattr(getattr(exc, 'response', None), 'status_code', None))
         raise RuntimeError("Code execution service is temporarily unavailable") from exc
 
 
