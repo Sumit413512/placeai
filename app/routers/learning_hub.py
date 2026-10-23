@@ -35,7 +35,7 @@ def wake_worker():
 
 
 def owned(db, notebook_id, user):
-    row = db.query(LearningNotebook).filter_by(id=notebook_id, user_id=user.id).first()
+    row = db.query(LearningNotebook).filter_by(id=notebook_id, user_id=user.id, deleted_at=None).first()
     if not row:
         raise HTTPException(404, "Learning notebook not found")
     return row
@@ -67,13 +67,15 @@ def serialize(row, *, detail=False):
 
 
 @router.get("")
-def library(background_tasks: BackgroundTasks, user: User = Depends(require_student), db: Session = Depends(get_db)):
-    rows = db.query(LearningNotebook).filter_by(user_id=user.id).order_by(
+def library(background_tasks: BackgroundTasks, trash: bool = False, user: User = Depends(require_student), db: Session = Depends(get_db)):
+    query = db.query(LearningNotebook).filter_by(user_id=user.id)
+    query = query.filter(LearningNotebook.deleted_at.is_not(None) if trash else LearningNotebook.deleted_at.is_(None))
+    rows = query.order_by(
         LearningNotebook.created_at.desc()).limit(50).all()
     runtime = db.get(LearningRuntime, 1)
     if not runtime or runtime.checked_at < utcnow() - timedelta(minutes=2):
         background_tasks.add_task(wake_worker)
-    return {"items": [serialize(row) for row in rows], "generation_available": generation_available(db)}
+    return {"items": [{"id":row.id,"title":row.title,"deleted_at":row.deleted_at.isoformat()} if trash else serialize(row) for row in rows], "generation_available": generation_available(db)}
 
 
 @router.post("", status_code=202, dependencies=[Depends(student_ai_guard)])
@@ -86,6 +88,8 @@ def create(body: LearningRequest, background_tasks: BackgroundTasks,
         return request.model_copy(update={"standard_version": 2, "authoring_version": 2,
                                           "chapters": None, "level": "beginner", "goals": ""})
     if existing:
+        if existing.deleted_at:
+            raise HTTPException(409, "This notebook is in Deleted notes. Restore it or submit a new request.")
         previous = LearningRequest.model_validate_json(existing.input_json)
         incoming = current_standard(body) if previous.standard_version >= 2 else body
         if previous.model_dump(exclude={"authoring_version"}) != incoming.model_dump(exclude={"authoring_version"}):
@@ -111,6 +115,34 @@ def create(body: LearningRequest, background_tasks: BackgroundTasks,
 @router.get("/{notebook_id}")
 def get_notebook(notebook_id: str, user: User = Depends(require_student), db: Session = Depends(get_db)):
     return serialize(owned(db, notebook_id, user), detail=True)
+
+
+@router.delete("/{notebook_id}")
+def delete_notebook(notebook_id:str,user:User=Depends(require_student),db:Session=Depends(get_db)):
+    db.query(User).filter_by(id=user.id).with_for_update().one()
+    row=db.query(LearningNotebook).filter_by(id=notebook_id,user_id=user.id).with_for_update().first()
+    if not row:raise HTTPException(404,"Learning notebook not found")
+    if not row.deleted_at:
+        row.deleted_at,row.deleted_state=utcnow(),row.state
+        row.state,row.lease_token,row.lease_until="deleted",None,None
+        db.commit()
+    return {"id":row.id,"title":row.title,"deleted":True}
+
+
+@router.post("/{notebook_id}/restore")
+def restore_notebook(notebook_id:str,background_tasks:BackgroundTasks,user:User=Depends(require_student),db:Session=Depends(get_db)):
+    db.query(User).filter_by(id=user.id).with_for_update().one()
+    row=db.query(LearningNotebook).filter_by(id=notebook_id,user_id=user.id).with_for_update().first()
+    if not row:raise HTTPException(404,"Learning notebook not found")
+    if row.deleted_at:
+        state=row.deleted_state if row.deleted_state in {"ready","failed"} else "queued"
+        if state=="queued" and db.query(LearningNotebook).filter(LearningNotebook.user_id==user.id,
+                LearningNotebook.state.in_(["queued","running","retrying"])).first():
+            raise HTTPException(409,"Another notebook is still being prepared. Restore this request after it finishes.")
+        row.state,row.deleted_at,row.deleted_state,row.available_at=state,None,None,utcnow()
+        db.commit()
+        background_tasks.add_task(wake_worker)
+    return serialize(row,detail=True)
 
 
 @router.post("/{notebook_id}/retry", dependencies=[Depends(student_ai_guard)])

@@ -40,7 +40,8 @@ def test_student_can_create_read_and_download_notes_without_leaving_workspace(br
     assert page.locator("[name=goals], [name=level], [name=chapters]").count() == 0
     page.get_by_role("button", name="Create notes", exact=True).click()
     expect(page.locator("#learning-library")).to_contain_text("Preparing")
-    expect(page.locator("#learning-library")).not_to_contain_text("Failed notes")
+    expect(page.locator('#learning-library [data-learning-id="failed-notebook"]')).to_have_count(0)
+    expect(page.get_by_text("Failed notes", exact=True)).not_to_be_visible()
     expect(page.locator(".learning-chapter")).to_have_count(0)
     expect(page.get_by_role("button",name="Download complete PDF",exact=True)).to_have_count(0)
     phase[0]="ready"

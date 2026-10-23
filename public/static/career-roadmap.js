@@ -247,7 +247,7 @@
       root().innerHTML = page +
         '<section class="roadmap-plan-toolbar" aria-label="Saved roadmap actions">' +
           '<div class="roadmap-plan-toolbar-copy"><span class="section-kicker">YOUR SAVED PLAN</span><small>Updated ' + esc(fmtDate(latest.created_at)) + '</small></div>' +
-          '<div class="roadmap-plan-toolbar-actions"><button class="button button-secondary" type="button" data-action="roadmap-adjust">Adjust roadmap</button><button class="button button-secondary" type="button" data-action="roadmap-print">Print / save PDF</button></div>' +
+          '<div class="roadmap-plan-toolbar-actions"><button class="button button-primary" type="button" data-study-roadmap="' + esc(latest.id) + '">Track this roadmap</button><button class="button button-secondary" type="button" data-action="roadmap-adjust">Adjust roadmap</button><button class="button button-secondary" type="button" data-action="roadmap-print">Print / save PDF</button></div>' +
         '</section>' +
         roadmapHtml(latest, esc, fmtDate) +
         '<details class="roadmap-adjust-panel panel"><summary><span><strong>Adjust roadmap inputs</strong><small>Change your target, starting point or weekly pace, then rebuild with current market evidence.</small></span><span aria-hidden="true">+</span></summary><div class="roadmap-adjust-body">' + editor + '</div></details>';
@@ -268,6 +268,8 @@
   if (!register()) {
     window.addEventListener('placeai:student-views-ready', register, { once: true });
   }
+
+  document.addEventListener('click', event => { const button = event.target.closest('[data-study-roadmap]'); if (button && workspace) { window.PlaceAIStudy?.selectResource('roadmap', button.dataset.studyRoadmap); workspace.navigate('study-tracker'); } });
 
   document.addEventListener('submit', async event => {
     const form = event.target;
