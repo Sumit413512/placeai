@@ -339,7 +339,8 @@ def mock_interview_history(
         or_(*submitted),
     ).order_by(MockInterview.created_at.desc()).limit(50).all()
     from app.assessment_status import result_status
-    jobs = {job.interview_id: job for job in db.query(AssessmentJob).filter(AssessmentJob.interview_id.in_([row.id for row in rows])).all()}
+    jobs = ({job.interview_id: job for job in db.query(AssessmentJob).filter(AssessmentJob.interview_id.in_([row.id for row in rows])).all()}
+            if get_settings().assessment_queue_enabled else {})
     result = []
     for row in rows:
         saved = result_status(row, jobs.get(row.id))

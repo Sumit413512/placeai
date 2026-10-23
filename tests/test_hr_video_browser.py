@@ -62,7 +62,7 @@ def test_saved_pending_attempt_never_hijacks_lab_entry_and_history_does_not_retr
     page.locator('[data-saved-result="saved"]').click()
     page.locator("#retry-analysis").wait_for(state="visible")
     assert requests == ["GET"]
-    assert "expected within 24 hours" in page.locator("#analysis-message").inner_text()
+    assert "current processing status" in page.locator("#analysis-message").inner_text()
     assert page.locator(".analysis-step.done").count() == 0
     page.locator("#return-to-setup").click()
     assert page.locator("#setup-panel").is_visible()
