@@ -10,6 +10,9 @@ from app.models import (AssessmentJob, AuditEvent, LearningNotebook, LearningRun
                         User, UserRole, VideoCourse, VideoLesson, utcnow)
 from app.services import record_audit
 
+# Staff-only repair admission; ordinary new-lesson limits remain unchanged.
+MAINTENANCE_PARTS_PER_DAY = 48
+
 
 def overview(db):
     courses = []
@@ -54,7 +57,7 @@ def recover(db, actor, kind, identifier):
         recent = db.query(AuditEvent).filter(AuditEvent.action == 'processing.recovery', AuditEvent.entity_type == 'courses',
             AuditEvent.created_at > now-timedelta(days=1)).limit(1000).all()
         used = sum(json.loads(event.metadata_json or '{}').get('requeued_parts', 0) for event in recent)
-        capacity = min(max(0, 40-used), max(0, (STORAGE_BUDGET-storage_used(db))//MAX_VIDEO_BYTES-pending))
+        capacity = min(max(0, MAINTENANCE_PARTS_PER_DAY-used), max(0, (STORAGE_BUDGET-storage_used(db))//MAX_VIDEO_BYTES-pending))
         for row in db.query(VideoLesson).options(defer(VideoLesson.video_data)).filter_by(course_id=identifier).order_by(VideoLesson.position).with_for_update().all():
             if row.state != 'failed' and not (row.state == 'ready' and not checks_passed(json.loads(row.content_json))):
                 continue
