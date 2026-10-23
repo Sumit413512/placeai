@@ -233,10 +233,11 @@
     syncModalState();
     focusModal($('#auth-overlay'));
   }
-  function closeAuth() {
+  function closeAuth(restoreFocus = true) {
     $('#auth-overlay').classList.add('hidden');
     syncModalState();
-    restoreModalOpener('auth');
+    if (restoreFocus) restoreModalOpener('auth');
+    else modalOpeners.auth = null;
   }
   function openModal(html) {
     rememberModalOpener('generic');
@@ -375,6 +376,8 @@
     } catch {
       state.token=''; return false;
     }
+    // An authenticated workspace must never retain a sign-in/signup layer.
+    closeAuth(false);
     $('#marketing-site').classList.add('hidden');
     $('#app-shell').classList.remove('hidden');
     const display = state.me.username || state.me.email;
@@ -415,13 +418,17 @@
   window.PlaceAIAuth = Object.freeze({
     async completeSignIn(session) {
       if (!session?.access_token) throw new Error('Sign-in was not completed. Please try again.');
+      // Retire the old form before slow workspace reads. In particular, skipping
+      // optional MFA must not expose the credentials dialog again underneath it.
+      closeAuth(false);
       if (bootWorkspaceInFlight) await bootWorkspaceInFlight.catch(() => false);
       state.token = session.access_token;
       bootWorkspaceCompleted = false;
       if (!await bootWorkspace()) {
+        showAuth('login');
         throw new Error('Your session could not be opened. Please try signing in again.');
       }
-      closeAuth();
+      closeAuth(false);
     }
   });
 
