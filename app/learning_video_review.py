@@ -16,7 +16,7 @@ class ReviewCapacityError(NarrationCapacityError):
 
 class LessonReviewRejected(ValueError):
     def __init__(self, issues):
-        super().__init__("The actual lesson did not pass its audiovisual review")
+        super().__init__("The lesson did not pass a required quality review")
         self.issues = [str(item)[:400] for item in issues[:5]]
 
 

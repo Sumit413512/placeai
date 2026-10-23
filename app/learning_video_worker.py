@@ -19,7 +19,7 @@ from app import learning_ai
 from app import learning_speech
 from app.learning_video_content import CoursePlan, FullCoursePlan, SQL_MODULES, validate_full_plan, LessonScript, LESSON_PROMPT
 from app.learning_video_media import render_video, inspect_video, speak, NarrationCapacityError, MAX_AUDIO_BYTES
-from app.learning_video_review import review_video, ReviewCapacityError
+from app.learning_video_review import review_video, ReviewCapacityError, LessonReviewRejected
 from app.learning_worker import Session, heartbeat
 from app.models import User, UserRole, VideoCourse, VideoLesson, VideoNarration, utcnow
 
@@ -346,7 +346,7 @@ def _process(item, sessions):
                      "issues": {"type": "array", "items": {"type": "string"}}},
                      "required": ["approved", "issues"], "additionalProperties": False}, max_output_tokens=1200)
                 if review.get("approved") is not True or review.get("issues") != []:
-                    raise ValueError("Lesson did not pass its content review")
+                    raise LessonReviewRejected(review.get("issues") or ["Correct factual content, examples and source support before publication."])
                 content = {**script.model_dump(), "sources": fresh_sources,
                            "content_review": {"passed": True, "version": 1}}
                 # Persist the checked script so narration retries do not repeat authoring.
@@ -381,7 +381,7 @@ def _process(item, sessions):
                     {"type":"object","properties":{"approved":{"type":"boolean"},"issues":{"type":"array","items":{"type":"string"}}},
                      "required":["approved","issues"],"additionalProperties":False}, max_output_tokens=1200)
                 if review.get("approved") is not True or review.get("issues") != []:
-                    raise ValueError("Saved lesson did not pass content review")
+                    raise LessonReviewRejected(review.get("issues") or ["Correct the saved lesson's factual content and source support."])
                 content["content_review"] = {"passed": True, "version": 1}
             content["audiovisual_review"] = review_video(data, content)
             update = {"content_json": json.dumps(content), "video_data": data, "duration_seconds": duration}
