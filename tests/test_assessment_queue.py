@@ -48,7 +48,7 @@ def test_saved_groq_submission_requires_consent_then_enqueues_once(queued, monke
     queued.db.commit()
 
     status = exams.saved_interview_result(queued.interview.id, queued.user, queued.db)
-    assert status["status"] == "pending"
+    assert status["status"] == "delayed"
     assert status["requires_recording_consent"] is True
     assert status["queued"] is False
     assert queued.db.query(AssessmentJob).count() == 0

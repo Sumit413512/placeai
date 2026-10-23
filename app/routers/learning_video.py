@@ -37,10 +37,9 @@ def owner_course(db, course_id, user):
 
 def owner_lesson(db, course_id, position, user):
     course = owner_course(db, course_id, user)
-    if json.loads(course.input_json).get("curriculum_version") == 2:
-        publication = course_data(db, course, user)
-        if not publication["course_ready"]:
-            raise HTTPException(409, "Your full course is still being prepared and checked. Return to the course overview.")
+    publication = course_data(db, course, user)
+    if not publication["course_ready"]:
+        raise HTTPException(409, "Your full course is still being prepared and checked. Return to the course overview.")
     lesson = db.query(VideoLesson).options(defer(VideoLesson.video_data)).filter_by(
         course_id=course.id, position=position).first()
     if not lesson:
@@ -69,7 +68,7 @@ def course_data(db, course, user):
               "error_code": course.error_code, "introduction": plan.get("introduction", ""),
               "prerequisites": plan.get("prerequisites", []), "lessons": [],
               "sources": json.loads(course.sources_json), "created_at": course.created_at.isoformat(),
-              "requires_full_preparation": json.loads(course.input_json).get("curriculum_version") == 2}
+              "requires_full_preparation": True}
     modules, previous, in_module = [], None, 0
     for position, outline in enumerate(plan.get("lessons", [])):
         # Old flat outlines get neutral two-part sections without changing their
@@ -85,9 +84,8 @@ def course_data(db, course, user):
         modules[-1]["positions"].append(position)
         row, progress = lessons.get(position, (None, None))
         checks = json.loads(row.content_json) if row and row.state == "ready" else {}
-        quality_checked = (checks.get("content_review", {}).get("passed") is True
-                           and checks.get("media_review", {}).get("passed") is True
-                           and checks.get("audiovisual_review", {}).get("passed") is True)
+        from app.learning_publication import checks_passed
+        quality_checked = checks_passed(checks)
         result["lessons"].append({**outline, "position": position,
             "module_title": modules[-1]["title"], "module_number": len(modules),
             "number": f"{len(modules)}.{in_module}",
@@ -120,6 +118,10 @@ def course_data(db, course, user):
         result["preparation_status"] = "ready"
     elif course.state == "failed" or any(item["status"] == "failed" for item in result["lessons"]):
         result["preparation_status"] = "needs_attention"
+        result["preparation_notice"] = "This course needs a preparation repair. Your request and saved progress are preserved. Please contact PlaceAI support."
+    elif any(item["status"] == "ready" and not item["quality_checked"] for item in result["lessons"]):
+        result["preparation_status"] = "review_required"
+        result["preparation_notice"] = "This saved course needs its quality recheck before learning can begin. Your progress is preserved."
     elif running:
         result["preparation_status"] = "preparing"
         result["preparation_notice"] = "Your course is being prepared and checked in the background. You can leave this page."

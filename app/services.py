@@ -341,8 +341,8 @@ def company_trust_assessment(profile: RecruiterProfile, db: Session | None = Non
 
 def placement_readiness(student: StudentProfile, db: Session) -> dict:
     """Evidence-backed readiness, not a prediction of hiring success."""
-    profile_fields = [student.full_name, student.degree, student.branch, student.graduation_year, student.cgpa, student.phone, student.linkedin_url]
-    profile_score = round(sum(bool(x) for x in profile_fields) / len(profile_fields) * 100)
+    from app.profile_completeness import profile_completion
+    profile_score = profile_completion(student)["percent"]
     resume_score = 0
     if student.resume:
         resume_score = 65 + (20 if student.resume.is_parsed else 0) + (15 if student.ai_summary else 0)

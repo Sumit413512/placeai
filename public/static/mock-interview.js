@@ -179,7 +179,7 @@
         {job_title:'Graduate Software Engineer',company_name:'Campus Technology Partner',overall_score:71,created_at:new Date(Date.now()-86400000*9).toISOString()}
       ] : await api('/mock-interview/history');
       panel.classList.remove('hidden');
-      $('#history-list').innerHTML = rows.length ? rows.map(row=>`<article class="history-item"><div><strong>${esc(row.job_title)}</strong><span>${esc(row.company_name || 'Company')} · ${row.created_at ? new Date(row.created_at).toLocaleString('en-IN') : 'Saved attempt'}</span>${row.id?`<button type="button" class="button secondary" data-saved-result="${esc(row.id)}">${row.overall_score===null?'View report status':'View complete result'}</button>`:''}</div><div class="history-score">${row.overall_score ?? 'Within 24h'}</div></article>`).join('') : '<p class="disclaimer">No saved attempts yet.</p>';
+      $('#history-list').innerHTML = rows.length ? rows.map(row=>`<article class="history-item"><div><strong>${esc(row.job_title)}</strong><span>${esc(row.company_name || 'Company')} · ${row.created_at ? new Date(row.created_at).toLocaleString('en-IN') : 'Saved attempt'}</span>${row.id?`<button type="button" class="button secondary" data-saved-result="${esc(row.id)}">${row.overall_score===null?'View report status':'View complete result'}</button>`:''}</div><div class="history-score">${row.overall_score ?? esc(row.status_label || 'Processing')}</div></article>`).join('') : '<p class="disclaimer">No saved attempts yet.</p>';
     } catch (_) {
       panel.classList.remove('hidden');
       $('#history-list').textContent='Saved reports could not load. Refresh this page to try again.';
@@ -2057,6 +2057,7 @@
       row.classList.remove('done','active');
       row.querySelector('b').textContent='Pending';
     });
+    $('#analysis-panel h2').textContent='PlaceAI is grading every response';
     $('#analysis-message').textContent='Preparing your complete report. All section scores appear together after grading and HR video analysis finish.';
     $('#return-to-setup').classList.toggle('hidden',!state.submissionSaved || !!(state.hr?.recorder && !state.hr.submitted));
     $('#analysis-panel').scrollIntoView({behavior:'smooth',block:'start'});
@@ -2073,10 +2074,11 @@
   }
 
   function showPendingResult(saved={}) {
-    const terminal=saved.queue_status==='failed';
+    const terminal=saved.queue_status==='failed' || saved.status==='failed';
+    $('#analysis-panel h2').textContent=terminal ? 'Analysis needs attention' : saved.status==='delayed' ? 'Your report is delayed' : 'Your report is being prepared';
     $('#analysis-message').textContent=saved.status_message || (terminal
       ? 'Your exam is saved. Analysis needs another attempt. Select Retry analysis; your answers will not be replaced.'
-      : 'Your exam is saved. Your complete report is expected within 24 hours. You can leave this page and return from exam history.');
+      : 'Your answers are saved. Return from exam history to check the current processing status.');
     $('#return-to-setup').classList.remove('hidden');
     $('#retry-analysis').classList.toggle('hidden',saved.queued && !terminal);
     state.finishing=false;
@@ -2111,7 +2113,7 @@
         state.lastResult=saved.result;
         renderResult(saved.result,false);
       }else{
-        if(saved.status==='pending')showPendingResult(saved);
+        if(['pending','queued','running','delayed','failed'].includes(saved.status))showPendingResult(saved);
         else $('#analysis-message').textContent='This assessment has not been submitted. Finish it in the original exam tab.';
       }
     }catch(error){
@@ -2136,10 +2138,11 @@
       if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
       if(saved.status==='complete')return saved.result;
       if(saved.queue_status==='failed')return {analysis_status:'pending',...saved};
-      if(saved.error_code==='VIDEO_PROVIDER_CAPACITY')$('#analysis-message').textContent='Your exam is saved. Analysis is waiting for available capacity. Your complete report is expected within 24 hours, and you can return from exam history.';
+      if(saved.status_message)$('#analysis-message').textContent=saved.status_message;
+      else if(saved.error_code==='VIDEO_PROVIDER_CAPACITY')$('#analysis-message').textContent='Your exam is saved. Analysis is waiting for available capacity. Your complete report is expected within 24 hours, and you can return from exam history.';
       else if(saved.spoken_progress)$('#analysis-message').textContent=`Your exam is saved. ${saved.spoken_progress.analyzed} of ${saved.spoken_progress.recorded} recorded answers analyzed. The complete report appears after every section is ready; you can return from exam history later.`;
     }
-    return {analysis_status:'pending',status_message:'Your exam is saved. Your complete report is expected within 24 hours. You can leave this page and return from exam history.'};
+    return {analysis_status:'pending',status_message:'Your answers are saved. Return from exam history to check the current processing status.'};
   }
 
   async function runResultAnalysis(auto) {
@@ -2170,7 +2173,7 @@
                 await api(`/mock-interview/${interviewId}/hr/processor-consent`,{method:'POST',body:JSON.stringify({processor:'groq',consent:true})});
                 if(state.analysisGeneration!==generation || state.session?.interview_id!==interviewId)return;
               }
-              if(saved.status==='pending'){state.submissionSaved=true;if(saved.queued){result=await waitForQueuedResult(generation);break;}}
+              if(['pending','queued','running','delayed','failed'].includes(saved.status)){state.submissionSaved=true;if(saved.queued){result=await waitForQueuedResult(generation);break;}}
               else{
                 state.submissionSaved=false;
                 if(!state.answers.length)throw new Error('This exam has not been submitted. Return to the original exam tab to finish uploading and submit.');

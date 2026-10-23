@@ -42,6 +42,7 @@ def script():
 @pytest.fixture
 def video(hub, monkeypatch):  # noqa: F811
     monkeypatch.setattr(learning_video, 'student_ai_guard', lambda *_args: None)
+    monkeypatch.setattr(worker, 'review_video', lambda *_args: {'passed': True, 'version': 1})
     app = FastAPI(); app.include_router(learning_video.router)
     app.dependency_overrides.update(hub.client.app.dependency_overrides)
     with TestClient(app) as client:
@@ -54,7 +55,7 @@ def new_course(video):
     return response.json()['id']
 
 
-def ready_lesson(video):
+def ready_lesson(video, full_ready=True):
     identifier = new_course(video)
     course = video.db.get(VideoCourse, identifier)
     course.state, course.plan_json = 'ready', json.dumps(course_plan())
@@ -63,9 +64,13 @@ def ready_lesson(video):
     assert video.api.post(f'/learning-hub/video/{identifier}/lessons/0').status_code == 202
     lesson = video.db.query(VideoLesson).filter_by(course_id=identifier).one()
     content = script(); content['sources'] = [{"title": "PostgreSQL", "url": "https://www.postgresql.org/docs/current/sql-select.html"}]
+    content.update({key: {'passed': True, 'version': 1} for key in ['content_review', 'media_review', 'audiovisual_review']})
     content['timings'] = [{"start": i * 25, "end": (i+1)*25} for i in range(4)]
     lesson.state, lesson.content_json, lesson.duration_seconds = 'ready', json.dumps(content), 100
     lesson.video_data = b'private-video-test'
+    if full_ready:
+        for index in range(1, 4):
+            video.db.add(VideoLesson(course_id=identifier, position=index, title=f'Part {index}', state='ready', content_json=json.dumps(content), video_data=b'private-video-test', duration_seconds=100))
     video.db.commit()
     return identifier, lesson.id, f'/learning-hub/video/{identifier}/lessons/0'
 
@@ -154,7 +159,13 @@ def test_worker_saves_real_playable_media_and_recovers_expired_lease(video, monk
     assert replacement[1] == first[1] and replacement[2] != first[2]
     worker.process(first, video.sessions)  # A stale worker must not publish.
     worker.process(replacement, video.sessions)
+    assert video.api.get(f'/learning-hub/video/{identifier}/lessons/0/media').status_code == 409
+    for _ in range(3):
+        with video.sessions() as db:
+            next_item = worker.claim(db)
+        worker.process(next_item, video.sessions)
     response = video.api.get(f'/learning-hub/video/{identifier}/lessons/0/media')
+    assert response.status_code == 200, response.text
     with av.open(io.BytesIO(response.content)) as container:
         assert {stream.type for stream in container.streams} == {'audio','video'}
         assert sum(1 for _ in container.decode(video=0)) == 32
@@ -179,7 +190,7 @@ def test_worker_failure_is_honest_and_no_media_is_published(video, monkeypatch):
 
 
 def test_lesson_retry_reuses_the_same_private_record_and_is_bounded(video):
-    identifier, lesson_id, path = ready_lesson(video)
+    identifier, lesson_id, path = ready_lesson(video, full_ready=False)
     row = video.db.get(VideoLesson, lesson_id)
     row.state, row.attempts = 'failed', 3; video.db.commit()
     assert video.api.post(path).status_code == 202
@@ -341,7 +352,7 @@ def test_legacy_personalised_course_never_enters_shared_cache(video):
 
 
 def test_daily_quota_defers_only_the_affected_lesson(video):
-    identifier, lesson_id, _ = ready_lesson(video)
+    identifier, lesson_id, _ = ready_lesson(video, full_ready=False)
     row = video.db.get(VideoLesson, lesson_id)
     row.state, row.error_code, row.available_at = 'retrying', 'NARRATION_CAPACITY', utcnow()+timedelta(hours=2)
     video.db.add(VideoLesson(course_id=identifier, position=1, title='Next part'))
@@ -368,7 +379,7 @@ def test_practice_during_playback_does_not_reset_the_watch_clock(video):
 
 
 def test_course_numbers_readiness_and_combined_completion(video):
-    identifier, lesson_id, path = ready_lesson(video)
+    identifier, lesson_id, path = ready_lesson(video, full_ready=False)
     legacy = course_plan()
     for item in legacy['lessons']:item.pop('module_title')
     row = video.db.get(VideoCourse,identifier);row.plan_json=json.dumps(legacy);video.db.commit()
@@ -382,7 +393,7 @@ def test_course_numbers_readiness_and_combined_completion(video):
         item['module_title'] = 'Query foundations' if index < 2 else 'Applied queries'
     row.plan_json = json.dumps(plan)
     for index in range(1,4):
-        video.db.add(VideoLesson(course_id=identifier,position=index,title=f'Part {index}',state='ready'))
+        video.db.add(VideoLesson(course_id=identifier,position=index,title=f'Part {index}',state='ready',content_json=json.dumps({key:{'passed':True} for key in ['content_review','media_review','audiovisual_review']})))
     video.db.commit()
     data = video.api.get(f'/learning-hub/video/{identifier}').json()
     assert data['course_ready'] and data['preparation_status'] == 'ready'
@@ -422,7 +433,7 @@ def test_full_sql_curriculum_has_depth_and_cannot_drop_an_advanced_module():
 
 
 def test_new_full_course_publishes_only_after_every_lesson_passes_checks(video):
-    identifier,lesson_id,path=ready_lesson(video)
+    identifier,lesson_id,path=ready_lesson(video, full_ready=False)
     course=video.db.get(VideoCourse,identifier)
     course.input_json=json.dumps({'topic':'SQL','curriculum_version':2})
     for position in range(1,4):
@@ -431,7 +442,7 @@ def test_new_full_course_publishes_only_after_every_lesson_passes_checks(video):
     video.db.commit()
     assert video.api.get(path).status_code==409
     assert video.api.get(path+'/media').status_code==409
-    assert video.api.get(f'/learning-hub/video/{identifier}').json()['checked_parts']==0
+    assert video.api.get(f'/learning-hub/video/{identifier}').json()['checked_parts']==1
     for row in video.db.query(VideoLesson).filter_by(course_id=identifier):
         content=json.loads(row.content_json)
         content.update(content_review={'passed':True},media_review={'passed':True},audiovisual_review={'passed':True})
