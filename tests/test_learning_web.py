@@ -84,3 +84,17 @@ def test_schema_transport_fallback_keeps_the_full_validation_contract_in_prompt(
         'title': {'type': 'string', 'minLength': 3}, 'description': {'type': 'string'}},
         'required': ['title', 'description']})
     assert set(shape['properties']) == {'title', 'description'} and 'title' not in shape
+
+
+def test_rate_limit_is_distinct_from_invalid_content_and_does_not_loop(monkeypatch):
+    monkeypatch.setattr(learning_ai.ai_provider, '_openai_keys', lambda: [])
+    monkeypatch.setattr(learning_ai.ai_provider, '_gemini_key', lambda: 'isolated-test-key')
+    calls = []
+    def limited(**kwargs):
+        calls.append(kwargs)
+        response = httpx.Response(429, request=httpx.Request('POST', 'https://provider.invalid/'))
+        raise httpx.HTTPStatusError('Quota unavailable', request=response.request, response=response)
+    monkeypatch.setattr(learning_ai.ai_provider, 'genai', SimpleNamespace(Client=lambda **_: SimpleNamespace(models=SimpleNamespace(generate_content=limited))))
+    with pytest.raises(learning_ai.LearningCapacityError) as error:
+        learning_ai.generate_json('Teach SQL', {'type': 'object'})
+    assert len(calls) == 1 and error.value.retry_seconds >= 3600

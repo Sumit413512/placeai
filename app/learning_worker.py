@@ -19,7 +19,7 @@ from app.learning_content import (LearningRequest, LearningPlan, LearningChapter
                                   ConceptPacket, LearningSupportingMaterial, validate_chapter, plan_authoring_schema)
 from app import learning_ai
 from app.learning_notes_prompt import notes_task
-from app.learning_quality import chapter_issues, validate_notebook, validate_standard
+from app.learning_quality import validate_notebook, validate_standard
 from app.learning_format import blocks
 
 LOGGER = logging.getLogger("placeai.learning.worker")
@@ -36,7 +36,7 @@ def write_checkpoint(sessions, identifier, token, plan, sources):
         db.commit()
 
 
-def author_concepts(sessions, identifier, token, plan_data, planned, index, preferences, sources):
+def author_concepts(sessions, identifier, token, plan_data, planned, index, preferences, sources, programming=False):
     """Small provider requests with durable per-concept checkpoints on free hosting."""
     draft = plan_data.get("draft") or {}
     if draft.get("position") != index:
@@ -58,6 +58,7 @@ def author_concepts(sessions, identifier, token, plan_data, planned, index, pref
             "Include a realistic worked example with expected result and explained steps. Code is illustrative, "
             "never claim execution; use code only where appropriate. Cite supporting source_ids. "
             "Keep each paragraph/list item under 120 words.\nCONCEPT: " + title
+            + ("\nThis is a programming topic: every worked example must include valid code, concrete inputs/results and explained steps. " if programming else "")
             + "\nREQUEST: " + json.dumps(preferences) + evidence), ConceptPacket.model_json_schema())
         for attempt in range(3):
             try:
@@ -175,6 +176,29 @@ def validate_material(raw, planned, source_count, programming, evidence):
                 seen.add(path)
                 parent, key = targets[path]
                 parent[key] = replacement["value"]
+
+
+def validate_and_repair(raw, planned, source_count, programming, evidence, sources, version):
+    """Repair cross-field teaching defects; never lower publication requirements."""
+    for attempt in range(3):
+        try:
+            chapter = validate_material(raw, planned, source_count, programming, evidence)
+            if version >= 2:
+                validate_standard(chapter)
+            return chapter
+        except ValueError as error:
+            if attempt == 2:
+                raise
+            issues = ([{'path': list(item['loc']), 'message': str(item['msg'])[:300]}
+                       for item in error.errors()] if isinstance(error, ValidationError) else [str(error)[:1600]])
+            raw, _ = learning_ai.generate_json(notes_task(
+                "Repair the listed chapter validation defects only. Preserve valid explanations, depth, source IDs "
+                "and examples. Every planned subtopic must retain its EXACT title and have a mapped worked example. "
+                "Every programming example must contain code. Keep short paragraphs, lists and emphasized terms. "
+                "Do not summarize or replace correct material. Return the complete corrected chapter.\nISSUES: "
+                + json.dumps(issues) + "\nCHAPTER: " + json.dumps(raw) + "\nOUTLINE: " + planned.model_dump_json()
+                + "\nEVIDENCE: " + evidence + "\nSOURCES: " + json.dumps(sources)), LearningChapter.model_json_schema())
+    raise ValueError("Chapter validation could not finish")
 
 
 def heartbeat(db):
@@ -318,7 +342,7 @@ def _process(item, sessions):
             planned = plan.chapters[index]
             if request.standard_version >= 2 or request.authoring_version >= 2:
                 raw, memo, research_model, model = author_concepts(sessions, notebook_id, token,
-                    plan_data, planned, index, preferences, sources)
+                    plan_data, planned, index, preferences, sources, programming)
             else:
                 # Research each chapter separately so detailed explanations have relevant current evidence.
                 memo, chapter_sources, research_model = learning_ai.research(json.dumps({
@@ -381,19 +405,10 @@ def _process(item, sessions):
                         raise ValueError("Additional explanations must match their original subtopics")
                     subtopic["explanation"] += "\n\n" + addition["explanation"]
                     subtopic["source_ids"] = list(dict.fromkeys(subtopic["source_ids"] + addition["source_ids"]))
-            chapter = validate_material(raw, planned, len(sources), programming, memo)
-            if request.standard_version >= 2:
-                for attempt in range(2):
-                    issues = chapter_issues(chapter)
-                    if not issues:
-                        break
-                    corrected, model = learning_ai.generate_json(notes_task(
-                        "Repair ONLY the listed educational/formatting issues, preserving correct depth, facts, code and citations. "
-                        "Return the full corrected chapter.\nISSUES: " + json.dumps(issues)
-                        + "\nCHAPTER: " + chapter.model_dump_json() + "\nEVIDENCE: " + memo),
-                        LearningChapter.model_json_schema())
-                    chapter = validate_material(corrected, planned, len(sources), programming, memo)
-                validate_standard(chapter)
+            chapter = validate_and_repair(raw, planned, len(sources), programming, memo, numbered, request.standard_version)
+            if plan_data.get("draft"):
+                plan_data["draft"]["revision"] = chapter.model_dump()
+                write_checkpoint(sessions, notebook_id, token, plan_data, sources)
             for attempt in range(2):
                 try:
                     learning_ai.review_chapter(chapter.model_dump(), memo, {**preferences, "source_references": numbered})
@@ -451,6 +466,10 @@ def _process(item, sessions):
             if internal:
                 row.error_code = internal
             row.available_at = utcnow() + timedelta(seconds=min(60 * 2 ** row.attempts, 600))
+            if isinstance(error, learning_ai.LearningCapacityError):
+                row.state, row.error_code = "retrying", "LEARNING_PROVIDER_CAPACITY"
+                row.attempts = max(0, row.attempts - 1)
+                row.available_at = utcnow() + timedelta(seconds=error.retry_seconds)
             row.lease_until = None
             row.lease_token = None
             db.commit()

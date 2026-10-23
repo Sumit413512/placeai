@@ -56,6 +56,7 @@ def serialize(row, *, detail=False):
               "created_at": row.created_at.isoformat(), "updated_at": row.updated_at.isoformat(),
               "error_code": row.error_code, "retry_after_seconds": 8,
               "preparation_stage": "ready" if ready else "needs_attention" if row.state == "failed" else
+                  "waiting_capacity" if row.error_code == "LEARNING_PROVIDER_CAPACITY" else
                   "checking" if total and len(chapters) == total else "preparing",
               "pdf_available": ready, "ready_to_begin": ready}
     if detail:
