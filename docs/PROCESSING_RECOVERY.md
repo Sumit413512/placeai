@@ -4,8 +4,14 @@ Platform Admin → Processing recovery lists failed assessment jobs, notebooks, 
 courses with failed, missing or unreviewed lessons. Request repair retains submitted
 answers, passed media and progress IDs. Each request is audited, rate limited and
 subject to a 30-minute duplicate cooldown. Course repair admission reserves against
-the existing storage budget and a global 40-part repair allowance per rolling day.
+the existing storage budget and a global 48-part staff repair allowance per rolling day.
 Missing legacy lessons are admitted by the existing bounded scheduler.
+
+The staff-only allowance includes a small maintenance reserve for provider/protocol
+repairs. Ordinary new-lesson admission remains 40 parts/day. The 150 MiB storage
+budget, per-request 40-part bound, fresh-admin-login requirement, rate limit,
+duplicate cooldown and generation/publication checks remain mandatory. This does
+not provision compute or change hosting plans; the existing free instance is used.
 
 Do not replace failed media with guessed scores or bypass the three publication
 checks. A repeated content rejection invalidates its unpublished script/media so

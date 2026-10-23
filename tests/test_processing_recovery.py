@@ -84,7 +84,7 @@ def test_video_part_allowance_counts_only_video_recovery(hub, prior_kind):
     hub.db.add(course); hub.db.flush()
     hub.db.add(VideoLesson(course_id=course.id, position=0, title='One', state='failed'))
     hub.db.add(AuditEvent(action='processing.recovery', entity_type=prior_kind, entity_id='other-recovery',
-                         metadata_json='{"requeued_parts":40}'))
+                         metadata_json='{"requeued_parts":48}'))
     hub.db.commit()
     if prior_kind == 'courses':
         with pytest.raises(HTTPException) as error: recover(hub.db, hub.owner, 'courses', course.id)
