@@ -57,10 +57,14 @@ def test_v2_checks_and_pdf_must_finish_before_publication(hub, monkeypatch):
         props = schema["properties"]
         if "approved" in props: result = {"approved": True, "issues": []}
         elif "chapters" in props: result = plan
+        elif "additional_explanation" in props:
+            result = {"additional_explanation": chapter["subtopics"][0]["explanation"]}
         elif "concept" in props:
             title = task.split("CONCEPT: ", 1)[1].split("\n", 1)[0]
-            result = {"concept": next(x for x in chapter["subtopics"] if x["title"] == title),
+            result = {"concept": copy.deepcopy(next(x for x in chapter["subtopics"] if x["title"] == title)),
                       "example": next(x for x in chapter["examples"] if x["subtopic"] == title)}
+            if title == chapter["subtopics"][0]["title"]:
+                result["concept"]["explanation"] = "**Predicate** selects matching rows.\n- Evaluate each row against the condition."
         else: result = {k: v for k, v in chapter.items() if k not in {"subtopics", "examples"}}
         return result, "isolated:writer"
     monkeypatch.setattr(learning_ai, "generate_json", generate)
@@ -84,7 +88,8 @@ def test_v2_checks_and_pdf_must_finish_before_publication(hub, monkeypatch):
     assert reader.outline and reader.pages
     assert any("Worked example" in page.extract_text() for page in reader.pages)
     # Finalization is local; it does not call the model again.
-    assert len(calls) == 6
+    assert len(calls) == 7
+    assert ready["chapters"][0]["examples"][0]["code"] == chapter["examples"][0]["code"]
 
 
 def test_v2_ready_flag_cannot_bypass_missing_publication_review(hub):

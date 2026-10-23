@@ -58,7 +58,33 @@ def author_concepts(sessions, identifier, token, plan_data, planned, index, pref
             "never claim execution; use code only where appropriate. Cite supporting source_ids. "
             "Keep each paragraph/list item under 120 words.\nCONCEPT: " + title
             + "\nREQUEST: " + json.dumps(preferences) + evidence), ConceptPacket.model_json_schema())
-        packet = ConceptPacket.model_validate(raw)
+        for attempt in range(3):
+            try:
+                packet = ConceptPacket.model_validate(raw)
+                break
+            except ValidationError as error:
+                if attempt == 2:
+                    raise
+                errors = error.errors()
+                if all(item["loc"] == ("concept", "explanation") and item["type"] == "string_too_short" for item in errors):
+                    addition, model = learning_ai.generate_json(notes_task(
+                        "Add NEW substantive teaching to this short explanation. Do not repeat existing text. "
+                        "Add worked reasoning, mechanisms, practical context and edge cases in 300-450 NEW words. "
+                        "Use short paragraphs and meaningful lists; do not add filler. Return only additional_explanation. "
+                        "\nCONCEPT: " + title + "\nEXISTING: " + str(raw["concept"]["explanation"]) + evidence),
+                        {"type": "object", "properties": {"additional_explanation": {"type": "string", "minLength": 1200}},
+                         "required": ["additional_explanation"], "additionalProperties": False})
+                    extra = addition.get("additional_explanation")
+                    if not isinstance(extra, str) or not extra.strip():
+                        raise ValueError("Concept expansion must include meaningful explanation")
+                    raw["concept"]["explanation"] += "\n\n" + extra
+                else:
+                    raw, model = learning_ai.generate_json(notes_task(
+                        "Repair the listed structural or short-field issues. Preserve valid explanation, code, "
+                        "expected output and source citations. Return the full corrected concept packet. "
+                        "Every explanation needs at least 300 substantive words; example explanations need explained reasoning. "
+                        "\nFIELDS: " + json.dumps([{"path": list(e["loc"]), "type": e["type"]} for e in errors])
+                        + "\nPACKET: " + json.dumps(raw) + evidence), ConceptPacket.model_json_schema())
         if packet.concept.title != title or packet.example.subtopic != title:
             raise ValueError("Concept example must match its syllabus title")
         draft["concepts"].append(packet.model_dump())
