@@ -81,11 +81,18 @@ def create(body: LearningRequest, background_tasks: BackgroundTasks,
     # A user-row lock serializes duplicate admission and concurrent tabs for this owner.
     db.query(User).filter_by(id=user.id).with_for_update().one()
     existing = db.query(LearningNotebook).filter_by(user_id=user.id, request_id=body.request_id).first()
+    def current_standard(request):
+        return request.model_copy(update={"standard_version": 2, "authoring_version": 2,
+                                          "chapters": None, "level": "beginner", "goals": ""})
     if existing:
-        previous = LearningRequest.model_validate_json(existing.input_json).model_dump(exclude={"authoring_version"})
-        if previous != body.model_dump(exclude={"authoring_version"}):
+        previous = LearningRequest.model_validate_json(existing.input_json)
+        incoming = current_standard(body) if previous.standard_version >= 2 else body
+        if previous.model_dump(exclude={"authoring_version"}) != incoming.model_dump(exclude={"authoring_version"}):
             raise HTTPException(409, "This request identifier belongs to different learning preferences")
         return serialize(existing, detail=True)
+    # Standards are server policy, never a caller-controlled quality downgrade.
+    # Previously saved v1 notebooks above keep their exact idempotency contract.
+    body = current_standard(body)
     if not generation_available(db):
         raise HTTPException(503, "Learning Hub research is temporarily unavailable. Please try again later.")
     if db.query(LearningNotebook).filter(LearningNotebook.user_id == user.id,

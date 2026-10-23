@@ -44,6 +44,16 @@ def test_new_requests_have_no_depth_but_saved_requests_keep_their_contract():
     assert old.standard_version == 1 and old.chapters == 8
 
 
+def test_client_cannot_downgrade_new_notebook_or_choose_a_depth(hub):
+    payload = {"topic": "SQL", "standard_version": 1, "chapters": 8,
+               "level": "advanced", "goals": "Condense it", "request_id": "server-standard-policy-001"}
+    response = hub.client.post('/learning-hub', json=payload)
+    assert response.status_code == 202
+    book = response.json()
+    assert book['input']['standard_version'] == 2 and book['input']['chapters'] is None
+    assert hub.client.post('/learning-hub', json=payload).json()['id'] == book['id']
+
+
 def test_v2_checks_and_pdf_must_finish_before_publication(hub, monkeypatch):
     book = hub.client.post("/learning-hub", json={"topic": "PostgreSQL predicates", "standard_version": 2,
         "request_id": "standard-worker-request-001"}).json()
