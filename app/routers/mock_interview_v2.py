@@ -2543,15 +2543,11 @@ def saved_interview_result(
         email_status = delivery_status(db, interview.id)
     if result is not None:
         result["report_email"] = {"eligible": email_eligible, "status": email_status}
-    return {"interview_id": interview.id,
-            "status": "complete" if complete else "pending" if queued or recording and recording.submission_json else "awaiting_submission",
+    from app.assessment_status import result_status
+    saved = result_status(interview, queued, submitted=bool(queued or recording and recording.submission_json))
+    return {"interview_id": interview.id, **saved,
             "queued": bool(queued), "queue_status": queued.state if queued else None,
-            "retry_after_seconds": None if stopped else 10, "expected_within_hours": 24 if not complete and not stopped else None,
-            "status_message": (
-                "Your answers are saved, but analysis stopped after repeated failures. Retry analysis or contact your institution with the assessment reference."
-                if stopped else "Your report is expected within 24 hours. You can leave this page and return from exam history."
-                if not complete else "Your complete report is ready."
-            ),
+            "retry_after_seconds": 10 if not complete and not stopped and saved["status"] != "awaiting_submission" else None,
             "error_code": queued.error_code if queued else None,
             "report_email": {"eligible": email_eligible, "status": email_status},
             "spoken_progress": spoken_progress,

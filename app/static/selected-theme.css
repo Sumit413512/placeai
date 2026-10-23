@@ -1211,3 +1211,10 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 #marketing-site .placeai-footer-bottom { border-top: 1px solid #8c7b8b; }
 #marketing-site :is(.placeai-footer, .site-footer) a:focus-visible { outline: 2px solid #faf6f1 !important; outline-offset: 4px; }
 #marketing-site :is(.placeai-footer, .site-footer) a:hover { text-decoration: underline; text-underline-offset: 4px; }
+
+/* Activity actions retain a readable target on narrow screens. */
+#app-shell .activity-item > .row-actions .row-button { min-width: 72px; flex-shrink: 0; white-space: nowrap; overflow-wrap: normal; }
+@media (max-width: 640px) {
+  #app-shell .activity-item:has(> .row-actions) { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: start; }
+  #app-shell .activity-item > .row-actions { grid-column: 2; justify-content: flex-start; min-width: 0; width: 100%; }
+}

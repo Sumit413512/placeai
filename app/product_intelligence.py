@@ -572,24 +572,15 @@ def student_next_actions(student: StudentProfile, db: Session) -> list[dict]:
     """Return prioritized student actions without exposing unauthorized campus opportunities."""
     now = utcnow()
     actions: list[dict] = []
-    missing = [
-        label
-        for label, value in (
-            ("full name", student.full_name),
-            ("branch", student.branch),
-            ("graduation year", student.graduation_year),
-            ("CGPA", student.cgpa),
-            ("phone", student.phone),
-        )
-        if value in (None, "")
-    ]
+    from app.profile_completeness import profile_completion
+    missing = [field for field in profile_completion(student)["missing"] if field != "resume"]
     if missing:
         actions.append({
             "key": "profile",
             "type": "profile_incomplete",
             "priority": "high",
             "title": "Complete your placement profile",
-            "description": f"Add {', '.join(missing)} so eligibility checks use complete information.",
+            "description": f"Add {', '.join(missing)} so your placement profile uses complete information.",
             "view": "profile",
             "due_at": None,
         })

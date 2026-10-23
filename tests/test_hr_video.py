@@ -111,7 +111,7 @@ def test_pending_history_is_recoverable_without_releasing_scores(exam):
     exam.db.commit()
     history = mock_interview.mock_interview_history(exam.user, exam.db)
     assert history[0]["id"] == exam.interview.id
-    assert history[0]["analysis_status"] == "pending"
+    assert history[0]["analysis_status"] == "delayed"
     assert history[0]["overall_score"] is None
     assert history[0]["dimensions"] == {}
     assert exams.saved_interview_result(exam.interview.id, exam.user, exam.db)["result"] is None

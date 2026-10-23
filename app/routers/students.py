@@ -52,8 +52,8 @@ def dashboard(current_user: User = Depends(require_student), db: Session = Depen
     avg_interview = None
     if scores:
         avg_interview = round(sum(scores) / len(scores), 1)
-    completion_fields = [profile.full_name, profile.college, profile.degree, profile.branch, profile.graduation_year, profile.cgpa, profile.skills, profile.resume]
-    completion = round(sum(bool(x) for x in completion_fields) / len(completion_fields) * 100)
+    from app.profile_completeness import profile_completion
+    completion = profile_completion(profile)["percent"]
     return {
         "profile_completion": completion,
         "applications": len(applications),

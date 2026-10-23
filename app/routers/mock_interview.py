@@ -338,8 +338,12 @@ def mock_interview_history(
         MockInterview.student_id == profile.id,
         or_(*submitted),
     ).order_by(MockInterview.created_at.desc()).limit(50).all()
+    from app.assessment_status import result_status
+    jobs = ({job.interview_id: job for job in db.query(AssessmentJob).filter(AssessmentJob.interview_id.in_([row.id for row in rows])).all()}
+            if get_settings().assessment_queue_enabled else {})
     result = []
     for row in rows:
+        saved = result_status(row, jobs.get(row.id))
         evaluation = {}
         try:
             evaluation = json.loads(row.evaluation_json or "{}")
@@ -347,13 +351,14 @@ def mock_interview_history(
             evaluation = {}
         result.append({
             "id": row.id,
-            "analysis_status": "complete" if row.overall_score is not None else "pending",
+            "analysis_status": saved["status"],
+            **saved,
             "job_id": row.job_id,
             "job_title": row.job.title if row.job else "Role",
             "company_name": row.job.recruiter.company_name if row.job and row.job.recruiter else None,
             "overall_score": row.overall_score,
             "dimensions": evaluation.get("dimensions", {}) if row.overall_score is not None and isinstance(evaluation, dict) else {},
-            "overall_feedback": row.overall_feedback if row.overall_score is not None else "Your exam is saved. Your complete report is expected within 24 hours.",
+            "overall_feedback": row.overall_feedback if row.overall_score is not None else saved["status_message"],
             "created_at": row.created_at.isoformat() if row.created_at else None,
         })
     return result

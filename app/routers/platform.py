@@ -4,7 +4,7 @@ import re
 from datetime import timedelta
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
@@ -555,3 +555,25 @@ def platform_engagement(
             "Historical visitors from before that release cannot be reconstructed."
         ),
     }
+
+
+@router.get("/processing-recovery")
+def processing_recovery_status(current_user: User = Depends(require_platform_admin), db: Session = Depends(get_db)):
+    from app.processing_recovery import overview
+    return overview(db)
+
+
+@router.post("/processing-recovery/{kind}/{identifier}/retry")
+def retry_processing(kind: str, identifier: str, request: Request, tasks: BackgroundTasks,
+                     current_user: User = Depends(require_platform_admin), db: Session = Depends(get_db)):
+    if kind not in {"courses", "notes", "assessments"}:
+        raise HTTPException(404, "Recovery category not found")
+    if not current_user.last_login_at or current_user.last_login_at < utcnow_naive()-timedelta(minutes=15):
+        raise HTTPException(403, "Sign out and sign in again before requesting a processing repair.")
+    from app.rate_limit import enforce_rate_limit
+    enforce_rate_limit(db, request, scope="processing-recovery", limit=12, window_seconds=3600, block_seconds=600)
+    from app.processing_recovery import recover
+    from app.routers.learning_hub import wake_worker
+    result = recover(db, current_user, kind, identifier)
+    tasks.add_task(wake_worker)
+    return result

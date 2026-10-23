@@ -26,7 +26,7 @@
     const isCurrent = (id, version) => active() && current === id && playerEpoch === version;
     const failedCourse = data => data.status === 'failed' || data.lessons.some(item => item.status === 'failed');
     const libraryLabel = data => structure(data).course_ready ? 'Ready to begin' :
-      data.preparation_status === 'queued' ? 'Queued' : data.preparation_status === 'waiting_capacity' ? 'Waiting to retry' : 'Processing';
+      data.preparation_status === 'review_required' ? 'Quality recheck needed' : data.preparation_status === 'queued' ? 'Queued' : data.preparation_status === 'waiting_capacity' ? 'Waiting to retry' : 'Processing';
     const badge = data => `<small class="learning-status" data-state="${structure(data).course_ready ? 'ready' : 'processing'}">${libraryLabel(data)}</small>`;
     const courseCard = item => {
       const data = structure(item);
@@ -85,7 +85,7 @@
       }
     }
     function showCourse(data) {
-      if (failedCourse(data)) { stopPlayer(); clearTimeout(poll); current = null; course = null; studying = false; panel.querySelector('[data-video-discovery]').hidden = false; panel.querySelector('[data-video-workspace]').hidden = true; status(''); library().catch(() => {}); return; }
+      if (failedCourse(data)) { status(data.preparation_notice || 'This course needs a preparation repair. Your request and saved progress are preserved. Contact PlaceAI support.'); stopPlayer(); clearTimeout(poll); current = null; course = null; studying = false; panel.querySelector('[data-video-discovery]').hidden = false; panel.querySelector('[data-video-workspace]').hidden = true; library().catch(() => {}); return; }
       course = structure(data);
       panel.querySelector('[data-video-discovery]').hidden = true;
       panel.querySelector('[data-video-workspace]').hidden = false;
