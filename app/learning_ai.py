@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 import httpx
@@ -44,7 +45,8 @@ def clean_sources(sources):
         if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or url in seen:
             continue
         seen.add(url)
-        output.append({"url": url, "title": str(source.get("title") or parsed.hostname)[:240]})
+        output.append({"url": url, "title": str(source.get("title") or parsed.hostname)[:240],
+                       "researched_at": datetime.now(timezone.utc).isoformat()})
     return output[:20]
 
 

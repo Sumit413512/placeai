@@ -4,6 +4,7 @@ from __future__ import annotations
 import ipaddress
 import re
 import socket
+from datetime import datetime, timezone
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 
@@ -85,7 +86,8 @@ def fetch_document(url):
                 parser.feed(b"".join(chunks).decode("utf-8", errors="replace"))
                 text = "\n".join(" ".join(line.split()) for line in "".join(parser.parts).splitlines() if line.strip())
                 if len(text) < 500: raise ValueError("Reference has insufficient readable evidence")
-                return {"url": url, "title": " ".join(parser.title_parts).strip()[:240] or urlsplit(url).hostname}, text[:14000]
+                return {"url": url, "title": " ".join(parser.title_parts).strip()[:240] or urlsplit(url).hostname,
+                        "researched_at": datetime.now(timezone.utc).isoformat()}, text[:14000]
     raise ValueError("Reference has too many redirects")
 
 
