@@ -31,6 +31,27 @@ def safe_error_status(error):
     return status if isinstance(status, int) and 100 <= status <= 599 else None
 
 
+def provider_schema(schema):
+    """A compact transport contract; full constraints remain in prompt/validators."""
+    if isinstance(schema, list):
+        return [provider_schema(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+    decorations = {'title', 'description', 'default', 'minLength', 'maxLength', 'pattern',
+                   'minimum', 'maximum', 'minItems', 'maxItems', 'format'}
+    result = {}
+    for key, value in schema.items():
+        if key in decorations:
+            continue
+        if key in {'properties', '$defs', 'definitions'}:
+            result[key] = {name: provider_schema(child) for name, child in value.items()}
+        elif key in {'enum', 'const', 'required'}:
+            result[key] = value
+        else:
+            result[key] = provider_schema(value)
+    return result
+
+
 def configured() -> bool:
     return bool(ai_provider._openai_keys() or (ai_provider._gemini_key() and ai_provider.genai))
 
@@ -120,10 +141,20 @@ def generate_json(task: str, schema: dict, *, max_output_tokens: int = 8000) -> 
             model = os.getenv("LEARNING_GEMINI_MODEL") or get_settings().gemini_model
             client = ai_provider.genai.Client(api_key=ai_provider._gemini_key(),
                                               http_options={"timeout": 55000, "retry_options": {"attempts": 1}})
-            response = client.models.generate_content(model=model, contents=prompt,
-                config=types.GenerateContentConfig(response_mime_type="application/json",
-                                                    response_json_schema=schema,
-                                                    max_output_tokens=max_output_tokens))
+            try:
+                response = client.models.generate_content(model=model, contents=prompt,
+                    config=types.GenerateContentConfig(response_mime_type="application/json",
+                                                        response_json_schema=provider_schema(schema),
+                                                        max_output_tokens=max_output_tokens))
+            except Exception as error:
+                if safe_error_status(error) != 400:
+                    raise
+                # Some models reject complex schema grammars. This changes only
+                # transport formatting, never Pydantic/content/publication checks.
+                LOGGER.warning("Learning schema transport retry provider=gemini status=400")
+                response = client.models.generate_content(model=model, contents=prompt,
+                    config=types.GenerateContentConfig(response_mime_type="application/json",
+                                                        max_output_tokens=max_output_tokens))
             candidates = getattr(response, "candidates", None) or []
             reason = getattr(candidates[0], "finish_reason", None) if candidates else None
             reason = getattr(reason, "name", str(reason or ""))
