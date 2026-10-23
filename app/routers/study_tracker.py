@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import date, timedelta
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -20,6 +20,7 @@ class Input(BaseModel):
 
 
 class PlanInput(Input):
+    request_id: UUID = Field(default_factory=uuid4)
     title: str = Field(min_length=3,max_length=180)
     roadmap_id: str | None = Field(default=None,max_length=100)
     daily_minutes: int = Field(default=45,ge=5,le=480)
@@ -99,12 +100,18 @@ def resources(user:User=Depends(require_student),db:Session=Depends(get_db)):
 @router.post('/plans',status_code=201)
 def create_plan(body:PlanInput,user:User=Depends(require_student),db:Session=Depends(get_db)):
     service.lock_owner(db,user)
+    existing_request=db.query(StudyPlan).filter_by(user_id=user.id,request_id=str(body.request_id)).first()
+    if existing_request:
+        if any(getattr(existing_request,k)!=getattr(body,k) for k in ('title','roadmap_id','daily_minutes','target_date')):
+            raise HTTPException(409,'This request identifier already belongs to another study plan')
+        return service.plan_data(db,existing_request,user,service.mock_records(db,user))
     if db.query(StudyPlan).filter_by(user_id=user.id).count()>=20:raise HTTPException(409,'You can keep up to 20 study plans')
     if body.target_date and body.target_date<service.local_day(utcnow(),body.timezone):raise HTTPException(422,'Choose today or a future target date')
     if body.roadmap_id:service.owned_roadmap(db,body.roadmap_id,user)
     # One calendar convention per student avoids splitting the same activity across days.
     existing=db.query(StudyPlan).filter_by(user_id=user.id).order_by(StudyPlan.created_at).first()
     data=body.model_dump()
+    data['request_id']=str(body.request_id)
     if existing:data['timezone']=existing.timezone
     row=StudyPlan(user_id=user.id,**data);db.add(row);db.commit()
     return service.plan_data(db,row,user,service.mock_records(db,user))
@@ -183,6 +190,7 @@ def save_reading(identifier:str,body:ReadingInput,user:User=Depends(require_stud
     if body.source=='web':daily.notes_seconds+=int(min(body.active_seconds,elapsed,60))
     daily.last_pulse_at=now
     selected=keys[:keys.index(body.section_key)+1] if body.through else [body.section_key]
+    book.last_read_section=body.section_key
     for key in selected:
         item=db.get(NotebookProgress,(identifier,key))
         if item is None:

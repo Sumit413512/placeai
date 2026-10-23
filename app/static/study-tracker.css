@@ -42,3 +42,7 @@
 @media(max-width:900px) { .study-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }.study-next { grid-template-columns:1fr; }.notes-reader-layout { grid-template-columns:180px minmax(0,1fr); }.notes-focus-content { padding:24px; } }
 @media(max-width:600px) { .study-welcome { padding:22px; }.study-illustration { width:100px; height:90px; }.study-welcome h2 { font-size:23px !important; }.study-metrics { gap:10px; }.study-metrics article { padding:16px; }.study-metrics strong { font-size:25px; }.study-goal,.study-form-grid { grid-template-columns:1fr; }.study-goal-actions { align-items:flex-start; }.study-days { grid-template-columns:repeat(7,minmax(0,1fr)); }.notes-reader-layout { grid-template-columns:1fr; }.notes-reader-layout>nav { max-height:180px; border-right:0; border-bottom:1px solid #ded8e4; }.notes-focus-content { max-height:75vh; padding:20px 16px; }.notes-focus-top>span { order:3; width:100%; }.learning-library-row { align-items:stretch; flex-direction:column; }.learning-library-row .notes-delete-button { align-self:flex-end; }.notes-reader-toolbar { align-items:flex-start; flex-direction:column; } }
 @media(prefers-reduced-motion:reduce) { .study-book { animation:none; } }
+
+#study-tracker .sr-only { position:absolute !important; width:1px !important; height:1px !important; padding:0 !important; margin:-1px !important; overflow:hidden !important; clip:rect(0,0,0,0) !important; white-space:nowrap !important; border:0 !important; }
+
+.notes-focus-reader { scroll-margin-top:88px; }

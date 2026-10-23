@@ -6,10 +6,12 @@ from app.models import generate_uuid, utcnow
 
 class StudyPlan(Base):
     __tablename__ = 'study_plans'
-    __table_args__ = (Index('ix_study_plan_owner', 'user_id', 'created_at'),)
+    __table_args__ = (Index('ix_study_plan_owner', 'user_id', 'created_at'),
+                     UniqueConstraint('user_id','request_id',name='uq_study_plan_request'))
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     title = Column(String(180), nullable=False)
+    request_id = Column(String(36), nullable=False, default=generate_uuid)
     # Provenance only: deleting a source roadmap must not erase a student's plan.
     roadmap_id = Column(String)
     daily_minutes = Column(Integer, nullable=False, default=45)

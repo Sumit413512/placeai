@@ -145,7 +145,7 @@
       try {
         await context.api(`/learning-hub/${encodeURIComponent(identifier)}`, {method:'DELETE'});
         close(); epoch += 1; clearTimeout(timer); clearTimeout(libraryTimer);
-        if (selected === identifier) { selected = null; document.querySelector('#learning-notebook-result')?.replaceChildren(); }
+        if (selected === identifier) { selected = null; const result = document.querySelector('#learning-notebook-result'); if (result) { result.replaceChildren(); delete result.dataset.learningSignature; } }
         if (root()) { await refreshLibrary(epoch); document.querySelector('#learning-refresh-status').textContent = 'Notebook deleted. You can restore it from Deleted notes.'; }
       } catch (error) { dialog.querySelector('[role="alert"]').textContent = error.message; event.target.disabled = false; }
     };

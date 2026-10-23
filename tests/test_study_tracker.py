@@ -46,6 +46,7 @@ def test_notes_visit_does_not_award_completion_pdf_marks_are_idempotent_and_undo
     mark={'section_key':'1.2','event_id':str(uuid4()),'source':'offline','through':True,'completed':True}
     assert tracker.client.put(path,json=mark).json()['percent']==66
     assert tracker.client.put(path,json=mark).json()['completed']==2
+    assert tracker.client.get(path).json()['last_section']=='1.2'
     daily=tracker.db.query(StudyDaily).one();tracker.db.refresh(daily);assert daily.sections_completed==2 and daily.notes_seconds==0
     summary=tracker.client.get('/study-tracker').json()
     assert summary['plans'][0]['goals'][0]['completed']==2 and summary['plans'][0]['percent']==66
@@ -95,3 +96,31 @@ def test_video_goals_follow_the_viewers_private_completion_and_quiz(video):
     assert video.api.get('/study-tracker').json()['plans'][0]['goals'][0]['completed']==1
     video.actor[0]=video.other
     assert video.api.post(endpoint,json={'kind':'video','resource_id':identifier}).status_code==404
+    enrolled=video.api.post('/learning-hub/video',json={'topic':'SQL','request_id':'other-viewer-request-001'})
+    assert enrolled.status_code==202 and enrolled.json()['id']==identifier
+    other=video.api.post('/study-tracker/plans',json={'title':'My separate progress'}).json()
+    own_goal=video.api.post('/study-tracker/plans/'+other['id']+'/goals',json={'kind':'video','resource_id':identifier})
+    assert own_goal.status_code==201 and own_goal.json()['completed']==0
+
+
+def test_plan_idempotency_and_roadmap_outcomes_are_owner_checked(tracker):
+    from app.roadmap_models import CareerRoadmap
+    profile=StudentProfile(user_id=tracker.owner.id);tracker.db.add(profile);tracker.db.flush()
+    road=CareerRoadmap(student_id=profile.id,title='Data engineering',roadmap_json=json.dumps({'phases':[{'name':'Foundations','outcomes':['Explain SQL joins']}]}));tracker.db.add(road);tracker.db.commit()
+    body={'title':'Roadmap study','roadmap_id':road.id,'request_id':str(uuid4())}
+    first=tracker.client.post('/study-tracker/plans',json=body);assert first.status_code==201
+    again=tracker.client.post('/study-tracker/plans',json=body);assert again.json()['id']==first.json()['id']
+    assert tracker.client.post('/study-tracker/plans',json={**body,'title':'Changed request'}).status_code==409
+    goal=tracker.client.post('/study-tracker/plans/'+first.json()['id']+'/goals',json={'kind':'milestone','resource_id':'0:0','title':'Invented outcome'})
+    assert goal.status_code==201 and goal.json()['title']=='Explain SQL joins'
+    assert tracker.client.patch('/study-tracker/goals/'+goal.json()['id'],json={'completed':1}).json()['percent']==100
+    tracker.actor[0]=tracker.other
+    assert tracker.client.post('/study-tracker/plans',json={'title':'Steal roadmap','roadmap_id':road.id}).status_code==404
+    assert tracker.client.get('/study-tracker/resources').json()['roadmaps']==[]
+
+
+def test_other_roles_cannot_open_student_tracking(tracker):
+    from types import SimpleNamespace
+    row=book(tracker);tracker.actor[0]=SimpleNamespace(role='recruiter')
+    for path in ['/study-tracker','/study-tracker/resources','/study-tracker/notes/'+row.id]:
+        assert tracker.client.get(path).status_code==403

@@ -50,7 +50,7 @@ def reading_data(db, book):
     completed = sum(bool(by_key.get(s['key']) and by_key[s['key']].completed) for s in outline)
     return {'notebook_id': book.id, 'sections': [{**s, 'completed': bool(by_key.get(s['key']) and by_key[s['key']].completed)} for s in outline],
             'completed': completed, 'total': total, 'percent': int(100*completed/total) if total else 0,
-            'last_section': last.section_key if last else None,
+            'last_section': book.last_read_section if book.last_read_section in by_key else last.section_key if last else None,
             'basis': 'Sections you mark complete. Last-read position is saved separately.'}
 
 
@@ -109,7 +109,8 @@ def goal_data(db, goal, user, mocks):
         from app.routers.learning_video import owner_course, course_data
         try:
             course = owner_course(db, goal.resource_id, user); data = course_data(db, course, user)
-            done, total = data['completed_parts'], len(data['lessons']) or goal.target
+            done, total = data['completed_parts'] if data['course_ready'] else 0, len(data['lessons']) or goal.target
+            unavailable = not data['course_ready']
             minutes = max(3, round(sum(x['duration_seconds'] for x in data['lessons']) / max(total,1) / 60) + 2)
             resume = {'view':'learning-hub','course':course.id}
         except HTTPException: unavailable = True; done = 0
@@ -126,10 +127,22 @@ def plan_data(db, plan, user, mocks):
     remaining = sum(g['remaining_minutes'] for g in goals)
     days = math.ceil(remaining/plan.daily_minutes)
     today = local_day(utcnow(), plan.timezone)
+    budget=plan.daily_minutes
+    steps=[]
+    for goal in goals:
+        left=goal['target']-goal['completed']
+        if plan.paused or not left or goal['unavailable'] or (budget<=0 and steps):continue
+        per_unit=max(1,goal['remaining_minutes']//left)
+        if budget<per_unit and steps:break
+        units=min(left,max(1,budget//per_unit))
+        steps.append({'goal_id':goal['id'],'units':units,'minutes':units*per_unit})
+        budget-=units*per_unit
+    required=math.ceil(remaining/max(1,(plan.target_date-today).days+1)) if plan.target_date else None
     return {'id':plan.id,'title':plan.title,'roadmap_id':plan.roadmap_id,'daily_minutes':plan.daily_minutes,
             'target_date':str(plan.target_date) if plan.target_date else None,'timezone':plan.timezone,'paused':plan.paused,
             'goals':goals,'percent':int(sum(g['percent'] for g in goals)/len(goals)) if goals else 0,
             'estimated_days_remaining':days,'estimated_finish':str(today+timedelta(days=days)),
+            'today_steps':steps,'required_daily_minutes':required,
             'pace_notice':'Estimate based on remaining sections, lessons and practice goals; adjust to your pace.',
             'progress_basis':'Average completion across your goals. Reading is self-reported; videos include quizzes.'}
 
@@ -142,7 +155,9 @@ def resource_catalog(db, user):
         and_(VideoCourse.shared_key.is_not(None), db.query(VideoEnrollment).filter(
             VideoEnrollment.user_id == user.id, VideoEnrollment.course_id == VideoCourse.id).exists()))).order_by(VideoCourse.created_at.desc()).limit(30).all()
     roads = db.query(CareerRoadmap).join(StudentProfile).filter(StudentProfile.user_id == user.id).order_by(CareerRoadmap.created_at.desc()).limit(10).all()
+    from app.routers.learning_video import course_data
+    ready_courses=[c for c in courses if course_data(db,c,user)['course_ready']]
     return {'notes':[{'id':b.id,'title':b.title,'sections':len(sections(b))} for b in books if serialize(b)['ready_to_begin']],
-            'videos':[{'id':c.id,'title':c.title} for c in courses],
+            'videos':[{'id':c.id,'title':c.title} for c in ready_courses],
             'roadmaps':[{'id':r.id,'title':r.title,'estimated_days':r.roadmap.get('estimated_days'),
                          'weekly_hours':r.roadmap.get('weekly_hours'),'milestones':roadmap_milestones(r)} for r in roads]}
