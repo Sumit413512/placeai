@@ -75,3 +75,19 @@ def test_student_cannot_open_admin_recovery(hub):
     with TestClient(app) as client:
         assert client.get('/platform/processing-recovery').status_code == 403
         assert client.post('/platform/processing-recovery/courses/test/retry').status_code == 403
+
+
+@pytest.mark.parametrize('prior_kind', ['courses', 'notes', 'assessments'])
+def test_video_part_allowance_counts_only_video_recovery(hub, prior_kind):
+    course = VideoCourse(user_id=hub.owner.id, request_id='budget-scope-test', title='SQL', state='ready',
+                        input_json='{}', plan_json='{"lessons":[{"title":"One"}]}')
+    hub.db.add(course); hub.db.flush()
+    hub.db.add(VideoLesson(course_id=course.id, position=0, title='One', state='failed'))
+    hub.db.add(AuditEvent(action='processing.recovery', entity_type=prior_kind, entity_id='other-recovery',
+                         metadata_json='{"requeued_parts":40}'))
+    hub.db.commit()
+    if prior_kind == 'courses':
+        with pytest.raises(HTTPException) as error: recover(hub.db, hub.owner, 'courses', course.id)
+        assert error.value.status_code == 409
+    else:
+        assert recover(hub.db, hub.owner, 'courses', course.id)['requeued_parts'] == 1
