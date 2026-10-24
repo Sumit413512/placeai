@@ -343,12 +343,11 @@ def placement_readiness(student: StudentProfile, db: Session) -> dict:
     """Evidence-backed readiness, not a prediction of hiring success."""
     from app.profile_completeness import profile_completion
     profile_score = profile_completion(student)["percent"]
-    resume_score = 0
-    if student.resume:
-        resume_score = 65 + (20 if student.resume.is_parsed else 0) + (15 if student.ai_summary else 0)
+    from app.resume_evidence import saved_review, alignment
+    review = saved_review(student)
+    resume_score = int(review.get("resume_score", 0)) if review else 0
     skills_score = min(100, len(student.skills) * 12 + len(student.certifications) * 7)
-    desired = _norm_set(student.desired_roles)
-    role_alignment = min(100, 40 + len(desired) * 15) if desired else 35
+    role_alignment = alignment(student)["score"] or 0
     # Real interview evidence is intentionally separated from AI mock-interview evidence.
     completed_interviews = len([m for m in student.mock_interviews if m.overall_score is not None])
     interview_readiness = min(100, 45 + completed_interviews * 15)
@@ -358,10 +357,7 @@ def placement_readiness(student: StudentProfile, db: Session) -> dict:
     if student.academic_gap_months: academic -= min(20, student.academic_gap_months // 6 * 5)
     academic = max(0, academic)
     parsed = student.resume.ai_parsed_data if student.resume else None
-    project_evidence = 55
-    if parsed and isinstance(parsed, dict):
-        exp = parsed.get("experience") or []
-        project_evidence = min(100, 55 + len(exp) * 10)
+    project_evidence = min(100, len(review.get("project_examples", [])) * 20) if review else 0
     components = {
         "Profile completeness": profile_score,
         "Resume strength": resume_score,

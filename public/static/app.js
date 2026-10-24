@@ -31,8 +31,8 @@
     '/static/ai-readiness.js',
     '/static/workspace-experience.js?v=20261016-interface-guidelines',
     '/static/legal-links.js',
-    '/static/career-roadmap.js?v=20261024-study1',
-    '/static/app-core.js?v=20261024-study1'
+    '/static/career-roadmap.js?v=20261024-evidence1',
+    '/static/app-core.js?v=20261024-evidence1'
   ];
 
   const loadNext = (index) => {

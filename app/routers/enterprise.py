@@ -14,6 +14,7 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app import document_vault
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_current_user, require_institution_admin, require_recruiter, require_student
@@ -810,13 +811,108 @@ def list_documents(current_user: User = Depends(get_current_user), student_id: s
         if not s: raise HTTPException(status_code=404, detail="Student not found")
     else:
         raise HTTPException(status_code=403, detail="Document vault is limited to students and institution teams")
-    rows = db.query(StudentDocument).filter(StudentDocument.student_id == s.id).order_by(StudentDocument.uploaded_at.desc()).all()
-    return [{"id": d.id, "document_type": d.document_type, "filename": d.original_filename, "visibility": d.visibility, "is_verified": d.is_verified, "uploaded_at": d.uploaded_at.isoformat() if d.uploaded_at else None} for d in rows]
+    query = db.query(StudentDocument).filter(StudentDocument.student_id == s.id)
+    if current_user.role == UserRole.institution_admin:
+        query = query.filter(StudentDocument.shared_organization_id == current_user.organization_id, StudentDocument.shared_at.is_not(None))
+    rows = query.order_by(StudentDocument.semester, StudentDocument.uploaded_at.desc()).all()
+    return [document_vault.out(d, db) for d in rows]
+
+
+@router.get('/documents/institution')
+def institution_document_directory(semester: int | None = Query(None, ge=1, le=20), course: str | None = Query(None, max_length=120),
+        offset: int = Query(0, ge=0), limit: int = Query(30, ge=1, le=50),
+        current_user: User = Depends(require_institution_admin), db: Session = Depends(get_db)):
+    if current_user.role != UserRole.institution_admin or not current_user.organization_id:
+        raise HTTPException(403, 'Institution membership required')
+    query = db.query(StudentProfile).filter(StudentProfile.organization_id == current_user.organization_id)
+    if semester is not None:
+        query = query.filter(StudentProfile.current_semester == semester)
+    if course:
+        query = query.filter(StudentProfile.degree == course)
+    total = query.count()
+    students = query.order_by(StudentProfile.current_semester, StudentProfile.full_name, StudentProfile.id).offset(offset).limit(limit).all()
+    ids = [s.id for s in students]
+    docs = db.query(StudentDocument).filter(StudentDocument.student_id.in_(ids), StudentDocument.shared_organization_id == current_user.organization_id,
+        StudentDocument.shared_at.is_not(None)).order_by(StudentDocument.semester, StudentDocument.uploaded_at.desc()).all() if ids else []
+    grouped = {}
+    for doc in docs:
+        grouped.setdefault(doc.student_id, []).append(document_vault.out(doc, db))
+    return {'total': total, 'offset': offset, 'limit': limit, 'students': [
+        {'id': s.id, 'name': s.full_name or 'Student', 'course': s.degree, 'branch': s.branch,
+         'semester': s.current_semester, 'enrollment_number': s.enrollment_number, 'academic_year': s.academic_year,
+         'documents': grouped.get(s.id, [])} for s in students]}
+
+
+@router.get('/documents/context')
+def document_context(current_user: User = Depends(require_student), db: Session = Depends(get_db)):
+    s = _student(current_user, db)
+    org = db.get(Organization, s.organization_id) if s.organization_id else None
+    return {'organization_id': org.id if org else None, 'organization_name': org.name if org else None,
+            'semester': s.current_semester, 'course': s.degree}
+
+
+@router.post('/documents/{document_id}/submit')
+def submit_document(document_id: str, data: document_vault.DocumentSubmission,
+        current_user: User = Depends(require_student), db: Session = Depends(get_db)):
+    s = _student(current_user, db)
+    d = db.query(StudentDocument).filter(StudentDocument.id == document_id, StudentDocument.student_id == s.id).with_for_update().first()
+    if not d:
+        raise HTTPException(404, 'Document not found')
+    if not data.consent:
+        raise HTTPException(422, 'Explicit consent is required to submit this document.')
+    if not s.organization_id or s.organization_id != data.organization_id:
+        raise HTTPException(403, 'Submit only to your linked institution. Contact support if your membership is incorrect.')
+    if not s.degree or not s.current_semester:
+        raise HTTPException(409, 'Set your course and current semester in Profile before submitting.')
+    if d.document_type == 'marksheet' and not d.semester:
+        raise HTTPException(409, 'Add the marksheet semester before submitting. Upload it again with the correct semester.')
+    d.shared_organization_id = s.organization_id
+    d.shared_at = utcnow()
+    d.visibility = 'institution_only'
+    record_audit(db, current_user, 'document.submitted', organization_id=s.organization_id, entity_type='student_document', entity_id=d.id)
+    db.commit()
+    return document_vault.out(d, db)
+
+
+@router.patch('/documents/{document_id}/metadata')
+def update_document_metadata(document_id: str, data: document_vault.DocumentMetadata,
+        current_user: User = Depends(require_student), db: Session = Depends(get_db)):
+    s = _student(current_user, db)
+    d = db.query(StudentDocument).filter(StudentDocument.id == document_id, StudentDocument.student_id == s.id).with_for_update().first()
+    if not d:
+        raise HTTPException(404, 'Document not found')
+    if d.shared_at:
+        raise HTTPException(409, 'Withdraw the submission before changing its semester or label.')
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(d, key, value.strip() or None if isinstance(value, str) else value)
+    d.is_verified = False
+    db.commit()
+    return document_vault.out(d, db)
+
+
+@router.delete('/documents/{document_id}/submission')
+def revoke_document_submission(document_id: str, current_user: User = Depends(require_student), db: Session = Depends(get_db)):
+    s = _student(current_user, db)
+    d = db.query(StudentDocument).filter(StudentDocument.id == document_id, StudentDocument.student_id == s.id).with_for_update().first()
+    if not d:
+        raise HTTPException(404, 'Document not found')
+    org_id = d.shared_organization_id
+    d.shared_organization_id = None
+    d.shared_at = None
+    d.visibility = 'private'
+    record_audit(db, current_user, 'document.submission_revoked', organization_id=org_id, entity_type='student_document', entity_id=d.id)
+    db.commit()
+    return {'revoked': True}
+
 
 
 @router.post("/documents", status_code=status.HTTP_201_CREATED)
-async def upload_document(document_type: str, visibility: str = "institution_only", file: UploadFile = File(...), current_user: User = Depends(require_student_premium_access), db: Session = Depends(get_db)):
+async def upload_document(document_type: str, visibility: str = "private", semester: int | None = Query(None, ge=1, le=20), label: str | None = Query(None, max_length=160), file: UploadFile = File(...), current_user: User = Depends(require_student_premium_access), db: Session = Depends(get_db)):
     s = _student(current_user, db)
+    document_vault.validate_type(document_type)
+    if visibility not in {'private', 'institution_only', 'recruiter_with_permission'}:
+        raise HTTPException(422, 'Invalid visibility')
+    # Legacy visibility parameters do not establish new sharing consent.
     raw = await file.read(10 * 1024 * 1024 + 1)
     if len(raw) > 10 * 1024 * 1024: raise HTTPException(status_code=413, detail="Document must be 10 MB or smaller")
     safe_ext = Path(file.filename or "document").suffix.lower()
@@ -827,7 +923,7 @@ async def upload_document(document_type: str, visibility: str = "institution_onl
     reference = save_file(
         db, category="student-document", original_filename=original_name, mime_type=mime_type, data=raw, local_path=path
     )
-    d = StudentDocument(student_id=s.id, document_type=document_type, original_filename=original_name, filepath=reference, visibility=visibility)
+    d = StudentDocument(student_id=s.id, document_type=document_type, original_filename=original_name, filepath=reference, visibility="private", semester=semester, label=(label or "").strip() or None)
     db.add(d); db.commit(); db.refresh(d)
     return {"id": d.id, "document_type": d.document_type, "filename": d.original_filename, "visibility": d.visibility, "is_verified": d.is_verified}
 
@@ -837,12 +933,15 @@ def download_document(document_id: str, current_user: User = Depends(get_current
     d = db.query(StudentDocument).filter(StudentDocument.id == document_id).first()
     if not d: raise HTTPException(status_code=404, detail="Document not found")
     s = db.query(StudentProfile).filter(StudentProfile.id == d.student_id).first()
-    if current_user.role == UserRole.student:
-        ensure_student_premium_access(current_user, db)
-        if not s or s.user_id != current_user.id: raise HTTPException(status_code=404, detail="Document not found")
-    if current_user.role == UserRole.institution_admin and (not s or s.organization_id != current_user.organization_id): raise HTTPException(status_code=404, detail="Document not found")
-    if current_user.role not in {UserRole.student, UserRole.institution_admin, UserRole.platform_admin}: raise HTTPException(status_code=403, detail="Not permitted")
-    return file_download_response(db, d.filepath, filename=d.original_filename)
+    if not s:
+        raise HTTPException(404, 'Document not found')
+    owner = current_user.role == UserRole.student and s.user_id == current_user.id
+    if not owner and not document_vault.staff_can_view(current_user, s, d):
+        raise HTTPException(404, 'Document not found')
+    record_audit(db, current_user, 'document.opened', organization_id=d.shared_organization_id, entity_type='student_document', entity_id=d.id)
+    db.commit()
+    media_type = {'.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg'}.get(Path(d.original_filename).suffix.lower(), 'application/octet-stream')
+    return file_download_response(db, d.filepath, filename=d.original_filename, media_type=media_type)
 
 
 # -----------------------------------------------------------------------------

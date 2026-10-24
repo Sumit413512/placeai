@@ -1,0 +1,33 @@
+# Resume evidence and academic document submissions
+
+## Resume coaching standard
+
+The local, versioned `placeai-evidence-1` rubric runs on the existing server using the uploaded text-based PDF. It does not upload the PDF to an external provider or claim to be a trained model or universal ATS score. Scanned, encrypted, unreadable and oversized documents produce an actionable error instead of a made-up score. Replacement resumes have no inherited review.
+
+Seven document checks total 100 points: readable text (15), education section (15), skills section (10), projects/experience section (15), contribution statements (20), measurable outcomes (15), and portfolio/code reference (10). Every earned check includes original PDF page/line excerpts. A sparse document cannot achieve a high score just by listing headings: fewer than 120 readable words caps the document score at 40; 120–249 words caps it at 70. More than 1,800 words or 4 pages caps this student-oriented rubric at 75. These adjustments appear in the report; they are coaching guidance rather than universal hiring rules. Link presence is not link ownership verification. Formatting, language quality and factual accuracy need human review. Suggestions use templates/placeholders rather than fabricated achievements or metrics.
+
+Target roles use a student-editable checklist. The supplied role templates are broad starting points, not current job postings. Requirements have required weight 2 or preferred weight 1. Matching applied context earns full documentary credit, an affirmative mention earns half, and no supporting evidence earns zero. Explicitly negative statements earn zero. Matching is conservative and local: line wrapping, synonyms and nuanced negation can require human correction. Students should enter atomic requirements separately. This measures documentary coverage, not verified mastery, applicant ranking or a hiring decision. Profile-only claims do not supply missing resume proof. Changing the target/checklist marks the previous role score stale until the review runs again.
+
+Resume, target-role and project readiness use reviewed evidence rather than file-upload, role-count or AI-parsing bonuses. Academic eligibility and interview readiness calculations are unchanged. Where evidence has not been reviewed, the interface says so. Readiness is not a placement prediction.
+
+Owner-only preparation context shows actual saved notes completions, completed video/quiz units and completed scored assessments. Self-reported learning does not add resume/alignment credit or establish competence. Existing profile and study data remain distinct.
+
+Optional AI coaching uses existing providers and account-scoped AI rate limits. It requires explicit per-student consent and only sends selected skill/contribution excerpts and the target role to the configured OpenAI, Google Gemini or Groq provider. Contact/header/education/link excerpts are excluded. Structured output has bounded lengths and no score field. Each returned page/line/quote must exactly match the supplied excerpts; invalid responses are rejected and leave the local review intact. The file and target are rechecked after the provider call. Suggestions remain AI advice, requiring student review. Provider errors do not prevent local analysis. No new provider, paid plan or automatic background AI request is introduced.
+
+## Academic profile and document vault
+
+Course (`degree`), branch, current semester (1–20), enrollment number and academic year are canonical profile fields. Existing institution approval rules for academic eligibility fields are retained. Students cannot change institution membership through these forms. Current semester describes the student now; each document has its own semester, including historic marksheets.
+
+Uploads allow bounded PDF/PNG/JPEG files with signature validation. Each upload is private. Historical visibility strings are retained in storage but do not count as explicit new submission consent; there is no bulk data deletion or automatic sharing backfill.
+
+Submitting a document requires owner authentication, explicit consent, the exact linked institution, course/current-semester profile information, and a document semester for marksheets. The submission stores institution and timestamp. Document labels/semesters cannot be edited while submitted: withdraw first. Withdrawing stops new institution list/download access immediately; already downloaded copies cannot be recalled. Original file bytes stay available to their student owner.
+
+Institution administrators see only their own student roster and explicitly submitted documents, grouped in expandable student records, with course/current-semester filters and pagination. Each document identifies its own semester and offers View/Download. Unsubmitted filenames are not exposed. A changed student institution does not transfer old submission access. Other students, recruiters, other institutions and unscoped platform administrators cannot download private vault files. There is no new faculty role or cross-institution permission grant. View/submit/withdraw operations create audit events without recording file content.
+
+The additive Alembic migration requires schema provisioning before deployment under the existing restricted database runtime. Existing private-table RLS and grants remain intact. No grades, eligibility thresholds, interview scores, generated notes, media or account passwords are rewritten.
+
+## Verification scope
+
+Tests cover weighted/partial/negative evidence, exact quotes, target invalidation, numeric tampering, cross-account isolation, consent, private uploads, institution scoping, withdrawal, current-semester consistency, AI quote hallucinations, unchanged protected calculations and actual browser flows with student/staff sessions. Mobile checks cover 320/390/768/1440px. Downloads use the shared session-refresh path. Hosting remains free.
+
+Reference principles were reviewed against [Rezi’s documented rubric categories](https://www.rezi.ai/rezi-docs/the-rezi-score-explained) and [Resume Worded’s content checks](https://www.resumeworded.com/score-guide). PlaceAI does not copy their scoring or claim equivalence to proprietary ATS systems.

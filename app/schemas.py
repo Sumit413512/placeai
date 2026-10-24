@@ -118,6 +118,10 @@ class GoogleAuthRequest(BaseModel):
 class StudentProfileCreate(BaseModel):
     full_name: Optional[str] = Field(None, max_length=200)
     college: Optional[str] = Field(None, max_length=250)
+    current_semester: Optional[int] = Field(None, ge=1, le=20)
+    enrollment_number: Optional[str] = Field(None, max_length=80)
+    academic_year: Optional[str] = Field(None, max_length=40)
+    target_role: Optional[str] = Field(None, max_length=160)
     degree: Optional[str] = Field(None, max_length=120)
     branch: Optional[str] = Field(None, max_length=120)
     graduation_year: Optional[int] = Field(None, ge=2020, le=2040)
@@ -146,6 +150,10 @@ class StudentProfileOut(BaseModel):
     organization_id: Optional[str] = None
     full_name: Optional[str] = None
     college: Optional[str] = None
+    current_semester: Optional[int] = Field(None, ge=1, le=20)
+    enrollment_number: Optional[str] = Field(None, max_length=80)
+    academic_year: Optional[str] = Field(None, max_length=40)
+    target_role: Optional[str] = Field(None, max_length=160)
     degree: Optional[str] = None
     branch: Optional[str] = None
     graduation_year: Optional[int] = None
