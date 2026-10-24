@@ -121,13 +121,24 @@
   const initialDesiredView = viewFromUrl() || normalizeView(safeSessionGet(STORAGE_KEY));
   let restoringInitialView = Boolean(initialDesiredView && initialDesiredView !== 'dashboard');
   let restoreTimer = null;
+  let restoringHistory = false;
+  window.addEventListener('popstate', () => {
+    if (!workspaceVisible()) return;
+    const view = viewFromUrl() || 'dashboard';
+    const button = findNavButton(view);
+    if (!button || view === 'mock-interview' || button.classList.contains('active')) return;
+    restoringInitialView = false;
+    clearTimeout(restoreTimer); restoreTimer = null;
+    restoringHistory = true;
+    try { button.click(); } finally { restoringHistory = false; }
+  });
 
-  function writeViewUrl(view) {
+  function writeViewUrl(view, push = false) {
     try {
       const url = new URL(location.href);
       if (!view || view === 'dashboard') url.searchParams.delete(VIEW_PARAM);
       else url.searchParams.set(VIEW_PARAM, view);
-      history.replaceState(
+      history[push ? 'pushState' : 'replaceState'](
         {...(history.state || {}), placeaiView: view || 'dashboard'},
         '',
         `${url.pathname}${url.search}${url.hash}`
@@ -135,12 +146,14 @@
     } catch {}
   }
 
-  function rememberView(value) {
+  function rememberView(value, push = false) {
     const view = normalizeView(value);
     if (!view || view === 'mock-interview') return;
     safeSessionSet(STORAGE_KEY, view);
-    writeViewUrl(view);
+    writeViewUrl(view, push && viewFromUrl() !== view && !(view === 'dashboard' && !viewFromUrl()));
   }
+
+  window.PlaceAIWorkspaceHistory = { remember(view) { if (!restoringInitialView) rememberView(view, !restoringHistory); } };
 
   function clearView() {
     safeSessionRemove(STORAGE_KEY);
@@ -222,8 +235,7 @@
       return;
     }
 
-    const viewButton = event.target.closest?.('[data-view]');
-    if (viewButton?.dataset.view) rememberView(viewButton.dataset.view);
+
 
     if (event.target?.id === 'auth-overlay') {
       document.querySelector('#auth-overlay [data-action="close-auth"]')?.click();

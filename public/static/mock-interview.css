@@ -502,3 +502,6 @@ select:focus,textarea:focus{
 .spoken-listening-indicator.listening .spoken-question-clock time { color: #a61f29; }
 @keyframes micListening { 0% { opacity: .9; transform: scale(.88); } 100% { opacity: 0; transform: scale(1.28); } }
 @media (max-width: 520px) { .spoken-listening-indicator { grid-template-columns: 38px 38px minmax(0,1fr); gap: 8px; } .spoken-mic-symbol { width: 36px; height: 36px; } .spoken-frequency-bars { width: 38px; } .spoken-question-clock { grid-column: 3; text-align: left; display: flex; align-items: baseline; gap: 7px; } .spoken-question-clock time { font-size: 18px; } }
+
+/* Clear practice options and visible methodology. */
+.coach-method{background:#f7f0e6}.coach-method h2{font-size:25px;line-height:1.35}.coach-method-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px}.coach-method p{line-height:1.7;color:#564e5b}.coach-method summary{font-weight:600;cursor:pointer;line-height:1.6}.coach-method details{padding:22px;border:1px solid #d9cedc;background:#f1eaf3;border-radius:10px}.coach-method a{white-space:normal;text-align:center}@media(max-width:760px){.coach-method-grid{grid-template-columns:1fr}.coach-method details{padding:18px}}

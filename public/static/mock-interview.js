@@ -1312,12 +1312,31 @@
     }
   }
 
+  const proctorLibraries = new Map();
+  function loadProctorLibrary(source) {
+    if (proctorLibraries.has(source)) return proctorLibraries.get(source);
+    const promise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      let timer;
+      const fail = () => { clearTimeout(timer); script.remove(); proctorLibraries.delete(source); reject(new Error('Proctor library unavailable. Run the system check again.')); };
+      script.src = source; script.async = true;
+      script.onload = () => { clearTimeout(timer); resolve(); };
+      script.onerror = fail;
+      timer = setTimeout(fail, 12000);
+      document.head.appendChild(script);
+    });
+    proctorLibraries.set(source, promise);
+    return promise;
+  }
+
   async function ensureProctorModel() {
     if(state.proctorModelReady && state.proctorModel) return true;
     if(state.proctorModelLoading) return state.proctorModelLoading;
     state.proctorModelLoading=(async function(){
       try{
         setCheck('proctor',null,'Loading model');
+        if(!window.tf) await loadProctorLibrary('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.es2017.min.js');
+        if(!window.cocoSsd) await loadProctorLibrary('https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js');
         if(!window.tf || !window.cocoSsd) throw new Error('On-device proctor runtime did not load');
         await window.tf.ready();
         state.proctorModel=await window.cocoSsd.load({base:'lite_mobilenet_v2'});
