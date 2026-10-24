@@ -1,5 +1,6 @@
 """Real local UI -> authenticated HTTP -> isolated DB, with student and staff sessions."""
 from pathlib import Path
+import re
 from uuid import uuid4
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -90,8 +91,8 @@ def test_resume_review_and_consented_semester_documents(browser,local_server):
     assert Path(download.value.path()).read_bytes()==raw
     with staff.expect_popup() as preview:
         staff.get_by_role('button',name='View',exact=True).click()
-    # Chrome's native PDF viewer commits navigation without a normal HTML load event.
-    preview.value.wait_for_url('blob:**',wait_until='commit')
+    # Native PDF viewer navigation has no ordinary HTML load lifecycle.
+    expect(preview.value).to_have_url(re.compile(r'^blob:http://127\.0\.0\.1:8765/'))
     preview.value.close()
     staff.screenshot(path=str(output/'local-institution-documents.png'),full_page=True)
     for width in (1440,768,390,320):
