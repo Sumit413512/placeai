@@ -92,12 +92,11 @@ def test_resume_review_and_consented_semester_documents(browser,local_server):
     with staff.expect_popup() as preview:
         staff.get_by_role('button',name='View',exact=True).click()
     # Native PDF support varies; unsupported browsers must retain a usable fallback.
-    viewer=preview.value.wait_for_function("""() => {
-        if(location.href.startsWith('blob:'))return {mode:'native',href:location.href};
+    preview.value.wait_for_function("""expected => {
+        if(location.href.startsWith(expected))return true;
         const link=document.querySelector('[data-placeai-document-download]');
-        return link?{mode:'fallback',href:link.href}:false;
-    }""").json_value()
-    assert viewer['href'].startswith('blob:'+BASE_URL+'/')
+        return !!link && link.href.startsWith(expected);
+    }""",arg='blob:'+BASE_URL+'/')
     preview.value.close()
     staff.screenshot(path=str(output/'local-institution-documents.png'),full_page=True)
     for width in (1440,768,390,320):
