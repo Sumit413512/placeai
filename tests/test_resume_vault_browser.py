@@ -90,7 +90,8 @@ def test_resume_review_and_consented_semester_documents(browser,local_server):
     assert Path(download.value.path()).read_bytes()==raw
     with staff.expect_popup() as preview:
         staff.get_by_role('button',name='View',exact=True).click()
-    preview.value.wait_for_url('blob:**')
+    # Chrome's native PDF viewer commits navigation without a normal HTML load event.
+    preview.value.wait_for_url('blob:**',wait_until='commit')
     preview.value.close()
     staff.screenshot(path=str(output/'local-institution-documents.png'),full_page=True)
     for width in (1440,768,390,320):

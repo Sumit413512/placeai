@@ -89,6 +89,10 @@ def update_my_profile(data: StudentProfileCreate, current_user: User = Depends(r
             profile.desired_roles = [x.strip() for x in (value or []) if x.strip()][:20]
         elif field == "certifications":
             profile.certifications = [x.strip() for x in (value or []) if x.strip()][:50]
+        elif field == 'target_role':
+            profile.target_role = resume_evidence.normalize(value) or None
+            if not profile.target_role:
+                profile.role_requirements_json = '[]'
         elif field in sensitive and profile.organization_id and getattr(profile, field, None) != value:
             existing = db.query(ProfileChangeRequest).filter(ProfileChangeRequest.student_id == profile.id, ProfileChangeRequest.field_name == field, ProfileChangeRequest.status == "pending").first()
             if existing:

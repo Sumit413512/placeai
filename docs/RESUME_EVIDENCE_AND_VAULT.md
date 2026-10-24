@@ -24,7 +24,7 @@ Submitting a document requires owner authentication, explicit consent, the exact
 
 Institution administrators see only their own student roster and explicitly submitted documents, grouped in expandable student records, with course/current-semester filters and pagination. Each document identifies its own semester and offers View/Download. Unsubmitted filenames are not exposed. A changed student institution does not transfer old submission access. Other students, recruiters, other institutions and unscoped platform administrators cannot download private vault files. There is no new faculty role or cross-institution permission grant. View/submit/withdraw operations create audit events without recording file content.
 
-The additive Alembic migration requires schema provisioning before deployment under the existing restricted database runtime. Existing private-table RLS and grants remain intact. No grades, eligibility thresholds, interview scores, generated notes, media or account passwords are rewritten.
+The additive Alembic migration requires schema provisioning before deployment under the existing restricted database runtime. Browser-role grants remain absent. Role-specific RLS adds defense in depth to the three existing profile/resume/document tables while preserving the trusted server runtime's existing access; per-user and institution authorization remains in the application. No grades, eligibility thresholds, interview scores, generated notes, media or account passwords are rewritten. Do not roll back to the older automatic-sharing vault implementation after accepting private uploads: retain the consent checks or temporarily disable vault access during recovery.
 
 ## Verification scope
 

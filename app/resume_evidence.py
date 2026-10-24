@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException
 from pypdf import PdfReader
+from app.study_models import NotebookProgress
 
 VERSION = 'placeai-evidence-1'
 PRESETS = {
@@ -125,7 +126,7 @@ def analyze(raw, profile):
     check('outcomes', 'Measurable outcomes', 15, measurable, 'Where available, add a truthful scale, test result or outcome. Never invent numbers.')
     check('links', 'Portfolio or code reference', 10, find(r'(github\.com/|gitlab\.com/|portfolio|https?://)'), 'Add a relevant code or portfolio link. Links are detected, not independently verified.')
     config = target_config(profile)
-    requirements = [requirement_result(row, lines, profile.skills) for row in config['requirements']]
+    requirements = [requirement_result(row, lines, profile.skills) for row in config['requirements']] if config['role'] else []
     total = sum(x['weight'] for x in requirements)
     role_score = int(sum(x['weight'] * x['credit'] for x in requirements) / total * 100) if total else None
     words = len(text.split())
@@ -178,7 +179,6 @@ def alignment(profile):
 def preparation_context(profile, user, db):
     """Private activity context; completion must not be relabelled as competence."""
     from app.models import LearningNotebook, VideoCourse, VideoLesson, VideoProgress, VideoViewerProgress
-    from app.study_models import NotebookProgress
     from app.study_service import mock_records
     notes = db.query(NotebookProgress).join(LearningNotebook, NotebookProgress.notebook_id == LearningNotebook.id).filter(
         LearningNotebook.user_id == user.id, LearningNotebook.state == 'ready', NotebookProgress.completed.is_(True)).count()

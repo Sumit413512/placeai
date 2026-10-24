@@ -14,3 +14,13 @@ DO $$ BEGIN
     ALTER TABLE public.student_documents ADD CONSTRAINT fk_document_shared_org FOREIGN KEY (shared_organization_id) REFERENCES public.organizations(id);
   END IF;
 END $$;
+-- The runtime already has these table grants. A role-specific policy preserves that
+-- existing server access while adding RLS defense in depth; no browser role gains access.
+DO $$ DECLARE tab TEXT; BEGIN
+  FOREACH tab IN ARRAY ARRAY['student_profiles','resumes','student_documents'] LOOP
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename=tab AND policyname='placeai_evidence_runtime') THEN
+      EXECUTE format('CREATE POLICY placeai_evidence_runtime ON public.%I FOR ALL TO placeai_render_runtime USING (true) WITH CHECK (true)',tab);
+    END IF;
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY',tab);
+  END LOOP;
+END $$;

@@ -36,6 +36,16 @@ def upgrade() -> None:
             if runtime:
                 raise RuntimeError('Provision the document institution reference before deployment')
             op.create_foreign_key('fk_document_shared_org', 'student_documents', 'organizations', ['shared_organization_id'], ['id'])
+        if not runtime:
+            for table in ('student_profiles', 'resumes', 'student_documents'):
+                exists = bind.execute(sa.text("SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename=:table AND policyname='placeai_evidence_runtime'"), {'table': table}).scalar()
+                if not exists:
+                    bind.execute(sa.text(f'CREATE POLICY placeai_evidence_runtime ON public.{table} FOR ALL TO placeai_render_runtime USING (true) WITH CHECK (true)'))
+                bind.execute(sa.text(f'ALTER TABLE public.{table} ENABLE ROW LEVEL SECURITY'))
+        for table in ('student_profiles', 'resumes', 'student_documents'):
+            valid = bind.execute(sa.text("SELECT c.relrowsecurity AND NOT has_table_privilege('anon',c.oid,'SELECT,INSERT,UPDATE,DELETE') AND NOT has_table_privilege('authenticated',c.oid,'SELECT,INSERT,UPDATE,DELETE') AND EXISTS (SELECT 1 FROM pg_policies p WHERE p.schemaname='public' AND p.tablename=c.relname AND p.policyname='placeai_evidence_runtime' AND p.roles=ARRAY['placeai_render_runtime']::name[] AND p.qual='true' AND p.with_check='true') FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=:table"), {'table': table}).scalar()
+            if not valid:
+                raise RuntimeError('Private evidence/vault database controls are not provisioned')
     # Existing uploads stay stored; no historical visibility choice is treated as new consent.
 
 def downgrade() -> None:

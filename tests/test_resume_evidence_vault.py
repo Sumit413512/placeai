@@ -72,6 +72,9 @@ def test_resume_api_upload_review_target_change_and_account_isolation(evidence):
     assert api.get('/students/resume/evidence').json()['alignment']['score'] is None
     assert api.put('/students/resume/target',json={'role':'Role','requirements':[{'label':'  '}]}).status_code==422
     assert api.put('/students/resume/target',json={**target,'score':100}).status_code==422
+    assert api.put('/students/profile',json={'target_role':None}).status_code==200
+    assert api.get('/students/resume/evidence').json()['target']=={'role':'','requirements':[]}
+    assert api.post('/students/resume/evidence').json()['role_score'] is None
     evidence.actor[0]=evidence.other
     assert api.get('/students/resume/evidence').json()['review'] is None
     assert api.post('/students/resume/evidence').status_code==404
