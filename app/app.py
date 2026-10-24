@@ -326,6 +326,7 @@ billing = _import_router("billing")
 career_roadmap = _import_router("career_roadmap")
 learning_hub = _import_router("learning_hub")
 study_tracker = _import_router("study_tracker")
+technical_practice = _import_router("technical_practice")
 learning_video = _import_router("learning_video")
 product_intelligence = _import_router("product_intelligence")
 
@@ -398,6 +399,7 @@ _include_router(career_roadmap)
 _include_router(learning_video)
 _include_router(learning_hub)
 _include_router(study_tracker)
+_include_router(technical_practice)
 _include_router(product_intelligence)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -451,7 +453,7 @@ def root():
         '<script src="/static/api-errors.js" defer></script>\n'
         '<script src="/static/auth-protection.js" defer></script>\n'
         '<script src="/static/access-portal.js?v=20261019-google-link3" defer></script>\n'
-        '<script src="/static/ui-state-fixes.js" defer></script>\n'
+        '<script src="/static/ui-state-fixes.js?v=20261024-journeys1" defer></script>\n'
         '<script src="/static/account-security.js" defer></script>\n'
         '<script src="/static/provisioning-password-fix.js" defer></script>\n'
         '<script src="/static/release-ux-fixes.js" defer></script>\n'

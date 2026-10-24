@@ -6,7 +6,7 @@ from sqlalchemy.engine import URL
 
 from app.config import get_settings
 from app.database import Base, build_runtime_database_url
-from app import models  # noqa: F401
+from app import models, technical_practice  # noqa: F401
 
 config = context.config
 if config.config_file_name:

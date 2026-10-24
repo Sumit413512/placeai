@@ -76,7 +76,13 @@ def test_real_student_can_track_read_delete_restore_and_resume_notes(browser,loc
     expect(page.locator('[data-notes-progress]')).to_contain_text('100% marked complete')
     page.locator('#app-nav [data-view="study-tracker"]').click()
     expect(page.locator('.study-plan>.panel-head')).to_contain_text('100%')
-    text=page.locator('#study-reminder').inner_text();page.get_by_role('button',name='Another reminder',exact=True).click();assert page.locator('#study-reminder').inner_text()!=text
+    expect(page.get_by_role('button',name='Another reminder',exact=True)).to_have_count(0)
+    text=page.locator('#study-reminder').inner_text()
+    art=page.locator('.study-illustration').get_attribute('aria-label')
+    page.locator('#app-nav [data-view="dashboard"]').click()
+    page.locator('#app-nav [data-view="study-tracker"]').click()
+    expect(page.locator('#study-reminder')).not_to_have_text(text)
+    assert page.locator('.study-illustration').get_attribute('aria-label') != art
     for width in (1440,768,390,320):
         page.set_viewport_size({'width':width,'height':900});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),width
     page.set_viewport_size({'width':1440,'height':1000})

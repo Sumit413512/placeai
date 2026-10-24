@@ -133,13 +133,22 @@
     setTimeout(() => node.remove(), 3800);
   }
 
+  let navigationEpoch = 0;
   async function api(path, options = {}, retry = true) {
+    const requestEpoch = navigationEpoch;
+    const assertCurrentRead = () => {
+      if ((options.method || 'GET').toUpperCase() === 'GET' && !path.startsWith('/auth/') && requestEpoch !== navigationEpoch) {
+        throw new DOMException('The workspace view changed.', 'AbortError');
+      }
+    };
     const headers = new Headers(options.headers || {});
     if (state.token) headers.set('Authorization', `Bearer ${state.token}`);
     if (!(options.body instanceof FormData) && options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
     const response = await fetch(path, { ...options, headers, credentials: 'include' });
+    assertCurrentRead();
     if (response.status === 401 && retry && path !== '/auth/refresh') {
       const refreshed = await refreshSession();
+      assertCurrentRead();
       if (refreshed) return api(path, options, false);
     }
     if (response.status === 204) return null;
@@ -148,7 +157,7 @@
       const data = contentType.includes('application/json') ? await response.json().catch(() => ({})) : {};
       throw apiErrors.createError(data, response.status);
     }
-    if (contentType.includes('application/json')) return response.json();
+    if (contentType.includes('application/json')) { const data = await response.json(); assertCurrentRead(); return data; }
     return response;
   }
 
@@ -271,7 +280,7 @@
 
   const navByRole = {
     student: [
-      ['Workspace','dashboard','Dashboard'],['Workspace','opportunities','Opportunities'],['Workspace','applications','Applications'],['Campus','drives','Placement drives'],['Campus','interviews','Interviews'],['Campus','offers','Offers'],['Career','readiness','Readiness score'],['Career','roadmap','AI Career Roadmap'],['Career','learning-hub','Learning Hub'],['Career','study-tracker','Study tracker'],['Career','mock-interview','Mock interview coach'],['Career','resume','Resume & AI'],['Career','documents','Document vault'],['Career','assistant','AI placement assistant'],['Planning','calendar','Placement calendar'],['Updates','announcements','Announcements'],['Updates','notifications','Notifications'],['Safety','incidents','Report an issue'],['Account','approvals','Profile approvals'],['Account','profile','Profile']
+      ['Workspace','dashboard','Dashboard'],['Workspace','opportunities','Opportunities'],['Workspace','applications','Applications'],['Campus','drives','Placement drives'],['Campus','interviews','Interviews'],['Campus','offers','Offers'],['Career','readiness','Readiness score'],['Career','roadmap','AI Career Roadmap'],['Career','learning-hub','Learning Hub'],['Career','study-tracker','Study tracker'],['Career','mock-interview','Mock interview coach'],['Career','technical-practice','Technical practice'],['Career','resume','Resume & AI'],['Career','documents','Document vault'],['Career','assistant','AI placement assistant'],['Planning','calendar','Placement calendar'],['Updates','announcements','Announcements'],['Updates','notifications','Notifications'],['Safety','incidents','Report an issue'],['Account','approvals','Profile approvals'],['Account','profile','Profile']
     ],
     recruiter: [
       ['Workspace','dashboard','Dashboard'],['Hiring','jobs','Jobs'],['Hiring','pipeline','Drive pipeline'],['Hiring','candidates','Candidates'],['Hiring','interviews','Interviews'],['Hiring','offers','Offers'],['Trust','verification','Company verification'],['Collaboration','communications','Placement office messages'],['Insights','analytics','Analytics'],['Insights','assistant','AI placement assistant'],['Updates','notifications','Notifications'],['Account','profile','Company profile']
@@ -287,7 +296,7 @@
   function mountNav() {
     let items = navByRole[state.me.role] || [];
     if (state.me.role === 'student' && state.studentAccess?.student_kind === 'independent') {
-      const allowed = new Set(['dashboard','opportunities','applications','interviews','offers','readiness','roadmap','learning-hub','study-tracker','mock-interview','resume','documents','assistant','notifications','incidents','approvals','profile']);
+      const allowed = new Set(['dashboard','opportunities','applications','interviews','offers','readiness','roadmap','learning-hub','study-tracker','mock-interview','technical-practice','resume','documents','assistant','notifications','incidents','approvals','profile']);
       items = items.filter(([,id]) => allowed.has(id));
       items = [...items, ['Account','billing','Plan & billing']];
     }
@@ -434,11 +443,13 @@
   });
 
   async function navigate(view) {
+    const epoch = ++navigationEpoch;
     const premiumViews = new Set(['readiness','mock-interview','resume','documents','assistant']);
     if (state.me?.role === 'student' && state.studentAccess?.student_kind === 'independent' && premiumViews.has(view) && !state.studentAccess.premium_access) {
       view = 'billing';
     }
     if (view === 'mock-interview') { window.location.assign('/mock-interview'); return; }
+    window.PlaceAIWorkspaceHistory?.remember(view);
     state.view = view;
     if (state.me) trackPageView(`/workspace/${state.me.role}/${view}`);
     mountNav();
@@ -450,6 +461,7 @@
       else if (state.me.role === 'institution_admin') await renderInstitution(view);
       else if (state.me.role === 'platform_admin') await renderPlatform(view);
     } catch (e) {
+      if (epoch !== navigationEpoch) return;
       $('#app-content').innerHTML = pageHead('Something needs attention', e.message) + emptyState('!', 'Unable to load this view', e.message, `<button class="button button-secondary" data-action="reload-view">Try again</button>`);
       setContextAction();
     }

@@ -82,8 +82,8 @@ def test_mcq_interaction_and_expandable_navigator_contract():
     css = _text("app/static/mock-interview.css")
     js = _text("app/static/mock-interview.js")
 
-    assert "mock-interview.css?v=20261008-spoken-timer" in html
-    assert "mock-interview.js?v=20261023-recovery1" in html
+    assert "mock-interview.css?v=20261024-journeys1" in html
+    assert "mock-interview.js?v=20261024-journeys1" in html
     assert 'role="radiogroup"' in js
     assert 'role="radio"' in js
     assert "option-select-indicator" in js
@@ -116,10 +116,10 @@ def test_proctor_runtime_is_required_and_active_in_preview_and_production():
     js = _text("app/static/mock-interview.js")
     css = _text("app/static/mock-interview.css")
 
-    assert "@tensorflow/tfjs@4.22.0" in html
-    assert "tf.es2017.min.js" in html
+    assert "@tensorflow/tfjs@4.22.0" in js
+    assert "tf.es2017.min.js" in js
     assert "/dist/tf.min.js" not in html
-    assert "@tensorflow-models/coco-ssd@2.2.3" in html
+    assert "@tensorflow-models/coco-ssd@2.2.3" in js
     assert 'data-check="screen"' in html
     assert 'data-check="proctor"' in html
     assert 'data-check="monitor"' in html
@@ -151,7 +151,7 @@ def test_render_assessment_demo_requires_real_preflight_instead_of_bypassing_pro
 def test_mock_assessment_copy_is_professional_and_drops_plus_marketing():
     html = _text("app/templates/mock-interview.html")
     assert "Secure Placement Assessment" in html
-    assert "Institution-grade simulation" in html
+    assert "Structured placement practice" in html
     assert "50+" not in html
     assert "50-question minimum" not in html
 
@@ -175,8 +175,8 @@ def test_executable_coding_workspace_is_mirrored_and_cache_busted():
     js = _text("app/static/mock-interview.js")
     css = _text("app/static/mock-interview.css")
 
-    assert "mock-interview.css?v=20261008-spoken-timer" in html
-    assert "mock-interview.js?v=20261023-recovery1" in html
+    assert "mock-interview.css?v=20261024-journeys1" in html
+    assert "mock-interview.js?v=20261024-journeys1" in html
     assert "code-workspace" in js
     assert "code-language" in js
     assert "run-code" in js
