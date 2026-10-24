@@ -59,6 +59,9 @@ def _component_map(payload: dict) -> dict[str, int]:
 
 def readiness_evidence(student: StudentProfile, db: Session) -> dict:
     """Return explainable readiness evidence without presenting an employment prediction."""
+    from app.resume_evidence import saved_review, alignment
+    review = saved_review(student)
+    role = alignment(student)
     base = placement_readiness(student, db)
     components = _component_map(base)
     mocks = (
@@ -98,9 +101,9 @@ def readiness_evidence(student: StudentProfile, db: Session) -> dict:
             "key": "resume",
             "label": "Resume strength",
             "score": components.get("Resume strength", 0),
-            "confidence": "high" if resume and resume.is_parsed else ("medium" if resume else "low"),
+            "confidence": "medium" if review else "low",
             "source": "Uploaded resume" + (" + parsed structure" if resume and resume.is_parsed else ""),
-            "evidence": "Resume uploaded and parsed for structured evidence." if resume and resume.is_parsed else ("Resume uploaded; structured parsing has not been completed." if resume else "No resume evidence is currently available."),
+            "evidence": f"Local resume rubric: {review['resume_score']}/100, with exact page/line excerpts. Claims are not independently verified." if review else "Run the evidence review; uploading or AI parsing alone does not earn resume points.",
             "observed_at": _iso(resume.uploaded_at if resume else None),
         },
         {
@@ -116,9 +119,9 @@ def readiness_evidence(student: StudentProfile, db: Session) -> dict:
             "key": "role_alignment",
             "label": "Role alignment",
             "score": components.get("Role alignment", 0),
-            "confidence": "medium" if student.desired_roles else "low",
-            "source": "Target-role preferences",
-            "evidence": f"{len(student.desired_roles)} target role(s) recorded: {', '.join(student.desired_roles[:4]) or 'none yet'}.",
+            "confidence": "medium" if role["score"] is not None else "low",
+            "source": "Selected role checklist + quoted resume evidence",
+            "evidence": f"{role['target_role'] or 'No target role'}: {role['message']}",
             "observed_at": _iso(student.updated_at),
         },
         {
@@ -143,9 +146,9 @@ def readiness_evidence(student: StudentProfile, db: Session) -> dict:
             "key": "projects",
             "label": "Project evidence",
             "score": components.get("Project evidence", 0),
-            "confidence": "medium" if parsed_experience else "low",
+            "confidence": "medium" if review and review.get("project_examples") else "low",
             "source": "Resume project/experience evidence",
-            "evidence": f"{len(parsed_experience)} parsed project/experience item(s) available." if parsed_experience else "No structured project/experience evidence is available yet.",
+            "evidence": f"{len(review.get('project_examples', []))} quoted contribution lines; self-reported, not verified." if review else "No quoted contribution evidence reviewed yet.",
             "observed_at": _iso(resume.uploaded_at if resume else None),
         },
     ]
@@ -170,6 +173,8 @@ def readiness_evidence(student: StudentProfile, db: Session) -> dict:
     return {
         **base,
         "readiness_band": band,
+        "role_alignment": role,
+        "resume_review_available": review is not None,
         "evidence": evidence,
         "evidence_summary": {
             "high_confidence_sources": high_confidence,
