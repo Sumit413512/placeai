@@ -326,7 +326,6 @@ billing = _import_router("billing")
 career_roadmap = _import_router("career_roadmap")
 learning_hub = _import_router("learning_hub")
 study_tracker = _import_router("study_tracker")
-technical_practice = _import_router("technical_practice")
 learning_video = _import_router("learning_video")
 product_intelligence = _import_router("product_intelligence")
 
@@ -399,7 +398,6 @@ _include_router(career_roadmap)
 _include_router(learning_video)
 _include_router(learning_hub)
 _include_router(study_tracker)
-_include_router(technical_practice)
 _include_router(product_intelligence)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"

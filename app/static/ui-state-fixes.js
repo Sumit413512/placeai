@@ -23,6 +23,7 @@
 
   const normalizeView = value => {
     const view = String(value || '').trim().toLowerCase();
+    if (view === 'technical-practice') return 'dashboard'; // Retired standalone page.
     return SAFE_VIEW.test(view) ? view : '';
   };
 
