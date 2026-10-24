@@ -126,7 +126,7 @@
     if (!workspaceVisible()) return;
     const view = viewFromUrl() || 'dashboard';
     const button = findNavButton(view);
-    if (!button || view === 'mock-interview') return;
+    if (!button || view === 'mock-interview' || button.classList.contains('active')) return;
     restoringInitialView = false;
     clearTimeout(restoreTimer); restoreTimer = null;
     restoringHistory = true;

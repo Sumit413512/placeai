@@ -38,7 +38,8 @@ def test_workspace_state_layer_can_persist_and_restore_extension_view() -> None:
     state_layer = _read("app/static/ui-state-fixes.js")
 
     assert "const SAFE_VIEW = /^[a-z0-9-]{1,48}$/;" in state_layer
-    assert "const viewButton = event.target.closest?.('[data-view]');" in state_layer
-    assert "if (viewButton?.dataset.view) rememberView(viewButton.dataset.view);" in state_layer
+    assert "window.PlaceAIWorkspaceHistory" in state_layer
+    assert "rememberView(view, !restoringHistory)" in state_layer
+    assert "window.PlaceAIWorkspaceHistory?.remember(view);" in _read("app/static/app.js")
     assert "#app-nav button[data-view]" in state_layer
     assert len(VIEW_ID) <= 48
