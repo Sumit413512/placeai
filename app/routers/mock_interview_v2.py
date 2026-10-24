@@ -30,6 +30,7 @@ from app.placement_access import job_is_visible_to_student
 from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
 from app.student_entitlements import require_student_premium_access
 from app.trial_demo_access import enforce_trial_demo_start
+from app.zensar_practice import is_zensar_practice, company_label, build_questions, VERSION as ZENSAR_VERSION, NOTICE as ZENSAR_NOTICE
 from app.assessment_report_email import deliver_completed_report, delivery_status, eligible_recipient
 
 router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])
@@ -200,7 +201,7 @@ def _accessible_job(profile: StudentProfile, job_id: str, db: Session) -> Job:
         Job.is_active.is_(True),
         Job.approval_status == ApprovalStatus.approved,
     ).first()
-    if not job or not job_is_visible_to_student(profile, job, db):
+    if not job or not (job_is_visible_to_student(profile, job, db) or is_zensar_practice(job)):
         raise HTTPException(status_code=404, detail="Job not found")
     return job
 
@@ -970,6 +971,11 @@ def _generate_unique_questions(
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Generate one fast AI batch, then fill any gap with a grounded local safety net."""
     started = time.perf_counter()
+    if is_zensar_practice(job):
+        if count != FULL_MOCK_QUESTION_COUNT:
+            raise HTTPException(422, 'Zensar practice uses the full 50-question proctored assessment.')
+        base = _fallback_questions(profile=profile, job=job, focus=focus, difficulty=difficulty, count=count, previous=[])
+        return build_questions(base), {'generation_mode':'curated_practice','provider':'local','model':ZENSAR_VERSION,'generation_ms':round((time.perf_counter()-started)*1000)}
     accepted: list[dict[str, Any]] = []
     generation_mode = "resilient_fallback"
     provider = "local"
@@ -1114,6 +1120,8 @@ def start_mock_interview_v2(
 ):
     profile = _profile(current_user, db)
     job = _accessible_job(profile, body.job_id, db)
+    if is_zensar_practice(job) and body.mode != 'assessment':
+        raise HTTPException(422, 'Zensar practice requires the standard proctored assessment mode.')
     enforce_trial_demo_start(current_user, profile, job, db)
     previous = _previous_questions(profile, job, db)
     questions, generation = _generate_unique_questions(
@@ -1146,7 +1154,8 @@ def start_mock_interview_v2(
         "interview_id": interview.id,
         "job_id": job.id,
         "job_title": job.title,
-        "company_name": job.recruiter.company_name if job.recruiter else None,
+        "company_name": company_label(job),
+        "practice_notice": ZENSAR_NOTICE if is_zensar_practice(job) else None,
         "focus": body.focus,
         "difficulty": body.difficulty,
         "mode": body.mode,

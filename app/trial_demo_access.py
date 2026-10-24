@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Job, MockInterview, StudentProfile, User
 from app.student_entitlements import student_access_status
+from app.zensar_practice import is_zensar_practice
 
 TRIAL_DEMO_COMPANY_NAME = "TechNova Solutions — Demo"
 TRIAL_DEMO_JOB_TITLE = "PlaceAI TechNova Demo Assessment"
@@ -22,6 +23,8 @@ TRIAL_DEMO_VIDEO_RESPONSES = 4
 
 
 def is_trial_demo_job(job: Job | None) -> bool:
+    if is_zensar_practice(job):
+        return True
     if job is None or job.visibility != "public" or job.recruiter is None:
         return False
     return (
@@ -85,6 +88,7 @@ def trial_demo_access_state(
     db: Session,
 ) -> dict:
     access = student_access_status(user, db)
+    demo_name = "Zensar practice" if is_zensar_practice(job) else "TechNova demo"
     attempts = trial_demo_attempt_count(profile, job, db) if is_trial_demo_job(job) else 0
 
     if not is_trial_demo_job(job):
@@ -112,11 +116,11 @@ def trial_demo_access_state(
 
     if attempts >= TRIAL_DEMO_FREE_ATTEMPTS:
         note = (
-            "You have used your one free TechNova demo assessment attempt. "
+            f"You have used your one free {demo_name} assessment attempt. "
             "Purchase PlaceAI or continue through an institution-sponsored contract to attempt it again."
         )
     elif trial_active:
-        note = "Your active trial includes one free TechNova demo assessment attempt."
+        note = f"Your active trial includes one free {demo_name} assessment attempt."
     else:
         note = (
             "Your trial has ended. Purchase PlaceAI or join through an institution contract to continue."
@@ -139,6 +143,7 @@ def enforce_trial_demo_start(
     db: Session,
 ) -> dict:
     state = trial_demo_access_state(user, profile, job, db)
+    demo_name = "Zensar practice" if is_zensar_practice(job) else "TechNova demo"
     if not state["is_trial_demo"]:
         return state
     if state["access_mode"] in {"premium", "campus_sponsored"}:
@@ -148,7 +153,7 @@ def enforce_trial_demo_start(
 
     if state["attempts_used"] >= TRIAL_DEMO_FREE_ATTEMPTS:
         message = (
-            "You have already used your one free TechNova demo assessment attempt. "
+            f"You have already used your one free {demo_name} assessment attempt. "
             "Purchase a PlaceAI student plan or continue through an institution-sponsored PlaceAI contract "
             "to unlock further attempts."
         )

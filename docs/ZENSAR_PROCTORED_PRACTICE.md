@@ -1,0 +1,13 @@
+# Zensar practice — correction to assessment placement
+
+The separate Technical Practice page, assets, sidebar item, APIs and 16-question workflow are retired. Its historical private storage/migration is preserved solely so existing databases remain compatible; there is no product entry or accessible API for it.
+
+Zensar is a second entry inside the existing Mock Interview Coach assessment selector, alongside TechNova. It uses exactly the same 50-question, 10-section, 116-minute proctored blueprint: 36 objective items, two executable coding tasks, eight private audio answers and four HR video answers. All existing preflight, consent, full-screen, recording, section timing, integrity, answer-key grading, code execution and spoken-answer analysis controls remain authoritative.
+
+The question set contains PlaceAI-authored aptitude, reasoning, verbal, Java/OOP, SQL, programming and scenario items, plus the existing validated coding-task contract. It is a fixed, versioned preparation bank with shuffled objective options; it is not a leaked, official or current Zensar recruitment paper, and no affiliation is claimed. Public company reference: https://www.zensar.com/careers. This reference is not represented as an official assessment syllabus.
+
+The catalog record uses the existing fictional demo owner, without creating a new recruiter user or pretending to represent Zensar. A stable ID, title, private assessment visibility and demo-owner match identify the record. It is visible in the assessment catalog, not student recruitment opportunities, and cannot be applied to as a real vacancy. Display labels explicitly identify PlaceAI practice. Its distinct job identity preserves separate TechNova/Zensar histories and per-exam trial allowances. Practice reports do not trigger real recruiter/company report emails.
+
+Migration 0027 provisions this additive catalog entry from the existing TechNova demo owner and is repeat-safe. It never deletes an existing attempt or recording on rollback. If a fresh database has no TechNova demo owner, it makes no synthetic account and adds no row; provision the existing authorized demo fixture first.
+
+Verification includes catalog visibility, preservation of the TechNova option, exact section/response counts, server-only answer keys/hidden coding tests, standard recording initialization, rejection of reduced/unproctored configuration, separate trial counts, removed standalone paths, and browser transition through Zensar selection to mandatory system check. Existing audio/video, clock, grading and navigation regressions are rerun. Automated media input is synthetic; no production camera/microphone recording is made by these checks.

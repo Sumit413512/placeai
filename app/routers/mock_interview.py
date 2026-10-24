@@ -16,6 +16,7 @@ from app.models import AssessmentJob, ApprovalStatus, HRRecording, Job, MockInte
 from app.placement_access import job_is_visible_to_student
 from app.routers.ai import PROMPT_GUARDRAIL, call_gemini, extract_json_from_response, get_gemini_client
 from app.trial_demo_access import trial_demo_access_state
+from app.zensar_practice import is_zensar_practice, company_label, NOTICE
 
 router = APIRouter(prefix="/mock-interview", tags=["Mock Interview Coach"])
 
@@ -104,14 +105,15 @@ def mock_interview_jobs(
 ):
     profile = _profile(current_user, db)
     jobs = db.query(Job).filter(Job.is_active.is_(True), Job.approval_status == ApprovalStatus.approved).all()
-    visible = [job for job in jobs if job_is_visible_to_student(profile, job, db)]
+    visible = [job for job in jobs if job_is_visible_to_student(profile, job, db) or is_zensar_practice(job)]
     result = []
     for job in visible:
         demo_access = trial_demo_access_state(current_user, profile, job, db)
         result.append({
             "id": job.id,
             "title": job.title,
-            "company_name": job.recruiter.company_name if job.recruiter else None,
+            "company_name": company_label(job),
+            "practice_notice": NOTICE if is_zensar_practice(job) else None,
             "required_skills": job.required_skills,
             "experience_required": job.experience_required,
             "is_trial_demo": demo_access["is_trial_demo"],
@@ -196,7 +198,8 @@ Desired roles: {json.dumps(profile.desired_roles)}
         "interview_id": interview.id,
         "job_id": job.id,
         "job_title": job.title,
-        "company_name": job.recruiter.company_name if job.recruiter else None,
+        "company_name": company_label(job),
+            "practice_notice": NOTICE if is_zensar_practice(job) else None,
         "focus": body.focus,
         "questions": normalized,
     }
@@ -355,7 +358,7 @@ def mock_interview_history(
             **saved,
             "job_id": row.job_id,
             "job_title": row.job.title if row.job else "Role",
-            "company_name": row.job.recruiter.company_name if row.job and row.job.recruiter else None,
+            "company_name": company_label(row.job),
             "overall_score": row.overall_score,
             "dimensions": evaluation.get("dimensions", {}) if row.overall_score is not None and isinstance(evaluation, dict) else {},
             "overall_feedback": row.overall_feedback if row.overall_score is not None else saved["status_message"],

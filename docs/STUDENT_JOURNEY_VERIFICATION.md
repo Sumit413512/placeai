@@ -1,5 +1,7 @@
 # Student journey and technical practice release — 24 October 2026
 
+Historical release note: the separate technical practice feature below was retired and replaced by Zensar inside Mock Interview Coach. See ZENSAR_PROCTORED_PRACTICE.md. Navigation and tracker fixes remain.
+
 ## Problems and resulting behaviour
 
 Workspace navigation used replaceState for each screen, so browser Back could jump to an older standalone mock-interview page. The central navigation path now records distinct workspace entries and restores the selected screen on Back/Forward. Initial sign-in/reload restoration replaces rather than duplicates entries. Slow read responses from abandoned views cannot overwrite the current page.

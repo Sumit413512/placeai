@@ -1729,8 +1729,9 @@
         if(state.questions.length<50) throw new Error('Secure full mock requires at least 50 primary assessment items.');
       }
       state.answers=new Array(state.questions.length);
+      $('#selected-assessment').textContent=`${job.title} · ${job.company_name || 'Opportunity'}${job.practice_notice ? ' · '+job.practice_notice : ''}`;
       $('#interview-title').textContent=`${job.title} placement assessment`;
-      $('#interview-context').textContent=`${job.company_name || 'Opportunity'} · standardized blueprint · proctored forward-only mode`;
+      $('#interview-context').textContent=`${job.company_name || 'Opportunity'} · standardized blueprint · proctored forward-only mode${job.practice_notice ? ' · '+job.practice_notice : ''}`;
       $('#setup-panel').classList.add('hidden'); $('#system-panel').classList.remove('hidden');
       $('#system-panel').scrollIntoView({behavior:'smooth',block:'start'});
     } catch(error){
