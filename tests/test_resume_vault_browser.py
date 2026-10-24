@@ -88,6 +88,10 @@ def test_resume_review_and_consented_semester_documents(browser,local_server):
             staff.get_by_role('button',name='Download',exact=True).click()
         assert response.value.status==200,response.value.text()
     assert Path(download.value.path()).read_bytes()==raw
+    with staff.expect_popup() as preview:
+        staff.get_by_role('button',name='View',exact=True).click()
+    preview.value.wait_for_url('blob:**')
+    preview.value.close()
     staff.screenshot(path=str(output/'local-institution-documents.png'),full_page=True)
     for width in (1440,768,390,320):
         staff.set_viewport_size({'width':width,'height':1000})
