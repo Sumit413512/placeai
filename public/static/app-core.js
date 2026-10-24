@@ -471,12 +471,32 @@
     $('#resume-target-form').onsubmit=async e=>{e.preventDefault();const f=e.target,b=f.querySelector('button[type=submit]'),status=f.querySelector('[role=status]');b.disabled=true;try{const requirements=$$('.evidence-requirement-row',f).map(row=>({label:row.querySelector('[data-requirement-label]').value.trim(),priority:row.querySelector('[data-requirement-priority]').value}));if(!requirements.length)throw new Error('Add at least one requirement.');await api('/students/resume/target',{method:'PUT',body:JSON.stringify({role:f.elements.role.value.trim(),requirements})});await renderResumeEvidence();toast('Target saved','Review your resume again to update role coverage.');}catch(err){status.textContent=err.message;}finally{b.disabled=false;}};
     $('#run-evidence-review').onclick=async e=>{const b=e.target;b.disabled=true;$('#evidence-review-status').textContent='Reviewing your resume…';try{await api('/students/resume/evidence',{method:'POST'});if(state.view==='resume')await renderResumeEvidence();}catch(err){if($('#evidence-review-status'))$('#evidence-review-status').textContent=err.message;}finally{b.disabled=false;}};
   }
-  async function viewVaultFile(id){
-    const popup=window.open('about:blank','_blank');if(!popup)throw new Error('Allow a new tab to view the document, or use Download.');popup.opener=null;
-    try{const response=await authorizedFile(`/enterprise/documents/${encodeURIComponent(id)}/download`);if(!response.ok)throw new Error('Document is unavailable or access was withdrawn.');const blob=await response.blob(),url=URL.createObjectURL(blob);popup.location.replace(url);setTimeout(()=>URL.revokeObjectURL(url),120000);}catch(err){popup.close();throw err;}
+  async function viewVaultFile(id,filename){
+    const popup=window.open('about:blank','_blank');
+    if(!popup)throw new Error('Allow a new tab to view the document, or use Download.');
+    popup.opener=null;
+    try{
+      const response=await authorizedFile(`/enterprise/documents/${encodeURIComponent(id)}/download`);
+      if(!response.ok)throw new Error('Document is unavailable or access was withdrawn.');
+      const blob=await response.blob(),url=URL.createObjectURL(blob),doc=popup.document;
+      doc.title='Document preview · PlaceAI';
+      doc.body.style.cssText='margin:0;padding:32px;background:#f7f4f7;color:#302b34;font:18px/1.6 Calibri,Arial,sans-serif';
+      const card=doc.createElement('main');card.style.cssText='max-width:640px;margin:10vh auto;background:white;border:1px solid #ded6df;border-radius:12px;padding:28px';
+      const heading=doc.createElement('h1');heading.textContent=filename||'Your document is ready';heading.style.cssText='font-size:28px;margin:0 0 16px;overflow-wrap:anywhere';
+      const copy=doc.createElement('p');copy.textContent='Opening your browser’s document viewer. If your browser downloads PDFs instead, open the downloaded file or use the button below.';
+      const download=doc.createElement('a');download.href=url;download.textContent='Download document';
+      download.download=filename||'PlaceAI-document'+({'application/pdf':'.pdf','image/png':'.png','image/jpeg':'.jpg'}[blob.type]||'');
+      download.dataset.placeaiDocumentDownload='true';download.style.cssText='display:inline-block;padding:12px 20px;background:#68495f;color:white;text-decoration:none;border-radius:8px';
+      card.append(heading,copy,download);doc.body.replaceChildren(card);
+      // Some browsers download PDFs without committing a new document. Keep a useful fallback.
+      popup.location.replace(url);
+      const created=Date.now(),cleanup=setInterval(()=>{
+        if(popup.closed||Date.now()-created>30*60*1000){URL.revokeObjectURL(url);clearInterval(cleanup);}
+      },5000);
+    }catch(err){popup.close();throw err;}
   }
   const vaultTypeOptions='<option value="marksheet">Marksheet</option><option value="certification">Certification</option><option value="transcript">Transcript</option><option value="photo">Photograph</option><option value="identity">Optional identity document</option><option value="internship_letter">Internship letter</option><option value="offer_letter">Offer letter</option>';
-  function vaultDocumentCard(d,context,staff=false){return `<article class="vault-document"><header><div><h3>${esc(d.label||d.filename)}</h3><p>${esc(d.document_type.replaceAll('_',' '))} · ${d.semester?'Semester '+d.semester:'General document'} · ${fmtDate(d.uploaded_at)}</p></div><span>${d.shared_at?'Submitted':'Private'}</span></header><div class="row-actions"><button class="row-button" data-action="view-vault-document" data-id="${esc(d.id)}">View</button><button class="row-button" data-action="download-vault-document" data-id="${esc(d.id)}">Download</button></div>${staff?'':d.shared_at?`<p>Submitted to ${esc(d.shared_organization_name||'your institution')}.</p><button class="row-button" data-vault-withdraw="${esc(d.id)}">Withdraw submission</button>`:`<details><summary>Semester and label</summary><form data-vault-metadata="${esc(d.id)}" class="form-stack"><label>Semester<input type="number" min="1" max="20" name="semester" value="${d.semester||''}"></label><label>Label<input name="label" maxlength="160" value="${esc(d.label||'')}"></label><button class="row-button">Save details</button></form></details>${context.organization_id?`<form data-vault-submit="${esc(d.id)}"><label class="check-label"><input type="checkbox" name="consent" required> I agree to submit this document to ${esc(context.organization_name)} for placement administration.</label><button class="row-button primary">Submit to institution</button></form>`:'<p>Link your institution through the authorised access process to submit documents.</p>'}`}<p role="status"></p></article>`;}
+  function vaultDocumentCard(d,context,staff=false){return `<article class="vault-document"><header><div><h3>${esc(d.label||d.filename)}</h3><p>${esc(d.document_type.replaceAll('_',' '))} · ${d.semester?'Semester '+d.semester:'General document'} · ${fmtDate(d.uploaded_at)}</p></div><span>${d.shared_at?'Submitted':'Private'}</span></header><div class="row-actions"><button class="row-button" data-action="view-vault-document" data-id="${esc(d.id)}" data-filename="${esc(d.filename)}">View</button><button class="row-button" data-action="download-vault-document" data-id="${esc(d.id)}" data-filename="${esc(d.filename)}">Download</button></div>${staff?'':d.shared_at?`<p>Submitted to ${esc(d.shared_organization_name||'your institution')}.</p><button class="row-button" data-vault-withdraw="${esc(d.id)}">Withdraw submission</button>`:`<details><summary>Semester and label</summary><form data-vault-metadata="${esc(d.id)}" class="form-stack"><label>Semester<input type="number" min="1" max="20" name="semester" value="${d.semester||''}"></label><label>Label<input name="label" maxlength="160" value="${esc(d.label||'')}"></label><button class="row-button">Save details</button></form></details>${context.organization_id?`<form data-vault-submit="${esc(d.id)}"><label class="check-label"><input type="checkbox" name="consent" required> I agree to submit this document to ${esc(context.organization_name)} for placement administration.</label><button class="row-button primary">Submit to institution</button></form>`:'<p>Link your institution through the authorised access process to submit documents.</p>'}`}<p role="status"></p></article>`;}
   async function renderAcademicVault(staff=false,filters={}){
     setPage(staff?'Student documents':'Document vault','Academic records');setContextAction();
     const params=new URLSearchParams(Object.entries(filters).filter(([,v])=>v!==''&&v!=null));
@@ -1162,8 +1182,8 @@
       else if(a==='open-thread')await openThread(id);
       else if(a==='download-thread-attachment')await downloadAuthorized(`/enterprise/communications/${val}/messages/${id}/attachment`,'placeai-attachment');
       else if(a==='download-report')await downloadAuthorized(`/enterprise/reports/${id}.${val}`,`${id}.${val}`);
-      else if(a==='view-vault-document'){await viewVaultFile(id);}
-      else if(a==='download-vault-document')await downloadAuthorized(`/enterprise/documents/${id}/download`,'student-document');
+      else if(a==='view-vault-document'){await viewVaultFile(id,el.dataset.filename);}
+      else if(a==='download-vault-document')await downloadAuthorized(`/enterprise/documents/${id}/download`,el.dataset.filename||'student-document');
       else if(a==='review-profile-change'){await api(`/enterprise/profile-change-requests/${id}`,{method:'PATCH',body:JSON.stringify({status:val})});toast(`Change ${val}`);navigate('approvals');}
     }catch(err){toast('Action failed',err.message,'error');}
   });
