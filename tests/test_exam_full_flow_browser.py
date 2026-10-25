@@ -153,7 +153,10 @@ def test_complete_exam_has_same_protection_and_real_recordings(browser, exams, l
             with av.open(BytesIO(b"".join(chunk.data for chunk in chunks))) as media:
                 assert bool(media.streams.video)==row.mime_type.startswith("video/")
                 audio=list(media.decode(audio=0))
-                assert audio and any(frame.to_ndarray().max()>0 for frame in audio),row.question_id
+                resampler=av.AudioResampler(format="s16",layout="mono",rate=16000)
+                pcm=[sample for frame in audio for sample in resampler.resample(frame)]
+                pcm.extend(resampler.resample(None))
+                assert pcm and any(any(bytes(frame.planes[0])[:frame.samples*2]) for frame in pcm),row.question_id
     engine.dispose()
     assert not errors,errors
     output=ROOT/"work/exam-flow-verification";output.mkdir(parents=True,exist_ok=True)
