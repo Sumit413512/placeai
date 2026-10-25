@@ -39,6 +39,7 @@
     proctorModelReady:false,
     proctorModelLoading:null,
     proctorModelBusy:false,
+    systemCheckRunning:false,
     proctorInputCanvas:null,
     nativeFaceDetector:null,
     localProctorTimer:null,
@@ -1312,46 +1313,83 @@
     }
   }
 
-  const proctorLibraries = new Map();
-  function loadProctorLibrary(source) {
-    if (proctorLibraries.has(source)) return proctorLibraries.get(source);
-    const promise = new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      let timer;
-      const fail = () => { clearTimeout(timer); script.remove(); proctorLibraries.delete(source); reject(new Error('Proctor library unavailable. Run the system check again.')); };
-      script.src = source; script.async = true;
-      script.onload = () => { clearTimeout(timer); resolve(); };
-      script.onerror = fail;
-      timer = setTimeout(fail, 12000);
-      document.head.appendChild(script);
+  const PROCTOR_LOAD_TIMEOUT = 45000;
+  function createProctorDetector(onPhase) {
+    const worker=new Worker('/static/proctor-worker.js?v=20261024-proctor2');
+    let nextId=0;
+    const requests=new Map();
+    let loadTimer;
+    let closed=false;
+    let rejectLoad;
+    function close(error){
+      if(closed)return;
+      closed=true;worker.terminate();clearTimeout(loadTimer);
+      if(state.proctorModel?.closed){state.proctorModelReady=false;updateStartEligibility();}
+      rejectLoad?.(error);
+      for(const pending of requests.values()){clearTimeout(pending.timer);pending.reject(error);}
+      requests.clear();
+    }
+    const ready=new Promise((resolve,reject)=>{
+      rejectLoad=reject;
+      loadTimer=setTimeout(()=>close(new Error('Model preparation timed out')),PROCTOR_LOAD_TIMEOUT);
+      worker.onerror=()=>close(new Error('Detector worker could not start'));
+      worker.onmessage=({data})=>{
+        if(data.type==='phase'){onPhase(data.label);return;}
+        if(data.type==='ready'){clearTimeout(loadTimer);rejectLoad=null;resolve();return;}
+        if(data.type==='error'){close(new Error(data.message));return;}
+        const pending=requests.get(data.id);
+        if(pending){clearTimeout(pending.timer);requests.delete(data.id);pending.resolve(data.predictions);}
+      };
+      worker.postMessage({type:'load'});
     });
-    proctorLibraries.set(source, promise);
-    return promise;
+    return {
+      ready,
+      get closed(){return closed;},
+      detect(input,maxNumBoxes=10,minScore=0.32){
+        if(closed)return Promise.reject(new Error('Detector is unavailable'));
+        const canvas=input instanceof HTMLCanvasElement?input:document.createElement('canvas');
+        if(canvas!==input){canvas.width=input.videoWidth||input.width||320;canvas.height=input.videoHeight||input.height||240;canvas.getContext('2d').drawImage(input,0,0,canvas.width,canvas.height);}
+        const image=canvas.getContext('2d',{willReadFrequently:true}).getImageData(0,0,canvas.width,canvas.height);
+        const id=++nextId;
+        return new Promise((resolve,reject)=>{
+          const timer=setTimeout(()=>close(new Error('Detector inference timed out')),10000);
+          requests.set(id,{resolve,reject,timer});
+          worker.postMessage({type:'detect',id,width:image.width,height:image.height,pixels:image.data.buffer,maxNumBoxes,minScore},[image.data.buffer]);
+        });
+      },
+      dispose(){close(new Error('Detector closed'));}
+    };
   }
 
   async function ensureProctorModel() {
-    if(state.proctorModelReady && state.proctorModel) return true;
+    if(state.proctorModelReady && state.proctorModel && !state.proctorModel.closed) return true;
     if(state.proctorModelLoading) return state.proctorModelLoading;
-    state.proctorModelLoading=(async function(){
+    state.proctorModelLoading=Promise.resolve().then(async function(){
+      const retry=$('#retry-proctor');
+      const detail=$('#proctor-load-detail');
+      let detector;
+      if(retry)retry.disabled=true;
+      if(detail)detail.textContent='Preparing secure detection on this device. No camera access is needed for this step.';
       try{
-        setCheck('proctor',null,'Loading model');
-        if(!window.tf) await loadProctorLibrary('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.es2017.min.js');
-        if(!window.cocoSsd) await loadProctorLibrary('https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js');
-        if(!window.tf || !window.cocoSsd) throw new Error('On-device proctor runtime did not load');
-        await window.tf.ready();
-        state.proctorModel=await window.cocoSsd.load({base:'lite_mobilenet_v2'});
-        state.proctorModelReady=Boolean(state.proctorModel);
-        setCheck('proctor',state.proctorModelReady?'pass':'fail',state.proctorModelReady?'Ready':'Unavailable');
-        return state.proctorModelReady;
+        detector=createProctorDetector(label=>setCheck('proctor',null,label));
+        await detector.ready;
+        state.proctorModel=detector;
+        state.proctorModelReady=true;
+        setCheck('proctor','pass','Ready');
+        if(detail)detail.textContent='Detector loaded and inference verified. Camera, screen sharing and liveness checks are still required.';
+        return true;
       }catch(error){
-        state.proctorModel=null;
-        state.proctorModelReady=false;
-        setCheck('proctor','fail','Unavailable');
+        detector?.dispose();
+        state.proctorModel=null;state.proctorModelReady=false;
+        setCheck('proctor','fail',error.message.includes('timed out')?'Timed out':'Download failed');
+        if(detail)detail.textContent='Detector preparation failed. Check your connection, then select Retry detector. The exam has not started.';
         return false;
       }finally{
+        if(retry){retry.disabled=false;retry.textContent=state.proctorModelReady?'Detector ready':'Retry detector';}
         state.proctorModelLoading=null;
+        updateStartEligibility();
       }
-    })();
+    });
     return state.proctorModelLoading;
   }
 
@@ -1475,6 +1513,10 @@
     }catch(error){
       $('#camera-proctor-status').textContent='Proctor model recovering';
       logIntegrity('local_proctor_error','On-device proctor model check failed and will retry.','system',null);
+      state.proctorModel?.dispose?.();state.proctorModel=null;state.proctorModelReady=false;
+      if(!await ensureProctorModel() && state.assessmentActive&&!state.finishing){
+        registerIntegrityWarning('proctor_model_unavailable','The on-device proctoring model became unavailable.','system','Proctoring unavailable',true);
+      }
     }finally{
       state.proctorModelBusy=false;
     }
@@ -1504,6 +1546,14 @@
   }
 
   async function runSystemCheck() {
+    if(state.systemCheckRunning)return;
+    state.systemCheckRunning=true;
+    state.livenessPassed=false;state.systemReady=false;
+    setCheck('liveness',null,'Required');
+    updateStartEligibility();
+    const checkButton=$('#run-check');
+    checkButton.disabled=true;
+    try {
     setCheck('browser','pass','Ready');
     setCheck('clipboard','pass','Enabled');
     setCheck('visibility','pass','Enabled');
@@ -1598,6 +1648,7 @@
     $('#system-status-pill').textContent=mediaReady&&state.screenReady&&modelReady?'Preflight ready':'Action required';
     $('#system-status-pill').classList.toggle('neutral',!(mediaReady&&state.screenReady&&modelReady));
     updateStartEligibility();
+    }finally{state.systemCheckRunning=false;checkButton.disabled=false;}
   }
 
   function motionSignature(video) {
@@ -1717,6 +1768,7 @@
     const jobId=$('#job-select').value;
     if(!jobId){toast('Select a target opportunity.','error');return;}
     const job=state.jobs.find(j=>String(j.id)===String(jobId));
+    void ensureProctorModel();
     const button=event.currentTarget.querySelector('button[type="submit"]');
     button.disabled=true; button.textContent='Building standardized assessment…';
     try {
@@ -1734,6 +1786,7 @@
       $('#interview-context').textContent=`${job.company_name || 'Opportunity'} · standardized blueprint · proctored forward-only mode${job.practice_notice ? ' · '+job.practice_notice : ''}`;
       $('#setup-panel').classList.add('hidden'); $('#system-panel').classList.remove('hidden');
       $('#system-panel').scrollIntoView({behavior:'smooth',block:'start'});
+      void ensureProctorModel();
     } catch(error){
       const form = event.currentTarget;
       apiErrors.applyToForm(form, error);
@@ -2549,6 +2602,7 @@
 
   $('#setup-form')?.addEventListener('submit',prepareAssessment);
   $('#run-check')?.addEventListener('click',runSystemCheck);
+  $('#retry-proctor')?.addEventListener('click',()=>{void ensureProctorModel();});
   $('#run-liveness')?.addEventListener('click',runLiveness);
   $('#consent-check')?.addEventListener('change',updateStartEligibility);
   $('#start-assessment')?.addEventListener('click',startAssessment);

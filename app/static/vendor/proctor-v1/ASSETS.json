@@ -1,0 +1,66 @@
+{
+  "runtime": "@tensorflow/tfjs@4.22.0",
+  "detector": "@tensorflow-models/coco-ssd@2.2.3",
+  "model_source": "https://storage.googleapis.com/tfjs-models/savedmodel/ssdlite_mobilenet_v2/",
+  "files": {
+    "coco-ssd.min.js": {
+      "bytes": 9299,
+      "sha256": "8875b8c1bb57723990c9d6506226e0e51cd21b8b6943eb53201086096de52df5"
+    },
+    "group1-shard1of5": {
+      "bytes": 4194304,
+      "sha256": "0e7af0f713e98521252321f7f84892c31cefccccec3ac64c84e5065b75ed5646"
+    },
+    "group1-shard2of5": {
+      "bytes": 4194304,
+      "sha256": "74cc6cfc2c4510c9cd81b8ad4cebf6f6a8f305119bb365ce0eb96276da38519a"
+    },
+    "group1-shard3of5": {
+      "bytes": 4194304,
+      "sha256": "50383033f893eae136392a403e8f70ade5efd90867df5695c4ca5ac640e14f38"
+    },
+    "group1-shard4of5": {
+      "bytes": 4194304,
+      "sha256": "d856dc534c780068bbf6c666ce1516df2c8433d87578aa31fcdf197de7058cc2"
+    },
+    "group1-shard5of5": {
+      "bytes": 1257312,
+      "sha256": "3d356f1fb6dfca6af78c56db34d9326706d0196e303f9de6b04f236ca79ed309"
+    },
+    "LICENSE-coco-ssd.txt": {
+      "bytes": 11357,
+      "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd"
+    },
+    "LICENSE-tfjs.txt": {
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    "model.json": {
+      "bytes": 527315,
+      "sha256": "3770b2528339b1e3340cb74360e1e40401816b009779aeb8d0cce3a4353ea3a9"
+    },
+    "tf-backend-wasm.min.js": {
+      "bytes": 144402,
+      "sha256": "bdd8c3c1fb0b37601bc2a122efa20b8d78e2936d104b03a44591be4188c63f65"
+    },
+    "tf.min.js": {
+      "bytes": 1105894,
+      "sha256": "a1f9e32fd9b373cf394905050cf0c8c66238b34925846c065db00d2a34d1c040"
+    },
+    "tfjs-backend-wasm-simd.wasm": {
+      "bytes": 424594,
+      "sha256": "77ebb28a6d34f371dbbf2086b7f2de8994acd8ea5a3cf1fa24d2c26c840cac7b"
+    },
+    "tfjs-backend-wasm-threaded-simd.wasm": {
+      "bytes": 435643,
+      "sha256": "c052228d4bef185c27bbe59a9e029570c78bbb9f08b3cb46b597851650373de2"
+    },
+    "tfjs-backend-wasm.wasm": {
+      "bytes": 311123,
+      "sha256": "70a5d516060464e5269f01c74bac1772d6b8ab6cb612acf16b5cdaf61f78d892"
+    }
+  },
+  "wasm_backend": "@tensorflow/tfjs-backend-wasm@4.22.0",
+  "runtime_source": "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.es2017.min.js",
+  "wasm_source": "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.22.0/dist/tf-backend-wasm.es2017.min.js"
+}

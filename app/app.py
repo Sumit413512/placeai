@@ -211,6 +211,11 @@ async def security_headers(request: Request, call_next):
             "media-src 'self' blob:; "
             f"{google_frames}object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
         )
+    if path == "/static/proctor-worker.js":
+        # WebAssembly is confined to this same-origin worker; page JS eval stays blocked.
+        response.headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'"
+    if path.startswith("/static/vendor/proctor-v1/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups" if path == "/" else "same-origin"
     if request.headers.get("authorization"):
         if "no-store" not in response.headers.get("Cache-Control", "").lower():
