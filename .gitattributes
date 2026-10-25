@@ -1,0 +1,3 @@
+# Preserve upstream detector artifact checksums across Windows and Linux.
+app/static/vendor/proctor-v1/** -text
+public/static/vendor/proctor-v1/** -text

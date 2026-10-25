@@ -131,7 +131,7 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
     expect(page.locator('.learning-video-player')).to_have_attribute('aria-label','Query concept 1')
     expect(page.locator('[data-video-outline] [data-video-lesson="1"]')).to_have_attribute('aria-current','step')
     expect(page.locator('[data-video-move="1"]')).to_be_enabled()
-    output=Path(__file__).resolve().parents[3]/'output/design'
+    output=Path(__file__).resolve().parents[1]/'work/ui-review'
     output.mkdir(parents=True,exist_ok=True)
     for width in (1440,736,390,320):
         page.set_viewport_size({"width":width,"height":1000})
