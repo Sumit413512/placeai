@@ -73,6 +73,7 @@ def test_complete_exam_has_same_protection_and_real_recordings(browser, exams, l
         submitted.append(route.request.post_data_json)
         route.fulfill(status=503,json={"detail":{"code":"VIDEO_PROVIDER_CAPACITY","message":"Synthetic test analysis is deliberately offline; exam data remains saved."}})
     page.route("**/mock-interview/evaluate",evaluate)
+    page.route("**/mock-interview/proctor-frame",lambda route:route.fulfill(json={"candidate_visible":True,"person_count":1,"mobile_phone_detected":False}))
     page.add_init_script("("+DEVICES+")()")
     page.goto(BASE_URL+"/mock-interview",wait_until="domcontentloaded")
     page.locator("#job-select").select_option(exams[company])
