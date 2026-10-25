@@ -83,7 +83,9 @@
     advancing:false,
     submissionSaved:false,
     recordingUrl:null,
-    voiceMeter:null
+    voiceMeter:null,
+    readingQuestionId:null,
+    reconnectingMicrophone:false
   };
 
   function toast(message, type='') {
@@ -707,12 +709,14 @@
     state.narrationCancel?.();
     state.narrationCancel=null;
     state.narrationUtterance=null;
+    state.readingQuestionId=null;
     if(window.speechSynthesis)speechSynthesis.cancel();
   }
 
   async function readQuestionBeforeAnswer(q, record) {
     cancelQuestionReading();
     const generation=state.narrationGeneration;
+    state.readingQuestionId=q.question_id;
     const spec=q.coding_spec || {};
     const examples=(spec.sample_tests || []).map((sample,i)=>'Example '+(i+1)+'. Input. '+sample.input+'. Expected output. '+sample.output).join(' ');
     const text='Reading question. '+q.question+(q.options?.length?' Options. '+q.options.map((v,i)=>'Option '+(i+1)+'. '+v).join(' '):'')+' '+(spec.constraints || []).join('. ')+' '+examples+'. '+(record?'Record your answer.':'You may answer now.');
@@ -758,6 +762,7 @@
       }
       await new Promise(resolve=>setTimeout(resolve,0));
     }
+    if(state.narrationGeneration===generation)state.readingQuestionId=null;
     if(record && state.narrationGeneration===generation && state.assessmentActive)await beginQuestionAnswer(q);
   }
 
@@ -787,7 +792,7 @@
   }
 
   async function startQuestionRecorder(q) {
-    if(state.answerClip?.questionId===q.question_id || state.answerStarting || !state.assessmentActive)return;
+    if(state.questions[state.current]?.question_id!==q.question_id || state.answerClip?.questionId===q.question_id || state.answerStarting || !state.assessmentActive)return;
     state.answerStarting=true;
     updateSpokenIndicator();
     try {
@@ -795,12 +800,12 @@
       if(!window.MediaRecorder)throw new Error('This browser cannot record this answer. Use a supported browser.');
       const audioOnly=q.response_mode==='audio';
       const tracks=state.mediaStream?.getTracks().filter(t=>!audioOnly || t.kind==='audio') || [];
-      if(!tracks.some(t=>t.kind==='audio' && t.readyState==='live') || !audioOnly && !tracks.some(t=>t.kind==='video' && t.readyState==='live'))throw new Error('Camera or microphone is unavailable. Restore your devices to record.');
+      if(!tracks.some(t=>t.kind==='audio' && t.readyState==='live' && t.enabled && !t.muted) || !audioOnly && !tracks.some(t=>t.kind==='video' && t.readyState==='live'))throw new Error('Camera or microphone is unavailable. Restore your devices to record.');
       const formats=audioOnly?['audio/webm;codecs=opus','audio/webm','audio/mp4']:['video/webm;codecs=vp8,opus','video/webm','video/mp4'];
       const mime=formats.find(t=>MediaRecorder.isTypeSupported(t));
       if(!mime)throw new Error('This browser cannot record this answer. Use a supported browser.');
       const recorder=new MediaRecorder(new MediaStream(tracks),{mimeType:mime,audioBitsPerSecond:48000,...(!audioOnly?{videoBitsPerSecond:250000}:{})});
-      const server=await api(`/mock-interview/${state.session.interview_id}/answers/${q.question_id}/start`,{method:'POST',body:JSON.stringify({mime_type:mime.split(';')[0],consent:$('#consent-check').checked})});
+      const server=await api(`/mock-interview/${state.session.interview_id}/answers/${q.question_id}/start`,{method:'POST',signal:AbortSignal.timeout(20000),body:JSON.stringify({mime_type:mime.split(';')[0],consent:$('#consent-check').checked})});
       if(server.status!=='recording')throw new Error('This answer has already been submitted.');
       const clip={questionId:q.question_id,interviewId:state.session.interview_id,recorder,chunks:[],uploaded:0,bytes:0,submitted:false,
         deadline:Date.now()+Math.max(0,Date.parse(server.question_deadline_at)-Date.parse(server.server_time))};
@@ -811,15 +816,30 @@
         for(let pos=0;pos<event.data.size;pos+=512*1024)clip.chunks.push(event.data.slice(pos,pos+512*1024));
         uploadQuestionAnswer(clip).catch(error=>{clip.error=error.message;});
       };
-      recorder.onerror=()=>{clip.error='Recording was interrupted. Finish this answer to preserve captured media.';};
+      recorder.onerror=()=>{
+        clip.error='Recording was interrupted. Finish this answer to preserve captured media.';
+        if(state.answerClip===clip){$('#spoken-answer-status').textContent=clip.error;updateSpokenIndicator();}
+      };
+      recorder.addEventListener('stop',()=>{
+        if(state.answerClip===clip && !clip.finishing && !clip.submitted){
+          $('#spoken-answer-status').textContent=clip.error || 'Recording stopped. Finish this answer to save captured audio before continuing.';
+          updateSpokenIndicator();
+        }
+      });
       recorder.start(4000);
       state.answerClip=clip;
       ensureVoiceMeter();
       $('#spoken-answer-status').textContent='Recording your answer · microphone on'+(audioOnly?'':' · camera on');
       updateSpokenIndicator();
       $('#start-spoken-answer').classList.add('hidden');
+      $('#retry-question-reading')?.classList.add('hidden');
+      $('#reconnect-answer-microphone')?.classList.add('hidden');
       $('#next-question').disabled=false;
-    }catch(error){$('#spoken-answer-status').textContent=error.message;$('#start-spoken-answer')?.classList.remove('hidden');}
+    }catch(error){
+      $('#spoken-answer-status').textContent=error.name==='TimeoutError'?'Microphone setup took too long. Select Start answer now to retry. Your saved answers are unchanged.':error.message;
+      $('#start-spoken-answer')?.classList.remove('hidden');
+      $('#reconnect-answer-microphone')?.classList.remove('hidden');
+    }
     finally{state.answerStarting=false;updateSpokenIndicator();}
   }
 
@@ -911,32 +931,59 @@
     const configured=Math.max(45,Math.min(150,Number(q?.answer_time_seconds)||150));
     const left=recording&&deadline?Math.max(0,Math.ceil((deadline-Date.now())/1000)):configured;
     indicator.classList.toggle('listening',recording);
-    indicator.classList.toggle('reading',!recording);
+    const reading=state.readingQuestionId===q?.question_id;
+    indicator.classList.toggle('reading',!recording && reading);
     const label=$('#spoken-mic-label'),help=$('#spoken-mic-help'),timer=$('#spoken-question-timer');
-    if(label)label.textContent=recording?'Microphone on · Listening':state.answerStarting?'Starting microphone…':'Question is being read aloud';
-    if(help)help.textContent=recording?(q?.response_mode==='video'?'Camera and microphone are recording this answer.':'Your voice is recording for this question.'):'The microphone starts listening after narration finishes.';
+    if(label)label.textContent=recording?'Microphone on · Listening':state.answerStarting?'Starting microphone…':reading?'Question is being read aloud':clip?'Recording stopped':'Ready to record your answer';
+    if(help)help.textContent=recording?(q?.response_mode==='video'?'Camera and microphone are recording this answer.':'Your voice is recording for this question.'):reading?'You can select Start answer now to finish reading and turn on your microphone.':clip?'Continue to save the captured answer.':'Select Start answer now. If your device is unavailable, reconnect the microphone.';
     if(timer){timer.textContent=formatTime(left);timer.setAttribute('datetime','PT'+left+'S');}
+  }
+
+  async function reconnectAnswerMicrophone(q) {
+    if(state.answerClip || state.answerStarting || state.reconnectingMicrophone || !state.assessmentActive)return;
+    state.reconnectingMicrophone=true;
+    const button=$('#reconnect-answer-microphone');button.disabled=true;
+    cancelQuestionReading();
+    let replacement;
+    try{
+      replacement=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+      const audio=replacement.getAudioTracks().find(track=>track.readyState==='live' && track.enabled && !track.muted);
+      if(!audio)throw new Error('No working microphone was found. Check browser permissions and retry.');
+      if(!state.assessmentActive || state.questions[state.current]?.question_id!==q.question_id || !state.mediaStream)return;
+      stopVoiceMeter();
+      state.mediaStream.getAudioTracks().forEach(track=>{state.mediaStream.removeTrack(track);track.stop();});
+      state.mediaStream.addTrack(audio);replacement.removeTrack(audio);
+      logIntegrity('microphone_reconnected','The candidate reconnected the microphone without changing camera or screen sharing.','browser',null);
+      button.classList.add('hidden');
+      await beginQuestionAnswer(q);
+    }catch(error){
+      const status=$('#spoken-answer-status');
+      if(status && state.questions[state.current]?.question_id===q.question_id)status.textContent=error.message || 'Microphone permission is required. Check your device and retry.';
+    }
+    finally{replacement?.getTracks().forEach(track=>track.stop());state.reconnectingMicrophone=false;button.disabled=false;updateSpokenIndicator();}
   }
 
   function renderSpokenAnswer(q) {
     state.answerClip=null;
     const answerSeconds=Math.max(45,Math.min(150,Number(q.answer_time_seconds)||150));
     const answerWindow=answerSeconds%60===0?(answerSeconds/60)+' minute'+(answerSeconds===60?'':'s'):Math.floor(answerSeconds/60)+' min '+(answerSeconds%60)+' sec';
-    $('#answer-area').innerHTML='<div class="answer-field"><strong>'+(q.response_mode==='video'?'HR camera and voice answer':'Spoken answer')+'</strong><p>Listen to the question, then answer aloud. This question has its own private recording with up to '+answerWindow+' of answer time.</p>'+spokenIndicatorMarkup(answerSeconds,q.response_mode==='video')+'<p id="spoken-answer-status" role="status">Reading question…</p><button id="start-spoken-answer" type="button" class="button secondary hidden">Start answer</button>'+(q.response_mode==='video'?'<video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video>':'')+'</div>';
+    $('#answer-area').innerHTML='<div class="answer-field"><strong>'+(q.response_mode==='video'?'HR camera and voice answer':'Spoken answer')+'</strong><p>Listen to the question, then answer aloud. This question has its own private recording with up to '+answerWindow+' of answer time.</p>'+spokenIndicatorMarkup(answerSeconds,q.response_mode==='video')+'<p id="spoken-answer-status" role="status">Reading question…</p><button id="start-spoken-answer" type="button" class="button secondary">Start answer now</button><button id="reconnect-answer-microphone" type="button" class="button secondary hidden">Reconnect microphone</button>'+(q.response_mode==='video'?'<video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video>':'')+'</div>';
     const preview=$('#hr-answer-preview');if(preview){preview.srcObject=state.mediaStream;preview.play().catch(()=>{});}
     $('#start-spoken-answer').onclick=()=>beginQuestionAnswer(q);
+    $('#reconnect-answer-microphone').onclick=()=>reconnectAnswerMicrophone(q);
     const readAgain=document.createElement('button');
     readAgain.id='retry-question-reading';readAgain.type='button';readAgain.className='button secondary hidden';
     readAgain.textContent='Read question again';
     $('#start-spoken-answer').after(readAgain);
     const narrationFailed=error=>{
       if(state.questions[state.current]?.question_id!==q.question_id || !state.assessmentActive)return;
+      state.readingQuestionId=null;
       $('#spoken-answer-status').textContent=error.message;
       $('#start-spoken-answer').classList.remove('hidden');readAgain.classList.remove('hidden');updateSpokenIndicator();
     };
     readAgain.onclick=()=>{
       if(state.answerClip || state.answerStarting)return;
-      readAgain.classList.add('hidden');$('#start-spoken-answer').classList.add('hidden');
+      readAgain.classList.add('hidden');$('#start-spoken-answer').classList.remove('hidden');
       $('#spoken-answer-status').textContent='Reading question…';
       readQuestionBeforeAnswer(q,true).catch(narrationFailed);
     };
@@ -1011,6 +1058,7 @@
             : 'Unsupported response mode. This item cannot be submitted.';
     const stage=$('.question-stage');
     if(stage) stage.scrollTop=0;
+    if(state.assessmentActive)installSecureGuards();
     $('#question-text').textContent=q.question;
     $('#question-watermark').textContent=`${state.candidateLabel} · Q${state.current+1}`;
     if(q.response_mode)renderSpokenAnswer(q);
@@ -1242,6 +1290,9 @@
   }
 
   function installSecureGuards() {
+    // Identical handlers are idempotent; restore protection on every rendered item.
+    document.addEventListener('selectstart',blockQuestionSelection,true);
+    document.addEventListener('dragstart',blockQuestionSelection,true);
     document.addEventListener('copy',blockClipboard,true);
     document.addEventListener('cut',blockClipboard,true);
     document.addEventListener('paste',blockClipboard,true);
@@ -1255,6 +1306,8 @@
   }
 
   function uninstallSecureGuards() {
+    document.removeEventListener('selectstart',blockQuestionSelection,true);
+    document.removeEventListener('dragstart',blockQuestionSelection,true);
     document.removeEventListener('copy',blockClipboard,true);
     document.removeEventListener('cut',blockClipboard,true);
     document.removeEventListener('paste',blockClipboard,true);
@@ -1267,6 +1320,9 @@
     window.removeEventListener('blur',blurGuard);
   }
 
+  function blockQuestionSelection(event){
+    if(state.assessmentActive && event.target instanceof Element && event.target.closest('.protected-question,.answer-options,.code-problem-meta'))event.preventDefault();
+  }
   function blockClipboard(event){
     if(!state.assessmentActive)return;
     event.preventDefault();
@@ -1281,7 +1337,7 @@
   function blockKeys(event){
     if(!state.assessmentActive)return;
     const key=event.key.toLowerCase();
-    if((event.ctrlKey||event.metaKey)&&['c','v','x','p','s','u','a'].includes(key)){
+    if(((event.ctrlKey||event.metaKey)&&['c','v','x','p','s','u','a','insert'].includes(key)) || (event.shiftKey && ['insert','delete'].includes(key))){
       event.preventDefault();
       logIntegrity('shortcut_blocked','Blocked keyboard shortcut: '+key,'browser',null);
     }
