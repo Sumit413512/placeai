@@ -57,3 +57,25 @@ def test_recruiter_inline_cancel_remains_in_normal_flow() -> None:
     rule = app_css.split(".auth-inline-cancel", 1)[1].split("}", 1)[0]
     assert "position: static" in rule
     assert "box-shadow: none" in rule
+
+
+def test_premium_theme_and_help_are_site_wide_and_mirrored() -> None:
+    theme = _read("app/static/selected-theme.css")
+    template = _read("app/templates/index.html")
+
+    assert theme == _read("public/static/selected-theme.css")
+    assert _read("app/static/legal.css") == _read("public/static/legal.css")
+    assert _read("app/static/help.html") == _read("public/static/help.html")
+    assert template == _read("public/index.html")
+
+    assert '--font-body: "DM Sans"' in theme
+    assert '--font-display: Manrope' in theme
+    assert "linear-gradient(135deg, #6648df" in theme
+    assert "linear-gradient(180deg, #17142b" in theme
+    assert "#app-shell .topbar-actions .help-centre-button" in theme
+    assert "display: inline-flex !important" in theme
+
+    assert 'href="/static/help.html">Help &amp; Support</a>' in template
+    assert 'class="mobile-support-link"' in template
+    assert 'class="icon-button help-centre-button"' in template
+    assert 'href="/static/help.html">Help Centre</a>' in template
