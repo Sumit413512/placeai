@@ -194,6 +194,7 @@
     '</section>' +
 
     '<section class="roadmap-path-head"><div><span class="section-kicker">YOUR ROADMAP</span><h2>' + esc(data.title || 'Career Roadmap') + '</h2><p>Complete each phase in order. Every phase ends with something you can demonstrate, not just something you have watched or read.</p></div><span class="roadmap-generated">Updated ' + esc(fmtDate(data.created_at)) + '</span></section>' +
+    '<div class="roadmap-phase-map" aria-label="Roadmap phase chart">' + phases.map((phase,index) => '<div class="roadmap-phase-node roadmap-phase-node-' + (index % 4) + '"><span>' + esc(phase.phase || index + 1) + '</span><div><strong>' + esc(phase.name || 'Learning phase') + '</strong><small>' + esc(phase.days || 0) + ' days</small></div></div>').join('') + '</div>' +
     '<div class="roadmap-phase-stack">' + phases.map(phase => phaseHtml(phase, esc)).join('') + '</div>' +
 
     '<div class="roadmap-support-grid">' +

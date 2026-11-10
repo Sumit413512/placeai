@@ -1,4 +1,5 @@
 import io
+import json
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -107,6 +108,24 @@ def test_serverless_admission_uses_worker_readiness_not_local_api_secrets(hub, m
     monkeypatch.setattr(learning_ai, "configured", lambda: False)
     assert hub.client.get("/learning-hub").json()["generation_available"]
     assert hub.client.post("/learning-hub", json=preferences()).status_code == 202
+
+
+def test_approved_notes_are_reused_for_another_student_without_generation(hub):
+    created = hub.client.post("/learning-hub", json=preferences()).json()
+    row = hub.db.get(LearningNotebook, created["id"])
+    plan = {**plan_data(), "publication_review": {
+        "version": 2, "passed": True, "chapters_checked": 8, "pdf_pages": 8}}
+    row.state = "ready"
+    row.plan_json = json.dumps(plan)
+    row.chapters_json = json.dumps([chapter_data() for _ in range(8)])
+    row.editorial_status = "approved"
+    hub.db.commit()
+    hub.actor[0] = hub.other
+    reused = hub.client.post("/learning-hub", json=preferences(
+        request_id="shared-learning-request-002")).json()
+    assert reused["ready_to_begin"] and reused["editorial_status"] == "approved"
+    assert reused["chapters"] == json.loads(row.chapters_json)
+    assert hub.db.query(LearningNotebook).count() == 2
 
 
 def test_validation_rejects_short_notes_broken_diagrams_and_invented_sources():

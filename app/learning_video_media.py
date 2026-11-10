@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+from array import array
 import io
 import logging
 import math
@@ -19,9 +20,26 @@ from app import ai_provider
 
 LOGGER = logging.getLogger("placeai.learning.video.media")
 RATE = 24000
-MAX_VIDEO_BYTES = 3 * 1024 * 1024
+MAX_VIDEO_BYTES = 5 * 1024 * 1024
 MAX_AUDIO_BYTES = 6 * 1024 * 1024
 FPS = 8
+
+
+def _normalize_pcm(pcm):
+    """Match the reference's even, broadcast-style loudness without clipping."""
+    samples = array("h")
+    samples.frombytes(pcm)
+    if not samples:
+        return pcm
+    peak = max(abs(value) for value in samples)
+    rms = math.sqrt(sum(value * value for value in samples) / len(samples))
+    if not peak or not rms:
+        return pcm
+    target_rms = 0.18 * 32767
+    gain = min(4.0, target_rms / rms, (0.9 * 32767) / peak)
+    if abs(gain - 1) < .01:
+        return pcm
+    return array("h", (max(-32768, min(32767, round(value * gain))) for value in samples)).tobytes()
 
 
 class NarrationCapacityError(RuntimeError):
@@ -94,7 +112,7 @@ def speak(narration):
                         headers={"x-goog-api-key": key}, timeout=60,
                         json={"model": os.getenv("LEARNING_TTS_GEMINI_MODEL", "gemini-3.8-flash-lite-tts"),
                               "input": [{"type": "user_input", "content": [{"type": "text", "text": narration,
-                                  "annotations": [{"type": "speech_metadata", "style": "Clear, calm educational narration"}]}]}],
+                                  "annotations": [{"type": "speech_metadata", "style": "Warm, confident Indian educational narration in natural Hindi-English. Say technical terms and quoted lines in English, explain concepts in clear Hindi, keep 145 to 155 words per minute, use smooth transitions and short purposeful pauses."}]}]}],
                               "response_format": {"type": "audio"}, "store": False,
                               "generation_config": {"speech_config": [{"voice": "Kore"}]}}) as response:
                         if response.status_code == 429:
@@ -120,7 +138,7 @@ def speak(narration):
                 if step.get("type") == "model_output":
                     for item in reversed(step.get("content", [])):
                         if item.get("type") == "audio" and item.get("data"):
-                            return _pcm(base64.b64decode(item["data"], validate=True))
+                            return _normalize_pcm(_pcm(base64.b64decode(item["data"], validate=True)))
             raise ValueError("Narration provider returned no audio")
         except Exception as error:
             if isinstance(error, NarrationCapacityError):
@@ -134,7 +152,7 @@ def speak(narration):
                 headers={"Authorization": f"Bearer {key}"},
                 json={"model": os.getenv("LEARNING_TTS_OPENAI_MODEL", "tts-1"), "voice": "alloy",
                       "input": narration, "response_format": "wav"}) as response:
-                return _pcm(_response_bytes(response, MAX_AUDIO_BYTES))
+                return _normalize_pcm(_pcm(_response_bytes(response, MAX_AUDIO_BYTES)))
         except Exception as error:
             LOGGER.warning("Video narration unavailable provider=openai error_type=%s status=%s",
                            type(error).__name__, getattr(getattr(error, "response", None), "status_code", None))
@@ -177,22 +195,34 @@ def _lines(text, font, width):
 
 def slide(scene, number, total):
     from PIL import Image, ImageDraw
-    image = Image.new("RGB", (960, 540), "#f7f9fc")
+    image = Image.new("RGB", (960, 540), "#070d1c")
     draw = ImageDraw.Draw(image)
-    draw.rectangle((0, 0, 12, 540), fill="#2563eb")
-    draw.text((44, 24), "PlaceAI  /  Learning Hub", font=_font(18), fill="#475569")
-    y = 72
+    draw.ellipse((-150, -190, 380, 340), fill="#0b1d3b")
+    draw.ellipse((690, 320, 1120, 720), fill="#111a32")
+    draw.text((44, 25), "PLACEAI  /  VISUAL LEARNING", font=_font(15), fill="#8693aa")
+    draw.text((805, 25), f"LESSON {number:02}", font=_font(15), fill="#f59e0b")
+    y = 68
     for line in _lines(scene["title"], _font(30), 870):
-        draw.text((44, y), line, font=_font(30), fill="#172554"); y += 38
+        draw.text((44, y), line, font=_font(30), fill="#f8fafc"); y += 38
+    draw.rounded_rectangle((44, y + 3, 150, y + 7), radius=2, fill="#f59e0b")
     y += 14
-    for point in scene["bullets"]:
-        for line in _lines(point, _font(23), 850):
-            draw.text((52, y), line, font=_font(23), fill="#1e293b"); y += 30
-        y += 8
+    for index, point in enumerate(scene["bullets"], 1):
+        lines = _lines(point, _font(22), 780)
+        height = max(48, len(lines) * 29 + 18)
+        draw.rounded_rectangle((44, y, 916, y + height), radius=12,
+                               fill="#0d172a", outline="#25334b", width=2)
+        draw.rounded_rectangle((60, y + 12, 92, y + 44), radius=8, fill="#f59e0b")
+        draw.text((70, y + 18), str(index), font=_font(16), fill="#07101f")
+        line_y = y + 10
+        for line in lines:
+            draw.text((112, line_y), line, font=_font(22), fill="#e5e7eb"); line_y += 29
+        y += height + 10
     if scene.get("code"):
-        y += 6
+        draw.rounded_rectangle((44, y, 916, min(484, y + len(scene["code"].splitlines()) * 27 + 28)),
+                               radius=12, fill="#050914", outline="#35445f", width=2)
+        y += 14
         for line in scene["code"].splitlines():
-            draw.text((52, y), line, font=_font(19, True), fill="#1e40af"); y += 27
+            draw.text((62, y), line, font=_font(19, True), fill="#7dd3fc"); y += 27
     if scene.get("diagram"):
         diagram = scene["diagram"]
         labels = {node["id"]: node["label"] for node in diagram["nodes"]}
@@ -202,23 +232,23 @@ def slide(scene, number, total):
             right = _lines(labels[edge['target']], _font(18), 350)
             height = max(48, max(len(left), len(right)) * 23 + 10)
             for x, lines in ((52, left), (540, right)):
-                draw.rounded_rectangle((x, y, x + 365, y + height), radius=6,
-                                       fill="#eff6ff", outline="#93c5fd", width=1)
+                draw.rounded_rectangle((x, y, x + 365, y + height), radius=12,
+                                       fill="#101b31", outline="#f59e0b", width=2)
                 for offset, line in enumerate(lines):
-                    draw.text((x + 8, y + 5 + offset * 23), line, font=_font(18), fill="#1e40af")
+                    draw.text((x + 12, y + 6 + offset * 23), line, font=_font(18), fill="#f8fafc")
             middle = y + height // 2
-            draw.line((425, middle, 530, middle), fill="#2563eb", width=2)
-            draw.polygon(((530, middle), (520, middle-5), (520, middle+5)), fill="#2563eb")
+            draw.line((425, middle, 530, middle), fill="#f59e0b", width=3)
+            draw.polygon(((530, middle), (520, middle-6), (520, middle+6)), fill="#f59e0b")
             y += height + 3
             if edge.get("label"):
                 for line in _lines(edge["label"], _font(14), 850):
-                    draw.text((65, y), line, font=_font(14), fill="#475569"); y += 19
+                    draw.text((65, y), line, font=_font(14), fill="#9aa7ba"); y += 19
             y += 8
     if y > 488:
         raise ValueError("Slide content exceeds its safe area; shorten the scene")
-    draw.line((44, 505, 916, 505), fill="#cbd5e1", width=1)
-    draw.text((44, 515), "AI-generated lesson • Examples are illustrative", font=_font(14), fill="#475569")
-    draw.text((840, 515), f"{number} / {total}", font=_font(14), fill="#475569")
+    draw.line((44, 505, 916, 505), fill="#25334b", width=1)
+    draw.text((44, 515), "Technical terms in English • Explanation in Hindi", font=_font(14), fill="#8693aa")
+    draw.text((840, 515), f"{number} / {total}", font=_font(14), fill="#f59e0b")
     return image
 
 
@@ -252,18 +282,12 @@ def board_frame(scene, number, total, phase, base=None):
     step = min(len(rows)-1, int(phase / .65 * len(rows)))
     bottom = min(488, rows[step])
     if step < len(rows)-1:
-        draw.rectangle((42, bottom, 920, 488), fill="#f7f9fc")
-    # Instructor audio activity and a board pointer follow actual scene duration.
-    draw.rounded_rectangle((755, 20, 916, 53), radius=8, fill="#e8efff")
-    draw.text((767, 27), "AI tutor", font=_font(16), fill="#1e40af")
-    for index in range(5):
-        height = 4 + int(abs(math.sin(phase * 95 + index * .8)) * 13)
-        x = 852 + index * 10
-        draw.line((x, 37-height//2, x, 37+height//2), fill="#2563eb", width=3)
+        draw.rectangle((42, bottom, 920, 488), fill="#070d1c")
+    # A subtle pointer and progress line follow the measured scene duration.
     pointer_y = min(481, bottom-8)
-    draw.ellipse((20, pointer_y-4, 28, pointer_y+4), fill="#2563eb")
-    draw.line((28, pointer_y, 39, pointer_y), fill="#2563eb", width=2)
-    draw.line((44, 499, 44 + int(872 * phase), 499), fill="#2563eb", width=3)
+    draw.ellipse((20, pointer_y-4, 28, pointer_y+4), fill="#f59e0b")
+    draw.line((28, pointer_y, 39, pointer_y), fill="#f59e0b", width=2)
+    draw.line((44, 499, 44 + int(872 * phase), 499), fill="#f59e0b", width=3)
     return image
 
 
@@ -276,7 +300,7 @@ def render_video(script, narrate=speak):
             pcm = narrate(scene["narration"])
             duration = math.ceil(len(pcm) / (RATE * 2))
             total_seconds += duration
-            if not 1 <= duration <= 90 or total_seconds > 480:
+            if not 1 <= duration <= 90 or total_seconds > 600:
                 raise ValueError("Lesson duration exceeds the rendering limit")
             locations.append((staged.tell(), len(pcm)))
             staged.write(pcm)
@@ -314,7 +338,7 @@ def _encode_video(script, narrate):
             image = slide(scene, index + 1, len(script["scenes"]))
             pcm = narrate(scene["narration"])
             duration = math.ceil(len(pcm) / (RATE * 2))
-            if duration < 1 or duration > 90 or seconds + duration > 480:
+            if duration < 1 or duration > 90 or seconds + duration > 600:
                 raise ValueError("Lesson duration exceeds the rendering limit")
             pcm = pcm.ljust(duration * RATE * 2, b"\0")
             timings.append({"start": seconds, "end": seconds + duration})
@@ -363,7 +387,7 @@ def inspect_video(data, content, duration):
     """
     import av
     import hashlib
-    if not data or len(data) > MAX_VIDEO_BYTES or not 0 < duration <= 480:
+    if not data or len(data) > MAX_VIDEO_BYTES or not 0 < duration <= 600:
         raise ValueError("Video exceeds its validated media bounds")
     timings = content.get("timings", [])
     if len(timings) != len(content.get("scenes", [])) or not timings:

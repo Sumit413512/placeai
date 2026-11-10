@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
 from datetime import timedelta
 
 import httpx
@@ -50,12 +51,15 @@ def serialize(row, *, detail=False):
     checked = request.get("standard_version", 1) < 2 or (
         review.get("passed") is True and review.get("version") == 2
         and review.get("chapters_checked") == total)
-    ready = row.state == "ready" and total > 0 and len(chapters) == total and checked
+    generated = row.state == "ready" and total > 0 and len(chapters) == total and checked
+    ready = generated and row.editorial_status == "approved"
     result = {"id": row.id, "title": row.title, "status": row.state,
               "completed_chapters": len(chapters), "total_chapters": total,
               "created_at": row.created_at.isoformat(), "updated_at": row.updated_at.isoformat(),
               "error_code": row.error_code, "retry_after_seconds": 8,
+              "editorial_status": row.editorial_status,
               "preparation_stage": "ready" if ready else "needs_attention" if row.state == "failed" else
+                  "awaiting_review" if generated else
                   "waiting_capacity" if row.error_code == "LEARNING_PROVIDER_CAPACITY" else
                   "checking" if total and len(chapters) == total else "preparing",
               "pdf_available": ready, "ready_to_begin": ready}
@@ -98,13 +102,34 @@ def create(body: LearningRequest, background_tasks: BackgroundTasks,
     # Standards are server policy, never a caller-controlled quality downgrade.
     # Previously saved v1 notebooks above keep their exact idempotency contract.
     body = current_standard(body)
+    share_payload = body.model_dump(exclude={"request_id"})
+    share_payload["topic"] = " ".join(body.topic.split()).casefold()
+    shared_key = hashlib.sha256(("shared-notes-v1:" + json.dumps(
+        share_payload, sort_keys=True, separators=(",", ":"))).encode()).hexdigest()
+    cached = db.query(LearningNotebook).filter(
+        LearningNotebook.shared_key == shared_key,
+        LearningNotebook.state == "ready",
+        LearningNotebook.editorial_status == "approved",
+    ).order_by(LearningNotebook.reviewed_at.desc(), LearningNotebook.updated_at.desc()).first()
+    if cached:
+        row = LearningNotebook(
+            user_id=user.id, request_id=body.request_id, shared_key=shared_key,
+            title=body.topic, input_json=body.model_dump_json(), state="ready",
+            plan_json=cached.plan_json, chapters_json=cached.chapters_json,
+            sources_json=cached.sources_json, evidence=cached.evidence,
+            provider=cached.provider, editorial_status="approved",
+            editorial_notes="Reused from an approved shared notebook.",
+            reviewed_by_user_id=cached.reviewed_by_user_id, reviewed_at=cached.reviewed_at,
+        )
+        db.add(row); db.commit(); db.refresh(row)
+        return serialize(row, detail=True)
     if not generation_available(db):
         raise HTTPException(503, "Learning Hub research is temporarily unavailable. Please try again later.")
     if db.query(LearningNotebook).filter(LearningNotebook.user_id == user.id,
                                         LearningNotebook.state.in_(["queued", "running", "retrying"])).first():
         raise HTTPException(409, "Your current notebook is still being prepared. Open it to see progress.")
-    row = LearningNotebook(user_id=user.id, request_id=body.request_id,
-                           title=body.topic, input_json=body.model_dump_json())
+    row = LearningNotebook(user_id=user.id, request_id=body.request_id, shared_key=shared_key,
+                           title=body.topic, input_json=body.model_dump_json(), editorial_status="generating")
     db.add(row)
     db.commit()
     db.refresh(row)

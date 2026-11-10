@@ -132,6 +132,10 @@ def test_v2_checks_and_pdf_must_finish_before_publication(hub, monkeypatch):
     assert hub.client.get(f"/learning-hub/{book['id']}/pdf").status_code == 409
     step()
     ready = hub.client.get(f"/learning-hub/{book['id']}").json()
+    assert ready["preparation_stage"] == "awaiting_review" and not ready["ready_to_begin"]
+    row = hub.db.get(LearningNotebook, book["id"])
+    row.editorial_status = "approved"; hub.db.commit()
+    ready = hub.client.get(f"/learning-hub/{book['id']}").json()
     assert ready["ready_to_begin"] and ready["plan"]["publication_review"]["passed"]
     assert ready["plan"]["publication_review"]["version"] == 2
     pdf = hub.client.get(f"/learning-hub/{book['id']}/pdf")
@@ -185,6 +189,8 @@ def test_provider_interruption_resumes_after_saved_concept(hub, monkeypatch):
     step()
     assert authored == titles  # First completed concept was not regenerated.
     step()
+    assert hub.client.get(f"/learning-hub/{row.id}").json()["preparation_stage"] == "awaiting_review"
+    row.editorial_status = "approved"; hub.db.commit()
     assert hub.client.get(f"/learning-hub/{row.id}").json()["ready_to_begin"]
 
 

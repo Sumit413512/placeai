@@ -59,6 +59,7 @@ def ready_lesson(video, full_ready=True):
     identifier = new_course(video)
     course = video.db.get(VideoCourse, identifier)
     course.state, course.plan_json = 'ready', json.dumps(course_plan())
+    course.editorial_status = 'approved'
     course.input_json = json.dumps({'topic':'SQL'})  # Existing short-course compatibility.
     video.db.commit()
     assert video.api.post(f'/learning-hub/video/{identifier}/lessons/0').status_code == 202
@@ -67,10 +68,11 @@ def ready_lesson(video, full_ready=True):
     content.update({key: {'passed': True, 'version': 1} for key in ['content_review', 'media_review', 'audiovisual_review']})
     content['timings'] = [{"start": i * 25, "end": (i+1)*25} for i in range(4)]
     lesson.state, lesson.content_json, lesson.duration_seconds = 'ready', json.dumps(content), 100
+    lesson.editorial_status = 'approved'
     lesson.video_data = b'private-video-test'
     if full_ready:
         for index in range(1, 4):
-            video.db.add(VideoLesson(course_id=identifier, position=index, title=f'Part {index}', state='ready', content_json=json.dumps(content), video_data=b'private-video-test', duration_seconds=100))
+            video.db.add(VideoLesson(course_id=identifier, position=index, title=f'Part {index}', state='ready', content_json=json.dumps(content), video_data=b'private-video-test', duration_seconds=100, editorial_status='approved'))
     video.db.commit()
     return identifier, lesson.id, f'/learning-hub/video/{identifier}/lessons/0'
 
@@ -164,6 +166,11 @@ def test_worker_saves_real_playable_media_and_recovers_expired_lease(video, monk
         with video.sessions() as db:
             next_item = worker.claim(db)
         worker.process(next_item, video.sessions)
+    # Automated checks finish first; a human editor releases the course and lessons.
+    for row in video.db.query(VideoLesson).filter_by(course_id=identifier):
+        row.editorial_status = 'approved'
+    video.db.get(VideoCourse, identifier).editorial_status = 'approved'
+    video.db.commit()
     response = video.api.get(f'/learning-hub/video/{identifier}/lessons/0/media')
     assert response.status_code == 200, response.text
     with av.open(io.BytesIO(response.content)) as container:
@@ -393,7 +400,7 @@ def test_course_numbers_readiness_and_combined_completion(video):
         item['module_title'] = 'Query foundations' if index < 2 else 'Applied queries'
     row.plan_json = json.dumps(plan)
     for index in range(1,4):
-        video.db.add(VideoLesson(course_id=identifier,position=index,title=f'Part {index}',state='ready',content_json=json.dumps({key:{'passed':True} for key in ['content_review','media_review','audiovisual_review']})))
+        video.db.add(VideoLesson(course_id=identifier,position=index,title=f'Part {index}',state='ready',editorial_status='approved',content_json=json.dumps({key:{'passed':True} for key in ['content_review','media_review','audiovisual_review']})))
     video.db.commit()
     data = video.api.get(f'/learning-hub/video/{identifier}').json()
     assert data['course_ready'] and data['preparation_status'] == 'ready'
@@ -438,7 +445,7 @@ def test_new_full_course_publishes_only_after_every_lesson_passes_checks(video):
     course.input_json=json.dumps({'topic':'SQL','curriculum_version':2})
     for position in range(1,4):
         video.db.add(VideoLesson(course_id=identifier,position=position,title=f'Part {position}',
-            state='ready',video_data=b'test-checked-media',content_json=json.dumps(script())))
+            state='ready',editorial_status='approved',video_data=b'test-checked-media',content_json=json.dumps(script())))
     video.db.commit()
     assert video.api.get(path).status_code==409
     assert video.api.get(path+'/media').status_code==409

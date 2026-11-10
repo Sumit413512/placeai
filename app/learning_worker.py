@@ -441,6 +441,8 @@ def _process(item, sessions):
             # Legacy notebooks retain their original publication contract.
             total = len(json.loads(row.plan_json).get("chapters", []))
             row.state = "ready" if finalizing or (request.standard_version == 1 and total and len(completed) == total) else "queued"
+            if row.state == "ready":
+                row.editorial_status = "pending_review" if request.standard_version >= 2 else "approved"
             row.attempts = 0
             row.error_code = None
             row.lease_token = None

@@ -119,8 +119,10 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
     expect(page.locator('[data-video-outline] [data-video-lesson="0"]')).to_have_attribute('aria-current','step')
     expect(page.get_by_role('button',name='Previous lesson',exact=True)).to_be_disabled()
     assert page.locator('.learning-video-quiz').evaluate('(el)=>Boolean(el.previousElementSibling)')
-    page.get_by_label('Playback speed',exact=True).select_option('1.5')
-    assert video.evaluate('v=>v.playbackRate')==1.5
+    expect(page.get_by_label('Playback speed',exact=True)).to_have_count(0)
+    expect(page.locator('.learning-video-player-help')).to_contain_text('video menu')
+    assert video.locator('track').get_attribute('default') is None
+    assert video.evaluate("v=>v.textTracks[0].mode") == 'disabled'
     for fieldset in page.locator('[data-video-practice] fieldset').all():
         fieldset.locator('input').first.check()
     page.get_by_role('button',name='Check answers',exact=True).click()
