@@ -43,7 +43,7 @@ def test_learning_journey_is_readable_responsive_and_links_to_existing_flows(bro
     assert all(current <= previous + 1 for previous, current in zip(levels, levels[1:])), levels
     heading = page.locator("#recruiters .section-heading h2")
     assert heading.evaluate("el=>getComputedStyle(el).fontWeight") == "400"
-    assert "Calibri" in heading.evaluate("el=>getComputedStyle(el).fontFamily")
+    assert "Manrope" in heading.evaluate("el=>getComputedStyle(el).fontFamily")
     assert page.locator(".journey-card h3").all_text_contents() == ["Learn", "Practice", "Get Placed"]
     assert page.locator(".journey-card a").evaluate_all("els=>els.map(el=>el.getAttribute('href'))") == [
         "#preparation-lab",

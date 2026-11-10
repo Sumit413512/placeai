@@ -1244,7 +1244,7 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
   --pa-accent: #5b3fd4;
   --pa-accent-hover: #472db7;
   --pa-selected: #efedff;
-  --pa-canvas: #f5f7fb;
+  --pa-canvas: #f6f8fc;
   --pa-border: #dfe4ee;
   --font-body: "DM Sans", "Segoe UI", Arial, sans-serif !important;
   --font-display: Manrope, "DM Sans", "Segoe UI", Arial, sans-serif !important;
@@ -1332,7 +1332,7 @@ h1, h2, h3, h4, h5, .page-head h1, .panel-head h2 { font-family: var(--font-disp
   box-shadow: inset 3px 0 0 #a997ff !important;
 }
 #app-shell .app-nav button.active :is(span, svg) { color: #fff !important; }
-#app-shell .sidebar-bottom { border-top-color: rgb(255 255 255 / 10%) !important; }
+#app-shell .sidebar-bottom { background: transparent !important; border-top-color: rgb(255 255 255 / 10%) !important; }
 #app-shell .ai-policy {
   background: rgb(255 255 255 / 5%) !important; border-color: rgb(255 255 255 / 10%) !important;
 }
