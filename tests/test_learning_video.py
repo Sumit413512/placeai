@@ -15,8 +15,9 @@ from test_learning_hub import hub  # noqa: F401
 from app import learning_ai, learning_video_worker as worker
 from app.learning_video_content import CoursePlan, LessonScript, VideoScene
 from app.learning_video_media import captions, render_video, slide
-from app.models import VideoCourse, VideoLesson, VideoProgress, VideoViewerProgress, VideoNarration, utcnow
-from app.routers import learning_video
+from app.models import (Notification, VideoCourse, VideoEnrollment, VideoLesson, VideoProgress,
+                        VideoViewerProgress, VideoNarration, utcnow, UserRole)
+from app.routers import learning_video, platform
 
 
 def course_plan():
@@ -91,6 +92,65 @@ def test_course_idempotency_budgets_and_owner_isolation(video):
     anonymous = TestClient(FastAPI())
     anonymous.app.include_router(learning_video.router)
     assert anonymous.get('/learning-hub/video').status_code == 401
+
+
+def test_learner_can_remove_shared_and_private_courses_without_deleting_shared_source(video):
+    shared_id = new_course(video)
+    video.actor[0] = video.other
+    joined = video.api.post('/learning-hub/video', json={
+        'topic': 'SQL', 'request_id': 'other-remove-shared-001'}).json()
+    assert joined['id'] == shared_id
+    video.actor[0] = video.owner
+    assert video.api.delete(f'/learning-hub/video/{shared_id}').status_code == 204
+    assert video.db.get(VideoCourse, shared_id) is not None
+    assert video.db.get(VideoEnrollment, (video.owner.id, shared_id)) is None
+    assert video.api.get(f'/learning-hub/video/{shared_id}').status_code == 404
+    video.actor[0] = video.other
+    assert video.api.get(f'/learning-hub/video/{shared_id}').status_code == 200
+
+    private = VideoCourse(user_id=video.other.id, request_id='private-remove-001',
+        title='Private SQL', input_json='{}', state='queued')
+    video.db.add(private); video.db.commit()
+    private_id = private.id
+    assert video.api.delete(f'/learning-hub/video/{private_id}').status_code == 204
+    video.db.expire_all()
+    assert video.db.get(VideoCourse, private_id) is None
+
+
+def test_platform_admin_reviews_complete_course_and_regenerates_one_video(video):
+    identifier, lesson_id, _ = ready_lesson(video)
+    course = video.db.get(VideoCourse, identifier)
+    course.editorial_status = 'pending_review'
+    for lesson in video.db.query(VideoLesson).filter_by(course_id=identifier):
+        lesson.editorial_status = 'pending_review'
+    video.owner.role = UserRole.platform_admin
+    video.db.commit()
+    admin_app = FastAPI(); admin_app.include_router(platform.router)
+    admin_app.dependency_overrides.update(video.api.app.dependency_overrides)
+    with TestClient(admin_app) as admin:
+        queue = admin.get('/platform/learning-content-review').json()['items']
+        assert [(item['kind'], item['id']) for item in queue] == [('course', identifier)]
+        preview = admin.get(f'/platform/learning-content-review/course/{identifier}').json()
+        assert len(preview['lessons']) == 4
+        assert all(item['media_available'] for item in preview['lessons'])
+        approved = admin.patch(f'/platform/learning-content-review/course/{identifier}',
+            json={'decision': 'approved', 'notes': ''})
+        assert approved.status_code == 200
+        video.db.expire_all()
+        assert all(row.editorial_status == 'approved' for row in
+                   video.db.query(VideoLesson).filter_by(course_id=identifier))
+        assert video.db.query(Notification).filter_by(user_id=video.owner.id,
+            category='learning').count() == 1
+
+        regenerated = admin.post(
+            f'/platform/learning-content-review/lesson/{lesson_id}/regenerate',
+            json={'notes': 'Correct the diagram timing and spoken explanation.'})
+        assert regenerated.status_code == 202
+        video.db.expire_all()
+        lesson = video.db.get(VideoLesson, lesson_id)
+        assert lesson.state == 'queued' and lesson.video_data is None
+        assert 'revision_feedback' in json.loads(lesson.content_json)
+        assert video.db.get(VideoCourse, identifier).editorial_status == 'pending_review'
 
 
 def test_media_transcript_practice_and_progress_are_private(video):

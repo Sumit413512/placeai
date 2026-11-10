@@ -515,7 +515,7 @@ def robots(request: Request) -> Response:
 def sitemap(request: Request) -> Response:
     base = _public_base(request)
     urls = ["/", "/privacy", "/terms", "/acceptable-use"]
-    urls += ["/static/" + name for name in ("about.html", "contact.html", "pricing.html", "service-delivery.html", "refund-cancellation.html")]
+    urls += ["/static/" + name for name in ("about.html", "contact.html", "help.html", "pricing.html", "service-delivery.html", "refund-cancellation.html")]
     body = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     body += "\n".join(f"  <url><loc>{base}{path}</loc></url>" for path in urls)
     body += "\n</urlset>\n"

@@ -18,7 +18,8 @@ from app.dependencies import require_student
 from app.learning_content import ContentModel
 from app.learning_video_content import VideoRequest
 from app.learning_video_media import captions
-from app.models import User, VideoCourse, VideoLesson, VideoProgress, VideoEnrollment, VideoViewerProgress, utcnow
+from app.models import (User, VideoCourse, VideoLesson, VideoProgress, VideoEnrollment,
+                        VideoViewerProgress, VideoNarration, utcnow)
 from app.routers.learning_hub import generation_available, wake_worker
 from app.study_service import lock_owner, record_video_time
 
@@ -222,6 +223,31 @@ def create(body: VideoRequest, request: Request, tasks: BackgroundTasks,
 @router.get("/{course_id}")
 def get_course(course_id: str, user: User = Depends(require_student), db: Session = Depends(get_db)):
     return course_data(db, owner_course(db, course_id, user), user)
+
+
+@router.delete("/{course_id}", status_code=204)
+def remove_course(course_id: str, user: User = Depends(require_student),
+                  db: Session = Depends(get_db)):
+    """Remove a course from this learner without destroying a shared approved course."""
+    db.query(User).filter_by(id=user.id).with_for_update().one()
+    course = owner_course(db, course_id, user)
+    lesson_ids = [identifier for identifier, in db.query(VideoLesson.id).filter_by(course_id=course.id)]
+    if lesson_ids:
+        db.query(VideoViewerProgress).filter(
+            VideoViewerProgress.user_id == user.id,
+            VideoViewerProgress.lesson_id.in_(lesson_ids),
+        ).delete(synchronize_session=False)
+    db.query(VideoEnrollment).filter_by(user_id=user.id, course_id=course.id).delete()
+    if course.shared_key is None:
+        if lesson_ids:
+            db.query(VideoProgress).filter(VideoProgress.lesson_id.in_(lesson_ids)).delete(
+                synchronize_session=False)
+            db.query(VideoNarration).filter(VideoNarration.lesson_id.in_(lesson_ids)).delete(
+                synchronize_session=False)
+        db.query(VideoLesson).filter_by(course_id=course.id).delete(synchronize_session=False)
+        db.delete(course)
+    db.commit()
+    return Response(status_code=204)
 
 
 @router.post("/{course_id}/retry", dependencies=[Depends(student_ai_guard)])
