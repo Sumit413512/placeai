@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="PlaceAI Help Centre for learning, accounts, placement workflows and issue reporting.">
+  <title>Help Centre — PlaceAI</title>
+  <link rel="icon" type="image/svg+xml" href="/static/placeai-icon.svg">
+  <link rel="stylesheet" href="/static/legal.css">
+  <style>
+    .help-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:22px 0}.help-card{border:1px solid #dce3ed;border-radius:16px;padding:20px;background:linear-gradient(145deg,#fff,#f7f9fc)}.help-card span{display:inline-grid;width:38px;height:38px;place-items:center;border-radius:12px;background:#f2eaf0;color:#68495f;font-weight:800}.help-card h2{margin:14px 0 8px;font-size:19px}.help-card p{margin:0 0 12px}.help-card a{font-weight:700}.help-steps{counter-reset:step;display:grid;gap:10px;padding:0;list-style:none}.help-steps li{counter-increment:step;display:grid;grid-template-columns:30px 1fr;gap:10px;align-items:start}.help-steps li:before{content:counter(step);display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#68495f;color:#fff;font-weight:800}.help-faq{border-top:1px solid #e4e8ef;padding:15px 0}.help-faq summary{cursor:pointer;font-weight:750;color:#1d2a3b}.help-faq p{margin-bottom:0}@media(max-width:720px){.help-grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="legal-shell">
+    <header class="legal-top">
+      <a class="legal-brand" href="/">PlaceAI</a>
+      <nav class="legal-nav" aria-label="Help and company">
+        <a href="/static/help.html" aria-current="page">Help Centre</a>
+        <a href="/static/contact.html">Contact</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/">Back to PlaceAI</a>
+      </nav>
+    </header>
+    <section class="legal-hero">
+      <span class="legal-kicker">PlaceAI Help Centre</span>
+      <h1>Find the right answer without losing your work.</h1>
+      <p>Guidance for course requests, learning progress, accounts, applications and authorized support routes.</p>
+      <div class="legal-meta">Never share passwords, OTPs, access tokens or full payment credentials in a support request.</div>
+    </section>
+    <main class="legal-card">
+      <div class="help-grid">
+        <article class="help-card"><span>01</span><h2>Learning courses and notes</h2><p>Track preparation from Requested through Processing and Approval to Ready to begin. Generated content opens only after automated checks and a human review.</p><a href="#learning">Open learning guidance</a></article>
+        <article class="help-card"><span>02</span><h2>Account and access</h2><p>Use the role assigned to you. Students can self-register; recruiter and administrator workspaces use controlled access approval.</p><a href="#access">Open access guidance</a></article>
+        <article class="help-card"><span>03</span><h2>Placement workflows</h2><p>Understand applications, drives, interviews, offers, document submission and institution approvals.</p><a href="#placement">Open placement guidance</a></article>
+        <article class="help-card"><span>04</span><h2>Report an issue</h2><p>Signed-in students can use <strong>Safety → Report an issue</strong>. Institution-linked students can also contact their authorized placement team.</p><a href="/static/contact.html">View support routes</a></article>
+      </div>
+
+      <section id="learning">
+        <h2>Learning request workflow</h2>
+        <ol class="help-steps">
+          <li><p><strong>Requested:</strong> your request is saved immediately and remains in Your video courses or Your notebooks.</p></li>
+          <li><p><strong>Processing:</strong> PlaceAI builds the complete module structure and prepares every required lesson or section. You can leave and return later.</p></li>
+          <li><p><strong>Approval:</strong> automated content, media and audio-visual checks complete first; a platform administrator then reviews the package.</p></li>
+          <li><p><strong>Ready to begin:</strong> an in-app update appears and the learning button becomes available. Your progress is saved as you study.</p></li>
+        </ol>
+        <div class="legal-note">If a generated lesson is incorrect, an administrator can request correction for that individual video. PlaceAI regenerates it from the saved review findings and repeats all publication checks before the course can be approved.</div>
+      </section>
+
+      <section id="access"><h2>Account and access help</h2><p>Use password reset from the sign-in dialog if you cannot access your account. Privileged roles must use the approved role and verified email linked to their workspace. Do not create a second account to bypass an access review.</p></section>
+      <section id="placement"><h2>Placement workflow help</h2><p>Applications and campus opportunities are scoped to your account and institution. Profile fields marked as institution-verified may require placement-office approval. Documents remain private until you explicitly submit them to an authorized institution.</p></section>
+
+      <h2>Frequently asked questions</h2>
+      <details class="help-faq"><summary>Why is my course still processing?</summary><p>A complete course can contain many 5–10 minute lessons. Provider capacity, rendering and independent quality checks may extend preparation time. Completed parts remain saved.</p></details>
+      <details class="help-faq"><summary>Can a requested course disappear?</summary><p>No normal refresh or sign-out should remove it. It remains attached to your account until you deliberately choose Remove course. If a processing fault occurs, the request is preserved for repair.</p></details>
+      <details class="help-faq"><summary>Why can’t I start a course immediately?</summary><p>The complete course must be generated, pass content and media checks, and receive human approval. This prevents an incomplete or unreviewed lesson from being presented as ready.</p></details>
+      <details class="help-faq"><summary>How do captions and playback speed work?</summary><p>Captions start off. Use the video player's menu to turn captions on or change playback speed when required.</p></details>
+      <details class="help-faq"><summary>How do I delete learning content?</summary><p>Notes move to Deleted notes and can be restored. Removing a video course removes it and its private viewing progress from your learning library; an approved shared source course remains available for other learners.</p></details>
+    </main>
+    <footer class="legal-footer"><span>© 2026 PlaceAI</span><span><a href="/static/contact.html">Contact</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span></footer>
+  </div>
+</body>
+</html>

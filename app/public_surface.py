@@ -14,7 +14,7 @@ PATHS = {
 PATHS.update(
     {
         name: "/static/" + name
-        for name in ("about.html", "contact.html", "pricing.html", "service-delivery.html", "refund-cancellation.html")
+        for name in ("about.html", "contact.html", "help.html", "pricing.html", "service-delivery.html", "refund-cancellation.html")
     }
 )
 

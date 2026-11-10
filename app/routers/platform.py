@@ -29,11 +29,13 @@ from app.models import (
     User,
     UserRole,
     VideoCourse,
+    VideoEnrollment,
     VideoLesson,
+    VideoNarration,
 )
 from app.placement_access import utcnow_naive
 from app.schemas import AdminUserProvision, OrganizationCreate, OrganizationOut, PlatformOverviewOut, UserOut
-from app.services import record_audit
+from app.services import create_notification, record_audit
 from app.telemetry_models import EmailDeliveryEvent, PageViewEvent
 from app.utils import generate_reset_token, get_hashed_password, hash_reset_token
 
@@ -44,6 +46,10 @@ settings = get_settings()
 class LearningEditorialDecision(BaseModel):
     decision: Literal["approved", "changes_requested"]
     notes: str = Field(default="", max_length=2000)
+
+
+class LearningRegenerationRequest(BaseModel):
+    notes: str = Field(min_length=3, max_length=2000)
 
 _ORG_FIELD_LIMITS = {
     "domain": 200,
@@ -615,7 +621,8 @@ def learning_content_review(current_user: User = Depends(require_platform_admin)
         VideoCourse.updated_at.asc()).limit(100).all()
     lesson_rows = db.query(VideoLesson, VideoCourse.title).join(
         VideoCourse, VideoCourse.id == VideoLesson.course_id).filter(
-        VideoLesson.editorial_status.in_(review_states)).order_by(
+        VideoLesson.editorial_status.in_(review_states),
+        ~VideoCourse.editorial_status.in_(review_states)).order_by(
         VideoLesson.updated_at.asc()).limit(200).all()
     items = ([_editorial_item("notes", row) for row in notes]
              + [_editorial_item("course", row) for row in courses]
@@ -643,7 +650,11 @@ def preview_learning_content(kind: str, identifier: str,
         lessons = db.query(VideoLesson).filter_by(course_id=row.id).order_by(VideoLesson.position).all()
         return {**_editorial_item(kind, row), "plan": json.loads(row.plan_json),
                 "sources": json.loads(row.sources_json),
-                "lessons": [_editorial_item("lesson", lesson, parent_title=row.title) for lesson in lessons]}
+                "lessons": [{**_editorial_item("lesson", lesson, parent_title=row.title),
+                             "position": lesson.position,
+                             "duration_seconds": lesson.duration_seconds,
+                             "media_available": bool(lesson.video_data),
+                             "content": json.loads(lesson.content_json)} for lesson in lessons]}
     if kind == "lesson":
         row = db.get(VideoLesson, identifier)
         if not row:
@@ -680,6 +691,23 @@ def review_learning_content(kind: str, identifier: str, body: LearningEditorialD
         raise HTTPException(409, "Only fully generated content can be reviewed")
     if body.decision == "changes_requested" and not body.notes.strip():
         raise HTTPException(422, "Explain the changes needed before sending it back")
+    prior_status = row.editorial_status
+    if kind == "course":
+        lessons = db.query(VideoLesson).filter_by(course_id=row.id).order_by(VideoLesson.position).all()
+        expected = len(json.loads(row.plan_json).get("lessons", []))
+        if body.decision == "approved":
+            from app.learning_publication import checks_passed
+            if not lessons or len(lessons) != expected or any(
+                lesson.state != "ready" or not checks_passed(json.loads(lesson.content_json))
+                for lesson in lessons
+            ):
+                raise HTTPException(409, "The complete course and every automated quality check must be ready before approval")
+        for lesson in lessons:
+            if lesson.state == "ready":
+                lesson.editorial_status = body.decision
+                lesson.editorial_notes = body.notes.strip()
+                lesson.reviewed_by_user_id = current_user.id
+                lesson.reviewed_at = utcnow_naive()
     row.editorial_status = body.decision
     row.editorial_notes = body.notes.strip()
     row.reviewed_by_user_id = current_user.id
@@ -687,5 +715,57 @@ def review_learning_content(kind: str, identifier: str, body: LearningEditorialD
     record_audit(db, current_user, f"learning.{kind}.{body.decision}",
                  entity_type=f"learning_{kind}", entity_id=row.id,
                  metadata={"notes_supplied": bool(row.editorial_notes)})
+    if kind == "course" and body.decision == "approved" and prior_status != "approved":
+        learner_ids = {user_id for user_id, in db.query(VideoEnrollment.user_id).filter_by(course_id=row.id)}
+        if row.shared_key is None and row.user_id:
+            learner_ids.add(row.user_id)
+        for learner_id in learner_ids:
+            create_notification(db, learner_id, "Your video course is ready",
+                f"{row.title} passed the full course review and is ready to begin.",
+                category="learning", priority="high", link="learning-hub")
     db.commit()
     return _editorial_item(kind, row)
+
+
+@router.post("/learning-content-review/lesson/{identifier}/regenerate", status_code=202)
+def regenerate_learning_video(identifier: str, body: LearningRegenerationRequest,
+                              tasks: BackgroundTasks,
+                              current_user: User = Depends(require_platform_admin),
+                              db: Session = Depends(get_db)):
+    row = db.query(VideoLesson).filter_by(id=identifier).with_for_update().first()
+    if not row:
+        raise HTTPException(404, "Video lesson not found")
+    course = db.query(VideoCourse).filter_by(id=row.course_id).with_for_update().first()
+    content = json.loads(row.content_json or "{}")
+    findings = [body.notes.strip()]
+    for check in ("content_review", "media_review", "audiovisual_review"):
+        report = content.get(check, {})
+        if report and report.get("passed") is not True:
+            findings.append(f"Automated {check.replace('_', ' ')} did not pass; correct its reported defects.")
+    db.query(VideoNarration).filter_by(lesson_id=row.id).delete(synchronize_session=False)
+    row.state = "queued"
+    row.content_json = json.dumps({"revision_feedback": findings})
+    row.video_data = None
+    row.duration_seconds = 0
+    row.attempts = 0
+    row.error_code = None
+    row.lease_token = None
+    row.lease_until = None
+    row.available_at = utcnow_naive()
+    row.editorial_status = "generating"
+    row.editorial_notes = body.notes.strip()
+    row.reviewed_by_user_id = current_user.id
+    row.reviewed_at = utcnow_naive()
+    if course:
+        course.editorial_status = "pending_review"
+        course.editorial_notes = "One or more lessons are being regenerated after review."
+        course.reviewed_by_user_id = current_user.id
+        course.reviewed_at = utcnow_naive()
+    record_audit(db, current_user, "learning.lesson.regeneration_requested",
+                 entity_type="learning_lesson", entity_id=row.id,
+                 metadata={"course_id": row.course_id, "findings": len(findings)})
+    db.commit()
+    from app.routers.learning_hub import wake_worker
+    tasks.add_task(wake_worker)
+    return {"id": row.id, "status": row.state,
+            "message": "The lesson is queued for corrected regeneration and full automated rechecking."}
