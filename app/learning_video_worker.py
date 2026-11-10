@@ -287,12 +287,12 @@ def _process(item, sessions):
                 raise RuntimeError("VIDEO_STORAGE_CAPACITY")
         if kind == "course":
             evidence, sources, _ = learning_ai.research(json.dumps(preferences))
-            full_course = preferences.get("curriculum_version") == 2
+            full_course = preferences.get("curriculum_version", 1) >= 2
             schema = FullCoursePlan if full_course else CoursePlan
             raw, _ = learning_ai.generate_json(
                 "Plan a progressive video course. Each lesson teaches one "
-                "objective in 2-5 minutes. Include foundations, worked examples and placement-oriented "
-                "practice. State scope honestly; do not promise mastery. Use English. "
+                "objective in 5-10 minutes. Include foundations, worked examples and placement-oriented "
+                "practice. State scope honestly; do not promise mastery. Use English for titles and technical terms. "
                 "Cover the full topic in ordered parts, from foundations through advanced applications, "
                 "Organize lessons into named subtopic modules, with consecutive lessons sharing "
                 "the same module_title. Each video teaches one focused subtopic; each module should "
@@ -406,8 +406,10 @@ def _process(item, sessions):
                 capacity = min(40-used, max(0, (STORAGE_BUDGET-storage_used(db))//MAX_VIDEO_BYTES-pending))
                 for position, outline in enumerate(json.loads(row.plan_json).get("lessons", [])[:max(0, capacity)]):
                     if not db.query(VideoLesson.id).filter_by(course_id=row.id, position=position).first():
-                        db.add(VideoLesson(course_id=row.id, position=position, title=outline["title"]))
+                        db.add(VideoLesson(course_id=row.id, position=position, title=outline["title"],
+                                           editorial_status="generating"))
             row.state, row.error_code, row.lease_token, row.lease_until = "ready", None, None, None
+            row.editorial_status = "pending_review"
             if kind == "lesson":
                 db.query(VideoNarration).filter_by(lesson_id=identifier).delete()
             db.commit()

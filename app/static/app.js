@@ -289,7 +289,7 @@
       ['Command centre','dashboard','Overview'],['Command centre','attention','Drive Rescue'],['Command centre','analytics2','Placement analytics'],['People','students','Students'],['People','documents','Student documents'],['People','approvals','Profile approvals'],['People','recruiters','Recruiters'],['Access','institution-access-requests','Access requests'],['Trust','verification','Company verification'],['Placements','jobs','Campus jobs'],['Placements','drives','Placement drives'],['Placements','pipeline','Drive pipelines'],['Placements','applications','Applications'],['Placements','interviews','Interviews'],['Placements','offers','Offer management'],['Operations','attendance','QR attendance'],['Operations','calendar','Placement calendar'],['Operations','announcements','Announcements'],['Operations','communications','Recruiter communication'],['Governance','policies','Placement policies'],['Governance','custom-fields','Custom fields'],['Governance','incidents','Incident reports'],['Governance','reports','Reports'],['Updates','notifications','Notifications'],['Governance','audit','Audit log']
     ],
     platform_admin: [
-      ['Platform','dashboard','Overview'],['Platform','organizations','Institutions'],['People','registrations','Registrations'],['Insights','engagement','Engagement'],['Operations','recovery','Processing recovery'],['Platform','integrations','Integrations'],['Access','leads','Access requests'],['Updates','notifications','Notifications']
+      ['Platform','dashboard','Overview'],['Platform','organizations','Institutions'],['People','registrations','Registrations'],['Insights','engagement','Engagement'],['Operations','content-review','Content review'],['Operations','recovery','Processing recovery'],['Platform','integrations','Integrations'],['Access','leads','Access requests'],['Updates','notifications','Notifications']
     ]
   };
 
@@ -755,6 +755,13 @@
       setPage('Overview','Platform control'); setContextAction('Add institution','open-org-form');
       const o=await api('/platform/overview');
       $('#app-content').innerHTML = `${pageHead('Platform overview','Tenant and controlled-access operating metrics.','Add institution','open-org-form')}<div class="metric-grid"><article class="metric-card"><small>Institutions</small><strong>${o.organizations}</strong><span>Active platform tenants</span></article><article class="metric-card"><small>Students</small><strong>${o.students}</strong><span>Registered student users</span></article><article class="metric-card"><small>Recruiters</small><strong>${o.recruiters}</strong><span>Controlled recruiter accounts</span></article><article class="metric-card"><small>Active jobs</small><strong>${o.active_jobs}</strong><span>${o.applications} applications recorded</span></article><article class="metric-card"><small>Access requests</small><strong>${o.access_requests}</strong><span>Privileged workspace requests awaiting review</span></article></div>`;
+    } else if (view === 'content-review') {
+      setPage('Learning content review','Platform control'); setContextAction();
+      const data=await api('/platform/learning-content-review');
+      const typeLabel={notes:'Notes',course:'Course plan',lesson:'Video lesson'};
+      $('#app-content').innerHTML=`${pageHead('Learning content review','Preview AI-generated notes and videos before they become available to students. Approved topics are reused for later requests.')}
+        <div class="metric-grid"><article class="metric-card"><small>Awaiting review</small><strong>${data.pending_count||0}</strong><span>Generated items needing a human decision</span></article><article class="metric-card"><small>Total open</small><strong>${data.items.length}</strong><span>Includes requested changes</span></article></div>
+        ${data.items.length?`<div class="data-panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Content</th><th>Type</th><th>Generation</th><th>Review</th><th>Updated</th><th>Actions</th></tr></thead><tbody>${data.items.map(item=>`<tr><td><span class="table-primary">${esc(item.title)}</span><span class="table-secondary">${esc(item.parent_title||item.id)}</span></td><td>${esc(typeLabel[item.kind]||item.kind)}</td><td>${statusBadge(item.generation_status)}</td><td>${statusBadge(item.editorial_status)}</td><td>${fmtDateTime(item.updated_at)}</td><td><div class="row-actions"><button class="row-button" data-action="preview-learning-content" data-kind="${item.kind}" data-id="${item.id}">Preview</button><button class="row-button primary" data-action="review-learning-content" data-kind="${item.kind}" data-id="${item.id}" data-value="approved">Approve</button><button class="row-button" data-action="review-learning-content" data-kind="${item.kind}" data-id="${item.id}" data-value="changes_requested">Request changes</button></div></td></tr>`).join('')}</tbody></table></div></div>`:emptyState('OK','Review queue is clear','No generated learning content is waiting for a decision.')}`;
     } else if (view === 'recovery') {
       setPage('Processing recovery','Platform control'); setContextAction();
       const data=await api('/platform/processing-recovery');
@@ -844,6 +851,13 @@
 
   async function viewCandidate(id){ const s=await api(`/recruiters/students/${id}`); openModal(`<span class="section-kicker">Candidate profile</span><h2>${esc(s.full_name||'Candidate')}</h2><p class="form-intro">${esc(s.degree||'')} ${s.branch?`· ${esc(s.branch)}`:''} ${s.cgpa!=null?`· CGPA ${s.cgpa}`:''}</p><div class="ai-box"><div class="ai-box-head"><span>SKILLS</span>${s.is_verified?statusBadge('approved'):statusBadge('pending')}</div>${tags(s.skills)}</div>${s.ai_summary?`<div class="ai-box"><div class="ai-box-head"><span>AI-ASSISTED SUMMARY</span></div><p>${esc(s.ai_summary)}</p></div>`:''}<div class="form-footer"><button class="button button-secondary" data-action="download-candidate-resume" data-id="${id}">Open resume</button></div>`); }
 
+  async function previewLearningContent(kind,id){
+    const item=await api(`/platform/learning-content-review/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`);
+    const payload=kind==='notes'?{plan:item.plan,chapters:item.chapters,sources:item.sources}:kind==='course'?{plan:item.plan,lessons:item.lessons,sources:item.sources}:item.content;
+    const media=kind==='lesson'&&item.media_available?`<video controls preload="metadata" style="width:100%;border-radius:14px;background:#07111f" src="/platform/learning-content-review/lesson/${encodeURIComponent(id)}/media"></video>`:'';
+    openModal(`<span class="section-kicker">Human publication review</span><h2>${esc(item.title)}</h2><p class="form-intro">${esc((item.parent_title?item.parent_title+' · ':'')+item.editorial_status.replaceAll('_',' '))}</p>${media}<div class="ai-box"><div class="ai-box-head"><span>GENERATED CONTENT</span></div><pre style="white-space:pre-wrap;max-height:48vh;overflow:auto">${esc(JSON.stringify(payload,null,2))}</pre></div><div class="form-footer"><button class="button button-secondary" data-action="close-generic-modal">Close</button><button class="button button-primary" data-action="review-learning-content" data-kind="${kind}" data-id="${id}" data-value="approved">Approve</button></div>`);
+  }
+
   document.addEventListener('click', async e => {
     const authOpen=e.target.closest('[data-open-auth]'); if(authOpen){showAuth(authOpen.dataset.openAuth);return;}
     const view=e.target.closest('[data-view]'); if(view && state.me){
@@ -872,6 +886,8 @@
       else if(a==='open-org-form')openOrgForm();
       else if(a==='open-admin-form')openAdminForm(id);
       else if(a==='view-platform-registration'){const d=await api(`/platform/registrations/${encodeURIComponent(id)}`);openModal(platformRegistrationDetailHtml(d));}
+      else if(a==='preview-learning-content'){await previewLearningContent(action.dataset.kind,id);}
+      else if(a==='review-learning-content'){const decision=action.dataset.value;const notes=decision==='changes_requested'?window.prompt('Describe the exact changes required:',''):'';if(decision==='changes_requested'&&!notes?.trim())return;await api(`/platform/learning-content-review/${encodeURIComponent(action.dataset.kind)}/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({decision,notes:notes||''})});closeModal();toast(decision==='approved'?'Content approved':'Changes requested');await navigate('content-review');}
       else if(a==='platform-engagement-period'){state.platformEngagementDays=Number(id)||30;await navigate('engagement');}
       else if(a==='platform-provision-recruiter'){
         const email=String(action.dataset.email||'').trim();

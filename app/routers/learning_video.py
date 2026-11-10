@@ -92,6 +92,7 @@ def course_data(db, course, user):
             "number": f"{len(modules)}.{in_module}",
             "status": row.state if row else "not_started", "duration_seconds": row.duration_seconds if row else 0,
             "quality_checked": quality_checked,
+            "editorial_status": row.editorial_status if row else "generating",
             "retry_available": bool(row and row.state == "failed" and row.attempts < 4),
             "error_code": row.error_code if row else None,
             "available_at": row.available_at.isoformat() + "Z" if row else None,
@@ -102,8 +103,10 @@ def course_data(db, course, user):
     result["ready_parts"] = sum(item["status"] == "ready" for item in result["lessons"])
     result["completed_parts"] = sum(item["video_completed"] and item["practice_completed"] for item in result["lessons"])
     result["checked_parts"] = sum(item["status"] == "ready" and item["quality_checked"] for item in result["lessons"])
-    result["course_ready"] = (course.state == "ready" and bool(result["lessons"])
+    result["editorial_status"] = course.editorial_status
+    result["course_ready"] = (course.state == "ready" and course.editorial_status == "approved" and bool(result["lessons"])
         and result["ready_parts"] == len(result["lessons"])
+        and all(item["editorial_status"] == "approved" for item in result["lessons"])
         and (not result["requires_full_preparation"] or result["checked_parts"] == len(result["lessons"])))
     result["course_completed"] = bool(result["lessons"]) and result["completed_parts"] == len(result["lessons"])
     result["completion_percent"] = round(100 * result["completed_parts"] / len(result["lessons"])) if result["lessons"] else 0
@@ -120,6 +123,10 @@ def course_data(db, course, user):
     elif course.state == "failed" or any(item["status"] == "failed" for item in result["lessons"]):
         result["preparation_status"] = "needs_attention"
         result["preparation_notice"] = "This course needs a preparation repair. Your request and saved progress are preserved. Please contact PlaceAI support."
+    elif (course.state == "ready" and result["ready_parts"] == len(result["lessons"])
+          and result["checked_parts"] == len(result["lessons"])):
+        result["preparation_status"] = "awaiting_review"
+        result["preparation_notice"] = "Generation and automated checks are complete. A PlaceAI administrator is reviewing this course before release."
     elif any(item["status"] == "ready" and not item["quality_checked"] for item in result["lessons"]):
         result["preparation_status"] = "review_required"
         result["preparation_notice"] = "This saved course needs its quality recheck before learning can begin. Your progress is preserved."
@@ -166,7 +173,7 @@ def topic_key(topic):
     normalized = " ".join(unicodedata.normalize("NFKC", topic).split()).casefold()
     if len(normalized) < 2:
         raise HTTPException(422, "Enter a topic with at least two characters")
-    return normalized, hashlib.sha256(("shared-full-course-v2:en:" + normalized).encode()).hexdigest()
+    return normalized, hashlib.sha256(("shared-full-course-v3:hinglish:" + normalized).encode()).hexdigest()
 
 
 @router.get("")
@@ -201,7 +208,8 @@ def create(body: VideoRequest, request: Request, tasks: BackgroundTasks,
             raise HTTPException(503, "Video research is temporarily unavailable. Saved lessons remain available.")
         budget(db, user)
         row = VideoCourse(user_id=user.id, shared_key=key, request_id=body.request_id,
-            title=normalized, input_json=json.dumps({"topic": normalized, "curriculum_version": 2}))
+            title=normalized, input_json=json.dumps({"topic": normalized, "curriculum_version": 3}),
+            editorial_status="generating")
         db.add(row); db.flush()
         tasks.add_task(wake_worker)
     enrollment = db.get(VideoEnrollment, (user.id, row.id))
@@ -263,7 +271,8 @@ def prepare(course_id: str, position: int, request: Request, tasks: BackgroundTa
         existing.state, existing.error_code, existing.available_at = "queued", None, utcnow()
         db.commit(); tasks.add_task(wake_worker)
         return course_data(db, course, user)
-    row = VideoLesson(course_id=course.id, position=position, title=lessons[position]["title"])
+    row = VideoLesson(course_id=course.id, position=position, title=lessons[position]["title"],
+                      editorial_status="generating")
     db.add(row); db.flush()
     if not course.shared_key:
         db.add(VideoProgress(lesson_id=row.id))
@@ -292,17 +301,20 @@ def viewer_record(db, row, user, *, lock=False):
 @router.get("/{course_id}/lessons/{position}")
 def lesson(course_id: str, position: int, user: User = Depends(require_student), db: Session = Depends(get_db)):
     row = owner_lesson(db, course_id, position, user)
-    content = json.loads(row.content_json) if row.state == "ready" else {}
+    course = db.get(VideoCourse, row.course_id)
+    published = row.state == "ready" and row.editorial_status == "approved" and course.editorial_status == "approved"
+    content = json.loads(row.content_json) if published else {}
     content.pop("solution", None)
     content["quiz"] = [{"question": q["question"], "options": q["options"]} for q in content.get("quiz", [])]
-    return {"title": row.title, "status": row.state, "duration_seconds": row.duration_seconds,
+    return {"title": row.title, "status": "ready" if published else "awaiting_review", "duration_seconds": row.duration_seconds,
             "content": content, **progress_data(viewer_record(db, row, user))}
 
 
 @router.get("/{course_id}/lessons/{position}/media")
 def media(course_id: str, position: int, user: User = Depends(require_student), db: Session = Depends(get_db)):
     row = owner_lesson(db, course_id, position, user)
-    if row.state != "ready":
+    course = db.get(VideoCourse, row.course_id)
+    if row.state != "ready" or row.editorial_status != "approved" or course.editorial_status != "approved":
         raise HTTPException(409, "The lesson video is still being prepared")
     data = db.query(VideoLesson.video_data).filter_by(id=row.id).scalar()
     if not data:
@@ -313,13 +325,14 @@ def media(course_id: str, position: int, user: User = Depends(require_student), 
 @router.get("/{course_id}/lessons/{position}/captions")
 def subtitles(course_id: str, position: int, user: User = Depends(require_student), db: Session = Depends(get_db)):
     row = owner_lesson(db, course_id, position, user)
-    if row.state != "ready":
+    course = db.get(VideoCourse, row.course_id)
+    if row.state != "ready" or row.editorial_status != "approved" or course.editorial_status != "approved":
         raise HTTPException(409, "Lesson captions are still being prepared")
     return Response(captions(json.loads(row.content_json)), media_type="text/vtt", headers=PRIVATE)
 
 
 class Playback(ContentModel):
-    position_seconds: float = Field(ge=0, le=480, allow_inf_nan=False)
+    position_seconds: float = Field(ge=0, le=600, allow_inf_nan=False)
 
 
 @router.put("/{course_id}/lessons/{position}/progress")
@@ -327,7 +340,8 @@ def progress(course_id: str, position: int, body: Playback,
              user: User = Depends(require_student), db: Session = Depends(get_db)):
     lock_owner(db,user)
     row = owner_lesson(db, course_id, position, user)
-    if row.state != "ready":
+    course = db.get(VideoCourse, row.course_id)
+    if row.state != "ready" or row.editorial_status != "approved" or course.editorial_status != "approved":
         raise HTTPException(409, "Lesson is not ready")
     record = viewer_record(db, row, user, lock=True)
     now = utcnow()
@@ -361,7 +375,8 @@ class Answers(ContentModel):
 def practice(course_id: str, position: int, body: Answers,
              user: User = Depends(require_student), db: Session = Depends(get_db)):
     row = owner_lesson(db, course_id, position, user)
-    if row.state != "ready":
+    course = db.get(VideoCourse, row.course_id)
+    if row.state != "ready" or row.editorial_status != "approved" or course.editorial_status != "approved":
         raise HTTPException(409, "Lesson is not ready")
     content = json.loads(row.content_json)
     results = []

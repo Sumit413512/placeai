@@ -911,6 +911,7 @@ class LearningNotebook(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     request_id = Column(String(80), nullable=False)
+    shared_key = Column(String(64), nullable=True, index=True)
     title = Column(String(240), nullable=False)
     state = Column(String(24), nullable=False, default="queued")
     input_json = Column(Text, nullable=False)
@@ -926,6 +927,10 @@ class LearningNotebook(Base):
     lease_token = Column(String(40), nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    editorial_status = Column(String(24), nullable=False, default="approved", index=True)
+    editorial_notes = Column(Text, nullable=False, default="")
+    reviewed_by_user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at = Column(DateTime)
 
 
 class LearningRuntime(Base):
@@ -956,6 +961,10 @@ class VideoCourse(Base):
     available_at = Column(DateTime, nullable=False, default=utcnow)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    editorial_status = Column(String(24), nullable=False, default="approved", index=True)
+    editorial_notes = Column(Text, nullable=False, default="")
+    reviewed_by_user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at = Column(DateTime)
 
 
 class VideoLesson(Base):
@@ -977,6 +986,10 @@ class VideoLesson(Base):
     available_at = Column(DateTime, nullable=False, default=utcnow)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    editorial_status = Column(String(24), nullable=False, default="approved", index=True)
+    editorial_notes = Column(Text, nullable=False, default="")
+    reviewed_by_user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at = Column(DateTime)
 
 
 class VideoProgress(Base):

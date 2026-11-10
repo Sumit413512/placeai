@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import re
 from datetime import timedelta
-from typing import List
+from typing import List, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
@@ -18,14 +20,16 @@ from app.models import (
     ApprovalStatus,
     Job,
     MockInterview,
+    LearningNotebook,
     Organization,
     OrganizationType,
     RecruiterProfile,
     RefreshSession,
     Resume,
-    StudentProfile,
     User,
     UserRole,
+    VideoCourse,
+    VideoLesson,
 )
 from app.placement_access import utcnow_naive
 from app.schemas import AdminUserProvision, OrganizationCreate, OrganizationOut, PlatformOverviewOut, UserOut
@@ -35,6 +39,11 @@ from app.utils import generate_reset_token, get_hashed_password, hash_reset_toke
 
 router = APIRouter(prefix="/platform", tags=["Platform Admin"])
 settings = get_settings()
+
+
+class LearningEditorialDecision(BaseModel):
+    decision: Literal["approved", "changes_requested"]
+    notes: str = Field(default="", max_length=2000)
 
 _ORG_FIELD_LIMITS = {
     "domain": 200,
@@ -577,3 +586,106 @@ def retry_processing(kind: str, identifier: str, request: Request, tasks: Backgr
     result = recover(db, current_user, kind, identifier)
     tasks.add_task(wake_worker)
     return result
+
+
+def _editorial_item(kind: str, row, *, parent_title: str | None = None):
+    return {
+        "kind": kind,
+        "id": row.id,
+        "title": row.title,
+        "parent_title": parent_title,
+        "generation_status": row.state,
+        "editorial_status": row.editorial_status,
+        "editorial_notes": row.editorial_notes,
+        "created_at": row.created_at.isoformat(),
+        "updated_at": row.updated_at.isoformat(),
+        "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
+    }
+
+
+@router.get("/learning-content-review")
+def learning_content_review(current_user: User = Depends(require_platform_admin),
+                            db: Session = Depends(get_db)):
+    review_states = ("pending_review", "changes_requested")
+    notes = db.query(LearningNotebook).filter(
+        LearningNotebook.editorial_status.in_(review_states)).order_by(
+        LearningNotebook.updated_at.asc()).limit(100).all()
+    courses = db.query(VideoCourse).filter(
+        VideoCourse.editorial_status.in_(review_states)).order_by(
+        VideoCourse.updated_at.asc()).limit(100).all()
+    lesson_rows = db.query(VideoLesson, VideoCourse.title).join(
+        VideoCourse, VideoCourse.id == VideoLesson.course_id).filter(
+        VideoLesson.editorial_status.in_(review_states)).order_by(
+        VideoLesson.updated_at.asc()).limit(200).all()
+    items = ([_editorial_item("notes", row) for row in notes]
+             + [_editorial_item("course", row) for row in courses]
+             + [_editorial_item("lesson", row, parent_title=course_title)
+                for row, course_title in lesson_rows])
+    items.sort(key=lambda item: item["updated_at"])
+    return {"items": items, "pending_count": sum(
+        item["editorial_status"] == "pending_review" for item in items)}
+
+
+@router.get("/learning-content-review/{kind}/{identifier}")
+def preview_learning_content(kind: str, identifier: str,
+                             current_user: User = Depends(require_platform_admin),
+                             db: Session = Depends(get_db)):
+    if kind == "notes":
+        row = db.get(LearningNotebook, identifier)
+        if not row:
+            raise HTTPException(404, "Learning notebook not found")
+        return {**_editorial_item(kind, row), "plan": json.loads(row.plan_json),
+                "chapters": json.loads(row.chapters_json), "sources": json.loads(row.sources_json)}
+    if kind == "course":
+        row = db.get(VideoCourse, identifier)
+        if not row:
+            raise HTTPException(404, "Video course not found")
+        lessons = db.query(VideoLesson).filter_by(course_id=row.id).order_by(VideoLesson.position).all()
+        return {**_editorial_item(kind, row), "plan": json.loads(row.plan_json),
+                "sources": json.loads(row.sources_json),
+                "lessons": [_editorial_item("lesson", lesson, parent_title=row.title) for lesson in lessons]}
+    if kind == "lesson":
+        row = db.get(VideoLesson, identifier)
+        if not row:
+            raise HTTPException(404, "Video lesson not found")
+        course = db.get(VideoCourse, row.course_id)
+        return {**_editorial_item(kind, row, parent_title=course.title if course else None),
+                "duration_seconds": row.duration_seconds, "content": json.loads(row.content_json),
+                "media_available": bool(row.video_data)}
+    raise HTTPException(404, "Learning content type not found")
+
+
+@router.get("/learning-content-review/lesson/{identifier}/media")
+def preview_learning_video(identifier: str,
+                           current_user: User = Depends(require_platform_admin),
+                           db: Session = Depends(get_db)):
+    row = db.get(VideoLesson, identifier)
+    if not row or not row.video_data:
+        raise HTTPException(404, "Video preview is not available")
+    return Response(row.video_data, media_type="video/mp4", headers={
+        "Cache-Control": "private, no-store", "Content-Disposition": "inline"})
+
+
+@router.patch("/learning-content-review/{kind}/{identifier}")
+def review_learning_content(kind: str, identifier: str, body: LearningEditorialDecision,
+                            current_user: User = Depends(require_platform_admin),
+                            db: Session = Depends(get_db)):
+    model = {"notes": LearningNotebook, "course": VideoCourse, "lesson": VideoLesson}.get(kind)
+    if not model:
+        raise HTTPException(404, "Learning content type not found")
+    row = db.query(model).filter_by(id=identifier).with_for_update().first()
+    if not row:
+        raise HTTPException(404, "Learning content not found")
+    if row.state != "ready":
+        raise HTTPException(409, "Only fully generated content can be reviewed")
+    if body.decision == "changes_requested" and not body.notes.strip():
+        raise HTTPException(422, "Explain the changes needed before sending it back")
+    row.editorial_status = body.decision
+    row.editorial_notes = body.notes.strip()
+    row.reviewed_by_user_id = current_user.id
+    row.reviewed_at = utcnow_naive()
+    record_audit(db, current_user, f"learning.{kind}.{body.decision}",
+                 entity_type=f"learning_{kind}", entity_id=row.id,
+                 metadata={"notes_supplied": bool(row.editorial_notes)})
+    db.commit()
+    return _editorial_item(kind, row)

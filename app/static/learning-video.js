@@ -22,11 +22,21 @@
     let urls = [], playerEpoch = 0, saving = false, lastSaved = 0, observer;
     const apiBase = '/learning-hub/video';
     const active = () => alive && hub.isConnected && ctx.state.view === 'learning-hub';
+    const learningLocation = () => {
+      const url = new URL(location.href);
+      return {course:url.searchParams.get('course') || '', lesson:url.searchParams.get('lesson')};
+    };
+    const writeLearningLocation = (courseId = '', lesson = null, replace = false) => {
+      const url = new URL(location.href);
+      if (courseId) url.searchParams.set('course', courseId); else url.searchParams.delete('course');
+      if (lesson !== null && lesson !== undefined) url.searchParams.set('lesson', String(lesson)); else url.searchParams.delete('lesson');
+      history[replace ? 'replaceState' : 'pushState']({...history.state, placeaiView:'learning-hub'}, '', `${url.pathname}${url.search}${url.hash}`);
+    };
     const status = message => { if (active()) panel.querySelector('[data-video-status]').textContent = message; };
     const isCurrent = (id, version) => active() && current === id && playerEpoch === version;
     const failedCourse = data => data.status === 'failed' || data.lessons.some(item => item.status === 'failed');
     const libraryLabel = data => structure(data).course_ready ? 'Ready to begin' :
-      data.preparation_status === 'review_required' ? 'Quality recheck needed' : data.preparation_status === 'queued' ? 'Queued' : data.preparation_status === 'waiting_capacity' ? 'Waiting to retry' : 'Processing';
+      data.preparation_status === 'awaiting_review' ? 'Awaiting human review' : data.preparation_status === 'review_required' ? 'Quality recheck needed' : data.preparation_status === 'queued' ? 'Queued' : data.preparation_status === 'waiting_capacity' ? 'Waiting to retry' : 'Processing';
     const badge = data => `<small class="learning-status" data-state="${structure(data).course_ready ? 'ready' : 'processing'}">${libraryLabel(data)}</small>`;
     const courseCard = item => {
       const data = structure(item);
@@ -69,7 +79,7 @@
       data.completed_parts = data.lessons.filter(item => item.video_completed && item.practice_completed).length;
       data.ready_parts = data.lessons.filter(item => item.status === 'ready').length;
       data.checked_parts = data.lessons.filter(item => item.status === 'ready' && item.quality_checked).length;
-      data.course_ready = data.status === 'ready' && data.lessons.length > 0 && data.ready_parts === data.lessons.length && (!data.requires_full_preparation || data.checked_parts === data.lessons.length);
+      data.course_ready = data.status === 'ready' && (data.editorial_status || 'approved') === 'approved' && data.lessons.length > 0 && data.ready_parts === data.lessons.length && data.lessons.every(item => (item.editorial_status || 'approved') === 'approved') && (!data.requires_full_preparation || data.checked_parts === data.lessons.length);
       data.completion_percent = data.lessons.length ? Math.round(100 * data.completed_parts / data.lessons.length) : 0;
       return data;
     }
@@ -135,7 +145,7 @@
       if (!response.ok) throw new Error('The lesson could not be loaded. Refresh and try again.');
       return response.blob();
     }
-    async function openLesson(index) {
+    async function openLesson(index, historyMode = 'push') {
       if (!course?.course_ready) { status('Your full course is still being prepared and checked.'); return; }
       await saveProgress(); stopPlayer();
       const id = current, version = playerEpoch;
@@ -151,7 +161,15 @@
       const outline = course.lessons[index];
       host.innerHTML = `<section class="panel learning-video-lesson-panel"><p class="learning-meta">Lesson ${esc(outline.number)}</p><h2>${esc(data.title)}</h2><p>${esc(content.objective)}</p><video class="learning-video-player" controls playsinline preload="metadata" aria-label="${esc(data.title)}"><track kind="captions" srclang="en" label="English" default></video><div class="learning-video-playback-tools"><label>Playback speed <select data-video-speed aria-label="Playback speed"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><small>AI narration · Captions available</small></div><p data-video-save-status role="status">Resume position is saved while you watch.</p><section class="learning-video-quiz" aria-label="Quick quiz"><h3>Quick quiz</h3><p>Check what you learned in this lesson.</p><form data-video-practice>${content.quiz.map((q,i) => `<fieldset><legend>${esc(q.question)}</legend>${q.options.map((option,j) => `<label class="learning-video-option"><input type="radio" name="q${i}" value="${j}" required> ${esc(option)}</label>`).join('')}</fieldset>`).join('')}<button class="button button-primary" type="submit">Check answers</button></form><div data-video-feedback aria-live="polite"></div></section><div class="learning-video-lesson-navigation" aria-label="Lesson navigation"><button type="button" class="button button-secondary" data-video-move="-1">Previous lesson</button><button type="button" class="button button-primary" data-video-move="1">Next lesson</button></div><details><summary>Key takeaways and practice exercise</summary><ul>${content.takeaways.map(item => `<li>${esc(item)}</li>`).join('')}</ul><h3>Try it yourself</h3><p>${esc(content.exercise)}</p><div data-video-solution></div></details><details><summary>Transcript and visual explanations</summary>${content.scenes.map(scene => `<section><h3>${esc(scene.title)}</h3><p>${esc(scene.narration)}</p>${scene.code ? `<pre><code>${esc(scene.code)}</code></pre>` : ''}${scene.diagram ? `<p>${esc(scene.diagram.explanation)}</p>` : ''}</section>`).join('')}</details><details><summary>Research references</summary><p class="learning-meta">AI-authored explanations use these references. Examples have not been executed.</p><ul>${content.sources.map(source => { let url; try { url = new URL(source.url); } catch { return ''; } return url.protocol === 'https:' && !url.username && !url.password ? `<li><a href="${esc(url.href)}" target="_blank" rel="noopener noreferrer">${esc(source.title)}</a></li>` : ''; }).join('')}</ul></details></section>`;
       player = host.querySelector('video'); position = index; studying = true;
-      player.src = videoUrl; player.querySelector('track').src = captionUrl;
+      const captionTrack = player.querySelector('track');
+      captionTrack.removeAttribute('default');
+      player.src = videoUrl; captionTrack.src = captionUrl; captionTrack.track.mode = 'disabled';
+      host.querySelector('.learning-video-playback-tools')?.remove();
+      const playerHelp = document.createElement('p');
+      playerHelp.className = 'learning-video-player-help';
+      playerHelp.textContent = 'Captions and playback speed are available from the video menu.';
+      player.insertAdjacentElement('afterend', playerHelp);
+      if (historyMode !== 'none') writeLearningLocation(id, index, historyMode === 'replace');
       player.addEventListener('loadedmetadata', () => { if (player && isCurrent(id, version)) player.currentTime = data.position_seconds < data.duration_seconds - 2 ? data.position_seconds : 0; }, {once:true});
       player.addEventListener('error', () => status('Your browser could not play this video. Try an updated browser; the transcript and practice remain available below.'));
       player.addEventListener('timeupdate', () => { if (Date.now() - lastSaved >= 10000 && !player?.paused) saveProgress(); });
@@ -170,7 +188,6 @@
       if (!video) { saveProgress(); player?.pause(); }
       else library().catch(error => status(error.message));
     });
-    panel.addEventListener('change', event => { if (event.target.matches('[data-video-speed]') && player) player.playbackRate = Number(event.target.value); });
     panel.addEventListener('submit', async event => {
       event.preventDefault(); const form = event.target, button = form.querySelector('[type="submit"]');
       if (button.disabled) return; button.disabled = true;
@@ -203,11 +220,11 @@
       if (!button || button.disabled) return; button.disabled = true;
       try {
         if (button.hasAttribute('data-video-track')) { await saveProgress(); window.PlaceAIStudy?.selectResource('video', current); await ctx.navigate('study-tracker'); }
-        else if (button.hasAttribute('data-video-browse')) { await saveProgress(); stopPlayer(); clearTimeout(poll); current = null; course = null; studying = false; panel.querySelector('[data-video-discovery]').hidden = false; panel.querySelector('[data-video-workspace]').hidden = true; status(''); await library(); }
-        else if (button.hasAttribute('data-video-overview-back')) { await saveProgress(); stopPlayer(); studying = false; showCourse(course); panel.querySelector('[data-video-overview-title]').focus(); }
+        else if (button.hasAttribute('data-video-browse')) { await saveProgress(); stopPlayer(); clearTimeout(poll); current = null; course = null; studying = false; panel.querySelector('[data-video-discovery]').hidden = false; panel.querySelector('[data-video-workspace]').hidden = true; status(''); writeLearningLocation(); await library(); }
+        else if (button.hasAttribute('data-video-overview-back')) { await saveProgress(); stopPlayer(); studying = false; showCourse(course); writeLearningLocation(current); panel.querySelector('[data-video-overview-title]').focus(); }
         else if (button.hasAttribute('data-video-begin')) { const first = course.lessons.find(item => item.status === 'ready' && !(item.video_completed && item.practice_completed)) || course.lessons.find(item => item.status === 'ready'); if (first) await openLesson(first.position); }
         else if (button.hasAttribute('data-video-move')) { const next = position + Number(button.dataset.videoMove); if (course?.lessons[next]?.status === 'ready') await openLesson(next); }
-        else if (button.dataset.videoId) { await saveProgress(); stopPlayer(); studying = false; current = button.dataset.videoId; const id = current; const data = await ctx.api(`${apiBase}/${encodeURIComponent(id)}`); if (active() && current === id) showCourse(data); }
+        else if (button.dataset.videoId) { await saveProgress(); stopPlayer(); studying = false; current = button.dataset.videoId; const id = current; const data = await ctx.api(`${apiBase}/${encodeURIComponent(id)}`); if (active() && current === id) { showCourse(data); writeLearningLocation(id); } }
         else if (button.hasAttribute('data-video-refresh')) { await library(); const id = current; if (id) { const data = await ctx.api(`${apiBase}/${encodeURIComponent(id)}`); if (active() && current === id) showCourse(data); } }
         else if (button.hasAttribute('data-video-retry-course')) { const id = current; const data = await ctx.api(`${apiBase}/${encodeURIComponent(id)}/retry`, {method:'POST'}); if (active() && current === id) showCourse(data); }
         else { const index = Number(button.dataset.videoLesson); const item = course.lessons[index];
@@ -217,7 +234,27 @@
       } catch (error) { status(error.message); }
       finally { if (button.isConnected) button.disabled = false; }
     });
-    cleanup = () => { alive = false; clearTimeout(poll); clearTimeout(libraryPoll); observer?.disconnect(); stopPlayer(); };
+    const restoreLearningLocation = async () => {
+      if (!active() || panel.hidden) return;
+      const target = learningLocation();
+      if (!target.course) {
+        await saveProgress(); stopPlayer(); current = null; course = null; studying = false;
+        panel.querySelector('[data-video-discovery]').hidden = false;
+        panel.querySelector('[data-video-workspace]').hidden = true;
+        await library(); return;
+      }
+      if (current !== target.course) {
+        current = target.course; studying = false; stopPlayer();
+        showCourse(await ctx.api(`${apiBase}/${encodeURIComponent(current)}`));
+      }
+      if (target.lesson !== null && /^\d+$/.test(target.lesson)) {
+        studying = true; showCourse(course); await openLesson(Number(target.lesson), 'none');
+      } else if (studying) {
+        await saveProgress(); stopPlayer(); studying = false; showCourse(course);
+      }
+    };
+    window.addEventListener('popstate', restoreLearningLocation);
+    cleanup = () => { alive = false; clearTimeout(poll); clearTimeout(libraryPoll); window.removeEventListener('popstate', restoreLearningLocation); observer?.disconnect(); stopPlayer(); };
     observer = new MutationObserver(() => { if (!hub.isConnected) cleanup(); });
     observer.observe(document.querySelector('#app-content'), {childList:true});
     const requested = window.PlaceAIStudySelection;
@@ -227,6 +264,9 @@
       ctx.api(`${apiBase}/${encodeURIComponent(requested.id)}`).then(data => {
         if (active()) { current = data.id; showCourse(data); }
       }).catch(error => status(error.message));
+    } else if (learningLocation().course) {
+      navigation.querySelector('[data-format="video"]').click();
+      restoreLearningLocation().catch(error => status(error.message));
     }
   }};
 })();

@@ -850,6 +850,14 @@
   counter-reset:roadmap-phase;
 }
 
+.roadmap-phase-map{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:0 0 24px}
+.roadmap-phase-node{display:flex;align-items:center;gap:12px;padding:16px;border-radius:18px;border:1px solid #dbeafe;background:linear-gradient(135deg,#eff6ff,#fff);box-shadow:0 8px 24px rgba(15,23,42,.06)}
+.roadmap-phase-node>span{display:grid;place-items:center;flex:0 0 42px;height:42px;border-radius:14px;background:#2563eb;color:#fff;font-weight:800}
+.roadmap-phase-node div{display:grid;gap:3px}.roadmap-phase-node strong{color:#0f172a}.roadmap-phase-node small{color:#64748b}
+.roadmap-phase-node-1{border-color:#fde68a;background:linear-gradient(135deg,#fffbeb,#fff)}.roadmap-phase-node-1>span{background:#d97706}
+.roadmap-phase-node-2{border-color:#bbf7d0;background:linear-gradient(135deg,#f0fdf4,#fff)}.roadmap-phase-node-2>span{background:#16a34a}
+.roadmap-phase-node-3{border-color:#e9d5ff;background:linear-gradient(135deg,#faf5ff,#fff)}.roadmap-phase-node-3>span{background:#9333ea}
+
 .roadmap-phase-stack>.panel{
   position:relative;
   overflow:hidden;
