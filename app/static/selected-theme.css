@@ -1237,3 +1237,156 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
   #app-shell .activity-item:has(> .row-actions) { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: start; }
   #app-shell .activity-item > .row-actions { grid-column: 2; justify-content: flex-start; min-width: 0; width: 100%; }
 }
+
+/* Premium interface pass: modern type, purposeful gradients, a distinct workspace
+   navigation rail, and help that stays visible at every responsive width. */
+:root {
+  --pa-accent: #5b3fd4;
+  --pa-accent-hover: #472db7;
+  --pa-selected: #efedff;
+  --pa-canvas: #f6f8fc;
+  --pa-border: #dfe4ee;
+  --font-body: "DM Sans", "Segoe UI", Arial, sans-serif !important;
+  --font-display: Manrope, "DM Sans", "Segoe UI", Arial, sans-serif !important;
+}
+body { font-family: var(--font-body) !important; }
+h1, h2, h3, h4, h5, .page-head h1, .panel-head h2 { font-family: var(--font-display) !important; }
+body :is(h1, h2, h3, h4, h5),
+#marketing-site .hero h1 { font-family: var(--font-display) !important; }
+
+.button-primary:not(.danger), .button.primary:not(.danger),
+#app-shell .button-primary, #app-shell .row-button.primary:not(.danger),
+.prep-card-action .button-primary, .privacy-actions button:last-child {
+  background: linear-gradient(135deg, #6648df 0%, #5234c7 55%, #4027a6 100%) !important;
+  border-color: #4b30bb !important;
+  box-shadow: 0 7px 18px rgb(76 48 187 / 20%) !important;
+  color: #fff !important;
+}
+.button-primary:hover:not(:disabled), .button.primary:hover:not(:disabled),
+#app-shell .button-primary:hover:not(:disabled), #app-shell .row-button.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #5739ca 0%, #4329ad 100%) !important;
+  box-shadow: 0 9px 22px rgb(67 41 173 / 25%) !important;
+  transform: translateY(-1px);
+}
+.button-primary:active:not(:disabled), #app-shell .button-primary:active:not(:disabled) {
+  box-shadow: 0 3px 9px rgb(67 41 173 / 18%) !important;
+  transform: translateY(0);
+}
+
+#marketing-site .site-header {
+  background: rgb(255 255 255 / 92%) !important;
+  box-shadow: 0 1px 0 rgb(28 35 54 / 7%), 0 8px 28px rgb(35 29 65 / 5%) !important;
+  backdrop-filter: blur(16px) !important;
+}
+#marketing-site .marketing-nav { gap: 19px; }
+#marketing-site .marketing-nav a { font-family: var(--font-body); font-weight: 600; }
+#marketing-site .mobile-support-link {
+  display: none; width: 42px; height: 42px; align-items: center; justify-content: center;
+  margin-left: auto; border: 1px solid var(--pa-border); border-radius: 12px;
+  background: #fff; color: var(--pa-accent); box-shadow: 0 5px 14px rgb(28 35 54 / 7%);
+}
+#marketing-site .mobile-support-link svg { width: 21px; height: 21px; }
+#marketing-site .site-footer-quick-links { display: flex; flex-wrap: wrap; gap: 14px; }
+#marketing-site .site-footer-quick-links a { font-weight: 600; }
+#marketing-site :is(.button-secondary, .button-ghost),
+#app-shell :is(.button-secondary, .row-button:not(.primary), .icon-button) {
+  background: linear-gradient(180deg, #fff 0%, #f8f7fd 100%) !important;
+  border-color: #dcdfea !important;
+}
+
+#marketing-site :is(.journey-card, .bento-card, .preparation-grid > article, .production-surface-card),
+#app-shell :is(.panel, .data-panel, .form-panel, .operation-card, .readiness-component,
+  .learning-video-course-card, .learning-video-lesson-panel) {
+  border-radius: 14px !important;
+  box-shadow: 0 10px 28px rgb(30 39 62 / 6%) !important;
+}
+#marketing-site :is(.journey-card, .bento-card, .preparation-grid > article):hover {
+  border-color: #cfc6f5 !important;
+  box-shadow: 0 16px 34px rgb(52 39 108 / 10%) !important;
+  transform: translateY(-2px);
+}
+
+#app-shell { grid-template-columns: 248px minmax(0, 1fr); }
+#app-shell .app-sidebar {
+  width: 248px;
+  background: linear-gradient(180deg, #17142b 0%, #211a3d 52%, #121728 100%) !important;
+  border-right: 1px solid #2c2850 !important;
+  box-shadow: 10px 0 32px rgb(20 17 43 / 10%) !important;
+  color: #fff !important;
+}
+#app-shell .app-sidebar .brand,
+#app-shell .app-sidebar :is(#workspace-name, .sidebar-user strong, .sidebar-signout) { color: #fff !important; }
+#app-shell .app-sidebar :is(#workspace-kind, .nav-group-label, .sidebar-user small) { color: #aeb6d2 !important; }
+#app-shell .workspace-pill {
+  margin: 2px 2px 8px !important; padding: 13px 12px !important;
+  border: 1px solid rgb(255 255 255 / 10%) !important; border-radius: 12px !important;
+  background: rgb(255 255 255 / 6%) !important;
+}
+#app-shell .workspace-avatar, #app-shell .user-avatar, #app-shell .ai-policy > span {
+  background: linear-gradient(135deg, #8168ef, #5c43cf) !important;
+  color: #fff !important;
+}
+#app-shell .app-nav button { color: #d9def0 !important; border-radius: 10px !important; }
+#app-shell .app-nav button:hover { background: rgb(255 255 255 / 7%) !important; color: #fff !important; }
+#app-shell .app-nav button.active {
+  background: linear-gradient(135deg, rgb(124 98 235 / 36%), rgb(91 63 212 / 22%)) !important;
+  border-color: rgb(180 165 255 / 30%) !important; color: #fff !important;
+  box-shadow: inset 3px 0 0 #a997ff !important;
+}
+#app-shell .app-nav button.active :is(span, svg) { color: #fff !important; }
+#app-shell .sidebar-bottom { background: transparent !important; border-top-color: rgb(255 255 255 / 10%) !important; }
+#app-shell .ai-policy {
+  background: rgb(255 255 255 / 5%) !important; border-color: rgb(255 255 255 / 10%) !important;
+}
+#app-shell .ai-policy :is(strong, small, p) { color: #dce1f2 !important; }
+#app-shell .sidebar-user {
+  background: rgb(255 255 255 / 6%) !important; border-color: rgb(255 255 255 / 10%) !important;
+}
+#app-shell .app-topbar {
+  background: rgb(255 255 255 / 94%) !important;
+  box-shadow: 0 1px 0 rgb(28 35 54 / 6%), 0 8px 24px rgb(34 42 70 / 4%) !important;
+  backdrop-filter: blur(15px) !important;
+}
+#app-shell .page-head h1 { font-weight: 700 !important; letter-spacing: -.035em !important; }
+#app-shell :is(.panel-head h2, .workspace-shortcuts > h2, .learning-video-card-title) { font-weight: 650 !important; }
+#app-shell :is(input:not([type=checkbox]):not([type=radio]), select, textarea) { border-radius: 10px !important; }
+#app-shell :is(.button, .row-button, .icon-button) { border-radius: 10px !important; }
+#app-shell .metric-card { border-radius: 14px !important; box-shadow: 0 8px 24px rgb(30 39 62 / 5%) !important; }
+.generic-modal-card, #auth-overlay .auth-modal {
+  border: 1px solid rgb(220 224 235 / 85%) !important;
+  border-radius: 20px !important;
+  box-shadow: 0 28px 80px rgb(20 25 45 / 24%) !important;
+  overflow: hidden;
+}
+#auth-overlay .auth-brand-panel {
+  background: linear-gradient(145deg, #17142b 0%, #2c2357 58%, #4e36b8 100%) !important;
+}
+#auth-overlay .auth-brand-panel :is(h2, p, span, strong, small) { color: #fff !important; }
+#app-shell .help-centre-button, .help-centre-button { display: inline-flex; align-items: center; gap: 7px; }
+#app-shell .help-centre-button svg, .help-centre-button svg { width: 18px; height: 18px; flex: 0 0 auto; }
+
+@media (max-width: 1180px) {
+  #app-shell { grid-template-columns: 224px minmax(0, 1fr); }
+  #app-shell .app-sidebar { width: 224px; }
+  #marketing-site .marketing-nav { gap: 13px; }
+}
+@media (max-width: 760px) {
+  #marketing-site .mobile-support-link { display: inline-flex; }
+  #marketing-site .mobile-menu { margin-left: 8px; }
+  #marketing-site .header-actions { display: none; }
+  #app-shell { display: block; }
+  #app-shell .app-sidebar { width: min(284px, 88vw); }
+  #app-shell .topbar-actions .help-centre-button {
+    display: inline-flex !important; width: 42px; height: 42px; min-width: 42px;
+    padding: 0 !important; justify-content: center;
+  }
+  #app-shell .topbar-actions .help-centre-button span { display: none; }
+  #app-shell .app-topbar { padding-inline: 12px; }
+  #app-shell .topbar-context { min-width: 0; }
+  #app-shell .topbar-context strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 28vw; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  #marketing-site :is(.journey-card, .bento-card, .preparation-grid > article),
+  .button-primary, #app-shell .button-primary { transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+}

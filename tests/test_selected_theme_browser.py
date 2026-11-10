@@ -6,27 +6,25 @@ def test_selected_palette_survives_dynamic_styles_and_auth_dialog(browser):  # n
     page.goto(BASE_URL, wait_until="networkidle")
     assert page.locator("body").evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(246, 248, 252)"
     sidebar = page.locator(".app-sidebar")
-    assert sidebar.evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(255, 255, 255)"
-    assert sidebar.evaluate("el => getComputedStyle(el).color") == "rgb(23, 36, 59)"
+    assert "linear-gradient" in sidebar.evaluate("el => getComputedStyle(el).backgroundImage")
+    assert sidebar.evaluate("el => getComputedStyle(el).color") == "rgb(255, 255, 255)"
     assert (
-        page.locator(".sidebar-bottom").evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(255, 255, 255)"
+        page.locator(".sidebar-bottom").evaluate("el => getComputedStyle(el).backgroundColor") == "rgba(0, 0, 0, 0)"
     )
     sign_in = page.locator('.hero button[data-open-auth="login"]')
     sign_in.click()
     assert page.locator("#auth-overlay").is_visible()
-    assert (
-        page.locator("#auth-overlay .auth-brand-panel").evaluate("el => getComputedStyle(el).backgroundColor")
-        == "rgb(255, 255, 255)"
-    )
+    assert "linear-gradient" in page.locator("#auth-overlay .auth-brand-panel").evaluate(
+        "el => getComputedStyle(el).backgroundImage")
     for role in ("student", "recruiter", "institution_admin", "platform_admin"):
         page.locator(f'#login-view [data-access-role="{role}"]').click()
         assert page.locator('#role-login-form input[name="role"]').input_value() == role
         submit = page.locator('#role-login-form button[type="submit"]')
         page.mouse.move(0, 0)
         page.wait_for_function(
-            "() => getComputedStyle(document.querySelector('#role-login-form button[type=submit]')).backgroundColor === 'rgb(104, 73, 95)'"
+            "() => getComputedStyle(document.querySelector('#role-login-form button[type=submit]')).backgroundImage.includes('linear-gradient')"
         )
-        assert submit.evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(104, 73, 95)"
+        assert "linear-gradient" in submit.evaluate("el => getComputedStyle(el).backgroundImage")
         assert submit.evaluate("el => getComputedStyle(el).color") == "rgb(255, 255, 255)"
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
     page.close()

@@ -49,11 +49,13 @@ INDEX_HTML = '''<!doctype html>
         <a href="#recruiters">Recruiters</a>
         <a href="#preparation-lab">Preparation Lab</a>
         <a href="#security">Security</a>
+        <a href="/static/help.html">Help &amp; Support</a>
       </nav>
       <div class="header-actions">
         <button class="button button-ghost" data-open-auth="login">Sign in</button>
         <button class="button button-primary" data-open-access="request">Request access</button>
       </div>
+      <a class="mobile-support-link" href="/static/help.html" aria-label="Open Help and Support"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.7 9a2.4 2.4 0 0 1 4.6 1c0 1.8-2.3 2.1-2.3 3.7"/><path d="M12 17h.01"/></svg></a>
       <button class="mobile-menu" data-action="toggle-mobile-menu" aria-label="Open navigation">Menu</button>
     </header>
 
@@ -188,7 +190,7 @@ INDEX_HTML = '''<!doctype html>
       <section class="cta-section"><div class="section-shell cta-inner"><div><span>Need a PlaceAI workspace?</span><h2>Choose the correct role<br>and request controlled access.</h2></div><button class="button button-light button-large" data-open-access="request">Request access</button></div></section>
     </main>
 
-    <footer class="site-footer section-shell"><a class="brand" href="#top"><span class="brand-mark"><span></span><span></span><span></span></span><span>PlaceAI</span></a><p>AI-assisted campus placement operating system.</p><span>© 2026 PlaceAI · Privacy-first campus hiring.</span></footer>
+    <footer class="site-footer section-shell"><a class="brand" href="#top"><span class="brand-mark"><span></span><span></span><span></span></span><span>PlaceAI</span></a><p>AI-assisted campus placement operating system.</p><nav class="site-footer-quick-links" aria-label="Support"><a href="/static/help.html">Help Centre</a><a href="/static/contact.html">Contact</a></nav><span>© 2026 PlaceAI · Privacy-first campus hiring.</span></footer>
   </div>
 
   <div id="app-shell" class="app-shell hidden">
@@ -201,7 +203,7 @@ INDEX_HTML = '''<!doctype html>
     </aside>
     <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" data-action="toggle-sidebar" aria-label="Close navigation"></button>
     <div class="app-content-wrap">
-      <header class="app-topbar"><button class="sidebar-trigger" data-action="toggle-sidebar">Menu</button><div class="topbar-context"><small id="page-eyebrow">Workspace</small><strong id="page-title">Dashboard</strong></div><div class="topbar-actions"><button class="icon-button command-launch" data-action="open-command-palette" title="Search PlaceAI" aria-label="Search PlaceAI"><svg class="command-launch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>Search <kbd>Ctrl K</kbd></button><button class="icon-button" data-action="open-help-centre" title="Help Centre" aria-label="Open Help Centre">Help</button><button class="icon-button" id="notifications-button" data-action="open-notifications" title="Notifications" aria-label="Notifications"><span class="notification-dot"></span>Updates <b id="notification-count" class="notification-count">0</b></button><button class="button button-primary button-small" id="context-action">New</button></div></header>
+      <header class="app-topbar"><button class="sidebar-trigger" data-action="toggle-sidebar">Menu</button><div class="topbar-context"><small id="page-eyebrow">Workspace</small><strong id="page-title">Dashboard</strong></div><div class="topbar-actions"><button class="icon-button command-launch" data-action="open-command-palette" title="Search PlaceAI" aria-label="Search PlaceAI"><svg class="command-launch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>Search <kbd>Ctrl K</kbd></button><button class="icon-button help-centre-button" data-action="open-help-centre" title="Help Centre" aria-label="Open Help Centre"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M9.7 9a2.4 2.4 0 0 1 4.6 1c0 1.8-2.3 2.1-2.3 3.7"/><path d="M12 17h.01"/></svg><span>Help</span></button><button class="icon-button" id="notifications-button" data-action="open-notifications" title="Notifications" aria-label="Notifications"><span class="notification-dot"></span>Updates <b id="notification-count" class="notification-count">0</b></button><button class="button button-primary button-small" id="context-action">New</button></div></header>
       <main id="app-content" class="app-content" tabindex="-1"><div class="loading-state"><span class="loader"></span><p>Loading your workspace…</p></div></main>
     </div>
   </div>
