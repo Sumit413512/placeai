@@ -1251,6 +1251,8 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
 }
 body { font-family: var(--font-body) !important; }
 h1, h2, h3, h4, h5, .page-head h1, .panel-head h2 { font-family: var(--font-display) !important; }
+body :is(h1, h2, h3, h4, h5),
+#marketing-site .hero h1 { font-family: var(--font-display) !important; }
 
 .button-primary:not(.danger), .button.primary:not(.danger),
 #app-shell .button-primary, #app-shell .row-button.primary:not(.danger),
