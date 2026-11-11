@@ -19,7 +19,7 @@ from app.learning_content import ContentModel
 from app.learning_video_content import VideoRequest
 from app.learning_video_media import captions
 from app.models import (User, VideoCourse, VideoLesson, VideoProgress, VideoEnrollment,
-                        VideoViewerProgress, VideoNarration, utcnow)
+                        VideoViewerProgress, utcnow)
 from app.routers.learning_hub import generation_available, wake_worker
 from app.study_service import lock_owner, record_video_time
 
@@ -228,7 +228,7 @@ def get_course(course_id: str, user: User = Depends(require_student), db: Sessio
 @router.delete("/{course_id}", status_code=204)
 def remove_course(course_id: str, user: User = Depends(require_student),
                   db: Session = Depends(get_db)):
-    """Remove a course from this learner without destroying a shared approved course."""
+    """Remove only the learner's enrollment; retained media is always reusable."""
     db.query(User).filter_by(id=user.id).with_for_update().one()
     course = owner_course(db, course_id, user)
     lesson_ids = [identifier for identifier, in db.query(VideoLesson.id).filter_by(course_id=course.id)]
@@ -239,13 +239,23 @@ def remove_course(course_id: str, user: User = Depends(require_student),
         ).delete(synchronize_session=False)
     db.query(VideoEnrollment).filter_by(user_id=user.id, course_id=course.id).delete()
     if course.shared_key is None:
+        # Preserve legacy/private source media too. Converting it to the canonical
+        # topic key makes a later request by this or another learner a cache hit.
+        try:
+            source = json.loads(course.input_json or "{}")
+        except (TypeError, ValueError):
+            source = {}
+        _normalized, reusable_key = topic_key(source.get("topic") or course.title)
+        collision = db.query(VideoCourse.id).filter(
+            VideoCourse.shared_key == reusable_key, VideoCourse.id != course.id).first()
+        course.shared_key = (hashlib.sha256(("retained-source:" + course.id).encode()).hexdigest()
+                             if collision else reusable_key)
+        course.user_id = None
         if lesson_ids:
+            # Legacy progress was course-global. It is private learner state, so it
+            # is cleared while lessons, narration and encoded media stay intact.
             db.query(VideoProgress).filter(VideoProgress.lesson_id.in_(lesson_ids)).delete(
                 synchronize_session=False)
-            db.query(VideoNarration).filter(VideoNarration.lesson_id.in_(lesson_ids)).delete(
-                synchronize_session=False)
-        db.query(VideoLesson).filter_by(course_id=course.id).delete(synchronize_session=False)
-        db.delete(course)
     db.commit()
     return Response(status_code=204)
 
