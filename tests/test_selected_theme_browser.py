@@ -53,7 +53,7 @@ def test_theme_covers_assessment_and_legal_pages_without_revealing_hidden_panels
         else:
             assert (
                 page.locator(".legal-card").evaluate("el => getComputedStyle(el).backgroundColor")
-                == "rgb(255, 255, 255)"
+                == "rgb(255, 253, 248)"
             )
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
     page.close()
