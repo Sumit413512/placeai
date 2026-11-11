@@ -4,10 +4,10 @@ from test_browser_smoke import BASE_URL, browser, local_server  # noqa: F401
 def test_selected_palette_survives_dynamic_styles_and_auth_dialog(browser):  # noqa: F811
     page = browser.new_page(viewport={"width": 390, "height": 844})
     page.goto(BASE_URL, wait_until="networkidle")
-    assert page.locator("body").evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(246, 248, 252)"
+    assert page.locator("body").evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(247, 245, 239)"
     sidebar = page.locator(".app-sidebar")
     assert "linear-gradient" in sidebar.evaluate("el => getComputedStyle(el).backgroundImage")
-    assert sidebar.evaluate("el => getComputedStyle(el).color") == "rgb(255, 255, 255)"
+    assert sidebar.evaluate("el => getComputedStyle(el).color") == "rgb(43, 48, 42)"
     assert (
         page.locator(".sidebar-bottom").evaluate("el => getComputedStyle(el).backgroundColor") == "rgba(0, 0, 0, 0)"
     )
@@ -34,26 +34,26 @@ def test_theme_covers_assessment_and_legal_pages_without_revealing_hidden_panels
     page = browser.new_page(viewport={"width": 390, "height": 844})
     for path in ("/privacy", "/terms", "/acceptable-use", "/static/contact.html", "/mock-interview?preview=1"):
         page.goto(BASE_URL + path, wait_until="networkidle")
-        assert page.locator("body").evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(246, 248, 252)"
+        assert page.locator("body").evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(247, 245, 239)"
         if path.startswith("/mock-interview"):
             assert (
                 page.locator(".assessment-sidebar").evaluate("el => getComputedStyle(el).backgroundColor")
-                == "rgb(255, 255, 255)"
+                == "rgb(241, 238, 229)"
             )
             assert (
                 page.locator(".proctor-header strong").evaluate("el => getComputedStyle(el).color")
-                == "rgb(255, 255, 255)"
+                == "rgb(255, 253, 248)"
             )
             assert (
                 page.locator(".assessment-camera-meta span").evaluate("el => getComputedStyle(el).color")
-                == "rgb(255, 255, 255)"
+                == "rgb(255, 253, 248)"
             )
             assert page.locator("#result-panel").is_hidden()
             assert page.locator("#interview-panel").is_hidden()
         else:
             assert (
                 page.locator(".legal-card").evaluate("el => getComputedStyle(el).backgroundColor")
-                == "rgb(255, 255, 255)"
+                == "rgb(255, 253, 248)"
             )
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
     page.close()
@@ -82,7 +82,7 @@ def test_editorial_cards_and_footer_remain_readable_on_mobile_and_desktop(browse
         footer = page.locator("#marketing-site .placeai-footer")
         footer.wait_for(state="visible")
         footer_bg = footer.evaluate("el => getComputedStyle(el).backgroundColor")
-        assert footer_bg == "rgb(48, 39, 51)"
+        assert footer_bg == "rgb(52, 56, 50)"
         for label in footer.locator("p, h3, a").all():
             if label.is_visible():
                 colour = label.evaluate("el => getComputedStyle(el).color")

@@ -1238,14 +1238,31 @@ body :is(.nav-label, .check-label) { font-weight: 400 !important; }
   #app-shell .activity-item > .row-actions { grid-column: 2; justify-content: flex-start; min-width: 0; width: 100%; }
 }
 
-/* Premium interface pass: modern type, purposeful gradients, a distinct workspace
-   navigation rail, and help that stays visible at every responsive width. */
+/* Warm enterprise interface pass.
+   The reference platforms use spacious white surfaces, strong ink, fine dividers,
+   photography and restrained accents. PlaceAI keeps those principles while using
+   its own ivory, terracotta, amber and sage palette. No blue/violet is used for
+   interface states, and every interactive foreground is contrast-safe. */
 :root {
-  --pa-accent: #5b3fd4;
-  --pa-accent-hover: #472db7;
-  --pa-selected: #efedff;
-  --pa-canvas: #f6f8fc;
-  --pa-border: #dfe4ee;
+  color-scheme: light;
+  --pa-accent: #9f3f24;
+  --pa-accent-hover: #7e2f1d;
+  --pa-accent-soft: #f7e5da;
+  --pa-sage: #52705a;
+  --pa-sage-soft: #e4eee5;
+  --pa-amber: #a76517;
+  --pa-amber-soft: #faedcf;
+  --pa-selected: #f4e5d9;
+  --pa-canvas: #f7f5ef;
+  --pa-surface: #fffdf8;
+  --pa-sidebar: #f1eee5;
+  --pa-border: #ddd7ca;
+  --pa-ink: #242823;
+  --pa-muted: #5f675f;
+  --pa-tone-blush: #f8ebe2;
+  --pa-tone-sand: #f6eddc;
+  --pa-tone-mauve: #e8efe5;
+  --pa-tone-stone: #efede6;
   --font-body: "DM Sans", "Segoe UI", Arial, sans-serif !important;
   --font-display: Manrope, "DM Sans", "Segoe UI", Arial, sans-serif !important;
 }
@@ -1257,25 +1274,30 @@ body :is(h1, h2, h3, h4, h5),
 .button-primary:not(.danger), .button.primary:not(.danger),
 #app-shell .button-primary, #app-shell .row-button.primary:not(.danger),
 .prep-card-action .button-primary, .privacy-actions button:last-child {
-  background: linear-gradient(135deg, #6648df 0%, #5234c7 55%, #4027a6 100%) !important;
-  border-color: #4b30bb !important;
-  box-shadow: 0 7px 18px rgb(76 48 187 / 20%) !important;
+  background: linear-gradient(135deg, #b95832 0%, #9f3f24 55%, #84321f 100%) !important;
+  border-color: #8b3520 !important;
+  box-shadow: 0 7px 18px rgb(126 47 29 / 18%) !important;
   color: #fff !important;
 }
 .button-primary:hover:not(:disabled), .button.primary:hover:not(:disabled),
 #app-shell .button-primary:hover:not(:disabled), #app-shell .row-button.primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, #5739ca 0%, #4329ad 100%) !important;
-  box-shadow: 0 9px 22px rgb(67 41 173 / 25%) !important;
+  background: linear-gradient(135deg, #a8492a 0%, #7e2f1d 100%) !important;
+  box-shadow: 0 9px 22px rgb(126 47 29 / 23%) !important;
   transform: translateY(-1px);
 }
 .button-primary:active:not(:disabled), #app-shell .button-primary:active:not(:disabled) {
-  box-shadow: 0 3px 9px rgb(67 41 173 / 18%) !important;
+  box-shadow: 0 3px 9px rgb(126 47 29 / 18%) !important;
   transform: translateY(0);
+}
+.button-primary:disabled, .button.primary:disabled,
+#app-shell :is(.button-primary,.row-button.primary):disabled {
+  background: #d8d1c6 !important; border-color: #d8d1c6 !important;
+  color: #565c54 !important; box-shadow: none !important; opacity: 1 !important;
 }
 
 #marketing-site .site-header {
-  background: rgb(255 255 255 / 92%) !important;
-  box-shadow: 0 1px 0 rgb(28 35 54 / 7%), 0 8px 28px rgb(35 29 65 / 5%) !important;
+  background: rgb(255 253 248 / 94%) !important;
+  box-shadow: 0 1px 0 rgb(62 57 48 / 8%), 0 8px 28px rgb(65 54 42 / 5%) !important;
   backdrop-filter: blur(16px) !important;
 }
 #marketing-site .marketing-nav { gap: 19px; }
@@ -1283,87 +1305,134 @@ body :is(h1, h2, h3, h4, h5),
 #marketing-site .mobile-support-link {
   display: none; width: 42px; height: 42px; align-items: center; justify-content: center;
   margin-left: auto; border: 1px solid var(--pa-border); border-radius: 12px;
-  background: #fff; color: var(--pa-accent); box-shadow: 0 5px 14px rgb(28 35 54 / 7%);
+  background: #fffdf8; color: var(--pa-accent); box-shadow: 0 5px 14px rgb(65 54 42 / 8%);
 }
 #marketing-site .mobile-support-link svg { width: 21px; height: 21px; }
 #marketing-site .site-footer-quick-links { display: flex; flex-wrap: wrap; gap: 14px; }
 #marketing-site .site-footer-quick-links a { font-weight: 600; }
 #marketing-site :is(.button-secondary, .button-ghost),
 #app-shell :is(.button-secondary, .row-button:not(.primary), .icon-button) {
-  background: linear-gradient(180deg, #fff 0%, #f8f7fd 100%) !important;
-  border-color: #dcdfea !important;
+  background: linear-gradient(180deg, #fffdf8 0%, #f4f0e7 100%) !important;
+  border-color: #d8d1c3 !important;
+  color: #343932 !important;
 }
 
 #marketing-site :is(.journey-card, .bento-card, .preparation-grid > article, .production-surface-card),
 #app-shell :is(.panel, .data-panel, .form-panel, .operation-card, .readiness-component,
   .learning-video-course-card, .learning-video-lesson-panel) {
   border-radius: 14px !important;
-  box-shadow: 0 10px 28px rgb(30 39 62 / 6%) !important;
+  box-shadow: 0 10px 28px rgb(65 54 42 / 7%) !important;
 }
 #marketing-site :is(.journey-card, .bento-card, .preparation-grid > article):hover {
-  border-color: #cfc6f5 !important;
-  box-shadow: 0 16px 34px rgb(52 39 108 / 10%) !important;
+  border-color: #cfb49f !important;
+  box-shadow: 0 16px 34px rgb(113 72 46 / 11%) !important;
   transform: translateY(-2px);
 }
 
 #app-shell { grid-template-columns: 248px minmax(0, 1fr); }
 #app-shell .app-sidebar {
   width: 248px;
-  background: linear-gradient(180deg, #17142b 0%, #211a3d 52%, #121728 100%) !important;
-  border-right: 1px solid #2c2850 !important;
-  box-shadow: 10px 0 32px rgb(20 17 43 / 10%) !important;
-  color: #fff !important;
+  background: linear-gradient(180deg, #f7f2e8 0%, #eee9dc 52%, #e6eee5 100%) !important;
+  border-right: 1px solid #d7d0c2 !important;
+  box-shadow: 10px 0 32px rgb(72 62 48 / 7%) !important;
+  color: #2b302a !important;
 }
 #app-shell .app-sidebar .brand,
-#app-shell .app-sidebar :is(#workspace-name, .sidebar-user strong, .sidebar-signout) { color: #fff !important; }
-#app-shell .app-sidebar :is(#workspace-kind, .nav-group-label, .sidebar-user small) { color: #aeb6d2 !important; }
+#app-shell .app-sidebar :is(#workspace-name, .sidebar-user strong, .sidebar-signout) { color: #292d28 !important; }
+#app-shell .app-sidebar :is(#workspace-kind, .nav-group-label, .sidebar-user small) { color: #62695f !important; }
 #app-shell .workspace-pill {
   margin: 2px 2px 8px !important; padding: 13px 12px !important;
-  border: 1px solid rgb(255 255 255 / 10%) !important; border-radius: 12px !important;
-  background: rgb(255 255 255 / 6%) !important;
+  border: 1px solid #d8d0c0 !important; border-radius: 12px !important;
+  background: rgb(255 253 248 / 72%) !important;
 }
 #app-shell .workspace-avatar, #app-shell .user-avatar, #app-shell .ai-policy > span {
-  background: linear-gradient(135deg, #8168ef, #5c43cf) !important;
+  background: linear-gradient(135deg, #b95832, #8c3521) !important;
   color: #fff !important;
 }
-#app-shell .app-nav button { color: #d9def0 !important; border-radius: 10px !important; }
-#app-shell .app-nav button:hover { background: rgb(255 255 255 / 7%) !important; color: #fff !important; }
+#app-shell .app-nav button { color: #3f463e !important; border-radius: 10px !important; }
+#app-shell .app-nav button:hover { background: rgb(255 253 248 / 80%) !important; color: #7e2f1d !important; }
 #app-shell .app-nav button.active {
-  background: linear-gradient(135deg, rgb(124 98 235 / 36%), rgb(91 63 212 / 22%)) !important;
-  border-color: rgb(180 165 255 / 30%) !important; color: #fff !important;
-  box-shadow: inset 3px 0 0 #a997ff !important;
+  background: linear-gradient(135deg, #f4ddca 0%, #e3ecdf 100%) !important;
+  border-color: #cdb8a4 !important; color: #6f2b1c !important;
+  box-shadow: inset 3px 0 0 #a64327 !important;
 }
-#app-shell .app-nav button.active :is(span, svg) { color: #fff !important; }
-#app-shell .sidebar-bottom { background: transparent !important; border-top-color: rgb(255 255 255 / 10%) !important; }
+#app-shell .app-nav button.active :is(span, svg) { color: #6f2b1c !important; }
+#app-shell .sidebar-bottom { background: transparent !important; border-top-color: #d5cec0 !important; }
 #app-shell .ai-policy {
-  background: rgb(255 255 255 / 5%) !important; border-color: rgb(255 255 255 / 10%) !important;
+  background: #e7eee4 !important; border-color: #cbd7c9 !important;
 }
-#app-shell .ai-policy :is(strong, small, p) { color: #dce1f2 !important; }
+#app-shell .ai-policy :is(strong, small, p) { color: #3e4b3f !important; }
 #app-shell .sidebar-user {
-  background: rgb(255 255 255 / 6%) !important; border-color: rgb(255 255 255 / 10%) !important;
+  background: #fffaf1 !important; border-color: #d8d0c0 !important;
 }
 #app-shell .app-topbar {
-  background: rgb(255 255 255 / 94%) !important;
-  box-shadow: 0 1px 0 rgb(28 35 54 / 6%), 0 8px 24px rgb(34 42 70 / 4%) !important;
+  background: rgb(255 253 248 / 95%) !important;
+  box-shadow: 0 1px 0 rgb(62 57 48 / 7%), 0 8px 24px rgb(65 54 42 / 5%) !important;
   backdrop-filter: blur(15px) !important;
 }
 #app-shell .page-head h1 { font-weight: 700 !important; letter-spacing: -.035em !important; }
 #app-shell :is(.panel-head h2, .workspace-shortcuts > h2, .learning-video-card-title) { font-weight: 650 !important; }
 #app-shell :is(input:not([type=checkbox]):not([type=radio]), select, textarea) { border-radius: 10px !important; }
 #app-shell :is(.button, .row-button, .icon-button) { border-radius: 10px !important; }
-#app-shell .metric-card { border-radius: 14px !important; box-shadow: 0 8px 24px rgb(30 39 62 / 5%) !important; }
+#app-shell .metric-card { border-radius: 14px !important; box-shadow: 0 8px 24px rgb(65 54 42 / 6%) !important; }
 .generic-modal-card, #auth-overlay .auth-modal {
-  border: 1px solid rgb(220 224 235 / 85%) !important;
+  border: 1px solid #ddd5c8 !important;
   border-radius: 20px !important;
-  box-shadow: 0 28px 80px rgb(20 25 45 / 24%) !important;
+  box-shadow: 0 28px 80px rgb(56 47 38 / 22%) !important;
   overflow: hidden;
 }
 #auth-overlay .auth-brand-panel {
-  background: linear-gradient(145deg, #17142b 0%, #2c2357 58%, #4e36b8 100%) !important;
+  background: linear-gradient(145deg, #f5e8d7 0%, #eadfcf 52%, #dce8d9 100%) !important;
 }
-#auth-overlay .auth-brand-panel :is(h2, p, span, strong, small) { color: #fff !important; }
+#auth-overlay .auth-brand-panel :is(h2, strong) { color: #292d28 !important; }
+#auth-overlay .auth-brand-panel :is(p, span, small) { color: #596158 !important; }
 #app-shell .help-centre-button, .help-centre-button { display: inline-flex; align-items: center; gap: 7px; }
 #app-shell .help-centre-button svg, .help-centre-button svg { width: 18px; height: 18px; flex: 0 0 auto; }
+
+/* Functional colour hierarchy. Primary actions use terracotta; completion and
+   confirmation use sage; attention uses amber. Destructive actions remain red. */
+#app-shell :is(.status-pill.success,.status-pill.approved,.status-pill.ready,.status-pill.active),
+#app-shell :is(.success-chip,.verified-badge,.completion-badge) {
+  background: #e2eee4 !important; border-color: #b8ceb9 !important; color: #2f6240 !important;
+}
+#app-shell :is(.status-pill.warning,.status-pill.pending,.status-pill.processing,.status-pill.review) {
+  background: #faedcf !important; border-color: #e3c788 !important; color: #765017 !important;
+}
+#app-shell :is(.status-pill.info,.status-pill.requested,.workspace-role-chip,.notification-count) {
+  background: #f4e5d9 !important; border-color: #d9bba4 !important; color: #76331f !important;
+}
+#app-shell :is(a,.text-button,.section-kicker,.card-kicker,.panel-head button,.auth-helper-link,.forgot-password) {
+  color: #8f3822 !important;
+}
+#app-shell :is(input,textarea,select):focus-visible,
+#app-shell :is(button,a,summary):focus-visible,
+#marketing-site :is(button,a):focus-visible {
+  outline: 3px solid #d79a67 !important; outline-offset: 3px !important;
+}
+#app-shell :is(input:not([type=checkbox]):not([type=radio]),select,textarea):focus {
+  border-color: #a84a2c !important; box-shadow: 0 0 0 3px rgb(168 74 44 / 13%) !important;
+}
+#app-shell :is(.progress-bar i,.signal-meter i.on,.analysis-meter>span) {
+  background: linear-gradient(90deg,#b95832,#8f3822) !important;
+}
+#app-shell input[type="checkbox"], #app-shell input[type="radio"],
+#app-shell input[type="range"] { accent-color: #9f3f24 !important; }
+
+/* Marketing surfaces use warm neutrals rather than synthetic colour washes. */
+#marketing-site .hero { background: linear-gradient(180deg,#fffdf8 0%,#f7f5ef 100%) !important; }
+#marketing-site .hero .eyebrow,
+#marketing-site :is(.prep-role-badge,.legal-note) { background: #f7e5da !important; border-color: #ddbca7 !important; }
+#marketing-site .journey-card:nth-child(3n+1) { background: #f8ebe2 !important; }
+#marketing-site .journey-card:nth-child(3n+2) { background: #f6eddc !important; }
+#marketing-site .journey-card:nth-child(3n+3) { background: #e8efe5 !important; }
+#marketing-site :is(.placeai-footer,.site-footer) {
+  background: #343832 !important; border-color: #343832 !important; color: #fffaf1 !important;
+}
+#marketing-site :is(.placeai-footer,.site-footer) :is(p,a,span,small,strong,h3) { color: #fffaf1 !important; }
+
+/* Recolour the raster wordmark at display time so the navigation does not
+   reintroduce the old blue brand treatment. */
+.brand .brand-mark { filter: grayscale(1) sepia(.45) saturate(1.15) contrast(1.12) !important; }
 
 @media (max-width: 1180px) {
   #app-shell { grid-template-columns: 224px minmax(0, 1fr); }
