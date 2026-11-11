@@ -46,7 +46,7 @@ def test_theme_covers_assessment_and_legal_pages_without_revealing_hidden_panels
             )
             assert (
                 page.locator(".assessment-camera-meta span").evaluate("el => getComputedStyle(el).color")
-                == "rgb(255, 255, 255)"
+                == "rgb(255, 253, 248)"
             )
             assert page.locator("#result-panel").is_hidden()
             assert page.locator("#interview-panel").is_hidden()
