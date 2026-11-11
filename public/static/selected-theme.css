@@ -1422,6 +1422,7 @@ body :is(h1, h2, h3, h4, h5),
 #marketing-site .hero { background: linear-gradient(180deg,#fffdf8 0%,#f7f5ef 100%) !important; }
 #marketing-site .hero .eyebrow,
 #marketing-site :is(.prep-role-badge,.legal-note) { background: #f7e5da !important; border-color: #ddbca7 !important; }
+#marketing-site .hero .eyebrow::before { background: #b95832 !important; }
 #marketing-site .journey-card:nth-child(3n+1) { background: #f8ebe2 !important; }
 #marketing-site .journey-card:nth-child(3n+2) { background: #f6eddc !important; }
 #marketing-site .journey-card:nth-child(3n+3) { background: #e8efe5 !important; }
