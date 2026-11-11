@@ -23,7 +23,7 @@ def test_public_landing_preview_is_mirrored_and_keeps_approved_brand():
     assert app_css == public_css
     assert app_brand == public_brand
 
-    assert "/static/placeai-logo.webp" in app_brand
+    assert "/static/placeai-logo.png" in app_brand
     assert 'href="#platform">Platform</a>' in app_html
     assert 'href="#institutions">Institutions</a>' in app_html
     assert 'href="#recruiters">Recruiters</a>' in app_html

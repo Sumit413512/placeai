@@ -11,16 +11,16 @@ def _text(path: str) -> str:
 
 
 def test_supplied_logo_is_mirrored_and_canonical() -> None:
-    app_logo = (ROOT / "app/static/placeai-logo.webp").read_bytes()
-    public_logo = (ROOT / "public/static/placeai-logo.webp").read_bytes()
+    app_logo = (ROOT / "app/static/placeai-logo.png").read_bytes()
+    public_logo = (ROOT / "public/static/placeai-logo.png").read_bytes()
     assert app_logo == public_logo
-    assert app_logo[:4] == b"RIFF"
-    assert app_logo[8:12] == b"WEBP"
+    assert app_logo[:8] == b"\x89PNG\r\n\x1a\n"
 
     app_brand = _text("app/static/brand.css")
     public_brand = _text("public/static/brand.css")
     assert app_brand == public_brand
-    assert '/static/placeai-logo.webp' in app_brand
+    assert '/static/placeai-logo.png' in app_brand
+    assert 'filter:none!important' in app_brand
     assert 'placeai-logo.svg' not in app_brand
 
 

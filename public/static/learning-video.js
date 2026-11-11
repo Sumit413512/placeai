@@ -228,7 +228,7 @@
       try {
         if (button.hasAttribute('data-video-remove')) {
           const identifier = button.dataset.videoRemove;
-          if (!window.confirm(`Remove ${button.dataset.title || 'this course'} from your video courses? Your private viewing progress for it will also be removed.`)) return;
+          if (!window.confirm(`Remove ${button.dataset.title || 'this course'} from your library? Your private viewing progress will be cleared, but PlaceAI will retain and reuse the reviewed source course.`)) return;
           await ctx.api(`${apiBase}/${encodeURIComponent(identifier)}`, {method:'DELETE'});
           if (current === identifier) { stopPlayer(); clearTimeout(poll); current = null; course = null; studying = false; panel.querySelector('[data-video-discovery]').hidden = false; panel.querySelector('[data-video-workspace]').hidden = true; writeLearningLocation(); }
           ctx.toast('Course removed', 'The course no longer appears in your learning library.');

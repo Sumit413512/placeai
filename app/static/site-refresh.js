@@ -19,7 +19,7 @@
   function updateBrandAssets() {
     document.querySelectorAll('.brand .brand-mark').forEach(mark => {
       mark.setAttribute('aria-hidden', 'true');
-      mark.style.backgroundImage = "url('/static/placeai-logo.webp')";
+      mark.style.backgroundImage = "url('/static/placeai-logo.png')";
     });
   }
 

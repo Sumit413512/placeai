@@ -40,7 +40,11 @@ def test_every_public_html_surface_loads_the_official_brand_assets():
 def test_brand_override_uses_supplied_lockup_and_keeps_accessible_name():
     css = _read("app/static/brand.css")
 
-    assert 'url("/static/placeai-logo.webp")' in css
+    supplied = (ROOT / "app/static/placeai-logo.png").read_bytes()
+    assert supplied == (ROOT / "public/static/placeai-logo.png").read_bytes()
+    assert supplied[:8] == b"\x89PNG\r\n\x1a\n"
+    assert 'url("/static/placeai-logo.png")' in css
+    assert "filter:none!important" in css
     assert "placeai-logo.svg" not in css
     assert ".brand .brand-mark span" in css
     assert ".brand .brand-mark i" in css

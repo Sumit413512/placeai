@@ -12,7 +12,11 @@ body { margin: 0; }
   display: flex; align-items: center; justify-content: space-between; gap: 20px;
   padding: 8px 0 28px; border-bottom: 1px solid #ddd7ca;
 }
-.legal-brand { font: 800 22px Manrope, "DM Sans", sans-serif; color: #2c302b; text-decoration: none; }
+.legal-brand {
+  display: block; width: 196px; height: 68px; flex: 0 0 auto;
+  background: transparent url("/static/placeai-logo.png") center/contain no-repeat;
+  color: transparent; font-size: 0; text-decoration: none; filter: none;
+}
 .legal-nav { display: flex; gap: 16px; flex-wrap: wrap; }
 .legal-nav a { color: #515950; text-decoration: none; font-size: 14px; font-weight: 600; }
 .legal-nav a:hover { color: #8f3822; text-decoration: underline; text-underline-offset: 4px; }

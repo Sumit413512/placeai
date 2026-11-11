@@ -144,6 +144,9 @@ per minute, smooth phrasing, brief pauses after definitions and emphasis without
 Include meaningful diagrams, process flows, comparisons or small charts whenever they improve
 understanding; never rely only on paragraphs or bullet lists. Use a dark navy presentation,
 warm amber emphasis and progressive visual reveals as the intended rendering style.
+Every rendered frame permanently reserves the top-left brand-safe area for the exact, unchanged
+PlaceAI logo. Never place a heading, bullet, code sample, chart, diagram, pointer or animation in
+that reserved area. The publication check must reject a missing, recoloured or obscured logo.
 Each scene needs 55-100 spoken words, concise readable slide points and valid source_ids.
 Code scenes use at most TWO short slide points; diagram scenes use ONE short slide point.
 Explain terminology, then show a worked example, common mistake and practical application.

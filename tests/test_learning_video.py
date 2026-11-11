@@ -15,7 +15,7 @@ from test_learning_hub import hub  # noqa: F401
 from app import learning_ai, learning_video_worker as worker
 from app.learning_video_content import CoursePlan, LessonScript, VideoScene
 from app.learning_video_media import captions, render_video, slide
-from app.models import (Notification, VideoCourse, VideoEnrollment, VideoLesson, VideoProgress,
+from app.models import (Notification, VideoCourse, VideoEnrollment, VideoLesson,
                         VideoViewerProgress, VideoNarration, utcnow, UserRole)
 from app.routers import learning_video, platform
 
@@ -94,7 +94,7 @@ def test_course_idempotency_budgets_and_owner_isolation(video):
     assert anonymous.get('/learning-hub/video').status_code == 401
 
 
-def test_learner_can_remove_shared_and_private_courses_without_deleting_shared_source(video):
+def test_learner_removal_never_deletes_source_and_rerequest_reuses_it(video):
     shared_id = new_course(video)
     video.actor[0] = video.other
     joined = video.api.post('/learning-hub/video', json={
@@ -105,16 +105,24 @@ def test_learner_can_remove_shared_and_private_courses_without_deleting_shared_s
     assert video.db.get(VideoCourse, shared_id) is not None
     assert video.db.get(VideoEnrollment, (video.owner.id, shared_id)) is None
     assert video.api.get(f'/learning-hub/video/{shared_id}').status_code == 404
+    rejoined = video.api.post('/learning-hub/video', json={
+        'topic': 'SQL', 'request_id': 'owner-rejoin-shared-001'}).json()
+    assert rejoined['id'] == shared_id
     video.actor[0] = video.other
     assert video.api.get(f'/learning-hub/video/{shared_id}').status_code == 200
 
     private = VideoCourse(user_id=video.other.id, request_id='private-remove-001',
-        title='Private SQL', input_json='{}', state='queued')
+        title='Private Python', input_json=json.dumps({'topic':'Private Python'}), state='queued')
     video.db.add(private); video.db.commit()
     private_id = private.id
     assert video.api.delete(f'/learning-hub/video/{private_id}').status_code == 204
     video.db.expire_all()
-    assert video.db.get(VideoCourse, private_id) is None
+    retained = video.db.get(VideoCourse, private_id)
+    assert retained is not None and retained.user_id is None and retained.shared_key
+    assert video.api.get(f'/learning-hub/video/{private_id}').status_code == 404
+    rerequest = video.api.post('/learning-hub/video', json={
+        'topic':' private python ', 'request_id':'private-reuse-002'}).json()
+    assert rerequest['id'] == private_id
 
 
 def test_platform_admin_reviews_complete_course_and_regenerates_one_video(video):
@@ -530,7 +538,21 @@ def test_actual_media_recheck_rejects_silent_and_broken_output(monkeypatch):
     content['timings']=timings
     report=inspect_video(data,content,duration)
     assert report['passed'] and report['tracks']['video']['frames']==32
+    assert report['brand_logo'] == {
+        'present': True, 'position': 'top-left', 'safe_box': (28, 14, 188, 72)}
     with pytest.raises(Exception):inspect_video(data[:100],content,duration)
     with pytest.raises(ValueError):inspect_video(data,content,duration+1)
     silent,duration,timings=render_video(content,narrate=lambda _:b'\0'*48000)
     with pytest.raises(ValueError,match='Silent'):inspect_video(silent,content,duration)
+
+
+def test_video_brand_asset_is_exact_and_logo_safe_area_is_reserved():
+    from hashlib import sha256
+    from app.learning_video_media import BRAND_LOGO_PATH, BRAND_SAFE_BOX, CONTENT_TOP
+    assert sha256(BRAND_LOGO_PATH.read_bytes()).hexdigest() == (
+        '9f40f815509927ab2580f6e2f090a3ce19c0db8262841e1e925515b504c4c854')
+    assert BRAND_SAFE_BOX[3] < CONTENT_TOP
+    frame = slide(script()['scenes'][0], 1, 4)
+    pixels = list(frame.crop(BRAND_SAFE_BOX).getdata())
+    assert sum(r > 185 and g > 185 and b > 185 for r, g, b in pixels) > 900
+    assert sum(b > 105 and b > r * 1.18 and b > g * 1.08 for r, g, b in pixels) > 90

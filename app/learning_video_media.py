@@ -12,6 +12,7 @@ import tempfile
 import time
 import wave
 from fractions import Fraction
+from functools import lru_cache
 from pathlib import Path
 
 import httpx
@@ -23,6 +24,26 @@ RATE = 24000
 MAX_VIDEO_BYTES = 5 * 1024 * 1024
 MAX_AUDIO_BYTES = 6 * 1024 * 1024
 FPS = 8
+BRAND_LOGO_PATH = Path(__file__).parent / "static" / "placeai-logo.png"
+BRAND_SAFE_BOX = (28, 14, 188, 72)
+CONTENT_TOP = 84
+
+
+@lru_cache(maxsize=1)
+def _brand_logo():
+    """Load the product-owner supplied logo without recolouring or filtering it."""
+    from PIL import Image
+    logo = Image.open(BRAND_LOGO_PATH).convert("RGBA")
+    logo.thumbnail((BRAND_SAFE_BOX[2] - BRAND_SAFE_BOX[0],
+                    BRAND_SAFE_BOX[3] - BRAND_SAFE_BOX[1]), Image.Resampling.LANCZOS)
+    return logo
+
+
+def _place_brand_logo(image):
+    logo = _brand_logo()
+    x = BRAND_SAFE_BOX[0]
+    y = BRAND_SAFE_BOX[1] + (BRAND_SAFE_BOX[3] - BRAND_SAFE_BOX[1] - logo.height) // 2
+    image.paste(logo, (x, y), logo)
 
 
 def _normalize_pcm(pcm):
@@ -199,9 +220,9 @@ def slide(scene, number, total):
     draw = ImageDraw.Draw(image)
     draw.ellipse((-150, -190, 380, 340), fill="#0b1d3b")
     draw.ellipse((690, 320, 1120, 720), fill="#111a32")
-    draw.text((44, 25), "PLACEAI  /  VISUAL LEARNING", font=_font(15), fill="#8693aa")
+    _place_brand_logo(image)
     draw.text((805, 25), f"LESSON {number:02}", font=_font(15), fill="#f59e0b")
-    y = 68
+    y = CONTENT_TOP
     for line in _lines(scene["title"], _font(30), 870):
         draw.text((44, y), line, font=_font(30), fill="#f8fafc"); y += 38
     draw.rounded_rectangle((44, y + 3, 150, y + 7), radius=2, fill="#f59e0b")
@@ -262,10 +283,11 @@ def board_frame(scene, number, total, phase, base=None):
     image = (base or slide(scene, number, total)).copy()
     draw = ImageDraw.Draw(image)
     # Keep whole labels readable: reveal complete board rows, never half-cut text.
-    y = 72 + len(_lines(scene['title'], _font(30), 870)) * 38 + 14
+    y = CONTENT_TOP + len(_lines(scene['title'], _font(30), 870)) * 38 + 14
     rows = [y - 2]
     for point in scene['bullets']:
-        y += len(_lines(point, _font(23), 850)) * 30 + 8
+        lines = _lines(point, _font(22), 780)
+        y += max(48, len(lines) * 29 + 18) + 10
         rows.append(y + 3)
     if scene.get('code'):
         y += 6
@@ -399,7 +421,7 @@ def inspect_video(data, content, duration):
         end = timing["end"]
     if abs(end - duration) > 1 / FPS:
         raise ValueError("Scene boundaries do not cover the video")
-    tracks, audible = {}, False
+    tracks, audible, branded = {}, False, False
     for kind in ("video", "audio"):
         with av.open(io.BytesIO(data)) as container:
             streams = [stream for stream in container.streams if stream.type == kind]
@@ -417,6 +439,14 @@ def inspect_video(data, content, duration):
                 if kind == "video":
                     if frame.width != 960 or frame.height != 540 or abs(stamp-count/FPS) > .002:
                         raise ValueError("Video frames do not match the presentation clock")
+                    if count == 0:
+                        # Requiring both the supplied logo's white plate and blue
+                        # mark rejects a missing, obscured or monochrome watermark.
+                        crop = frame.to_image().crop(BRAND_SAFE_BOX).convert("RGB")
+                        pixels = list(crop.getdata())
+                        white = sum(r > 185 and g > 185 and b > 185 for r, g, b in pixels)
+                        blue = sum(b > 105 and b > r * 1.18 and b > g * 1.08 for r, g, b in pixels)
+                        branded = white > 900 and blue > 90
                     finish = stamp + 1 / FPS
                 else:
                     if abs(stamp - finish) > .002:
@@ -433,10 +463,13 @@ def inspect_video(data, content, duration):
             tracks[kind] = {"frames": count, "end_seconds": round(finish, 6)}
     if not audible:
         raise ValueError("Silent lessons cannot be published")
+    if not branded:
+        raise ValueError("PlaceAI logo is missing, recoloured or obscured")
     if abs(tracks["video"]["end_seconds"] - tracks["audio"]["end_seconds"]) > .05:
         raise ValueError("Audio and video timelines have drifted")
-    return {"passed": True, "version": 1, "sha256": hashlib.sha256(data).hexdigest(),
+    return {"passed": True, "version": 2, "sha256": hashlib.sha256(data).hexdigest(),
             "tracks": tracks, "scene_boundaries": len(timings),
+            "brand_logo": {"present": True, "position": "top-left", "safe_box": BRAND_SAFE_BOX},
             "timing_scope": "Measured scene boundaries; within-scene timing is estimated"}
 
 

@@ -15,7 +15,8 @@
   padding:0!important;
   border:0!important;
   border-radius:0!important;
-  background:transparent url("/static/placeai-logo.webp") center/contain no-repeat!important;
+  background:transparent url("/static/placeai-logo.png") center/contain no-repeat!important;
+  filter:none!important;
   box-shadow:none!important;
   overflow:hidden;
 }
@@ -41,7 +42,8 @@
   color:inherit;
 }
 .brand-light .brand-mark{
-  background:transparent url("/static/placeai-logo.webp") center/contain no-repeat!important;
+  background:transparent url("/static/placeai-logo.png") center/contain no-repeat!important;
+  filter:none!important;
   box-shadow:none!important;
 }
 .site-header{
