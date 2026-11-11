@@ -70,8 +70,11 @@ def test_premium_theme_and_help_are_site_wide_and_mirrored() -> None:
 
     assert '--font-body: "DM Sans"' in theme
     assert '--font-display: Manrope' in theme
-    assert "linear-gradient(135deg, #6648df" in theme
-    assert "linear-gradient(180deg, #17142b" in theme
+    assert "linear-gradient(135deg, #b95832" in theme
+    assert "linear-gradient(180deg, #f7f2e8" in theme
+    final_theme = theme.split("/* Warm enterprise interface pass.", 1)[1]
+    for banned_colour in ("#5b3fd4", "#6648df", "#17142b", "#211a3d"):
+        assert banned_colour not in final_theme
     assert "#app-shell .topbar-actions .help-centre-button" in theme
     assert "display: inline-flex !important" in theme
 
