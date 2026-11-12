@@ -24,7 +24,7 @@ def enabled():
 
 
 def signature():
-    return "espeak-ng-0.2.4:en:165:v1" if enabled() else "board-voice-v1"
+    return "espeak-ng-0.2.4:en-hi:150:v2" if enabled() else "board-voice-v1"
 
 
 def linux_peak_mib():
@@ -94,7 +94,11 @@ def main():
     lib.espeak_SetParameter.argtypes = [ct.c_int, ct.c_int, ct.c_int]
     lib.espeak_Synth.argtypes = [ct.c_void_p, ct.c_size_t, ct.c_uint, ct.c_int,
                                ct.c_uint, ct.c_uint, ct.c_void_p, ct.c_void_p]
-    if lib.espeak_SetVoiceByName(b"en") != 0 or lib.espeak_SetParameter(1, 165, 0) != 0:
+    # The former English-only voice distorted Devanagari narration. Use the
+    # Hindi phoneme dictionary when actual Hindi script is present, without
+    # silently using paid cloud narration or affecting English-only lessons.
+    voice = b"hi" if re.search(r"[\u0900-\u097F]", text) else b"en"
+    if lib.espeak_SetVoiceByName(voice) != 0 or lib.espeak_SetParameter(1, 150, 0) != 0:
         raise RuntimeError("Offline voice configuration failed")
     encoded = text.encode("utf-8") + b"\0"
     result = lib.espeak_Synth(encoded, len(encoded), 0, 1, 0, 1, None, None)
