@@ -158,6 +158,44 @@ def _node_sequence(draw, visual, phase, *, linked):
             fill=BURGUNDY, size=22, max_width=820)
 
 
+
+def _linked_sum(draw, visual, phase):
+    """Two reversed-digit linked lists and the validated resulting digit chain."""
+    pairs = [
+        ("A", visual["labels"], 235),
+        ("B", visual["other_labels"], 319),
+        ("SUM", visual["result_labels"], 402),
+    ]
+    for row, (name, items, cy) in enumerate(pairs):
+        if (row == 1 and phase < .23) or (row == 2 and phase < .54):
+            continue
+        portion = (phase / .24 if row == 0 else (phase - .23) / .32
+                   if row == 1 else (phase - .54) / .45)
+        portion = max(0, min(1, portion))
+        n = len(items)
+        width = min(79, (732 - (n - 1) * 11) / n)
+        gap = 11
+        length = n * width + (n - 1) * gap
+        start = 170 + max(0, (735 - length) / 2)
+        draw.text((59, cy - 12), name, font=_font(18),
+                  fill=BURGUNDY if row == 2 else JADE)
+        revealed = min(n, max(1, floor(portion * (n + 1)) + 1))
+        selected = min(n - 1, floor(portion * n))
+        for i, digit in enumerate(items):
+            if i >= revealed and portion < .98:
+                continue
+            x = start + i * (width + gap)
+            _card(draw, (x, cy - 24, x + width, cy + 25),
+                  highlighted=row == 2 or i <= selected,
+                  active=i == selected)
+            _center(draw, x + width / 2, cy, digit, size=21,
+                    max_width=width - 10)
+            if i > 0:
+                _arrow(draw, x - gap + 1, cy, x - 2,
+                       portion=min(1, max(0, portion * (n + 1) - (i - 1))))
+    # The output is displayed only after both input chains have been taught.
+    # The arithmetic itself has already been validated in VideoStoryboard.
+
 def _bar_chart(draw, visual, phase):
     names, values = visual["labels"], visual["values"]
     max_val = max(values) if values else 1
@@ -233,6 +271,8 @@ def animated_frame(scene, number, total, phase):
     kind = visual["kind"]
     if kind in {"array", "linked_list"}:
         _node_sequence(draw, visual, phase, linked=kind == "linked_list")
+    elif kind == "linked_sum":
+        _linked_sum(draw, visual, phase)
     elif kind == "bar_chart":
         _bar_chart(draw, visual, phase)
     elif kind in {"flow", "timeline"}:
