@@ -1,27 +1,19 @@
--- PlaceAI assessment worker wake bridge for Render Free web service.
+-- PlaceAI durable background worker wake bridge for Render free web service.
 --
--- This is Supabase infrastructure, not an application Alembic migration. The
--- Render database role is intentionally restricted and must not manage extensions
--- or pg_cron jobs during app startup.
+-- Applied manually to Supabase because the restricted app database role must
+-- not manage pg_cron or pg_net. Reapplying is safe: pg_cron upserts this name.
 --
--- The job does NOT keep Render alive continuously. It sends one unauthenticated
--- GET to the public Render /health endpoint only when there is assessment work
--- that is running or becomes due within two minutes. No API key, cookie, user
--- identifier, transcript, recording metadata, or authorization header is stored
--- in pg_net.
+-- Render free web services can spin down without external requests even while
+-- the PostgreSQL learning queue has pending lessons. The previous wake job only
+-- watched assessment_jobs; queued educational videos then never resumed.
+-- This one watches ALL three durable queues (assessments, video, notebooks).
 --
--- Re-applying this file is safe: the named cron job is replaced atomically from
--- an operator perspective by unscheduling the existing job and scheduling the
--- canonical definition below.
+-- Only the PUBLIC Render /health URL is called. No user data, tokens, API keys,
+-- recordings, account identifiers or lesson text leave the database.
+-- When every queue is idle, the query makes ZERO network calls, allowing Render
+-- to sleep normally and avoiding unnecessary platform usage.
 
 CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
-
-SELECT cron.unschedule('placeai-assessment-worker-wake')
-WHERE EXISTS (
-    SELECT 1
-    FROM cron.job
-    WHERE jobname = 'placeai-assessment-worker-wake'
-);
 
 SELECT cron.schedule(
     'placeai-assessment-worker-wake',
@@ -29,27 +21,69 @@ SELECT cron.schedule(
     $cron$
     SELECT net.http_get(
         url := 'https://placeai-production.onrender.com/health',
-        timeout_milliseconds := 5000
+        timeout_milliseconds := 20000
     ) AS request_id
     WHERE EXISTS (
-        SELECT 1
-        FROM public.assessment_jobs
+        SELECT 1 FROM public.assessment_jobs
         WHERE state = 'running'
-           OR (
-               state IN ('queued', 'retrying')
-               AND available_at <= (now() AT TIME ZONE 'utc') + interval '2 minutes'
-           )
+           OR (state IN ('queued', 'retrying')
+               AND available_at <= (now() AT TIME ZONE 'utc') + interval '2 minutes')
+    )
+    OR EXISTS (
+        SELECT 1 FROM public.learning_video_lessons
+        WHERE state = 'running'
+           OR (state IN ('queued', 'retrying')
+               AND available_at <= (now() AT TIME ZONE 'utc') + interval '2 minutes')
+    )
+    OR EXISTS (
+        SELECT 1 FROM public.learning_video_courses
+        WHERE state = 'running'
+           OR (state IN ('queued', 'retrying')
+               AND available_at <= (now() AT TIME ZONE 'utc') + interval '2 minutes')
+    )
+    OR EXISTS (
+        SELECT 1 FROM public.learning_notebooks
+        WHERE state = 'running'
+           OR (state IN ('queued', 'retrying')
+               AND available_at <= (now() AT TIME ZONE 'utc') + interval '2 minutes')
     );
     $cron$
 );
 
--- Operator verification after applying:
---   SELECT extname, extversion FROM pg_extension WHERE extname = 'pg_net';
---   SELECT jobid, jobname, schedule, active, command
---     FROM cron.job WHERE jobname = 'placeai-assessment-worker-wake';
---   SELECT jobid, status, return_message, start_time, end_time
---     FROM cron.job_run_details
---    WHERE jobid = (SELECT jobid FROM cron.job
---                    WHERE jobname = 'placeai-assessment-worker-wake')
---    ORDER BY start_time DESC LIMIT 5;
--- When the assessment queue is empty, successful runs should report "0 rows".
+-- Self-heal a stalled pg_net HTTP worker only when PlaceAI wake requests
+-- are backing up, and pg_net has not completed ANY HTTP response recently.
+-- The predicate is intentionally narrow: never restart a healthy worker or
+-- interfere with a third-party queued request.
+SELECT cron.schedule(
+    'placeai-pgnet-wake-watchdog',
+    '*/5 * * * *',
+    $watchdog$
+    SELECT net.worker_restart() AS restarted
+    WHERE (
+        SELECT count(*)
+        FROM net.http_request_queue
+        WHERE url = 'https://placeai-production.onrender.com/health'
+    ) >= 4
+    AND NOT EXISTS (
+        SELECT 1
+        FROM net._http_response
+        WHERE created >= now() - interval '10 minutes'
+    );
+    $watchdog$
+);
+
+-- Operational verification:
+-- SELECT jobid, jobname, active FROM cron.job
+--   WHERE jobname = 'placeai-assessment-worker-wake';
+-- SELECT status, start_time, end_time
+--   FROM cron.job_run_details
+--   WHERE jobid = (SELECT jobid FROM cron.job WHERE jobname='placeai-assessment-worker-wake')
+--   ORDER BY start_time DESC LIMIT 5;
+-- SELECT status_code, created FROM net._http_response ORDER BY created DESC LIMIT 10;
+-- SELECT checked_at, provider_configured FROM public.learning_runtime WHERE id=1;
+--
+-- pg_cron "succeeded / 0 rows" does NOT mean the HTTP request succeeded.
+-- pg_net is async, so confirm responses and Render logs independently.
+-- If pg_net has a backed-up HTTP queue and stopped recording responses,
+-- inspect its worker status and use SELECT net.worker_restart() as a targeted
+-- recovery. A paid always-on worker is the recommended production topology.

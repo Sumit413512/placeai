@@ -1184,3 +1184,21 @@
     box-shadow:none!important;
   }
 }
+
+
+/* Keep transformed mobile cards sized to their scroll container regardless of
+   legacy desktop data-table minimum widths and late-loaded visual layers. */
+@media (max-width:760px) {
+  #app-shell .data-panel .table-wrap > table.data-table[data-placeai-responsive="true"] {
+    box-sizing:border-box!important;
+    display:block!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+  }
+  #app-shell .data-panel .table-wrap > table[data-placeai-responsive="true"] :is(tbody,tr,td) {
+    box-sizing:border-box;
+    min-width:0!important;
+    max-width:100%!important;
+  }
+}

@@ -24,6 +24,10 @@ def test_skipping_optional_authenticator_does_not_reveal_login_again(browser, ro
         route.fulfill(json=data)
     page.route(BASE_URL+'/**', api)
     page.goto(BASE_URL,wait_until='networkidle')
+    # The login form is dynamically rendered by access-portal.js, while the
+    # optional MFA choice is installed by auth-protection.js. Wait for both
+    # scripts before submitting, or the isolated browser test can race startup.
+    page.wait_for_function('Boolean(window.PlaceAIAuth?.completeSignIn && window.PlaceAIVerification?.showPending)')
     page.locator('.hero [data-open-auth="login"]').click()
     page.get_by_role('tab',name=label,exact=True).click()
     page.locator('#role-login-form input[name=email]').fill('test@example.invalid')
