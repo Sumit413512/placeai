@@ -194,7 +194,11 @@ def create(body: VideoRequest, request: Request, tasks: BackgroundTasks,
     normalized, key = topic_key(body.topic)
     # Rate-limit only possible cache misses, before acquiring transaction locks:
     # the durable limiter commits its own counters.
-    if not db.query(VideoCourse.id).filter_by(shared_key=key).first():
+    if (not db.query(VideoCourse.id).filter_by(shared_key=key).first()
+            and not db.query(VideoEnrollment.course_id).filter_by(
+                user_id=user.id, request_id=body.request_id).first()):
+        # Replayed V3 requests must not consume another AI request quota.
+        # The owning enrollment and topic are still verified under lock below.
         student_ai_guard(request, user, db)
     db.query(User).filter_by(id=user.id).with_for_update().one()
     from app.models import LearningRuntime
