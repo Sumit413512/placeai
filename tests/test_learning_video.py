@@ -145,6 +145,16 @@ def test_platform_admin_reviews_complete_course_and_regenerates_one_video(video)
                           headers={'Range': 'bytes=0-6'})
         assert media.status_code == 206 and media.content == b'private'
         assert media.headers['content-range'] == 'bytes 0-6/18'
+        assert preview['planned_count'] == 4 and preview['ready_count'] == 4
+        # A passing script is not sufficient: every approved part needs an MP4.
+        missing_media = video.db.get(VideoLesson, lesson_id)
+        missing_media.video_data = None
+        video.db.commit()
+        blocked = admin.patch(f'/platform/learning-content-review/course/{identifier}',
+            json={'decision': 'approved', 'notes': ''})
+        assert blocked.status_code == 409
+        missing_media.video_data = b'private-video-test'
+        video.db.commit()
         approved = admin.patch(f'/platform/learning-content-review/course/{identifier}',
             json={'decision': 'approved', 'notes': ''})
         assert approved.status_code == 200
