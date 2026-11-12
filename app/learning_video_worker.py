@@ -44,8 +44,8 @@ DAILY_LESSON_ADMISSION = _bounded_env_int("LEARNING_VIDEO_DAILY_ADMISSION", 80, 
 LEASE_SECONDS = 180
 
 
-def validate_script(raw, evidence, sources, *, require_visual=False):
-    """Repair one provider formatting/layout deviation before spending on narration."""
+def validate_script(raw, evidence, sources, *, require_visual=False, minimum_animated=0):
+    """Repair schema/animation deviations before consuming narration provider calls."""
     from app.learning_video_media import slide
     for attempt in range(2):
         raw = separate_visuals(raw)
@@ -53,6 +53,8 @@ def validate_script(raw, evidence, sources, *, require_visual=False):
             script = LessonScript.model_validate(raw)
             if require_visual and not any(scene.diagram or scene.visual for scene in script.scenes):
                 raise ValueError("Include a meaningful sourced animation or diagram and explain it aloud, not only text slides")
+            if minimum_animated and sum(bool(scene.visual) for scene in script.scenes) < minimum_animated:
+                raise ValueError("The new animation course needs at least three distinct original animated concept scenes")
             if any(i < 1 or i > len(sources) for scene in script.scenes for i in scene.source_ids):
                 raise ValueError("Citations must reference retrieved source IDs")
             for index, scene in enumerate(script.scenes):
@@ -369,7 +371,8 @@ def _process(item, sessions):
                     + json.dumps(content.get("revision_feedback", []))
                     + "\nEVIDENCE: " + memo + "\nSOURCES: " + json.dumps(numbered),
                     LessonScript.model_json_schema(), max_output_tokens=6500)
-                script = validate_script(raw, memo, numbered, require_visual=bool(course.shared_key))
+                script = validate_script(raw, memo, numbered, require_visual=bool(course.shared_key),
+                    minimum_animated=3 if preferences.get("curriculum_version", 1) >= 4 else 0)
                 review, _ = learning_ai.generate_json(
                     "Review the lesson against the evidence: factual correctness, code/dialect and "
                     "expected-output consistency, diagram relationships, supported citations, readable "
