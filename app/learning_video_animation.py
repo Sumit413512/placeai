@@ -114,24 +114,23 @@ def _node_sequence(draw, visual, phase, *, linked):
     if linked and n > 7:
         raise ValueError("Linked list contains too many nodes for the safe viewport")
     gap = 18 if linked else 9
-    left = 70
     span = 820 if not linked else 770
     box_width = min(108, (span - (n - 1) * gap) / n)
     block = n * box_width + (n - 1) * gap
     start = (960 - block) / 2 - (12 if linked else 0)
     focus = visual["focus_index"]
     mode = visual.get("action", "scan")
-    position = min(n - 1, max(0, floor(phase * n)))
+    # Show the complete random-access array immediately. Hiding sequential
+    # items would misleadingly suggest that direct indexing requires a scan.
+    # In scan/traverse mode the pointer walks only until the actual target.
+    position = min(focus, max(0, floor(phase * (focus + 1))))
     active = focus if mode == "direct" else position
-    reveal = min(n, max(1, floor(phase * (n + 1)) + 1))
     for index, label in enumerate(items):
         x = start + index * (box_width + gap)
         y = 275 if linked else 282
-        if index >= reveal and phase < .95:
-            continue
         active_node = index == active and phase >= .06
         _card(draw, (x, y - 45, x + box_width, y + 43),
-              highlighted=index <= position if mode != "direct" else index == focus,
+              highlighted=index == focus if mode == "direct" else index <= position,
               active=active_node)
         _center(draw, x + box_width / 2, y - 3, label,
                 size=26, max_width=box_width - 12)
