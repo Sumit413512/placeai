@@ -51,13 +51,20 @@ def validate_script(raw, evidence, sources, *, require_visual=False):
         raw = separate_visuals(raw)
         try:
             script = LessonScript.model_validate(raw)
-            if require_visual and not any(scene.diagram for scene in script.scenes):
-                raise ValueError("Include a meaningful sourced diagram and explain it aloud, not only text slides")
+            if require_visual and not any(scene.diagram or scene.visual for scene in script.scenes):
+                raise ValueError("Include a meaningful sourced animation or diagram and explain it aloud, not only text slides")
             if any(i < 1 or i > len(sources) for scene in script.scenes for i in scene.source_ids):
                 raise ValueError("Citations must reference retrieved source IDs")
             for index, scene in enumerate(script.scenes):
                 try:
-                    slide(scene.model_dump(), index + 1, len(script.scenes))
+                    dumped = scene.model_dump()
+                    slide(dumped, index + 1, len(script.scenes))
+                    if scene.visual:
+                        from app.learning_video_animation import animated_frame
+                        # Inspect the first, middle and last teaching beats before
+                        # consuming narrator quota or committing rendered media.
+                        animated_frame(dumped, index + 1, len(script.scenes), .15)
+                        animated_frame(dumped, index + 1, len(script.scenes), .65)
                 except ValueError as error:
                     raise ValueError(f"Scene {index + 1}: {error}") from error
             return script
