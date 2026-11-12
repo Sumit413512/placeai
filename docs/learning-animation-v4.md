@@ -25,7 +25,7 @@ one highlighted action at a time; the final takeaway is one sentence.
    remain untrusted and never become instructions.
 2. The lesson author produces a validated `VideoStoryboard` on at least three
    concept scenes for new V4 material, using one of:
-   `array`, `linked_list`, `flow`, `timeline`, `bar_chart`,
+   `array`, `linked_list`, `linked_sum`, `flow`, `timeline`, `bar_chart`,
    `compare`, `code_trace`. No arbitrary user-created Python/JS is executed.
 3. Pydantic validates labels, focus, chart numbers, readability and visual
    bounds; the local Pillow renderer preflights multiple animation phases
@@ -52,6 +52,7 @@ one highlighted action at a time; the final takeaway is one sentence.
   cell in order. Never show a loop when claiming direct O(1) access.
 - **Linked list:** nodes connect through arrows that represent pointers and
   terminate at NULL. Arrows never indicate numerical addition.
+- **Linked-list sum:** two least-significant-first digit chains are displayed before the computed result. Pydantic checks exact arithmetic and carry propagation (8→6→9 + 5→7 becomes 3→4→0→1). Never present an arbitrary fabricated digit chain.
 - **Flow / timeline:** sequential steps appear in source-supported order.
 - **Bar chart:** only evidence-backed numeric comparisons or unmistakably
   illustrative examples; values must match the visual heights.
