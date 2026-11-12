@@ -70,7 +70,7 @@ def test_platform_admin_preview_uses_authenticated_byte_ranges(browser):
                 return
             value = request.headers.get("range", "")
             import re
-            parsed = re.fullmatch(r"bytes=(\\d+)-(\\d+)", value)
+            parsed = re.fullmatch(r"bytes=(\d+)-(\d+)", value)
             if not parsed:
                 route.fulfill(status=416)
                 return
