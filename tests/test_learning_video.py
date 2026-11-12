@@ -78,6 +78,23 @@ def ready_lesson(video, full_ready=True):
     return identifier, lesson.id, f'/learning-hub/video/{identifier}/lessons/0'
 
 
+def test_legacy_v3_request_id_remains_idempotent_after_v4_animation_launch(video):
+    from hashlib import sha256
+    identifier = new_course(video)
+    old_key = sha256("shared-full-course-v3:hinglish:sql".encode()).hexdigest()
+    row = video.db.get(VideoCourse, identifier)
+    row.shared_key = old_key
+    video.db.commit()
+    replay = video.api.post('/learning-hub/video',
+        json={"topic": " SQL ", "request_id": "video-request-00000001"})
+    assert replay.status_code == 202, replay.text
+    assert replay.json()["id"] == identifier
+    assert video.db.query(VideoCourse).count() == 1
+    conflicting = video.api.post('/learning-hub/video',
+        json={"topic": "Python", "request_id": "video-request-00000001"})
+    assert conflicting.status_code == 409
+
+
 def test_course_idempotency_budgets_and_owner_isolation(video):
     identifier = new_course(video)
     assert new_course(video) == identifier

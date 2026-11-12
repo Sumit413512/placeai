@@ -133,7 +133,7 @@ def speak(narration):
                         headers={"x-goog-api-key": key}, timeout=60,
                         json={"model": os.getenv("LEARNING_TTS_GEMINI_MODEL", "gemini-3.8-flash-lite-tts"),
                               "input": [{"type": "user_input", "content": [{"type": "text", "text": narration,
-                                  "annotations": [{"type": "speech_metadata", "style": "Warm, confident Indian educational narration in natural Hindi-English. Say technical terms and quoted lines in English, explain concepts in clear Hindi, keep 145 to 155 words per minute, use smooth transitions and short purposeful pauses."}]}]}],
+                                  "annotations": [{"type": "speech_metadata", "style": "Speak with the warm, clear voice of an Indian college educator. Pronounce Hindi written in Devanagari as fluent native Hindi (hi-IN), NOT as English phonetics. Pronounce English computer-science terminology, code, numerals and API names naturally and precisely in English (en-IN). Preserve exact spoken text and its order. Use expressive but calm prosody at approximately 135 to 145 words per minute, with a short natural pause after each idea, and no robotic cadence. Do not invent spoken captions, translations, footer slogans or metadata."}]}]}],
                               "response_format": {"type": "audio"}, "store": False,
                               "generation_config": {"speech_config": [{"voice": "Kore"}]}}) as response:
                         if response.status_code == 429:
@@ -215,6 +215,9 @@ def _lines(text, font, width):
 
 
 def slide(scene, number, total):
+    if scene.get("visual"):
+        from app.learning_video_animation import animated_frame
+        return animated_frame(scene, number, total, .99)
     from PIL import Image, ImageDraw
     image = Image.new("RGB", (960, 540), "#070d1c")
     draw = ImageDraw.Draw(image)
@@ -268,7 +271,8 @@ def slide(scene, number, total):
     if y > 488:
         raise ValueError("Slide content exceeds its safe area; shorten the scene")
     draw.line((44, 505, 916, 505), fill="#25334b", width=1)
-    draw.text((44, 515), "Technical terms in English • Explanation in Hindi", font=_font(14), fill="#8693aa")
+    # The former "English technical terms / Hindi explanation" footer was a
+    # language instruction, not teaching content. Keep only the lesson index.
     draw.text((840, 515), f"{number} / {total}", font=_font(14), fill="#f59e0b")
     return image
 
@@ -279,6 +283,9 @@ def board_frame(scene, number, total, phase, base=None):
     Scene boundaries follow actual speech duration. Within-scene drawing is a visual
     aid, not a claim of word alignment or a recording of a human instructor.
     """
+    if scene.get("visual"):
+        from app.learning_video_animation import animated_frame
+        return animated_frame(scene, number, total, phase)
     from PIL import ImageDraw
     image = (base or slide(scene, number, total)).copy()
     draw = ImageDraw.Draw(image)
@@ -349,7 +356,11 @@ def _encode_video(script, narrate):
         video = container.add_stream("libx264", rate=FPS)
         video.width, video.height, video.pix_fmt = 960, 540, "yuv420p"
         video.codec_context.thread_count = 1
-        video.options = {"preset": "ultrafast", "crf": "28", "tune": "stillimage"}
+        # Preserve the old encoder profile for cached legacy slide lessons.
+        # Purpose-built kinetic lessons use a less static-biased H.264 tune.
+        video.options = ({"preset": "ultrafast", "crf": "30", "tune": "animation"}
+                         if any(scene.get("visual") for scene in script["scenes"])
+                         else {"preset": "ultrafast", "crf": "28", "tune": "stillimage"})
         audio = container.add_stream("aac", rate=RATE)
         audio.layout, audio.bit_rate = "mono", 48000
         resampler = av.AudioResampler(format="fltp", layout="mono", rate=RATE)
@@ -357,7 +368,7 @@ def _encode_video(script, narrate):
         for index, scene in enumerate(script["scenes"]):
             if time.monotonic() > deadline:
                 raise RuntimeError("VIDEO_RENDER_DEADLINE")
-            image = slide(scene, index + 1, len(script["scenes"]))
+            image = None if scene.get("visual") else slide(scene, index + 1, len(script["scenes"]))
             pcm = narrate(scene["narration"])
             duration = math.ceil(len(pcm) / (RATE * 2))
             if duration < 1 or duration > 90 or seconds + duration > 600:

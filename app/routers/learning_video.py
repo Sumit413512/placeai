@@ -176,7 +176,7 @@ def topic_key(topic):
     normalized = " ".join(unicodedata.normalize("NFKC", topic).split()).casefold()
     if len(normalized) < 2:
         raise HTTPException(422, "Enter a topic with at least two characters")
-    return normalized, hashlib.sha256(("shared-full-course-v3:hinglish:" + normalized).encode()).hexdigest()
+    return normalized, hashlib.sha256(("shared-full-course-v4:concept-animation-hi-en:" + normalized).encode()).hexdigest()
 
 
 @router.get("")
@@ -194,7 +194,11 @@ def create(body: VideoRequest, request: Request, tasks: BackgroundTasks,
     normalized, key = topic_key(body.topic)
     # Rate-limit only possible cache misses, before acquiring transaction locks:
     # the durable limiter commits its own counters.
-    if not db.query(VideoCourse.id).filter_by(shared_key=key).first():
+    if (not db.query(VideoCourse.id).filter_by(shared_key=key).first()
+            and not db.query(VideoEnrollment.course_id).filter_by(
+                user_id=user.id, request_id=body.request_id).first()):
+        # Replayed V3 requests must not consume another AI request quota.
+        # The owning enrollment and topic are still verified under lock below.
         student_ai_guard(request, user, db)
     db.query(User).filter_by(id=user.id).with_for_update().one()
     from app.models import LearningRuntime
@@ -202,7 +206,12 @@ def create(body: VideoRequest, request: Request, tasks: BackgroundTasks,
     prior = db.query(VideoEnrollment).filter_by(user_id=user.id, request_id=body.request_id).first()
     if prior:
         row = db.get(VideoCourse, prior.course_id)
-        if row.shared_key != key:
+        # A refresh of an existing V3 request must remain idempotent after
+        # the V4 animation cache launches. Only a NEW request ID creates V4.
+        # Reusing an ID for a different topic still fails closed.
+        legacy_key = hashlib.sha256(
+            ("shared-full-course-v3:hinglish:" + normalized).encode()).hexdigest()
+        if row.shared_key not in {key, legacy_key}:
             raise HTTPException(409, "This request identifier belongs to another topic")
         return course_data(db, row, user)
     row = db.query(VideoCourse).filter_by(shared_key=key).first()
@@ -211,7 +220,7 @@ def create(body: VideoRequest, request: Request, tasks: BackgroundTasks,
             raise HTTPException(503, "Video research is temporarily unavailable. Saved lessons remain available.")
         budget(db, user)
         row = VideoCourse(user_id=user.id, shared_key=key, request_id=body.request_id,
-            title=normalized, input_json=json.dumps({"topic": normalized, "curriculum_version": 3}),
+            title=normalized, input_json=json.dumps({"topic": normalized, "curriculum_version": 4}),
             editorial_status="generating")
         db.add(row); db.flush()
         tasks.add_task(wake_worker)
