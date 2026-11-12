@@ -620,7 +620,8 @@ def learning_content_review(current_user: User = Depends(require_platform_admin)
     courses = db.query(VideoCourse).filter(
         VideoCourse.editorial_status.in_(review_states)).order_by(
         VideoCourse.updated_at.asc()).limit(100).all()
-    lesson_rows = db.query(VideoLesson, VideoCourse.title).join(
+    lesson_rows = db.query(VideoLesson, VideoCourse.title).options(
+        defer(VideoLesson.video_data)).join(
         VideoCourse, VideoCourse.id == VideoLesson.course_id).filter(
         VideoLesson.editorial_status.in_(review_states),
         ~VideoCourse.editorial_status.in_(review_states)).order_by(
@@ -654,8 +655,11 @@ def preview_learning_content(kind: str, identifier: str,
             course_id=row.id).order_by(VideoLesson.position).all()
         media_ids = {lesson_id for lesson_id, in db.query(VideoLesson.id).filter(
             VideoLesson.course_id == row.id, VideoLesson.video_data.is_not(None)).all()}
-        return {**_editorial_item(kind, row), "plan": json.loads(row.plan_json),
+        plan = json.loads(row.plan_json)
+        return {**_editorial_item(kind, row), "plan": plan,
                 "sources": json.loads(row.sources_json),
+                "planned_count": len(plan.get("lessons", [])),
+                "ready_count": sum(lesson.state == "ready" and lesson.id in media_ids for lesson in lessons),
                 "lessons": [{**_editorial_item("lesson", lesson, parent_title=row.title),
                              "position": lesson.position,
                              "duration_seconds": lesson.duration_seconds,
@@ -690,7 +694,10 @@ def review_learning_content(kind: str, identifier: str, body: LearningEditorialD
     model = {"notes": LearningNotebook, "course": VideoCourse, "lesson": VideoLesson}.get(kind)
     if not model:
         raise HTTPException(404, "Learning content type not found")
-    row = db.query(model).filter_by(id=identifier).with_for_update().first()
+    query = db.query(model)
+    if kind == "lesson":
+        query = query.options(defer(VideoLesson.video_data))
+    row = query.filter_by(id=identifier).with_for_update().first()
     if not row:
         raise HTTPException(404, "Learning content not found")
     if row.state != "ready":
@@ -699,15 +706,19 @@ def review_learning_content(kind: str, identifier: str, body: LearningEditorialD
         raise HTTPException(422, "Explain the changes needed before sending it back")
     prior_status = row.editorial_status
     if kind == "course":
-        lessons = db.query(VideoLesson).filter_by(course_id=row.id).order_by(VideoLesson.position).all()
+        lessons = db.query(VideoLesson).options(defer(VideoLesson.video_data)).filter_by(
+            course_id=row.id).order_by(VideoLesson.position).all()
         expected = len(json.loads(row.plan_json).get("lessons", []))
         if body.decision == "approved":
             from app.learning_publication import checks_passed
+            media_ids = {lesson_id for lesson_id, in db.query(VideoLesson.id).filter(
+                VideoLesson.course_id == row.id, VideoLesson.video_data.is_not(None)).all()}
             if not lessons or len(lessons) != expected or any(
-                lesson.state != "ready" or not checks_passed(json.loads(lesson.content_json))
+                lesson.state != "ready" or lesson.id not in media_ids
+                or not checks_passed(json.loads(lesson.content_json))
                 for lesson in lessons
             ):
-                raise HTTPException(409, "The complete course and every automated quality check must be ready before approval")
+                raise HTTPException(409, "Every planned lesson, video and quality check must be ready before approval")
         for lesson in lessons:
             if lesson.state == "ready":
                 lesson.editorial_status = body.decision
