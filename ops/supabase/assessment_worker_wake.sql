@@ -50,6 +50,28 @@ SELECT cron.schedule(
     $cron$
 );
 
+-- Self-heal a stalled pg_net HTTP worker only when PlaceAI wake requests
+-- are backing up, and pg_net has not completed ANY HTTP response recently.
+-- The predicate is intentionally narrow: never restart a healthy worker or
+-- interfere with a third-party queued request.
+SELECT cron.schedule(
+    'placeai-pgnet-wake-watchdog',
+    '*/5 * * * *',
+    $watchdog$
+    SELECT net.worker_restart() AS restarted
+    WHERE (
+        SELECT count(*)
+        FROM net.http_request_queue
+        WHERE url = 'https://placeai-production.onrender.com/health'
+    ) >= 4
+    AND NOT EXISTS (
+        SELECT 1
+        FROM net._http_response
+        WHERE created >= now() - interval '10 minutes'
+    );
+    $watchdog$
+);
+
 -- Operational verification:
 -- SELECT jobid, jobname, active FROM cron.job
 --   WHERE jobname = 'placeai-assessment-worker-wake';
