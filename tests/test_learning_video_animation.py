@@ -142,3 +142,31 @@ def test_reversed_digit_sum_rejects_mathematically_incorrect_output():
     assert VideoStoryboard.model_validate(good).kind == "linked_sum"
     with pytest.raises(ValidationError, match="mathematically correct"):
         VideoStoryboard.model_validate({**good, "result_labels": ["3", "4", "9", "1"]})
+
+
+def test_direct_index_access_does_not_animate_a_fake_linear_scan():
+    """After its initial cue the pointer stays on the requested index.
+
+    A direct lookup is O(1); it must never animate revealing every preceding
+    cell as though reading them sequentially.
+    """
+    from PIL import ImageChops
+    scene = animated_scene("array")
+    scene["visual"].update(action="direct", focus_index=2)
+    early = animated_frame(scene, 1, 4, .15)
+    late = animated_frame(scene, 1, 4, .91)
+    assert ImageChops.difference(
+        early.crop((55, 190, 905, 440)),
+        late.crop((55, 190, 905, 440))).getbbox() is None
+
+
+def test_sequential_array_search_stops_at_target_not_last_cell():
+    scene = animated_scene("array")
+    scene["visual"].update(action="scan", focus_index=1)
+    initial = animated_frame(scene, 1, 4, .05)
+    target = animated_frame(scene, 1, 4, .55)
+    finished = animated_frame(scene, 1, 4, .95)
+    assert ImageChops.difference(initial, target).getbbox()
+    assert ImageChops.difference(
+        target.crop((55, 190, 905, 440)),
+        finished.crop((55, 190, 905, 440))).getbbox() is None
