@@ -97,3 +97,35 @@ def test_animated_lesson_mp4_has_measured_audio_and_safe_brand():
     assert checks["tracks"]["video"]["frames"] == 8
     assert checks["brand_logo"]["present"] is True
     assert checks["brand_logo"]["position"] == "top-left"
+
+
+def test_v4_course_requires_multiple_animated_scenes_before_narration(monkeypatch):
+    from copy import deepcopy
+    from app import learning_video_worker as worker
+    from test_learning_video import script
+    raw = script()
+    for index in range(3):
+        raw["scenes"][index].update(
+            code="", diagram=None,
+            visual=animated_scene("array")["visual"],
+            bullets=["Follow the selected value"])
+    checked = worker.validate_script(
+        deepcopy(raw), "Evidence supporting these illustrative array indices.",
+        [{"id": 1}], require_visual=True, minimum_animated=3)
+    assert sum(bool(scene.visual) for scene in checked.scenes) == 3
+
+    missing = deepcopy(raw)
+    missing["scenes"][0]["visual"] = None
+    monkeypatch.setattr(worker.learning_ai, "generate_json",
+                        lambda *_args, **_kw: (deepcopy(missing), "isolated"))
+    with pytest.raises(ValueError, match="at least three"):
+        worker.validate_script(missing, "Evidence", [{"id": 1}],
+                               require_visual=True, minimum_animated=3)
+
+
+def test_new_courses_have_separate_animation_cache_version():
+    from app.routers.learning_video import topic_key
+    from hashlib import sha256
+    old = sha256("shared-full-course-v3:hinglish:css".encode()).hexdigest()
+    assert topic_key(" CSS ")[1] != old
+    assert topic_key("css")[1] == topic_key(" CSS ")[1]
