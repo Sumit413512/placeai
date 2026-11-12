@@ -62,7 +62,7 @@ def _release_sha() -> str | None:
 async def lifespan(_: FastAPI):
     worker_stop, worker_thread = Event(), None
     learning_thread = None
-    video_thread = None
+    video_threads = []
     if runtime_readiness_errors:
         for code in runtime_readiness_errors:
             logger.error("PlaceAI runtime readiness blocked: %s", code)
@@ -85,9 +85,12 @@ async def lifespan(_: FastAPI):
         from app.learning_worker import run as run_learning
         learning_thread = Thread(target=run_learning, args=(worker_stop,), daemon=True, name="learning-worker")
         learning_thread.start()
-        from app.learning_video_worker import run as run_video_learning
-        video_thread = Thread(target=run_video_learning, args=(worker_stop,), daemon=True, name="video-learning-worker")
-        video_thread.start()
+        from app.learning_video_worker import MAX_ACTIVE_JOBS, run as run_video_learning
+        for index in range(MAX_ACTIVE_JOBS):
+            thread = Thread(target=run_video_learning, args=(worker_stop,), daemon=True,
+                            name=f"video-learning-worker-{index + 1}")
+            thread.start()
+            video_threads.append(thread)
     try:
         yield
     finally:
@@ -96,8 +99,8 @@ async def lifespan(_: FastAPI):
             worker_thread.join(timeout=5)
         if learning_thread:
             learning_thread.join(timeout=5)
-        if video_thread:
-            video_thread.join(timeout=5)
+        for thread in video_threads:
+            thread.join(timeout=5)
 
 
 app = FastAPI(
