@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 import zlib
 import time
 from copy import deepcopy
@@ -24,7 +25,22 @@ from app.learning_worker import Session, heartbeat
 from app.models import User, UserRole, VideoCourse, VideoLesson, VideoNarration, utcnow
 
 LOGGER = logging.getLogger("placeai.learning.video.worker")
-STORAGE_BUDGET = 150 * 1024 * 1024
+def _bounded_env_int(name, default, minimum, maximum):
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return value if minimum <= value <= maximum else default
+
+
+# PostgreSQL still has its own database limit. This application guard reserves
+# headroom while allowing a complete 32-part course to finish. Narration
+# checkpoints are compressed and removed as soon as their lesson passes.
+STORAGE_BUDGET = _bounded_env_int("LEARNING_VIDEO_STORAGE_BUDGET_MB", 300, 100, 450) * 1024 * 1024
+MAX_ATTEMPTS = _bounded_env_int("LEARNING_VIDEO_MAX_ATTEMPTS", 5, 3, 8)
+AUTO_FAILURE_ATTEMPTS = MAX_ATTEMPTS - 1
+MAX_ACTIVE_JOBS = _bounded_env_int("LEARNING_VIDEO_CONCURRENCY", 2, 1, 4)
+DAILY_LESSON_ADMISSION = _bounded_env_int("LEARNING_VIDEO_DAILY_ADMISSION", 80, 20, 160)
 LEASE_SECONDS = 180
 
 
@@ -142,10 +158,12 @@ def claim(db):
             db.rollback(); return None
     for model in (VideoCourse, VideoLesson):
         db.query(model).filter(model.state == "running", model.lease_until <= now,
-                               model.attempts >= 3).update({"state": "failed", "lease_token": None,
+                               model.attempts >= MAX_ATTEMPTS).update({"state": "failed", "lease_token": None,
                                    "lease_until": None, "error_code": "GENERATION_INTERRUPTED"})
-        if db.query(model.id).filter(model.state == "running", model.lease_until > now).first():
-            db.commit(); return None
+    active = sum(db.query(model.id).filter(model.state == "running", model.lease_until > now).count()
+                 for model in (VideoCourse, VideoLesson))
+    if active >= MAX_ACTIVE_JOBS:
+        db.commit(); return None
     for kind, model in (("course", VideoCourse), ("lesson", VideoLesson)):
         query = db.query(model)
         if kind == "lesson":
@@ -156,7 +174,7 @@ def claim(db):
         if kind == "lesson" and learning_speech.enabled() and learning_speech.available():
             # A previous provider cooldown is irrelevant to the offline voice.
             due = or_(due, model.error_code == "NARRATION_CAPACITY")
-        row = query.filter(model.attempts < 4, due, or_(model.state.in_(["queued", "retrying"]),
+        row = query.filter(model.attempts < MAX_ATTEMPTS, due, or_(model.state.in_(["queued", "retrying"]),
             (model.state == "running") & (model.lease_until <= now))).order_by(
             model.created_at, VideoLesson.position if kind == "lesson" else model.id,
             model.id).with_for_update(skip_locked=True).first()
@@ -186,7 +204,8 @@ def fill_pending_parts(db):
     since = utcnow() - timedelta(days=1)
     used = db.query(VideoLesson).filter(VideoLesson.created_at >= since).count()
     pending = db.query(VideoLesson).filter(VideoLesson.state.in_(["queued", "running", "retrying"])).count()
-    capacity = min(40-used, max(0, (STORAGE_BUDGET-storage_used(db))//MAX_VIDEO_BYTES-pending))
+    capacity = min(DAILY_LESSON_ADMISSION-used,
+                   max(0, (STORAGE_BUDGET-storage_used(db))//MAX_VIDEO_BYTES-pending))
     if capacity <= 0:
         db.commit(); return
     existing_count = select(func.count(VideoLesson.id)).where(
@@ -220,10 +239,18 @@ def cached_narrator(identifier, token, sessions):
         with sessions() as db:
             row = db.get(VideoNarration, (identifier, key))
             if row:
-                decoder = zlib.decompressobj()
-                pcm = decoder.decompress(bytes(row.audio_data), MAX_AUDIO_BYTES + 1)
-                if len(pcm) > MAX_AUDIO_BYTES or not decoder.eof:
-                    raise ValueError("Invalid narration checkpoint")
+                stored = bytes(row.audio_data)
+                if stored[:2] not in {b"x\x01", b"x^", b"x\x9c", b"x\xda"}:
+                    if len(stored) > MAX_AUDIO_BYTES:
+                        raise ValueError("Invalid narration checkpoint")
+                    return stored
+                try:
+                    decoder = zlib.decompressobj()
+                    pcm = decoder.decompress(stored, MAX_AUDIO_BYTES + 1)
+                    if len(pcm) > MAX_AUDIO_BYTES or not decoder.eof:
+                        raise ValueError("Invalid narration checkpoint")
+                except zlib.error:
+                    raise ValueError("Invalid narration checkpoint") from None
                 return pcm
         pcm = speak(text)
         packed = zlib.compress(pcm)
@@ -403,7 +430,8 @@ def _process(item, sessions):
                 used = db.query(VideoLesson).filter(VideoLesson.created_at >= since).count()
                 pending = db.query(VideoLesson).filter(VideoLesson.state.in_(["queued", "running", "retrying"])).count()
                 from app.learning_video_media import MAX_VIDEO_BYTES
-                capacity = min(40-used, max(0, (STORAGE_BUDGET-storage_used(db))//MAX_VIDEO_BYTES-pending))
+                capacity = min(DAILY_LESSON_ADMISSION-used,
+                               max(0, (STORAGE_BUDGET-storage_used(db))//MAX_VIDEO_BYTES-pending))
                 for position, outline in enumerate(json.loads(row.plan_json).get("lessons", [])[:max(0, capacity)]):
                     if not db.query(VideoLesson.id).filter_by(course_id=row.id, position=position).first():
                         db.add(VideoLesson(course_id=row.id, position=position, title=outline["title"],
@@ -425,7 +453,9 @@ def _process(item, sessions):
             row = db.query(model).filter_by(id=identifier).with_for_update().first()
             if not row or row.lease_token != token:
                 return
-            row.state = "failed" if row.attempts >= 3 else "retrying"
+            # Preserve one final learner-initiated retry after automatic repair
+            # attempts are exhausted. Staff recovery can later reset the budget.
+            row.state = "failed" if row.attempts >= AUTO_FAILURE_ATTEMPTS else "retrying"
             row.error_code = "CONTENT_CHECK" if isinstance(error, ValueError) else "GENERATION_UNAVAILABLE"
             if internal:
                 row.error_code = internal
@@ -449,6 +479,13 @@ def _process(item, sessions):
                 row.state, row.error_code = "retrying", "AUTHOR_CAPACITY"
                 row.attempts = max(0, row.attempts - 1)
                 row.available_at = utcnow() + timedelta(seconds=error.retry_seconds)
+            if internal in {"LEARNING_AUTHOR_UNAVAILABLE", "VIDEO_REVIEW_UNAVAILABLE",
+                            "VIDEO_REVIEW_INCOMPLETE", "VIDEO_NARRATION_UNAVAILABLE"}:
+                # Provider outages are operational waits, not bad course content.
+                # They must never consume the finite self-repair allowance.
+                row.state = "retrying"
+                row.attempts = max(0, row.attempts - 1)
+                row.available_at = utcnow() + timedelta(minutes=5)
             db.commit()
 
 
@@ -470,3 +507,21 @@ def run(stop):
         except Exception as error:
             LOGGER.warning("Video queue unavailable error_type=%s", type(error).__name__)
         stop.wait(5)
+
+
+def main():
+    """Run a durable queue process with bounded parallel lesson preparation."""
+    import signal
+    stop = Event()
+    for name in ("SIGTERM", "SIGINT"):
+        signal.signal(getattr(signal, name), lambda *_: stop.set())
+    workers = [Thread(target=run, args=(stop,), name=f"video-worker-{index + 1}")
+               for index in range(MAX_ACTIVE_JOBS)]
+    for thread in workers:
+        thread.start()
+    for thread in workers:
+        thread.join()
+
+
+if __name__ == "__main__":
+    main()

@@ -8,11 +8,11 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from app.learning_video_worker import claim
+from app.learning_video_worker import MAX_ACTIVE_JOBS, MAX_ATTEMPTS, claim
 from app.models import VideoCourse, VideoLesson, utcnow
 
 
-def test_video_workers_share_one_slot_and_stop_after_three_interrupted_attempts():
+def test_video_workers_use_the_bounded_pool_and_stop_after_interrupted_attempts():
     url = os.getenv('TEST_POSTGRES_URL')
     if not url:
         pytest.skip('Dedicated PostgreSQL test service is required')
@@ -34,9 +34,9 @@ def test_video_workers_share_one_slot_and_stop_after_three_interrupted_attempts(
                 return claim(db)
         with ThreadPoolExecutor(max_workers=12) as pool:
             items = [item for item in pool.map(attempt,range(24)) if item]
-        assert len(items)==1
+        assert len(items) == MAX_ACTIVE_JOBS
         with Session(scoped) as db:
-            row = db.get(VideoCourse,items[0][1]); row.attempts=3
+            row = db.get(VideoCourse,items[0][1]); row.attempts=MAX_ATTEMPTS
             row.lease_until=utcnow()-timedelta(seconds=1); db.commit()
         with Session(scoped) as db:
             replacement=claim(db)

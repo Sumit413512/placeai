@@ -249,7 +249,13 @@
     if (restoreFocus) restoreModalOpener('auth');
     else modalOpeners.auth = null;
   }
+  let activeLearningVideoPreviewUrl = null;
+  function releaseLearningVideoPreview() {
+    if (activeLearningVideoPreviewUrl) URL.revokeObjectURL(activeLearningVideoPreviewUrl);
+    activeLearningVideoPreviewUrl = null;
+  }
   function openModal(html) {
+    releaseLearningVideoPreview();
     rememberModalOpener('generic');
     const modal=$('#generic-modal');
     $('#generic-modal-content').innerHTML = html;
@@ -269,6 +275,7 @@
     focusModal(modal);
   }
   function closeModal() {
+    releaseLearningVideoPreview();
     const modal = $('#generic-modal');
     modal.classList.add('hidden');
     $('#generic-modal-content').innerHTML = '';
@@ -851,11 +858,58 @@
 
   async function viewCandidate(id){ const s=await api(`/recruiters/students/${id}`); openModal(`<span class="section-kicker">Candidate profile</span><h2>${esc(s.full_name||'Candidate')}</h2><p class="form-intro">${esc(s.degree||'')} ${s.branch?`· ${esc(s.branch)}`:''} ${s.cgpa!=null?`· CGPA ${s.cgpa}`:''}</p><div class="ai-box"><div class="ai-box-head"><span>SKILLS</span>${s.is_verified?statusBadge('approved'):statusBadge('pending')}</div>${tags(s.skills)}</div>${s.ai_summary?`<div class="ai-box"><div class="ai-box-head"><span>AI-ASSISTED SUMMARY</span></div><p>${esc(s.ai_summary)}</p></div>`:''}<div class="form-footer"><button class="button button-secondary" data-action="download-candidate-resume" data-id="${id}">Open resume</button></div>`); }
 
+
+  async function loadLearningVideoPreview(id, button) {
+    const video=[...document.querySelectorAll('#generic-modal-content video[data-learning-video-preview]')]
+      .find(element => element.dataset.learningVideoPreview === id);
+    if (!video) return;
+    if (button) button.disabled = true;
+    try {
+      // Native video tags cannot attach the platform admin Bearer token.
+      // Fetch the authorized private media one bounded byte-range at a time.
+      const pieces = [];
+      const url = '/platform/learning-content-review/lesson/' + encodeURIComponent(id) + '/media';
+      let offset=0, total=null;
+      do {
+        if (!video.isConnected || $('#generic-modal').classList.contains('hidden')) return;
+        const response=await api(url,{headers:{Range:'bytes='+offset+'-'+(offset+1048575)}});
+        if (response.status!==206) throw new Error('The server did not return seekable video media.');
+        const match=/^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get('Content-Range')||'');
+        if (!match || Number(match[1])!==offset) throw new Error('The video response has an invalid byte range.');
+        const end=Number(match[2]), length=Number(match[3]);
+        if (length<1 || length>12*1024*1024 || (total!==null && total!==length) || end<offset)
+          throw new Error('The video exceeds preview limits or changed during transfer.');
+        total=length;
+        const part=await response.blob();
+        if (part.size!==end-offset+1) throw new Error('The video transfer was incomplete.');
+        pieces.push(part);
+        offset=end+1;
+      } while (offset<total);
+      if (!video.isConnected || $('#generic-modal').classList.contains('hidden')) return;
+      const objectUrl=URL.createObjectURL(new Blob(pieces,{type:'video/mp4'}));
+      for (const other of document.querySelectorAll('#generic-modal-content video[data-learning-video-preview]')) {
+        other.pause();
+        other.removeAttribute('src');
+        other.load();
+      }
+      releaseLearningVideoPreview();
+      activeLearningVideoPreviewUrl=objectUrl;
+      video.src=objectUrl;
+      video.load();
+      video.play().catch(()=>{}); // Autoplay policies may require pressing Play.
+      if (button) button.textContent='Reload video';
+    } catch (error) {
+      toast('Video preview unavailable',error.message||'Try again after signing in.','error');
+    } finally {
+      if (button && button.isConnected) button.disabled=false;
+    }
+  }
+
   async function previewLearningContent(kind,id){
     const item=await api(`/platform/learning-content-review/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`);
     const payload=kind==='notes'?{plan:item.plan,chapters:item.chapters,sources:item.sources}:kind==='course'?{plan:item.plan,sources:item.sources}:item.content;
-    const media=kind==='lesson'&&item.media_available?`<video controls preload="metadata" style="width:100%;border-radius:14px;background:#07111f" src="/platform/learning-content-review/lesson/${encodeURIComponent(id)}/media"></video>`:'';
-    const lessons=kind==='course'?`<section class="course-review-package"><div class="panel-head"><div><h3>Complete course package</h3><p>${item.lessons.length} generated videos. Review any lesson, request a targeted regeneration, then approve the course together.</p></div></div>${item.lessons.map((lesson,index)=>{const checks=lesson.content||{};const passed=['content_review','media_review','audiovisual_review'].every(key=>checks[key]?.passed===true);return `<article class="course-review-lesson"><header><div><small>Lesson ${index+1}</small><h4>${esc(lesson.title)}</h4></div><span class="status-badge status-${passed?'approved':'pending'}">${passed?'Checks passed':'Check required'}</span></header>${lesson.media_available?`<video controls preload="none" src="/platform/learning-content-review/lesson/${encodeURIComponent(lesson.id)}/media" aria-label="Preview ${esc(lesson.title)}"></video>`:'<p>Video media is not ready.</p>'}<p>${esc(checks.objective||'Review the lesson script, media and automated reports.')}</p><div class="row-actions"><button class="row-button" data-action="regenerate-learning-video" data-id="${esc(lesson.id)}" data-title="${esc(lesson.title)}">Regenerate this video</button></div></article>`;}).join('')}</section>`:'';
+    const media=kind==='lesson'&&item.media_available?`<video controls preload="none" data-learning-video-preview="${esc(id)}" aria-label="Preview lesson video" style="width:100%;border-radius:14px;background:#07111f"></video><button type="button" class="button button-secondary" data-action="load-learning-video-preview" data-id="${esc(id)}">Load and play video</button>`:'';
+    const lessons=kind==='course'?`<section class="course-review-package"><div class="panel-head"><div><h3>Complete course package</h3><p>${item.ready_count||0} of ${item.planned_count||item.lessons.length} planned videos generated. Review each available lesson, repair failed or missing parts, then approve only when the whole course is ready.</p></div></div>${item.lessons.map((lesson,index)=>{const checks=lesson.content||{};const passed=['content_review','media_review','audiovisual_review'].every(key=>checks[key]?.passed===true);return `<article class="course-review-lesson"><header><div><small>Lesson ${index+1}</small><h4>${esc(lesson.title)}</h4></div><span class="status-badge status-${passed?'approved':'pending'}">${passed?'Checks passed':'Check required'}</span></header>${lesson.media_available?`<video controls preload="none" data-learning-video-preview="${esc(lesson.id)}" aria-label="Preview ${esc(lesson.title)}"></video><button type="button" class="row-button" data-action="load-learning-video-preview" data-id="${esc(lesson.id)}">Load and play video</button>`:'<p>Video media is not ready.</p>'}<p>${esc(checks.objective||'Review the lesson script, media and automated reports.')}</p><div class="row-actions"><button class="row-button" data-action="regenerate-learning-video" data-id="${esc(lesson.id)}" data-title="${esc(lesson.title)}">Regenerate this video</button></div></article>`;}).join('')}</section>`:'';
     openModal(`<span class="section-kicker">Human publication review</span><h2>${esc(item.title)}</h2><p class="form-intro">${esc((item.parent_title?item.parent_title+' · ':'')+item.editorial_status.replaceAll('_',' '))}</p>${media}${lessons}<details class="ai-box"><summary>Generated plan and source record</summary><pre style="white-space:pre-wrap;max-height:48vh;overflow:auto">${esc(JSON.stringify(payload,null,2))}</pre></details><div class="form-footer"><button class="button button-secondary" data-action="close-generic-modal">Close</button><button class="button button-secondary" data-action="review-learning-content" data-kind="${kind}" data-id="${id}" data-value="changes_requested">Request changes</button><button class="button button-primary" data-action="review-learning-content" data-kind="${kind}" data-id="${id}" data-value="approved">${kind==='course'?'Approve complete course':'Approve'}</button></div>`);
   }
 
@@ -889,6 +943,7 @@
       else if(a==='open-admin-form')openAdminForm(id);
       else if(a==='view-platform-registration'){const d=await api(`/platform/registrations/${encodeURIComponent(id)}`);openModal(platformRegistrationDetailHtml(d));}
       else if(a==='preview-learning-content'){await previewLearningContent(action.dataset.kind,id);}
+      else if(a==='load-learning-video-preview'){await loadLearningVideoPreview(id,action);}
       else if(a==='review-learning-content'){const decision=action.dataset.value;const notes=decision==='changes_requested'?window.prompt('Describe the exact changes required:',''):'';if(decision==='changes_requested'&&!notes?.trim())return;await api(`/platform/learning-content-review/${encodeURIComponent(action.dataset.kind)}/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({decision,notes:notes||''})});closeModal();toast(decision==='approved'?'Content approved':'Changes requested');await navigate('content-review');}
       else if(a==='regenerate-learning-video'){const notes=window.prompt(`What must be corrected in ${action.dataset.title||'this video'}?`,'');if(!notes?.trim())return;action.disabled=true;const result=await api(`/platform/learning-content-review/lesson/${encodeURIComponent(id)}/regenerate`,{method:'POST',body:JSON.stringify({notes})});closeModal();toast('Corrected regeneration queued',result.message);await navigate('content-review');}
       else if(a==='platform-engagement-period'){state.platformEngagementDays=Number(id)||30;await navigate('engagement');}

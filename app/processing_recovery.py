@@ -11,7 +11,7 @@ from app.models import (AssessmentJob, AuditEvent, LearningNotebook, LearningRun
 from app.services import record_audit
 
 # Staff-only repair admission; ordinary new-lesson limits remain unchanged.
-MAINTENANCE_PARTS_PER_DAY = 48
+MAINTENANCE_PARTS_PER_DAY = 80
 
 
 def overview(db):
@@ -67,8 +67,10 @@ def recover(db, actor, kind, identifier):
             row.available_at, row.lease_until, row.lease_token = now, None, None
             changed += 1
         missing = len(json.loads(course.plan_json).get('lessons', [])) - db.query(VideoLesson.id).filter_by(course_id=identifier).count()
-        if not changed and missing <= 0:
-            raise HTTPException(409, 'No recoverable parts or storage capacity available')
+        if not changed:
+            if missing > 0 and capacity <= 0:
+                raise HTTPException(409, 'Missing course parts cannot be admitted yet because the video storage or daily repair allowance is full')
+            raise HTTPException(409, 'No recoverable course parts are currently available')
     elif kind == 'notes':
         row = db.query(LearningNotebook).filter_by(id=identifier, state='failed').with_for_update().first()
         if not row:

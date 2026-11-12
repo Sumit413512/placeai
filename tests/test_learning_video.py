@@ -141,6 +141,23 @@ def test_platform_admin_reviews_complete_course_and_regenerates_one_video(video)
         preview = admin.get(f'/platform/learning-content-review/course/{identifier}').json()
         assert len(preview['lessons']) == 4
         assert all(item['media_available'] for item in preview['lessons'])
+        media = admin.get(f'/platform/learning-content-review/lesson/{lesson_id}/media',
+                          headers={'Range': 'bytes=0-6'})
+        assert media.status_code == 206 and media.content == b'private'
+        assert media.headers['content-range'] == 'bytes 0-6/18'
+        assert preview['planned_count'] == 4 and preview['ready_count'] == 4
+        # A passing script is not sufficient: every approved part needs an MP4.
+        missing_media = video.db.get(VideoLesson, lesson_id)
+        missing_media.video_data = None
+        video.db.commit()
+        blocked = admin.patch(f'/platform/learning-content-review/course/{identifier}',
+            json={'decision': 'approved', 'notes': ''})
+        assert blocked.status_code == 409
+        blocked_lesson = admin.patch(f'/platform/learning-content-review/lesson/{lesson_id}',
+            json={'decision': 'approved', 'notes': ''})
+        assert blocked_lesson.status_code == 409
+        missing_media.video_data = b'private-video-test'
+        video.db.commit()
         approved = admin.patch(f'/platform/learning-content-review/course/{identifier}',
             json={'decision': 'approved', 'notes': ''})
         assert approved.status_code == 200
@@ -249,7 +266,7 @@ def test_worker_saves_real_playable_media_and_recovers_expired_lease(video, monk
 def test_worker_failure_is_honest_and_no_media_is_published(video, monkeypatch):
     identifier = new_course(video)
     monkeypatch.setattr(learning_ai, 'research', lambda _: (_ for _ in ()).throw(RuntimeError('provider down')))
-    for _ in range(3):
+    for _ in range(worker.AUTO_FAILURE_ATTEMPTS):
         with video.sessions() as db:
             row = db.get(VideoCourse, identifier); row.available_at = utcnow() - timedelta(seconds=1); db.commit()
             item = worker.claim(db)
@@ -272,7 +289,7 @@ def test_lesson_retry_reuses_the_same_private_record_and_is_bounded(video):
     assert video.db.query(VideoLesson).count() == 1
     video.db.expire_all()
     row = video.db.get(VideoLesson, lesson_id)
-    row.state, row.attempts = 'failed', 4; video.db.commit()
+    row.state, row.attempts = 'failed', worker.MAX_ATTEMPTS; video.db.commit()
     assert video.api.post(path).status_code == 409
 
 
