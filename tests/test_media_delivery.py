@@ -40,3 +40,23 @@ def test_private_media_full_response_is_seekable():
         assert response.status_code == 200 and response.content == b"0123456789"
         assert response.headers["accept-ranges"] == "bytes"
         assert response.headers["content-length"] == "10"
+
+
+
+def test_admin_video_preview_never_uses_unauthenticated_native_media_src():
+    """The staff preview must use api() to attach its private Bearer token.
+
+    This is the frontend/backend contract that previously caused MP4 playback
+    to fail despite a valid admin session.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    app = (root / "app/static/app.js").read_text(encoding="utf-8")
+    mirrored = (root / "public/static/app-core.js").read_text(encoding="utf-8")
+    assert app == mirrored
+    assert "async function loadLearningVideoPreview(id, button)" in app
+    assert "await api(url,{headers:{Range:" in app
+    assert "data-action=\"load-learning-video-preview\"" in app
+    assert "releaseLearningVideoPreview();" in app
+    assert 'src="/platform/learning-content-review/lesson/' not in app
