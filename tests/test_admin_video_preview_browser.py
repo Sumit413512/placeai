@@ -120,7 +120,7 @@ def test_platform_admin_preview_uses_authenticated_byte_ranges(browser):
               .canPlayType('video/mp4; codecs="avc1.42E01E"'))"""):
         page.wait_for_function("""() => document.querySelector(
           'video[data-learning-video-preview="test-lesson"]').videoWidth === 64""", timeout=15000)
-    page.locator('#generic-modal-content [data-action="close-generic-modal"]').click()
+    page.locator('#generic-modal-cancel').click()
     page.wait_for_function("""() => !document.querySelector(
           'video[data-learning-video-preview="test-lesson"]')""")
     context.close()
