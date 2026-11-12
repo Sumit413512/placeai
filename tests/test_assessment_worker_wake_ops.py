@@ -8,7 +8,13 @@ def test_worker_wake_is_conditional_secret_free_and_idempotent():
     source = WAKE_SQL.read_text(encoding="utf-8")
 
     assert "CREATE EXTENSION IF NOT EXISTS pg_net" in source
-    assert "cron.unschedule('placeai-assessment-worker-wake')" in source
+    # Named cron.schedule() upserts in pg_cron: no unsafe unschedule gap.
+    assert "cron.unschedule('placeai-assessment-worker-wake')" not in source
+    assert "'placeai-pgnet-wake-watchdog'" in source
+    assert "net.worker_restart()" in source
+    assert "public.learning_video_courses" in source
+    assert "public.learning_video_lessons" in source
+    assert "public.learning_notebooks" in source
     assert "cron.schedule(" in source
     assert "'placeai-assessment-worker-wake'" in source
     assert "https://placeai-production.onrender.com/health" in source
