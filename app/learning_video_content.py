@@ -88,9 +88,11 @@ class VideoDiagram(Diagram):
 class VideoStoryboard(ContentModel):
     """Finite, source-grounded diagram specification, not executable model code."""
 
-    kind: Literal["array", "linked_list", "bar_chart", "flow", "timeline", "compare", "code_trace"]
+    kind: Literal["array", "linked_list", "linked_sum", "bar_chart", "flow", "timeline", "compare", "code_trace"]
     labels: list[str] = Field(min_length=2, max_length=10,
         description="Readable SHORT English node values, steps, categories, or code lines.")
+    other_labels: list[str] = Field(default_factory=list, max_length=8)
+    result_labels: list[str] = Field(default_factory=list, max_length=9)
     values: list[int] = Field(default_factory=list, max_length=8,
         description="Real or explicitly illustrative bar heights; no fabricated measurements.")
     focus_index: int = Field(default=0, ge=0, le=9,
@@ -110,6 +112,18 @@ class VideoStoryboard(ContentModel):
             raise ValueError("On-screen visual takeaway must fit the English-label font")
         if self.kind == "linked_list" and len(self.labels) > 7:
             raise ValueError("Show at most seven linked nodes per animated scene")
+        if self.kind == "linked_sum":
+            if not self.other_labels or not self.result_labels or len(self.labels) > 8:
+                raise ValueError("Linked-list addition needs two input chains and one output chain")
+            all_digits = self.labels + self.other_labels + self.result_labels
+            if any(len(item) != 1 or item not in "0123456789" for item in all_digits):
+                raise ValueError("Reversed-digit linked-list addition requires single decimal digit nodes")
+            number = lambda digits: sum(int(digit) * 10 ** index
+                                        for index, digit in enumerate(digits))
+            if number(self.labels) + number(self.other_labels) != number(self.result_labels):
+                raise ValueError("The animated linked-list sum must be mathematically correct")
+        elif self.other_labels or self.result_labels:
+            raise ValueError("Additional digit chains are reserved for linked_sum animations")
         if self.kind == "code_trace" and len(self.labels) > 7:
             raise ValueError("Trace at most seven short lines")
         if self.kind == "bar_chart":
@@ -191,6 +205,9 @@ per minute, smooth phrasing, brief pauses after definitions and emphasis without
 THE VIDEO IS AN ANIMATION, NOT A BULLET-SLIDE PRESENTATION. Plan a striking original
 visual story with at least three scenes containing the optional structured "visual" field.
 Use "array" when explaining index access or scans, "linked_list" for pointers and NULL,
+"linked_sum" to teach reverse-digit linked-list addition with two input chains and a
+mathematically VERIFIED result chain ("labels", "other_labels", "result_labels" contain
+single decimal digits in least-significant-first order; 8->6->9 + 5->7 = 3->4->0->1),
 "bar_chart" only for sourced numerical values or explicitly illustrative data,
 "flow"/"timeline" for sequential processes, "compare" for actual contrasts and
 "code_trace" for line-by-line examples. "visual.labels" must be 2-10 extremely SHORT
