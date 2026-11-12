@@ -26,6 +26,12 @@ def animated_scene(kind="array"):
     if kind == "code_trace":
         visual["labels"] = ["int i = 0;", "while (i < 4) {", "    i++;", "}"]
         visual["takeaway"] = "The loop increments i"
+    if kind == "linked_sum":
+        visual["labels"] = ["8", "6", "9"]
+        visual["other_labels"] = ["5", "7"]
+        visual["result_labels"] = ["3", "4", "0", "1"]
+        visual["focus_index"] = 2
+        visual["takeaway"] = "Carry to the next node; answer is 1043"
     return {
         "title": "A visual walk through the algorithm",
         "narration": ("Start with four values, then observe how the highlighted "
@@ -41,7 +47,7 @@ def animated_scene(kind="array"):
 
 
 @pytest.mark.parametrize("kind", [
-    "array", "linked_list", "bar_chart", "flow", "timeline", "compare", "code_trace"])
+    "array", "linked_list", "linked_sum", "bar_chart", "flow", "timeline", "compare", "code_trace"])
 def test_animated_visuals_change_in_the_teaching_area(kind):
     scene = VideoScene.model_validate(animated_scene(kind)).model_dump()
     early = animated_frame(scene, 1, 7, .08)
@@ -129,3 +135,10 @@ def test_new_courses_have_separate_animation_cache_version():
     old = sha256("shared-full-course-v3:hinglish:css".encode()).hexdigest()
     assert topic_key(" CSS ")[1] != old
     assert topic_key("css")[1] == topic_key(" CSS ")[1]
+
+
+def test_reversed_digit_sum_rejects_mathematically_incorrect_output():
+    good = animated_scene("linked_sum")["visual"]
+    assert VideoStoryboard.model_validate(good).kind == "linked_sum"
+    with pytest.raises(ValidationError, match="mathematically correct"):
+        VideoStoryboard.model_validate({**good, "result_labels": ["3", "4", "9", "1"]})
