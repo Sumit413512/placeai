@@ -176,7 +176,7 @@ def topic_key(topic):
     normalized = " ".join(unicodedata.normalize("NFKC", topic).split()).casefold()
     if len(normalized) < 2:
         raise HTTPException(422, "Enter a topic with at least two characters")
-    return normalized, hashlib.sha256(("shared-full-course-v3:hinglish:" + normalized).encode()).hexdigest()
+    return normalized, hashlib.sha256(("shared-full-course-v4:concept-animation-hi-en:" + normalized).encode()).hexdigest()
 
 
 @router.get("")
@@ -211,7 +211,7 @@ def create(body: VideoRequest, request: Request, tasks: BackgroundTasks,
             raise HTTPException(503, "Video research is temporarily unavailable. Saved lessons remain available.")
         budget(db, user)
         row = VideoCourse(user_id=user.id, shared_key=key, request_id=body.request_id,
-            title=normalized, input_json=json.dumps({"topic": normalized, "curriculum_version": 3}),
+            title=normalized, input_json=json.dumps({"topic": normalized, "curriculum_version": 4}),
             editorial_status="generating")
         db.add(row); db.flush()
         tasks.add_task(wake_worker)
