@@ -133,7 +133,7 @@ def speak(narration):
                         headers={"x-goog-api-key": key}, timeout=60,
                         json={"model": os.getenv("LEARNING_TTS_GEMINI_MODEL", "gemini-3.8-flash-lite-tts"),
                               "input": [{"type": "user_input", "content": [{"type": "text", "text": narration,
-                                  "annotations": [{"type": "speech_metadata", "style": "Warm, confident Indian educational narration in natural Hindi-English. Say technical terms and quoted lines in English, explain concepts in clear Hindi, keep 145 to 155 words per minute, use smooth transitions and short purposeful pauses."}]}]}],
+                                  "annotations": [{"type": "speech_metadata", "style": "Speak with the warm, clear voice of an Indian college educator. Pronounce Hindi written in Devanagari as fluent native Hindi (hi-IN), NOT as English phonetics. Pronounce English computer-science terminology, code, numerals and API names naturally and precisely in English (en-IN). Preserve exact spoken text and its order. Use expressive but calm prosody at approximately 135 to 145 words per minute, with a short natural pause after each idea, and no robotic cadence. Do not invent spoken captions, translations, footer slogans or metadata."}]}]}],
                               "response_format": {"type": "audio"}, "store": False,
                               "generation_config": {"speech_config": [{"voice": "Kore"}]}}) as response:
                         if response.status_code == 429:
