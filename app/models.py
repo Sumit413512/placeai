@@ -927,6 +927,8 @@ class LearningNotebook(Base):
     lease_token = Column(String(40), nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    # Legacy/private notebooks remain immediately usable unless their authoring
+    # workflow explicitly opts into the v2 editorial gate.
     editorial_status = Column(String(24), nullable=False, default="approved", index=True)
     editorial_notes = Column(Text, nullable=False, default="")
     reviewed_by_user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
@@ -961,7 +963,7 @@ class VideoCourse(Base):
     available_at = Column(DateTime, nullable=False, default=utcnow)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-    editorial_status = Column(String(24), nullable=False, default="approved", index=True)
+    editorial_status = Column(String(24), nullable=False, default="generating", index=True)
     editorial_notes = Column(Text, nullable=False, default="")
     reviewed_by_user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     reviewed_at = Column(DateTime)
@@ -986,7 +988,7 @@ class VideoLesson(Base):
     available_at = Column(DateTime, nullable=False, default=utcnow)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-    editorial_status = Column(String(24), nullable=False, default="approved", index=True)
+    editorial_status = Column(String(24), nullable=False, default="generating", index=True)
     editorial_notes = Column(Text, nullable=False, default="")
     reviewed_by_user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
     reviewed_at = Column(DateTime)

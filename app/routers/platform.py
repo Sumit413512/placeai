@@ -8,7 +8,7 @@ from typing import List, Literal
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from app.access_models import AccessRequest
 from app.config import get_settings
@@ -36,6 +36,7 @@ from app.models import (
 from app.placement_access import utcnow_naive
 from app.schemas import AdminUserProvision, OrganizationCreate, OrganizationOut, PlatformOverviewOut, UserOut
 from app.services import create_notification, record_audit
+from app.media_delivery import private_media_response
 from app.telemetry_models import EmailDeliveryEvent, PageViewEvent
 from app.utils import generate_reset_token, get_hashed_password, hash_reset_token
 
@@ -647,34 +648,39 @@ def preview_learning_content(kind: str, identifier: str,
         row = db.get(VideoCourse, identifier)
         if not row:
             raise HTTPException(404, "Video course not found")
-        lessons = db.query(VideoLesson).filter_by(course_id=row.id).order_by(VideoLesson.position).all()
+        # Never hydrate every MP4 BLOB while opening a course review. A complete
+        # course can contain dozens of videos and exhaust the web process.
+        lessons = db.query(VideoLesson).options(defer(VideoLesson.video_data)).filter_by(
+            course_id=row.id).order_by(VideoLesson.position).all()
+        media_ids = {lesson_id for lesson_id, in db.query(VideoLesson.id).filter(
+            VideoLesson.course_id == row.id, VideoLesson.video_data.is_not(None)).all()}
         return {**_editorial_item(kind, row), "plan": json.loads(row.plan_json),
                 "sources": json.loads(row.sources_json),
                 "lessons": [{**_editorial_item("lesson", lesson, parent_title=row.title),
                              "position": lesson.position,
                              "duration_seconds": lesson.duration_seconds,
-                             "media_available": bool(lesson.video_data),
+                             "media_available": lesson.id in media_ids,
                              "content": json.loads(lesson.content_json)} for lesson in lessons]}
     if kind == "lesson":
-        row = db.get(VideoLesson, identifier)
+        row = db.query(VideoLesson).options(defer(VideoLesson.video_data)).filter_by(id=identifier).first()
         if not row:
             raise HTTPException(404, "Video lesson not found")
         course = db.get(VideoCourse, row.course_id)
         return {**_editorial_item(kind, row, parent_title=course.title if course else None),
                 "duration_seconds": row.duration_seconds, "content": json.loads(row.content_json),
-                "media_available": bool(row.video_data)}
+                "media_available": db.query(VideoLesson.id).filter(
+                    VideoLesson.id == row.id, VideoLesson.video_data.is_not(None)).first() is not None}
     raise HTTPException(404, "Learning content type not found")
 
 
 @router.get("/learning-content-review/lesson/{identifier}/media")
-def preview_learning_video(identifier: str,
+def preview_learning_video(identifier: str, request: Request,
                            current_user: User = Depends(require_platform_admin),
                            db: Session = Depends(get_db)):
     row = db.get(VideoLesson, identifier)
     if not row or not row.video_data:
         raise HTTPException(404, "Video preview is not available")
-    return Response(row.video_data, media_type="video/mp4", headers={
-        "Cache-Control": "private, no-store", "Content-Disposition": "inline"})
+    return private_media_response(row.video_data, request)
 
 
 @router.patch("/learning-content-review/{kind}/{identifier}")

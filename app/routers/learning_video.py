@@ -18,6 +18,8 @@ from app.dependencies import require_student
 from app.learning_content import ContentModel
 from app.learning_video_content import VideoRequest
 from app.learning_video_media import captions
+from app.learning_video_worker import DAILY_LESSON_ADMISSION, MAX_ATTEMPTS
+from app.media_delivery import private_media_response
 from app.models import (User, VideoCourse, VideoLesson, VideoProgress, VideoEnrollment,
                         VideoViewerProgress, utcnow)
 from app.routers.learning_hub import generation_available, wake_worker
@@ -66,7 +68,7 @@ def course_data(db, course, user):
     plan = json.loads(course.plan_json)
     result = {"id": course.id, "title": course.title, "status": course.state,
               "preparation_notice": "",
-              "retry_available": course.state == "failed" and course.attempts < 4,
+              "retry_available": course.state == "failed" and course.attempts < MAX_ATTEMPTS,
               "error_code": course.error_code, "introduction": plan.get("introduction", ""),
               "prerequisites": plan.get("prerequisites", []), "lessons": [],
               "sources": json.loads(course.sources_json), "created_at": course.created_at.isoformat(),
@@ -94,7 +96,7 @@ def course_data(db, course, user):
             "status": row.state if row else "not_started", "duration_seconds": row.duration_seconds if row else 0,
             "quality_checked": quality_checked,
             "editorial_status": row.editorial_status if row else "generating",
-            "retry_available": bool(row and row.state == "failed" and row.attempts < 4),
+            "retry_available": bool(row and row.state == "failed" and row.attempts < MAX_ATTEMPTS),
             "error_code": row.error_code if row else None,
             "available_at": row.available_at.isoformat() + "Z" if row else None,
             **progress_data(progress)})
@@ -161,7 +163,7 @@ def budget(db, user, *, lesson=False):
         from app.learning_video_media import MAX_VIDEO_BYTES
         if storage_used(db) + (pending + 1) * MAX_VIDEO_BYTES > STORAGE_BUDGET:
             raise HTTPException(503, "Video storage is at capacity. Your saved lessons remain available.")
-        if mine >= 8 or total >= 40:
+        if mine >= 8 or total >= DAILY_LESSON_ADMISSION:
             raise HTTPException(429, "Video preparation allowance reached. Continue saved lessons and try tomorrow.")
     elif db.query(VideoCourse).filter(VideoCourse.user_id == user.id,
                                      VideoCourse.created_at >= since).count() >= 3:
@@ -267,7 +269,7 @@ def retry_course(course_id: str, tasks: BackgroundTasks,
     course = owner_course(db, course_id, user)
     if course.state != "failed":
         return course_data(db, course, user)
-    if course.attempts >= 4:
+    if course.attempts >= MAX_ATTEMPTS:
         raise HTTPException(409, "Preparation could not finish after retries. Please try a new path later.")
     if not generation_available(db):
         raise HTTPException(503, "Video preparation is temporarily unavailable")
@@ -289,7 +291,7 @@ def prepare(course_id: str, position: int, request: Request, tasks: BackgroundTa
     existing = db.query(VideoLesson).options(defer(VideoLesson.video_data)).populate_existing().filter_by(course_id=course.id, position=position).first()
     if existing and existing.state != "failed":
         return course_data(db, course, user)
-    if existing and existing.attempts >= 4:
+    if existing and existing.attempts >= MAX_ATTEMPTS:
         raise HTTPException(409, "Lesson preparation could not finish after retries. Please try again with a new course later.")
     if not generation_available(db):
         raise HTTPException(503, "Video preparation is temporarily unavailable")
@@ -300,7 +302,7 @@ def prepare(course_id: str, position: int, request: Request, tasks: BackgroundTa
     existing = db.query(VideoLesson).options(defer(VideoLesson.video_data)).populate_existing().filter_by(course_id=course.id, position=position).first()
     if existing and existing.state != "failed":
         return course_data(db, course, user)
-    if existing and existing.attempts >= 4:
+    if existing and existing.attempts >= MAX_ATTEMPTS:
         raise HTTPException(409, "Lesson preparation could not finish after retries")
     budget(db, user, lesson=True)
     if existing:
@@ -347,7 +349,8 @@ def lesson(course_id: str, position: int, user: User = Depends(require_student),
 
 
 @router.get("/{course_id}/lessons/{position}/media")
-def media(course_id: str, position: int, user: User = Depends(require_student), db: Session = Depends(get_db)):
+def media(course_id: str, position: int, request: Request,
+          user: User = Depends(require_student), db: Session = Depends(get_db)):
     row = owner_lesson(db, course_id, position, user)
     course = db.get(VideoCourse, row.course_id)
     if row.state != "ready" or row.editorial_status != "approved" or course.editorial_status != "approved":
@@ -355,7 +358,7 @@ def media(course_id: str, position: int, user: User = Depends(require_student), 
     data = db.query(VideoLesson.video_data).filter_by(id=row.id).scalar()
     if not data:
         raise HTTPException(404, "Lesson video is unavailable")
-    return Response(bytes(data), media_type="video/mp4", headers=PRIVATE)
+    return private_media_response(data, request)
 
 
 @router.get("/{course_id}/lessons/{position}/captions")
