@@ -104,9 +104,9 @@ class VideoStoryboard(ContentModel):
         if self.focus_index >= len(self.labels):
             raise ValueError("Animation highlight must refer to a real item")
         if any(not label.strip() or len(label) > (62 if self.kind == "code_trace" else 18)
-               or not label.isascii() for label in self.labels):
+               or not label.isascii() or not label.isprintable() for label in self.labels):
             raise ValueError("Use short English labels readable by the video font")
-        if not self.takeaway.isascii():
+        if not self.takeaway.isascii() or not self.takeaway.isprintable():
             raise ValueError("On-screen visual takeaway must fit the English-label font")
         if self.kind == "linked_list" and len(self.labels) > 7:
             raise ValueError("Show at most seven linked nodes per animated scene")
@@ -186,7 +186,7 @@ the learner needs to hear; never pronounce stage directions, slide labels or met
 Keep the language respectful, calm and suitable for an Indian college learner.
 Teach one coherent objective in 6-12 progressively ordered scenes, targeting 5-10 minutes total.
 This is a shared course for all students, progressing from foundations to applications.
-Teach as a warm, confident instructor at a modern visual board. Aim for 145-155 spoken words
+Teach as a warm, confident instructor at a modern visual board. Aim for 135-145 spoken words
 per minute, smooth phrasing, brief pauses after definitions and emphasis without hype.
 THE VIDEO IS AN ANIMATION, NOT A BULLET-SLIDE PRESENTATION. Plan a striking original
 visual story with at least three scenes containing the optional structured "visual" field.
