@@ -704,6 +704,12 @@ def review_learning_content(kind: str, identifier: str, body: LearningEditorialD
         raise HTTPException(409, "Only fully generated content can be reviewed")
     if body.decision == "changes_requested" and not body.notes.strip():
         raise HTTPException(422, "Explain the changes needed before sending it back")
+    if kind == "lesson" and body.decision == "approved":
+        from app.learning_publication import checks_passed
+        has_media = db.query(VideoLesson.id).filter(
+            VideoLesson.id == row.id, VideoLesson.video_data.is_not(None)).first() is not None
+        if not has_media or not checks_passed(json.loads(row.content_json)):
+            raise HTTPException(409, "The lesson video and all automated quality checks must pass before approval")
     prior_status = row.editorial_status
     if kind == "course":
         lessons = db.query(VideoLesson).options(defer(VideoLesson.video_data)).filter_by(
