@@ -202,7 +202,12 @@ def create(body: VideoRequest, request: Request, tasks: BackgroundTasks,
     prior = db.query(VideoEnrollment).filter_by(user_id=user.id, request_id=body.request_id).first()
     if prior:
         row = db.get(VideoCourse, prior.course_id)
-        if row.shared_key != key:
+        # A refresh of an existing V3 request must remain idempotent after
+        # the V4 animation cache launches. Only a NEW request ID creates V4.
+        # Reusing an ID for a different topic still fails closed.
+        legacy_key = hashlib.sha256(
+            ("shared-full-course-v3:hinglish:" + normalized).encode()).hexdigest()
+        if row.shared_key not in {key, legacy_key}:
             raise HTTPException(409, "This request identifier belongs to another topic")
         return course_data(db, row, user)
     row = db.query(VideoCourse).filter_by(shared_key=key).first()
