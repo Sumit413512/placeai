@@ -153,6 +153,9 @@ def test_platform_admin_reviews_complete_course_and_regenerates_one_video(video)
         blocked = admin.patch(f'/platform/learning-content-review/course/{identifier}',
             json={'decision': 'approved', 'notes': ''})
         assert blocked.status_code == 409
+        blocked_lesson = admin.patch(f'/platform/learning-content-review/lesson/{lesson_id}',
+            json={'decision': 'approved', 'notes': ''})
+        assert blocked_lesson.status_code == 409
         missing_media.video_data = b'private-video-test'
         video.db.commit()
         approved = admin.patch(f'/platform/learning-content-review/course/{identifier}',
