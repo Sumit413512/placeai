@@ -6,6 +6,9 @@ from test_browser_smoke import BASE_URL, browser, local_server  # noqa: F401
 @pytest.mark.parametrize('role,label', [('student','Student'),('recruiter','Recruiter'),('institution_admin','Institution Admin'),('platform_admin','Platform Admin')])
 def test_skipping_optional_authenticator_does_not_reveal_login_again(browser, role, label):
     page=browser.new_page(viewport={'width':1440,'height':1000})
+    # The module-scoped browser context is shared across role variants. Keep each
+    # sign-in handoff independent from tokens left by the preceding variant.
+    page.add_init_script("localStorage.clear(); sessionStorage.clear();")
     logged=[False]; held=[]
     def api(route):
         path=route.request.url.split(BASE_URL)[-1].split('?')[0]
