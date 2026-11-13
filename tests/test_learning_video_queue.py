@@ -133,7 +133,9 @@ def test_daily_review_quota_is_a_wait_not_a_type_error(monkeypatch):
         request=httpx.Request('POST',url), json={'error':{'message':'Daily quota exceeded'}}))
     with pytest.raises(review.ReviewCapacityError) as error:
         review.review_video(b'teaching-media', {'objective':'SQL','scenes':[],'timings':[]})
-    assert error.value.retry_seconds == 86400
+    assert 60 <= error.value.retry_seconds <= 86400
+    from app.learning_ai import next_daily_quota_reset_seconds
+    assert abs(error.value.retry_seconds - next_daily_quota_reset_seconds()) <= 5
 
 
 def test_rejected_lesson_keeps_correction_feedback_and_removes_only_its_generated_checkpoints(video, monkeypatch):
