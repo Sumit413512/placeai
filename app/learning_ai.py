@@ -276,42 +276,53 @@ def generate_json(task: str, schema: dict, *, max_output_tokens: int = 8000) -> 
                 retry_delay = max(retry_delay or 0, 180 if status == 503 else provider_retry_seconds(error))
             LOGGER.warning("Learning author unavailable provider=openai error_type=%s", type(error).__name__)
     if ai_provider._gemini_key():
-        try:
-            from google.genai import types
-            model = os.getenv("LEARNING_GEMINI_MODEL") or get_settings().gemini_model
-            client = ai_provider.genai.Client(api_key=ai_provider._gemini_key(),
-                                              http_options={"timeout": 55000, "retry_options": {"attempts": 1}})
+        from google.genai import types
+        primary = os.getenv("LEARNING_GEMINI_MODEL") or get_settings().gemini_model
+        backup = (os.getenv("LEARNING_GEMINI_BACKUP_MODEL") or "").strip()
+        # A separate, operator-approved model can have spare per-model quota,
+        # but NEVER add a chargeable backup automatically. Both use the same
+        # existing project key, so limits and cost remain the operator's choice.
+        models = [primary]
+        if backup and backup != primary and re.fullmatch(r"[A-Za-z0-9_.-]{3,100}", backup):
+            models.append(backup)
+        for index, model in enumerate(models):
             try:
-                response = client.models.generate_content(model=model, contents=prompt,
-                    config=types.GenerateContentConfig(response_mime_type="application/json",
-                                                        response_json_schema=provider_schema(schema),
-                                                        max_output_tokens=max_output_tokens))
+                client = ai_provider.genai.Client(api_key=ai_provider._gemini_key(),
+                                                  http_options={"timeout": 55000, "retry_options": {"attempts": 1}})
+                try:
+                    response = client.models.generate_content(model=model, contents=prompt,
+                        config=types.GenerateContentConfig(response_mime_type="application/json",
+                                                            response_json_schema=provider_schema(schema),
+                                                            max_output_tokens=max_output_tokens))
+                except Exception as error:
+                    if safe_error_status(error) != 400:
+                        raise
+                    LOGGER.warning("Learning schema transport retry provider=gemini status=400")
+                    response = client.models.generate_content(model=model, contents=prompt,
+                        config=types.GenerateContentConfig(response_mime_type="application/json",
+                                                            max_output_tokens=max_output_tokens))
+                candidates = getattr(response, "candidates", None) or []
+                reason = getattr(candidates[0], "finish_reason", None) if candidates else None
+                reason = getattr(reason, "name", str(reason or ""))
+                if reason and reason != "STOP":
+                    LOGGER.warning("Learning response incomplete finish_reason=%s",
+                                   reason if reason in {"MAX_TOKENS", "SAFETY", "RECITATION"} else "OTHER")
+                    raise RuntimeError("LEARNING_RESPONSE_INCOMPLETE")
+                text = str(response.text or "")
+                result = extract_json_from_response(text)
+                if isinstance(result, dict):
+                    return result, f"gemini:{model}"
             except Exception as error:
-                if safe_error_status(error) != 400:
-                    raise
-                # Some models reject complex schema grammars. This changes only
-                # transport formatting, never Pydantic/content/publication checks.
-                LOGGER.warning("Learning schema transport retry provider=gemini status=400")
-                response = client.models.generate_content(model=model, contents=prompt,
-                    config=types.GenerateContentConfig(response_mime_type="application/json",
-                                                        max_output_tokens=max_output_tokens))
-            candidates = getattr(response, "candidates", None) or []
-            reason = getattr(candidates[0], "finish_reason", None) if candidates else None
-            reason = getattr(reason, "name", str(reason or ""))
-            if reason and reason != "STOP":
-                LOGGER.warning("Learning response incomplete finish_reason=%s",
-                               reason if reason in {"MAX_TOKENS", "SAFETY", "RECITATION"} else "OTHER")
-                raise RuntimeError("LEARNING_RESPONSE_INCOMPLETE")
-            text = str(response.text or "")
-            result = extract_json_from_response(text)
-            if isinstance(result, dict):
-                return result, f"gemini:{model}"
-        except Exception as error:
-            status = safe_error_status(error)
-            if status in (429, 503):
-                capacity_limited = True
-                retry_delay = max(retry_delay or 0, 180 if status == 503 else provider_retry_seconds(error))
-            LOGGER.warning("Learning author unavailable provider=gemini error_type=%s status=%s", type(error).__name__, status)
+                status = safe_error_status(error)
+                if status in (429, 503):
+                    capacity_limited = True
+                    retry_delay = max(retry_delay or 0, 180 if status == 503 else provider_retry_seconds(error))
+                LOGGER.warning("Learning author unavailable provider=gemini model_slot=%d error_type=%s status=%s",
+                               index + 1, type(error).__name__, status)
+                # Backup is ONLY for model-specific throttling/outages, not
+                # safety refusals, invalid content or bad credentials.
+                if status not in (429, 503):
+                    break
     if capacity_limited:
         raise LearningCapacityError(retry_delay or 3600)
     raise RuntimeError("LEARNING_AUTHOR_UNAVAILABLE")
