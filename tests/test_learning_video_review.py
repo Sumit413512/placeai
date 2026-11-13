@@ -47,3 +47,21 @@ def test_video_review_quota_pauses_instead_of_publishing_or_silently_falling_bac
     monkeypatch.setattr(review.ai_provider, '_gemini_key', lambda: None)
     with pytest.raises(RuntimeError, match='VIDEO_REVIEW_UNAVAILABLE'):
         review.review_video(b'generated-test-mp4', content)
+
+
+def test_timeout_and_server_502_resume_private_media_review_without_approval(monkeypatch):
+    from app import learning_video_review as review
+    monkeypatch.setattr(review.ai_provider, '_gemini_key', lambda:'isolated-test')
+    source = script()
+    source['timings'] = [{'start':i,'end':i+1} for i in range(len(source['scenes']))]
+    def timeout(*_a, **_kw):
+        raise httpx.ReadTimeout('simulate stalled review service')
+    monkeypatch.setattr(review.httpx,'post',timeout)
+    with pytest.raises(review.ReviewCapacityError) as error:
+        review.review_video(b'sample-media', source)
+    assert error.value.retry_seconds == 180
+    monkeypatch.setattr(review.httpx,'post',
+                        lambda url, **_kw:httpx.Response(502,request=httpx.Request('POST',url)))
+    with pytest.raises(review.ReviewCapacityError) as error:
+        review.review_video(b'sample-media',source)
+    assert error.value.retry_seconds == 180
