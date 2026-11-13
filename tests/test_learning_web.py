@@ -98,3 +98,25 @@ def test_rate_limit_is_distinct_from_invalid_content_and_does_not_loop(monkeypat
     with pytest.raises(learning_ai.LearningCapacityError) as error:
         learning_ai.generate_json('Teach SQL', {'type': 'object'})
     assert len(calls) == 1 and error.value.retry_seconds >= 3600
+
+
+def test_author_retries_when_earliest_configured_model_can_recover(monkeypatch):
+    monkeypatch.setenv('LEARNING_GEMINI_MODEL', 'gemini-primary')
+    monkeypatch.setenv('LEARNING_GEMINI_BACKUP_MODEL', 'gemini-backup')
+    monkeypatch.setattr(learning_ai.ai_provider, '_openai_keys', lambda: [])
+    monkeypatch.setattr(learning_ai.ai_provider, '_gemini_key', lambda: 'isolated-test-key')
+    calls = []
+
+    def unavailable(**kwargs):
+        calls.append(kwargs['model'])
+        status = 429 if kwargs['model'] == 'gemini-primary' else 503
+        response = httpx.Response(status, request=httpx.Request('POST', 'https://provider.invalid/'))
+        message = 'Requests per day quota exhausted' if status == 429 else 'Temporarily unavailable'
+        raise httpx.HTTPStatusError(message, request=response.request, response=response)
+
+    monkeypatch.setattr(learning_ai.ai_provider, 'genai', SimpleNamespace(
+        Client=lambda **_: SimpleNamespace(models=SimpleNamespace(generate_content=unavailable))))
+    with pytest.raises(learning_ai.LearningCapacityError) as error:
+        learning_ai.generate_json('Teach arrays', {'type': 'object'})
+    assert calls == ['gemini-primary', 'gemini-backup']
+    assert error.value.retry_seconds == 180
