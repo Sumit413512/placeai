@@ -44,6 +44,30 @@ DAILY_LESSON_ADMISSION = _bounded_env_int("LEARNING_VIDEO_DAILY_ADMISSION", 80, 
 LEASE_SECONDS = 180
 
 
+def repair_feedback(error):
+    """Return short actionable findings for the next authoring attempt.
+
+    Pydantic's ValidationError subclasses ValueError but has no ``issues``
+    attribute. The old fallback therefore saved an empty list and subsequent
+    retries repeated the same malformed scene. Keep only schema paths and
+    validator messages; never persist provider bodies or prompt contents.
+    """
+    issues = getattr(error, "issues", None)
+    if isinstance(issues, list) and issues:
+        return [str(item)[:400] for item in issues[:8]]
+    if isinstance(error, ValidationError):
+        findings = []
+        for item in error.errors()[:8]:
+            path = ".".join(map(str, item.get("loc", ()))) or "lesson"
+            message = str(item.get("msg") or "Invalid generated value")[:300]
+            findings.append(f"{path}: {message}")
+        return findings or ["Generated lesson did not match the required schema."]
+    if isinstance(error, ValueError):
+        message = str(error).strip()
+        return [message[:400] if message else "Generated lesson did not pass validation."]
+    return []
+
+
 def validate_script(raw, evidence, sources, *, require_visual=False, minimum_animated=0):
     """Repair schema/animation deviations before consuming narration provider calls."""
     from app.learning_video_media import slide
@@ -612,7 +636,7 @@ def _process(item, sessions):
             if kind == "lesson" and isinstance(error, ValueError):
                 # Rejected media must not be reused as a valid review checkpoint.
                 row.video_data, row.duration_seconds = None, 0
-                feedback = getattr(error, "issues", [])
+                feedback = repair_feedback(error)
                 # Preserve public-source research when repairing the script,
                 # but discard invalid scripts, media and narration checkpoints.
                 prior = json.loads(row.content_json or "{}")
