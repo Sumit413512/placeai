@@ -84,7 +84,14 @@ def review_video(data, content):
         raise ReviewCapacityError(180)
     if response.status_code in (429, 503):
         delay = quota_delay(response)
-        raise ReviewCapacityError(delay or response.extensions.get("video_retry_seconds", 86400))
+        if delay is None:
+            # RPD resets at midnight Pacific. An unhinted daily quota must not
+            # strand a fully rendered, private course video for an arbitrary
+            # 24 hours when the real provider counter resets much sooner.
+            from app.learning_ai import next_daily_quota_reset_seconds
+            hinted = response.extensions.get("video_retry_seconds")
+            delay = hinted if hinted and hinted < 86400 else next_daily_quota_reset_seconds()
+        raise ReviewCapacityError(delay)
     response.raise_for_status()
     payload = response.json()
     candidates = payload.get("candidates", [])
