@@ -156,6 +156,19 @@ def separate_visuals(raw):
     for scene in result["scenes"]:
         if not isinstance(scene, dict):
             scenes.append(scene); continue
+        visual = scene.get("visual")
+        if isinstance(visual, dict):
+            kind = visual.get("kind")
+            # Structured-output providers often populate optional arrays from
+            # nearby schema examples even though they are illegal for the
+            # selected visual kind. These fields have no meaning outside their
+            # dedicated renderer, so remove them deterministically instead of
+            # spending another authoring call or weakening validation.
+            if kind != "linked_sum":
+                visual["other_labels"] = []
+                visual["result_labels"] = []
+            if kind != "bar_chart":
+                visual["values"] = []
         diagram = scene.get("diagram")
         points = scene.get("bullets", [])
         if isinstance(diagram, dict) and (scene.get("code") or isinstance(points, list) and len(points) > 1):

@@ -393,6 +393,22 @@ def test_mixed_visual_scene_is_split_without_losing_teaching_or_code():
         slide(scene.model_dump(), index+1, len(checked.scenes))
 
 
+def test_irrelevant_storyboard_arrays_are_removed_without_changing_input():
+    raw = script()
+    raw['scenes'][0]['code'] = ''
+    raw['scenes'][0]['visual'] = {
+        'kind':'array', 'labels':['10','20','30'], 'other_labels':['4','5'],
+        'result_labels':['9'], 'values':[10,20,30], 'focus_index':1,
+        'action':'direct', 'takeaway':'Index access selects one position.'}
+    transformed = worker.separate_visuals(raw)
+    visual = transformed['scenes'][0]['visual']
+    assert visual['other_labels'] == [] and visual['result_labels'] == []
+    assert visual['values'] == []
+    assert raw['scenes'][0]['visual']['values'] == [10,20,30]
+    checked = LessonScript.model_validate(transformed)
+    assert checked.scenes[0].visual.kind == 'array'
+
+
 def test_short_solution_is_expanded_without_regenerating_other_lesson_fields(monkeypatch):
     raw = script(); raw['solution'] = 'SELECT name FROM students;'
     replacement = script()['solution']
