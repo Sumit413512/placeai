@@ -275,7 +275,7 @@ def generate_json(task: str, schema: dict, *, max_output_tokens: int = 8000) -> 
                 capacity_limited = True
                 retry_delay = max(retry_delay or 0, 180 if status == 503 else provider_retry_seconds(error))
             LOGGER.warning("Learning author unavailable provider=openai error_type=%s", type(error).__name__)
-    if ai_provider._gemini_key():
+    if ai_provider._gemini_key() and ai_provider.genai:
         from google.genai import types
         primary = os.getenv("LEARNING_GEMINI_MODEL") or get_settings().gemini_model
         backup = (os.getenv("LEARNING_GEMINI_BACKUP_MODEL") or "").strip()
