@@ -411,7 +411,9 @@ def _process(item, sessions):
             update = {"title": plan.title, "plan_json": plan.model_dump_json(),
                       "sources_json": json.dumps(sources), "evidence": evidence}
         else:
-            if not content or "revision_feedback" in content or "_research_checkpoint" in content:
+            if (not content or "revision_feedback" in content
+                    or ("_research_checkpoint" in content
+                        and content.get("content_review", {}).get("passed") is not True)):
                 outline = plan["lessons"][position]
                 checkpoint = content.get("_research_checkpoint")
                 if (isinstance(checkpoint, dict) and
@@ -471,6 +473,10 @@ def _process(item, sessions):
                     raise LessonReviewRejected(review.get("issues") or ["Correct factual content, examples and source support before publication."])
                 content = {**script.model_dump(), "sources": fresh_sources,
                            "content_review": {"passed": True, "version": 1}}
+                if isinstance(checkpoint, dict):
+                    # Retain evidence privately across any voice or audiovisual
+                    # retry; remove it only after all checks have passed.
+                    content["_research_checkpoint"] = checkpoint
                 # Persist the checked script so narration retries do not repeat authoring.
                 with sessions() as db:
                     changed = db.query(VideoLesson).filter_by(id=identifier, lease_token=token).update(
@@ -525,6 +531,10 @@ def _process(item, sessions):
             finally:
                 LOGGER.info("Video pipeline phase=audiovisual_review elapsed_ms=%d",
                             int((time.monotonic() - review_started) * 1000))
+            # The approved lesson already carries its citations and reviewed
+            # narrative. Remove the large, internal-only research memo from
+            # persistent published content after independent AV verification.
+            content.pop("_research_checkpoint", None)
             update = {"content_json": json.dumps(content), "video_data": data, "duration_seconds": duration}
             pipeline_step = "finalize"
         with sessions() as db:
