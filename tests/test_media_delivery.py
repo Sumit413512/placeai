@@ -60,3 +60,15 @@ def test_admin_video_preview_never_uses_unauthenticated_native_media_src():
     assert "data-action=\"load-learning-video-preview\"" in app
     assert "releaseLearningVideoPreview();" in app
     assert 'src="/platform/learning-content-review/lesson/' not in app
+
+
+def test_platform_review_distinguishes_AI_checks_from_human_approval():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    app = (root / 'app/static/app.js').read_text(encoding='utf-8')
+    mirror = (root / 'public/static/app-core.js').read_text(encoding='utf-8')
+    assert app == mirror
+    assert 'Independent video review pending' in app
+    assert 'Human approval needed' in app
+    assert 'Provider capacity / generation retry' in app
+    assert "?'Checks passed':'Check required'" not in app
