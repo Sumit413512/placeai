@@ -8,6 +8,7 @@ from datetime import timedelta
 from app import learning_ai
 from app import learning_video_worker as worker
 from app.models import VideoCourse, VideoLesson, utcnow
+from test_learning_hub import hub  # noqa: F401 - shared isolated database fixture
 from test_learning_video import ready_lesson, script, video  # noqa: F401 - fixture import
 
 
