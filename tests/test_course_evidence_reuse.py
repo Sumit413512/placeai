@@ -71,3 +71,57 @@ def test_course_evidence_reuse_never_requires_a_provider_api_key(monkeypatch):
         {"title":"Python list comprehensions",
          "objective":"Use filtering in a Python list comprehension",
          "module_title":"Lists"}) is not None
+
+
+def test_optional_backup_author_model_uses_spare_quota_without_skipping_checks(monkeypatch):
+    from types import SimpleNamespace
+    from app import learning_ai
+    import json
+
+    class ProviderFailure(RuntimeError):
+        status_code = 429
+
+    seen = []
+    class FakeModels:
+        def generate_content(self, *, model, **kwargs):
+            seen.append(model)
+            if model == "mock-primary":
+                raise ProviderFailure("Model-specific 429")
+            return SimpleNamespace(
+                text=json.dumps({"ok": True}),
+                candidates=[SimpleNamespace(finish_reason=SimpleNamespace(name="STOP"))])
+    monkeypatch.setenv("LEARNING_GEMINI_MODEL", "mock-primary")
+    monkeypatch.setenv("LEARNING_GEMINI_BACKUP_MODEL", "mock-backup")
+    monkeypatch.setattr(learning_ai.ai_provider, "_openai_keys", lambda: [])
+    monkeypatch.setattr(learning_ai.ai_provider, "_gemini_key", lambda: "fake-test-key")
+    monkeypatch.setattr(learning_ai.ai_provider, "genai", SimpleNamespace(
+        Client=lambda **kwargs: SimpleNamespace(models=FakeModels())))
+    answer, provider = learning_ai.generate_json(
+        "Is the example valid?",
+        {"type":"object","properties":{"ok":{"type":"boolean"}},
+         "required":["ok"],"additionalProperties":False})
+    assert answer == {"ok": True}
+    assert provider == "gemini:mock-backup"
+    assert seen == ["mock-primary", "mock-backup"]
+
+
+def test_backup_is_not_called_for_non_capacity_errors(monkeypatch):
+    from types import SimpleNamespace
+    from app import learning_ai
+    called = []
+    class InvalidInput(Exception):
+        status_code = 400
+    class FakeModels:
+        def generate_content(self, *, model, **kwargs):
+            called.append(model)
+            raise InvalidInput("Invalid request")
+    monkeypatch.setenv("LEARNING_GEMINI_MODEL", "mock-primary")
+    monkeypatch.setenv("LEARNING_GEMINI_BACKUP_MODEL", "mock-backup")
+    monkeypatch.setattr(learning_ai.ai_provider, "_openai_keys", lambda: [])
+    monkeypatch.setattr(learning_ai.ai_provider, "_gemini_key", lambda: "fake-test-key")
+    monkeypatch.setattr(learning_ai.ai_provider, "genai", SimpleNamespace(
+        Client=lambda **kwargs: SimpleNamespace(models=FakeModels())))
+    with pytest.raises(RuntimeError, match="LEARNING_AUTHOR_UNAVAILABLE"):
+        learning_ai.generate_json("Test", {"type":"object"})
+    # A 400 schema-transport retry stays on the same model, then fails closed.
+    assert called == ["mock-primary", "mock-primary"]
