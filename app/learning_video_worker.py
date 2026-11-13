@@ -161,6 +161,14 @@ def separate_visuals(raw):
 
 
 def claim(db):
+    """Reserve the most useful unfinished work without bypassing quality gates.
+
+    A lesson that already has its locally checked MP4 needs ONLY the final
+    independent audiovisual review; it must not wait behind dozens of fresh
+    authoring jobs. A checked script waiting for voice/rendering is next.
+    Provider 429 cooldowns are project-wide; avoid a thundering herd of
+    retries against that shared quota, while continuing review/checkpoints.
+    """
     now = utcnow()
     if db.bind.dialect.name == "postgresql":
         if not db.execute(text("SELECT pg_try_advisory_xact_lock(742081322)")).scalar():
@@ -173,20 +181,28 @@ def claim(db):
                  for model in (VideoCourse, VideoLesson))
     if active >= MAX_ACTIVE_JOBS:
         db.commit(); return None
-    for kind, model in (("course", VideoCourse), ("lesson", VideoLesson)):
-        query = db.query(model)
-        if kind == "lesson":
-            query = query.options(defer(VideoLesson.video_data))
-        # Once admitted, a crashed lease must not inherit its old provider delay.
+
+    def due_filter(model):
         due = or_(model.available_at <= now,
                   (model.state == "running") & (model.lease_until <= now))
-        if kind == "lesson" and learning_speech.enabled() and learning_speech.available():
-            # A previous provider cooldown is irrelevant to the offline voice.
+        if model is VideoLesson and learning_speech.enabled() and learning_speech.available():
+            # A previously cooled-down cloud voice can use the available local
+            # voice without waiting for that unrelated speech-provider quota.
             due = or_(due, model.error_code == "NARRATION_CAPACITY")
-        row = query.filter(model.attempts < MAX_ATTEMPTS, due, or_(model.state.in_(["queued", "retrying"]),
-            (model.state == "running") & (model.lease_until <= now))).order_by(
-            model.created_at, VideoLesson.position if kind == "lesson" else model.id,
-            model.id).with_for_update(skip_locked=True).first()
+        return due
+
+    def reserve(model, kind, *extra):
+        row = (db.query(model)
+               .options(defer(VideoLesson.video_data)) if model is VideoLesson
+               else db.query(model))
+        row = (row.filter(model.attempts < MAX_ATTEMPTS, due_filter(model),
+                 or_(model.state.in_(["queued", "retrying"]),
+                     (model.state == "running") & (model.lease_until <= now)),
+                 *extra)
+               .order_by(model.available_at, model.created_at,
+                         VideoLesson.position if model is VideoLesson else model.id,
+                         model.id)
+               .with_for_update(skip_locked=True).first())
         if row:
             row.state, row.lease_token = "running", uuid4().hex
             row.error_code = None
@@ -194,6 +210,40 @@ def claim(db):
             row.attempts += 1
             db.commit()
             return kind, row.id, row.lease_token
+        return None
+
+    # FAST LANE 1: checked MP4, waiting on the actual independent Gemini
+    # audiovisual audit. Never expose this checkpoint until all checks pass.
+    media = reserve(VideoLesson, "lesson", VideoLesson.video_data.is_not(None))
+    if media:
+        return media
+
+    # FAST LANE 2: written and fact-checked lesson whose next step is speech/
+    # rendering. Keep progress even if the authoring LLM is rate-limited.
+    narrated = reserve(VideoLesson, "lesson", VideoLesson.video_data.is_(None),
+                       VideoLesson.content_json.like('%"content_review"%'))
+    if narrated:
+        return narrated
+
+    author_cooling_down = (
+        db.query(VideoLesson.id).filter(VideoLesson.state == "retrying",
+             VideoLesson.error_code == "AUTHOR_CAPACITY",
+             VideoLesson.available_at > now).first() is not None
+        or db.query(VideoCourse.id).filter(VideoCourse.state == "retrying",
+             VideoCourse.error_code == "AUTHOR_CAPACITY",
+             VideoCourse.available_at > now).first() is not None
+    )
+    if author_cooling_down:
+        # The shared Gemini project is currently refusing new requests.
+        # Let the first cooled-down item probe capacity at its due time,
+        # without needlessly burning retries for every queued lesson.
+        db.commit()
+        return None
+
+    for kind, model in (("course", VideoCourse), ("lesson", VideoLesson)):
+        item = reserve(model, kind)
+        if item:
+            return item
     db.commit()
     return None
 
