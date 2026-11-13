@@ -225,18 +225,17 @@ def claim(db):
     if narrated:
         return narrated
 
-    author_cooling_down = (
-        db.query(VideoLesson.id).filter(VideoLesson.state == "retrying",
-             VideoLesson.error_code == "AUTHOR_CAPACITY",
-             VideoLesson.available_at > now).first() is not None
-        or db.query(VideoCourse.id).filter(VideoCourse.state == "retrying",
-             VideoCourse.error_code == "AUTHOR_CAPACITY",
-             VideoCourse.available_at > now).first() is not None
-    )
-    if author_cooling_down:
-        # The shared Gemini project is currently refusing new requests.
-        # Let the first cooled-down item probe capacity at its due time,
-        # without needlessly burning retries for every queued lesson.
+    author_retry_at = [
+        db.query(func.min(model.available_at)).filter(
+            model.state == "retrying", model.error_code == "AUTHOR_CAPACITY",
+            model.attempts < MAX_ATTEMPTS).scalar()
+        for model in (VideoCourse, VideoLesson)
+    ]
+    # One due author task can probe the provider, even if other lessons have
+    # longer backoffs. Never hold up a ready probe until the *last* retry expires.
+    soonest_author_probe = min((value for value in author_retry_at if value is not None),
+                               default=None)
+    if soonest_author_probe is not None and soonest_author_probe > now:
         db.commit()
         return None
 
