@@ -153,8 +153,12 @@ def test_platform_admin_reviews_complete_course_and_regenerates_one_video(video)
     admin_app = FastAPI(); admin_app.include_router(platform.router)
     admin_app.dependency_overrides.update(video.api.app.dependency_overrides)
     with TestClient(admin_app) as admin:
-        queue = admin.get('/platform/learning-content-review').json()['items']
+        data = admin.get('/platform/learning-content-review').json()
+        queue = data['items']
         assert [(item['kind'], item['id']) for item in queue] == [('course', identifier)]
+        assert data['pending_count'] == 1 and data['preparing_count'] == 0
+        assert queue[0]['review_ready']
+        assert queue[0]['checked_count'] == queue[0]['planned_count'] == 4
         preview = admin.get(f'/platform/learning-content-review/course/{identifier}').json()
         assert len(preview['lessons']) == 4
         assert all(item['media_available'] for item in preview['lessons'])
@@ -167,6 +171,10 @@ def test_platform_admin_reviews_complete_course_and_regenerates_one_video(video)
         missing_media = video.db.get(VideoLesson, lesson_id)
         missing_media.video_data = None
         video.db.commit()
+        incomplete = admin.get('/platform/learning-content-review').json()
+        assert incomplete['pending_count'] == 0 and incomplete['preparing_count'] == 1
+        assert incomplete['items'][0]['review_ready'] is False
+        assert incomplete['items'][0]['checked_count'] == 3
         blocked = admin.patch(f'/platform/learning-content-review/course/{identifier}',
             json={'decision': 'approved', 'notes': ''})
         assert blocked.status_code == 409
