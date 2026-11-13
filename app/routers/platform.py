@@ -626,13 +626,56 @@ def learning_content_review(current_user: User = Depends(require_platform_admin)
         VideoLesson.editorial_status.in_(review_states),
         ~VideoCourse.editorial_status.in_(review_states)).order_by(
         VideoLesson.updated_at.asc()).limit(200).all()
+    # Course state=ready means its SYLLABUS passed, not that MP4s exist.
+    # Never report "check required / passed" prematurely or load video BLOBs.
+    from collections import defaultdict
+    from app.learning_publication import checks_passed
+    course_items = {row.id: _editorial_item("course", row) for row in courses}
+    if course_items:
+        ids = list(course_items)
+        raw_lessons = db.query(
+            VideoLesson.id, VideoLesson.course_id, VideoLesson.state,
+            VideoLesson.error_code
+        ).filter(VideoLesson.course_id.in_(ids)).all()
+        media_ids = {lesson_id for lesson_id, in db.query(VideoLesson.id).filter(
+            VideoLesson.course_id.in_(ids), VideoLesson.video_data.is_not(None)).all()}
+        checked_ids = {lesson_id for lesson_id, body in db.query(
+            VideoLesson.id, VideoLesson.content_json).filter(
+            VideoLesson.course_id.in_(ids), VideoLesson.state == "ready",
+            VideoLesson.video_data.is_not(None)).all()
+            if checks_passed(json.loads(body))}
+        grouped = defaultdict(list)
+        for record in raw_lessons:
+            grouped[record.course_id].append(record)
+        for course in courses:
+            lessons = grouped[course.id]
+            expected = len(json.loads(course.plan_json).get("lessons", []))
+            ready = sum(lesson.state == "ready" and lesson.id in media_ids for lesson in lessons)
+            checked = sum(lesson.id in checked_ids for lesson in lessons)
+            failed = sum(lesson.state == "failed" for lesson in lessons)
+            author_waiting = sum(lesson.error_code == "AUTHOR_CAPACITY" and
+                                 lesson.state == "retrying" for lesson in lessons)
+            complete = (course.state == "ready" and expected > 0 and
+                        len(lessons) == expected and ready == checked == expected)
+            item = course_items[course.id]
+            item.update(planned_count=expected, ready_count=ready,
+                        checked_count=checked, failed_count=failed,
+                        author_waiting_count=author_waiting,
+                        review_ready=complete,
+                        preparation_stage=("review_ready" if complete else
+                            "repair_required" if failed else
+                            "waiting_ai_capacity" if author_waiting else
+                            "generating_videos"))
     items = ([_editorial_item("notes", row) for row in notes]
-             + [_editorial_item("course", row) for row in courses]
+             + [course_items[row.id] for row in courses]
              + [_editorial_item("lesson", row, parent_title=course_title)
                 for row, course_title in lesson_rows])
     items.sort(key=lambda item: item["updated_at"])
     return {"items": items, "pending_count": sum(
-        item["editorial_status"] == "pending_review" for item in items)}
+        item["editorial_status"] == "pending_review"
+        and (item["kind"] != "course" or item["review_ready"]) for item in items),
+        "preparing_count": sum(item["kind"] == "course" and not item["review_ready"]
+                               for item in items)}
 
 
 @router.get("/learning-content-review/{kind}/{identifier}")
