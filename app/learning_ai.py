@@ -5,7 +5,8 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta, time as datetime_time
+from zoneinfo import ZoneInfo
 from urllib.parse import urlsplit
 
 import httpx
@@ -27,6 +28,21 @@ class LearningCapacityError(RuntimeError):
         self.retry_seconds = max(15, min(int(retry_seconds), 86400))
 
 
+def next_daily_quota_reset_seconds(now=None):
+    """Gemini RPD resets at midnight Pacific, including daylight-saving time.
+
+    Sleeping a fixed 24 hours after a 429 can waste almost an entire day when
+    quota resets a few minutes later. Allow 90s for provider counters to settle.
+    """
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    pacific = ZoneInfo("America/Los_Angeles")
+    local = now.astimezone(pacific)
+    midnight = datetime.combine(local.date() + timedelta(days=1),
+                                datetime_time.min, tzinfo=pacific)
+    remaining = int((midnight.astimezone(timezone.utc) - now).total_seconds()) + 90
+    return max(60, min(86400, remaining))
+
+
 def provider_retry_seconds(error):
     """Read bounded RetryInfo without logging provider bodies or credentials.
 
@@ -37,7 +53,7 @@ def provider_retry_seconds(error):
     details = getattr(error, "details", None)
     message = str(getattr(error, "message", "") or "")[:1200].lower()
     if any(word in message for word in ("requests per day", "daily quota", "rpd limit", "perday")):
-        return 86400
+        return next_daily_quota_reset_seconds()
     headers = getattr(getattr(error, "response", None), "headers", {}) or {}
     delays = []
     try:
@@ -58,7 +74,7 @@ def provider_retry_seconds(error):
                 delays.append(float(match.group(1)))
         for violation in item.get("violations", []) if isinstance(item.get("violations"), list) else []:
             if isinstance(violation, dict) and "perday" in str(violation.get("quotaId", "")).lower():
-                return 86400
+                return next_daily_quota_reset_seconds()
     hint = re.search(r"(?:retry in|retry after|retrydelay[^0-9]*)(\d+(?:\\.\d+)?)\s*s(?:ec(?:onds)?)?", message)
     if hint:
         delays.append(float(hint.group(1)))
