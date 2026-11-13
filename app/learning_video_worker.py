@@ -435,8 +435,14 @@ def _process(item, sessions):
                     pipeline_step = "lesson_research"
                     research_started = time.monotonic()
                     try:
-                        memo, fresh_sources, _ = learning_ai.research(
-                            json.dumps({"topic": preferences, "lesson": outline}))
+                        reuse = learning_ai.reusable_course_research(
+                            evidence, sources, outline) if course.shared_key else None
+                        if reuse:
+                            memo, fresh_sources, _ = reuse
+                            LOGGER.info("Video pipeline phase=lesson_research source=course_evidence_cache")
+                        else:
+                            memo, fresh_sources, _ = learning_ai.research(
+                                json.dumps({"topic": preferences, "lesson": outline}))
                     finally:
                         LOGGER.info("Video pipeline phase=lesson_research elapsed_ms=%d",
                                     int((time.monotonic() - research_started) * 1000))

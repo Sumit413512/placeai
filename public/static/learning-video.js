@@ -36,7 +36,10 @@
     const isCurrent = (id, version) => active() && current === id && playerEpoch === version;
     const failedCourse = data => data.status === 'failed' || data.lessons.some(item => item.status === 'failed');
     const libraryLabel = data => structure(data).course_ready ? 'Ready to begin' :
-      data.preparation_status === 'awaiting_review' ? 'Awaiting human review' : data.preparation_status === 'review_required' ? 'Quality recheck needed' : data.preparation_status === 'queued' ? 'Queued' : data.preparation_status === 'waiting_capacity' ? 'Waiting to retry' : 'Processing';
+      data.preparation_status === 'awaiting_review' ? 'Awaiting human review' : data.preparation_status === 'review_required' ? 'Quality recheck needed' : data.preparation_status === 'queued' ? 'Queued' : data.preparation_status === 'waiting_capacity' ? (
+        data.author_waiting_parts ? 'AI author quota paused' :
+        data.review_waiting_parts ? 'Video review quota paused' : 'Waiting to retry'
+      ) : 'Processing';
     const badge = data => `<small class="learning-status" data-state="${structure(data).course_ready ? 'ready' : 'processing'}">${libraryLabel(data)}</small>`;
     const workflow = data => {
       const currentStep = structure(data).course_ready ? 3 : data.preparation_status === 'awaiting_review' ? 2 : 1;
