@@ -51,6 +51,7 @@ def test_platform_admin_preview_uses_authenticated_byte_ranges(browser):
             data = {"items": [{"kind": "course", "id": "test-course",
                      "title": "Sample course", "parent_title": None,
                      "generation_status": "ready", "editorial_status": "pending_review",
+                     "review_ready": True, "checked_count": 1, "planned_count": 1,
                      "updated_at": "2026-11-12T09:00:00"}], "pending_count": 1}
         elif path == "/platform/learning-content-review/course/test-course":
             data = {"id": "test-course", "title": "Sample course",
