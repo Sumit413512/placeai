@@ -104,6 +104,16 @@ def course_data(db, course, user):
     result["practice_completed"] = sum(item["practice_completed"] for item in result["lessons"])
     result["modules"] = modules
     result["ready_parts"] = sum(item["status"] == "ready" for item in result["lessons"])
+    # Report which phase is genuinely blocked without suggesting an unfinished
+    # course has passed its checks or exposing its unapproved media.
+    result["author_waiting_parts"] = sum(
+        item["error_code"] == "AUTHOR_CAPACITY" and item["status"] in {"queued", "retrying"}
+        for item in result["lessons"])
+    result["review_waiting_parts"] = sum(
+        item["error_code"] == "REVIEW_CAPACITY" and item["status"] in {"queued", "retrying"}
+        for item in result["lessons"])
+    result["processing_parts"] = sum(
+        item["status"] in {"queued", "running", "retrying"} for item in result["lessons"])
     result["completed_parts"] = sum(item["video_completed"] and item["practice_completed"] for item in result["lessons"])
     result["checked_parts"] = sum(item["status"] == "ready" and item["quality_checked"] for item in result["lessons"])
     result["editorial_status"] = course.editorial_status
@@ -139,9 +149,22 @@ def course_data(db, course, user):
     elif waiting and not runnable:
         result["preparation_status"] = "waiting_capacity"
         result["next_retry_at"] = min(row.available_at for row in waiting).isoformat() + "Z"
-        result["preparation_notice"] = ("Lesson quality review is waiting for provider capacity. Your prepared work is saved."
-            if any(row.error_code == "REVIEW_CAPACITY" for row in waiting) else
-            "Preparation is waiting to retry. Your completed work is saved.")
+        if any(row.error_code == "AUTHOR_CAPACITY" for row in waiting):
+            result["preparation_notice"] = (
+                "The AI lesson-writing provider is rate-limited. Video generation has not"
+                " started for those lessons; automatic retry is scheduled. No quality"
+                " checks are being skipped.")
+        elif any(row.error_code == "REVIEW_CAPACITY" for row in waiting):
+            result["preparation_notice"] = (
+                "Your produced video is safely checkpointed. The independent audiovisual"
+                " quality review is waiting for provider capacity; automatic retry is scheduled.")
+        elif any(row.error_code == "NARRATION_CAPACITY" for row in waiting):
+            result["preparation_notice"] = (
+                "The narration provider is temporarily unavailable. Script work is"
+                " saved and speech generation will resume automatically.")
+        else:
+            result["preparation_notice"] = (
+                "Preparation is waiting to retry. Saved lesson work is preserved.")
     else:
         result["preparation_status"] = "queued"
         result["preparation_notice"] = "Your course is queued for background preparation. You can leave this page and return later."
