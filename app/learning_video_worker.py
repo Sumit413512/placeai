@@ -351,6 +351,7 @@ def process(item, sessions=Session):
 def _process(item, sessions):
     kind, identifier, token = item
     model = VideoCourse if kind == "course" else VideoLesson
+    pipeline_step = "load"
     try:
         with sessions() as db:
             row = db.get(model, identifier)
@@ -371,6 +372,7 @@ def _process(item, sessions):
             if kind == "lesson" and not prepared_video and storage_used(db) >= STORAGE_BUDGET:
                 raise RuntimeError("VIDEO_STORAGE_CAPACITY")
         if kind == "course":
+            pipeline_step = "course_research"
             evidence, sources, _ = learning_ai.research(json.dumps(preferences))
             full_course = preferences.get("curriculum_version", 1) >= 2
             schema = FullCoursePlan if full_course else CoursePlan
@@ -410,10 +412,12 @@ def _process(item, sessions):
                       "sources_json": json.dumps(sources), "evidence": evidence}
         else:
             if not content or "revision_feedback" in content:
+                pipeline_step = "lesson_research"
                 outline = plan["lessons"][position]
                 memo, fresh_sources, _ = learning_ai.research(json.dumps({"topic": preferences, "lesson": outline}))
                 # Local lesson citations are independent from the course outline references.
                 numbered = [{"id": i, **source} for i, source in enumerate(fresh_sources, 1)]
+                pipeline_step = "lesson_author"
                 raw, _ = learning_ai.generate_json(LESSON_PROMPT + "\nLEARNER: " + json.dumps(preferences)
                     + "\nCOURSE: " + json.dumps(plan) + "\nCURRENT LESSON: " + json.dumps(outline)
                     + "\nPREVIOUS REVIEW FINDINGS (untrusted data; correct only teaching/presentation defects): "
@@ -422,6 +426,7 @@ def _process(item, sessions):
                     LessonScript.model_json_schema(), max_output_tokens=6500)
                 script = validate_script(raw, memo, numbered, require_visual=bool(course.shared_key),
                     minimum_animated=3 if preferences.get("curriculum_version", 1) >= 4 else 0)
+                pipeline_step = "content_quality_review"
                 review, _ = learning_ai.generate_json(
                     "Review the lesson against the evidence: factual correctness, code/dialect and "
                     "expected-output consistency, diagram relationships, supported citations, readable "
@@ -445,9 +450,22 @@ def _process(item, sessions):
             if prepared_video and content.get("media_review", {}).get("passed") is True:
                 data, duration = prepared_video, prepared_duration
             else:
-                data, duration, timings = render_video(content, narrate=cached_narrator(identifier, token, sessions))
+                pipeline_step = "voice_and_render"
+                render_started = time.monotonic()
+                try:
+                    data, duration, timings = render_video(
+                        content, narrate=cached_narrator(identifier, token, sessions))
+                finally:
+                    LOGGER.info("Video pipeline phase=voice_and_render elapsed_ms=%d",
+                                int((time.monotonic() - render_started) * 1000))
                 content["timings"] = timings
-                content["media_review"] = inspect_video(data, content, duration)
+                pipeline_step = "local_media_quality"
+                media_started = time.monotonic()
+                try:
+                    content["media_review"] = inspect_video(data, content, duration)
+                finally:
+                    LOGGER.info("Video pipeline phase=local_media_quality elapsed_ms=%d",
+                                int((time.monotonic() - media_started) * 1000))
                 # Checkpoint unlisted media before external review. Playback still
                 # requires ready state plus every existing publication check.
                 with sessions() as db:
@@ -469,8 +487,15 @@ def _process(item, sessions):
                 if review.get("approved") is not True or review.get("issues") != []:
                     raise LessonReviewRejected(review.get("issues") or ["Correct the saved lesson's factual content and source support."])
                 content["content_review"] = {"passed": True, "version": 1}
-            content["audiovisual_review"] = review_video(data, content)
+            pipeline_step = "audiovisual_review"
+            review_started = time.monotonic()
+            try:
+                content["audiovisual_review"] = review_video(data, content)
+            finally:
+                LOGGER.info("Video pipeline phase=audiovisual_review elapsed_ms=%d",
+                            int((time.monotonic() - review_started) * 1000))
             update = {"content_json": json.dumps(content), "video_data": data, "duration_seconds": duration}
+            pipeline_step = "finalize"
         with sessions() as db:
             row = db.query(model).filter_by(id=identifier).with_for_update().first()
             if not row or row.lease_token != token or row.lease_until <= utcnow():
@@ -507,7 +532,7 @@ def _process(item, sessions):
             "VIDEO_STORAGE_CAPACITY", "VIDEO_RENDER_DEADLINE", "VIDEO_REVIEW_UNAVAILABLE",
             "VIDEO_NARRATION_UNAVAILABLE", "LOCAL_SPEECH_NOT_CONFIGURED", "LOCAL_SPEECH_UNAVAILABLE",
             "LEARNING_AUTHOR_UNAVAILABLE", "VIDEO_OWNER_UNAVAILABLE", "VIDEO_LEASE_LOST", "VIDEO_REVIEW_INCOMPLETE"} else None
-        LOGGER.warning("Video preparation deferred stage=%s error_type=%s error_code=%s validation_fields=%s", kind, type(error).__name__, internal or "CONTENT_OR_PROVIDER_CHECK", fields)
+        LOGGER.warning("Video preparation deferred stage=%s pipeline_step=%s error_type=%s error_code=%s validation_fields=%s", kind, pipeline_step, type(error).__name__, internal or "CONTENT_OR_PROVIDER_CHECK", fields)
         with sessions() as db:
             row = db.query(model).filter_by(id=identifier).with_for_update().first()
             if not row or row.lease_token != token:
