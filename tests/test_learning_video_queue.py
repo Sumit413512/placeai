@@ -151,3 +151,70 @@ def test_rejected_lesson_keeps_correction_feedback_and_removes_only_its_generate
     assert 'Scene 2' in json.loads(row.content_json)['revision_feedback'][0]
     assert video.db.query(VideoNarration).filter_by(lesson_id=lesson_id).count() == 0
     assert video.db.query(VideoLesson).filter_by(state='ready').count() == 3
+
+
+def test_checked_mp4_review_preempts_new_authoring_and_keeps_media_private(video):
+    course_id, lesson_id, path = ready_lesson(video)
+    checked = video.db.get(VideoLesson, lesson_id)
+    checked.state = "queued"
+    checked.available_at = utcnow() - timedelta(minutes=2)
+    checked.content_json = json.dumps({**script(),
+        "content_review":{"passed": True}, "media_review":{"passed": True}})
+    checked.video_data = b"durably-checked-private-mp4"
+    newer = VideoCourse(user_id=video.owner.id, request_id='review-priority-new-course',
+                        title='Waiting authoring course', state='ready',
+                        input_json='{}', plan_json=json.dumps(course_plan()))
+    video.db.add(newer); video.db.flush()
+    to_author = VideoLesson(course_id=newer.id, position=0,
+                            title='New authoring task', state='queued')
+    to_author.available_at = utcnow() - timedelta(hours=4)
+    video.db.add(to_author); video.db.commit()
+    with video.sessions() as db:
+        item = worker.claim(db)
+    assert item[0] == 'lesson' and item[1] == lesson_id
+    assert video.api.get(path+'/media').status_code == 409
+
+
+def test_shared_author_429_cooldown_stops_new_requests_but_not_review(video):
+    _, lesson_id, _ = ready_lesson(video, full_ready=False)
+    author = video.db.get(VideoLesson, lesson_id)
+    author.state, author.error_code, author.video_data = "retrying", "AUTHOR_CAPACITY", None
+    author.content_json = "{}"
+    author.available_at = utcnow() + timedelta(minutes=20)
+    video.db.commit()
+    other = VideoCourse(user_id=video.owner.id, request_id='review-priority-other-course',
+                        title='Other authoring', state='ready',
+                        input_json='{}', plan_json=json.dumps(course_plan()))
+    video.db.add(other); video.db.flush()
+    queued = VideoLesson(course_id=other.id, position=0, title='Not while 429')
+    video.db.add(queued); video.db.commit()
+    with video.sessions() as db:
+        assert worker.claim(db) is None  # Do not hammer one shared provider.
+
+    # A saved, locally checked video uses a distinct review stage and should
+    # continue to completion even while the authoring model is rate-limited.
+    review_task = VideoLesson(course_id=other.id, position=1, title='Needs audio-visual audit',
+                              state="queued", video_data=b"checked-original")
+    review_task.content_json = json.dumps({**script(),
+       "content_review":{"passed":True}, "media_review":{"passed":True}})
+    video.db.add(review_task); video.db.commit()
+    with video.sessions() as db:
+        item = worker.claim(db)
+    assert item[1] == review_task.id
+
+
+def test_author_quota_earliest_due_job_probes_even_with_other_long_waits(video):
+    _, first_id, _ = ready_lesson(video, full_ready=False)
+    course = video.db.get(VideoLesson, first_id).course_id
+    first = video.db.get(VideoLesson, first_id)
+    first.state, first.error_code, first.attempts = 'retrying','AUTHOR_CAPACITY',1
+    first.available_at = utcnow() - timedelta(minutes=2)
+    first.video_data, first.content_json = None, '{}'
+    later = VideoLesson(course_id=course, position=1, title='Another held author')
+    later.state, later.error_code = 'retrying','AUTHOR_CAPACITY'
+    later.available_at = utcnow() + timedelta(hours=4)
+    video.db.add(later); video.db.commit()
+    with video.sessions() as db:
+        item = worker.claim(db)
+    assert item[1] == first_id
+    assert video.db.get(VideoLesson, later.id).state == "retrying"
