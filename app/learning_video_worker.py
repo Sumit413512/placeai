@@ -153,6 +153,10 @@ def separate_visuals(raw):
     if not isinstance(result, dict) or not isinstance(result.get("scenes"), list):
         return result
     scenes = []
+    # A valid lesson contains at most fourteen scenes. Reserve only the spare
+    # slots for deterministic splits so malformed provider output can never
+    # turn into a different length failure.
+    split_slots = max(0, 14 - len(result["scenes"]))
     for scene in result["scenes"]:
         if not isinstance(scene, dict):
             scenes.append(scene); continue
@@ -169,6 +173,27 @@ def separate_visuals(raw):
                 visual["result_labels"] = []
             if kind != "bar_chart":
                 visual["values"] = []
+            if (scene.get("code") or isinstance(scene.get("diagram"), dict)) and split_slots:
+                # Preserve both teaching components. The original card keeps
+                # its code/diagram; the new focused card owns the animation.
+                # Reusing the sourced narration is safer than inventing text.
+                visual_scene = deepcopy(scene)
+                visual_scene["code"] = ""
+                visual_scene["diagram"] = None
+                takeaway = str(visual.get("takeaway") or "Trace the highlighted concept")
+                visual_scene["bullets"] = [takeaway[:100]]
+                scene["visual"] = None
+                split_slots -= 1
+            elif scene.get("code") or isinstance(scene.get("diagram"), dict):
+                # Preserve the full spoken/code teaching when a provider has
+                # already consumed the scene limit. A later retry can add more
+                # animation, but this pass never drops instructional content.
+                scene["visual"] = None
+                visual_scene = None
+            else:
+                visual_scene = None
+        else:
+            visual_scene = None
         diagram = scene.get("diagram")
         points = scene.get("bullets", [])
         if isinstance(diagram, dict) and (scene.get("code") or isinstance(points, list) and len(points) > 1):
@@ -193,6 +218,8 @@ def separate_visuals(raw):
                     "code": "", "diagram": diagram, "source_ids": scene.get("source_ids", [])})
         else:
             scenes.append(scene)
+        if visual_scene is not None:
+            scenes.append(visual_scene)
     result["scenes"] = scenes
     return result
 

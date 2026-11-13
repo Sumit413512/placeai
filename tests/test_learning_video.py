@@ -409,6 +409,22 @@ def test_irrelevant_storyboard_arrays_are_removed_without_changing_input():
     assert checked.scenes[0].visual.kind == 'array'
 
 
+def test_animation_is_split_from_code_without_losing_either_component():
+    raw = script()
+    raw['scenes'][0]['visual'] = {
+        'kind':'array', 'labels':['10','20','30'], 'focus_index':1,
+        'action':'direct', 'takeaway':'Index one selects the middle value.'}
+    transformed = worker.separate_visuals(raw)
+    checked = LessonScript.model_validate(transformed)
+    assert len(checked.scenes) == 5
+    assert checked.scenes[0].code == 'SELECT name FROM students;'
+    assert checked.scenes[0].visual is None
+    assert checked.scenes[1].code == ''
+    assert checked.scenes[1].visual.kind == 'array'
+    assert checked.scenes[1].narration == raw['scenes'][0]['narration']
+    assert raw['scenes'][0]['visual']['kind'] == 'array'
+
+
 def test_short_solution_is_expanded_without_regenerating_other_lesson_fields(monkeypatch):
     raw = script(); raw['solution'] = 'SELECT name FROM students;'
     replacement = script()['solution']
