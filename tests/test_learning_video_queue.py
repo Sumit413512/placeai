@@ -155,6 +155,15 @@ def test_rejected_lesson_keeps_correction_feedback_and_removes_only_its_generate
     assert video.db.query(VideoLesson).filter_by(state='ready').count() == 3
 
 
+def test_schema_validation_feedback_is_actionable_for_next_author_attempt():
+    with pytest.raises(worker.ValidationError) as caught:
+        worker.LessonScript.model_validate({'objective':'Arrays','scenes':[{'title':'Broken scene'}]})
+    feedback = worker.repair_feedback(caught.value)
+    assert feedback and feedback != []
+    assert any('scenes.0' in item for item in feedback)
+    assert all(len(item) <= 400 for item in feedback)
+
+
 def test_checked_mp4_review_preempts_new_authoring_and_keeps_media_private(video):
     course_id, lesson_id, path = ready_lesson(video)
     checked = video.db.get(VideoLesson, lesson_id)
