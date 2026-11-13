@@ -171,8 +171,10 @@ def claim(db):
     """
     now = utcnow()
     if db.bind.dialect.name == "postgresql":
-        if not db.execute(text("SELECT pg_try_advisory_xact_lock(742081322)")).scalar():
-            db.rollback(); return None
+        # Serialise only brief queue-admission transactions. The previous
+        # nonblocking lock discarded concurrent claims and underutilised
+        # available worker slots during bursts (observed in PostgreSQL CI).
+        db.execute(text("SELECT pg_advisory_xact_lock(742081322)"))
     for model in (VideoCourse, VideoLesson):
         db.query(model).filter(model.state == "running", model.lease_until <= now,
                                model.attempts >= MAX_ATTEMPTS).update({"state": "failed", "lease_token": None,
