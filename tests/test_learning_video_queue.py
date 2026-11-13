@@ -222,13 +222,18 @@ def test_author_quota_earliest_due_job_probes_even_with_other_long_waits(video):
 
 def test_llm_429_uses_provider_retry_hint_without_forcing_one_hour():
     from types import SimpleNamespace
-    from app.learning_ai import LearningCapacityError, provider_retry_seconds
+    from app.learning_ai import (LearningCapacityError, provider_retry_seconds,
+                                 next_daily_quota_reset_seconds)
     assert provider_retry_seconds(SimpleNamespace(
         details=[{'retryDelay':'27s'}], message='RESOURCE_EXHAUSTED')) == 30
     assert provider_retry_seconds(SimpleNamespace(
         response=SimpleNamespace(headers={'retry-after':'45'}), message='rate limited')) == 48
-    assert provider_retry_seconds(SimpleNamespace(
-        message='Requests per day quota exhausted')) == 86400
+    assert 60 <= provider_retry_seconds(SimpleNamespace(
+        message='Requests per day quota exhausted')) <= 86400
+    from datetime import datetime, timezone
+    # Nov 12 in Los Angeles reaches midnight at Nov 13, 08:00 UTC.
+    assert next_daily_quota_reset_seconds(
+        datetime(2026,11,13,7,59,0,tzinfo=timezone.utc)) == 150
     assert provider_retry_seconds(SimpleNamespace(message='Resource exhausted')) == 3600
     assert LearningCapacityError(29).retry_seconds == 29
     assert LearningCapacityError(999999).retry_seconds == 86400
