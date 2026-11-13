@@ -96,6 +96,16 @@ def safe_error_status(error):
     return status if isinstance(status, int) and 100 <= status <= 599 else None
 
 
+def capacity_retry_seconds(error):
+    """Map retryable provider transport/capacity failures to a short wait."""
+    status = safe_error_status(error)
+    if status == 429:
+        return provider_retry_seconds(error)
+    if status in (502, 503, 504) or isinstance(error, (httpx.TimeoutException, TimeoutError)):
+        return 180
+    return None
+
+
 def provider_schema(schema):
     """A compact transport contract; full constraints remain in prompt/validators."""
     if isinstance(schema, list):
@@ -274,10 +284,10 @@ def generate_json(task: str, schema: dict, *, max_output_tokens: int = 8000) -> 
             if isinstance(result, dict):
                 return result, f"openai:{get_settings().openai_model}"
         except Exception as error:
-            status = safe_error_status(error)
-            if status in (429, 503):
+            retry = capacity_retry_seconds(error)
+            if retry is not None:
                 capacity_limited = True
-                retry_delays.append(180 if status == 503 else provider_retry_seconds(error))
+                retry_delays.append(retry)
             LOGGER.warning("Learning author unavailable provider=openai error_type=%s", type(error).__name__)
     if ai_provider._gemini_key() and ai_provider.genai:
         from google.genai import types
@@ -318,14 +328,15 @@ def generate_json(task: str, schema: dict, *, max_output_tokens: int = 8000) -> 
                     return result, f"gemini:{model}"
             except Exception as error:
                 status = safe_error_status(error)
-                if status in (429, 503):
+                retry = capacity_retry_seconds(error)
+                if retry is not None:
                     capacity_limited = True
-                    retry_delays.append(180 if status == 503 else provider_retry_seconds(error))
+                    retry_delays.append(retry)
                 LOGGER.warning("Learning author unavailable provider=gemini model_slot=%d error_type=%s status=%s",
                                index + 1, type(error).__name__, status)
                 # Backup is ONLY for model-specific throttling/outages, not
                 # safety refusals, invalid content or bad credentials.
-                if status not in (429, 503):
+                if retry is None:
                     break
     if capacity_limited:
         raise LearningCapacityError(min(retry_delays) if retry_delays else 3600)

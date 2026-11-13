@@ -120,3 +120,26 @@ def test_author_retries_when_earliest_configured_model_can_recover(monkeypatch):
         learning_ai.generate_json('Teach arrays', {'type': 'object'})
     assert calls == ['gemini-primary', 'gemini-backup']
     assert error.value.retry_seconds == 180
+
+
+def test_timeout_and_gateway_timeout_are_short_capacity_waits(monkeypatch):
+    monkeypatch.setenv('LEARNING_GEMINI_MODEL', 'gemini-primary')
+    monkeypatch.setenv('LEARNING_GEMINI_BACKUP_MODEL', 'gemini-backup')
+    monkeypatch.setattr(learning_ai.ai_provider, '_openai_keys', lambda: [])
+    monkeypatch.setattr(learning_ai.ai_provider, '_gemini_key', lambda: 'isolated-test-key')
+    calls = []
+
+    def unavailable(**kwargs):
+        calls.append(kwargs['model'])
+        request = httpx.Request('POST', 'https://provider.invalid/')
+        if kwargs['model'] == 'gemini-primary':
+            raise httpx.ReadTimeout('Provider read timed out', request=request)
+        response = httpx.Response(504, request=request)
+        raise httpx.HTTPStatusError('Gateway timeout', request=request, response=response)
+
+    monkeypatch.setattr(learning_ai.ai_provider, 'genai', SimpleNamespace(
+        Client=lambda **_: SimpleNamespace(models=SimpleNamespace(generate_content=unavailable))))
+    with pytest.raises(learning_ai.LearningCapacityError) as error:
+        learning_ai.generate_json('Teach arrays', {'type': 'object'})
+    assert calls == ['gemini-primary', 'gemini-backup']
+    assert error.value.retry_seconds == 180
