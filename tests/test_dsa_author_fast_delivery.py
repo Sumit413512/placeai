@@ -47,6 +47,12 @@ def test_author_429_pauses_all_unwritten_lessons_without_consuming_retries(video
         assert not row.video_data
     assert "_research_checkpoint" in json.loads(first.content_json)
     assert video.db.get(VideoCourse, course_id).state == "ready"
+    status = video.api.get(f"/learning-hub/video/{course_id}").json()
+    assert status["author_waiting_parts"] == 2
+    assert status["processing_parts"] == 2
+    assert status["preparation_status"] == "waiting_capacity"
+    assert "rate-limited" in status["preparation_notice"]
+    assert status["next_retry_at"]
     # Do not make another paid provider request when the quota is still paused.
     with video.sessions() as db:
         assert worker.claim(db) is None
