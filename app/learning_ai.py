@@ -42,7 +42,7 @@ def provider_retry_seconds(error):
     delays = []
     try:
         value = headers.get("retry-after")
-        if value is not None and re.fullmatch(r"\\d+(?:\\.\\d+)?", str(value)):
+        if value is not None and re.fullmatch(r"\d+(?:\\.\d+)?", str(value)):
             delays.append(float(value))
     except (AttributeError, ValueError, TypeError):
         pass
@@ -53,13 +53,13 @@ def provider_retry_seconds(error):
             continue
         hint = item.get("retryDelay") or item.get("retry_delay")
         if hint:
-            match = re.fullmatch(r"(\\d+(?:\\.\\d+)?)s?", str(hint))
+            match = re.fullmatch(r"(\d+(?:\\.\d+)?)s?", str(hint))
             if match:
                 delays.append(float(match.group(1)))
         for violation in item.get("violations", []) if isinstance(item.get("violations"), list) else []:
             if isinstance(violation, dict) and "perday" in str(violation.get("quotaId", "")).lower():
                 return 86400
-    hint = re.search(r"(?:retry in|retry after|retrydelay[^0-9]*)(\\d+(?:\\.\\d+)?)\\s*s(?:ec(?:onds)?)?", message)
+    hint = re.search(r"(?:retry in|retry after|retrydelay[^0-9]*)(\d+(?:\\.\d+)?)\s*s(?:ec(?:onds)?)?", message)
     if hint:
         delays.append(float(hint.group(1)))
     if delays:
