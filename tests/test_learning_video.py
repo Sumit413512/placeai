@@ -480,6 +480,38 @@ def test_speech_quota_wait_keeps_completed_scene_work_and_has_a_bound(monkeypatc
     assert delays == [3, 1]
 
 
+def test_neural_openai_fallback_preserves_hinglish_voice_profile(monkeypatch):
+    from contextlib import contextmanager
+    import httpx
+    from app import learning_video_media as media
+    wav = io.BytesIO()
+    with wave.open(wav, 'wb') as audio:
+        audio.setnchannels(1); audio.setsampwidth(2); audio.setframerate(24000)
+        audio.writeframes(b'\0'*48000)
+    captured = []
+    monkeypatch.setenv('LEARNING_TTS_ALLOW_PAID_FALLBACK', 'true')
+    monkeypatch.delenv('LEARNING_TTS_OPENAI_MODEL', raising=False)
+    monkeypatch.delenv('LEARNING_TTS_OPENAI_VOICE', raising=False)
+    monkeypatch.setattr(media.ai_provider, '_gemini_key', lambda: None)
+    monkeypatch.setattr(media.ai_provider, '_openai_keys', lambda: ['isolated-test-key'])
+
+    @contextmanager
+    def streamed(_method, url, **kwargs):
+        captured.append((url, kwargs))
+        request = httpx.Request('POST', url)
+        yield httpx.Response(200, content=wav.getvalue(), request=request)
+
+    monkeypatch.setattr(media.httpx, 'stream', streamed)
+    assert media.speak('Arrays का index zero से शुरू होता है।') == b'\0'*48000
+    url, request = captured[0]
+    assert url == 'https://api.openai.com/v1/audio/speech'
+    assert request['json']['model'] == 'gpt-4o-mini-tts'
+    assert request['json']['voice'] == 'marin'
+    assert request['json']['input'] == 'Arrays का index zero से शुरू होता है।'
+    assert 'natural Hinglish' in request['json']['instructions']
+    assert '135 to 145 words per minute' in request['json']['instructions']
+
+
 def test_shared_course_reuses_media_but_never_another_students_progress(video, monkeypatch):
     identifier, lesson_id, path = ready_lesson(video)
     video.api.put(path+'/progress', json={'position_seconds':12})
