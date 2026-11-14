@@ -20,6 +20,12 @@ services:
         value: gemini-3.8-flash-tts
       - key: LEARNING_TTS_GEMINI_VOICE
         value: Sulafat
+      - key: LEARNING_TTS_ALLOW_PAID_FALLBACK
+        value: "true"
+      - key: LEARNING_TTS_OPENAI_MODEL
+        value: gpt-4o-mini-tts
+      - key: LEARNING_TTS_OPENAI_VOICE
+        value: marin
       - key: APP_NAME
         value: PlaceAI
       - key: ENVIRONMENT
