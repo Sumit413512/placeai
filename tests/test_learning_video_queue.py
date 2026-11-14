@@ -47,6 +47,16 @@ def test_offline_voice_reclaims_old_speech_cooldown_immediately(video, monkeypat
         assert db.get(VideoLesson, lesson_id).error_code is None
 
 
+def test_neural_voice_signature_changes_with_model_and_voice(monkeypatch):
+    monkeypatch.setenv('LEARNING_TTS_PROVIDER', 'gemini')
+    monkeypatch.setenv('LEARNING_TTS_GEMINI_MODEL', 'gemini-3.8-flash-tts')
+    monkeypatch.setenv('LEARNING_TTS_GEMINI_VOICE', 'Sulafat')
+    first = learning_speech.signature()
+    monkeypatch.setenv('LEARNING_TTS_GEMINI_VOICE', 'Kore')
+    assert first != learning_speech.signature()
+    assert 'hinglish-135-145' in first
+
+
 def test_crashed_admitted_lease_ignores_pre_admission_cooldown(video):
     _, lesson_id, _ = ready_lesson(video)
     row = video.db.get(VideoLesson, lesson_id)

@@ -448,15 +448,22 @@ def test_speech_quota_wait_keeps_completed_scene_work_and_has_a_bound(monkeypatc
                  httpx.Response(200,json={'steps':[{'type':'model_output','content':[{'type':'audio',
                     'data':base64.b64encode(wav.getvalue()).decode()}]}]},request=request)]
     delays = []
+    requests = []
     monkeypatch.setattr(media.ai_provider,'_gemini_key',lambda:'isolated-test-key')
     monkeypatch.setattr(media.ai_provider,'_openai_keys',lambda:[])
     @contextmanager
     def streamed(*_args, **_kwargs):
+        requests.append(_kwargs['json'])
         yield responses.pop(0)
     monkeypatch.setattr(media.httpx,'stream',streamed)
     monkeypatch.setattr(media.time,'sleep',delays.append)
     assert media.speak('A short isolated teaching narration.') == b'\0'*48000
     assert delays == [3] and not responses
+    request_json = requests[0]
+    assert request_json['model'] == 'gemini-3.8-flash-tts'
+    assert request_json['generation_config']['speech_config'][0]['voice'] == 'Sulafat'
+    style = request_json['input'][0]['content'][0]['annotations'][0]['style']
+    assert 'natural Hinglish' in style and '135 to 145 words per minute' in style
     daily = httpx.Response(429,json={'error':{'details':[{'violations':[{'quotaId':'RequestsPerDay','quotaValue':'0'}]}]}},request=request)
     assert media.quota_delay(daily) is None
     responses.append(httpx.Response(200,json={'steps':[{'type':'model_output','content':[{'type':'audio',

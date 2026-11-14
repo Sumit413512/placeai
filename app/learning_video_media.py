@@ -131,11 +131,12 @@ def speak(narration):
                 try:
                     with httpx.stream("POST", "https://generativelanguage.googleapis.com/v1beta/interactions",
                         headers={"x-goog-api-key": key}, timeout=60,
-                        json={"model": os.getenv("LEARNING_TTS_GEMINI_MODEL", "gemini-3.8-flash-lite-tts"),
+                        json={"model": os.getenv("LEARNING_TTS_GEMINI_MODEL", "gemini-3.8-flash-tts"),
                               "input": [{"type": "user_input", "content": [{"type": "text", "text": narration,
-                                  "annotations": [{"type": "speech_metadata", "style": "Speak with the warm, clear voice of an Indian college educator. Pronounce Hindi written in Devanagari as fluent native Hindi (hi-IN), NOT as English phonetics. Pronounce English computer-science terminology, code, numerals and API names naturally and precisely in English (en-IN). Preserve exact spoken text and its order. Use expressive but calm prosody at approximately 135 to 145 words per minute, with a short natural pause after each idea, and no robotic cadence. Do not invent spoken captions, translations, footer slogans or metadata."}]}]}],
+                                  "annotations": [{"type": "speech_metadata", "style": "Warm, smooth, confident Indian college tutor speaking natural Hinglish. Pronounce Devanagari as fluent native Hindi and every computer-science term, code token, numeral and API name clearly in English. Preserve the exact transcript and order. Keep 135 to 145 words per minute with natural sentence rhythm, gentle emphasis, smooth transitions and short purposeful pauses. Never sound robotic, rushed, dramatic, sing-song, or like a literal translation. Do not invent captions, translations, slogans or metadata."}]}]}],
                               "response_format": {"type": "audio"}, "store": False,
-                              "generation_config": {"speech_config": [{"voice": "Kore"}]}}) as response:
+                              "generation_config": {"speech_config": [{"voice":
+                                  os.getenv("LEARNING_TTS_GEMINI_VOICE", "Sulafat")}]}}) as response:
                         if response.status_code == 429:
                             delay = quota_delay(response)
                             if delay is None:

@@ -50,16 +50,19 @@ def review_video(data, content):
         "a pointer must not imply numeric addition. A direct O(1) access must not "
         "be animated as a sequential scan. Reject false numerical values, clipped "
         "labels, mismatched visual focus, repeated static text-only slides, or old "
-        "language-instruction footer banners. Listen carefully for unnatural Hindi "
-        "grammar, garbled Devanagari speech, or incorrect pronunciations of technical "
-        "English. Reject material narration mispronunciation or audio that is "
-        "contradictory, incomprehensible, skipped, or out of sequence. "
+        "language-instruction footer banners. Independently evaluate voice quality in EVERY scene. "
+        "Reject robotic or synthetic-sounding delivery, garbled speech, unnatural Hindi grammar, "
+        "incorrect Hindi pronunciation, incorrect English technical-term pronunciation, unnatural "
+        "code switching, unstable speaker identity, rushed or dragging pace, sing-song cadence, "
+        "harsh transitions, repeated words, or missing purposeful pauses. The expected delivery is "
+        "a warm, smooth, confident Indian tutor using natural Hinglish at about 135-145 WPM. "
         "This is a deterministic concept animation, not a human avatar; no lip "
         "sync is expected and within-scene cues have approximate, not word-level "
         "alignment. Do not approve if both audio and video cannot be inspected. "
         "Report EVERY scene, numbered from 1. "
         'Return ONLY JSON: {"approved":boolean,"issues":[string],"scene_checks":'
-        '[{"scene":integer,"audio_matches_script":boolean,"visual_matches_audio":boolean}]}. '
+        '[{"scene":integer,"audio_matches_script":boolean,"visual_matches_audio":boolean,'
+        '"voice_quality_ok":boolean}]}. '
         "SCRIPT: " + json.dumps(script)
     )
     # Fixed-shape per-scene verdicts rarely need thousands of output tokens.
@@ -109,12 +112,15 @@ def review_video(data, content):
             or any(not isinstance(item, dict) for item in checks)
             or [item.get("scene") for item in checks] != list(range(1, len(checks) + 1))
             or any(not isinstance(item.get(key), bool) for item in checks
-                   for key in ("audio_matches_script", "visual_matches_audio"))):
+                   for key in ("audio_matches_script", "visual_matches_audio", "voice_quality_ok"))):
         raise RuntimeError("VIDEO_REVIEW_INCOMPLETE")
     if (result["approved"] is not True or result["issues"]
-            or any(not item["audio_matches_script"] or not item["visual_matches_audio"] for item in checks)):
+            or any(not item["audio_matches_script"] or not item["visual_matches_audio"]
+                   or not item["voice_quality_ok"] for item in checks)):
         issues = result["issues"] or ["Correct audiovisual alignment in scene " + str(item["scene"])
-            for item in checks if not item["audio_matches_script"] or not item["visual_matches_audio"]]
+            for item in checks if not item["audio_matches_script"] or not item["visual_matches_audio"]
+            or not item["voice_quality_ok"]]
         raise LessonReviewRejected(issues or ["Correct the educational audiovisual presentation before publication."])
-    return {"passed": True, "version": 1, "model": model, "scenes_checked": len(checks),
-            "scope": "Automated audiovisual review; not a guarantee of word-level timing or correctness"}
+    return {"passed": True, "version": 2, "model": model, "scenes_checked": len(checks),
+            "voice_quality": "natural_hinglish_required",
+            "scope": "Automated audiovisual and voice-quality review; not a guarantee of word-level timing or correctness"}
