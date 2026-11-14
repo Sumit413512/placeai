@@ -27,6 +27,14 @@ FPS = 8
 BRAND_LOGO_PATH = Path(__file__).parent / "static" / "placeai-logo.png"
 BRAND_SAFE_BOX = (28, 14, 188, 72)
 CONTENT_TOP = 84
+NEURAL_TUTOR_STYLE = (
+    "Warm, smooth, confident Indian college tutor speaking natural Hinglish. "
+    "Pronounce Devanagari as fluent native Hindi and every computer-science term, code token, "
+    "numeral and API name clearly in English. Preserve the exact transcript and order. "
+    "Keep 135 to 145 words per minute with natural sentence rhythm, gentle emphasis, smooth "
+    "transitions and short purposeful pauses. Never sound robotic, rushed, dramatic, sing-song, "
+    "or like a literal translation. Do not invent captions, translations, slogans or metadata."
+)
 
 
 @lru_cache(maxsize=1)
@@ -133,7 +141,7 @@ def speak(narration):
                         headers={"x-goog-api-key": key}, timeout=60,
                         json={"model": os.getenv("LEARNING_TTS_GEMINI_MODEL", "gemini-3.8-flash-tts"),
                               "input": [{"type": "user_input", "content": [{"type": "text", "text": narration,
-                                  "annotations": [{"type": "speech_metadata", "style": "Warm, smooth, confident Indian college tutor speaking natural Hinglish. Pronounce Devanagari as fluent native Hindi and every computer-science term, code token, numeral and API name clearly in English. Preserve the exact transcript and order. Keep 135 to 145 words per minute with natural sentence rhythm, gentle emphasis, smooth transitions and short purposeful pauses. Never sound robotic, rushed, dramatic, sing-song, or like a literal translation. Do not invent captions, translations, slogans or metadata."}]}]}],
+                                  "annotations": [{"type": "speech_metadata", "style": NEURAL_TUTOR_STYLE}]}]}],
                               "response_format": {"type": "audio"}, "store": False,
                               "generation_config": {"speech_config": [{"voice":
                                   os.getenv("LEARNING_TTS_GEMINI_VOICE", "Sulafat")}]}}) as response:
@@ -172,8 +180,10 @@ def speak(narration):
         try:
             with httpx.stream("POST", "https://api.openai.com/v1/audio/speech", timeout=100,
                 headers={"Authorization": f"Bearer {key}"},
-                json={"model": os.getenv("LEARNING_TTS_OPENAI_MODEL", "tts-1"), "voice": "alloy",
-                      "input": narration, "response_format": "wav"}) as response:
+                json={"model": os.getenv("LEARNING_TTS_OPENAI_MODEL", "gpt-4o-mini-tts"),
+                      "voice": os.getenv("LEARNING_TTS_OPENAI_VOICE", "marin"),
+                      "input": narration, "instructions": NEURAL_TUTOR_STYLE,
+                      "response_format": "wav"}) as response:
                 return _normalize_pcm(_pcm(_response_bytes(response, MAX_AUDIO_BYTES)))
         except Exception as error:
             LOGGER.warning("Video narration unavailable provider=openai error_type=%s status=%s",
