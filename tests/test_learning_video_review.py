@@ -13,7 +13,8 @@ def test_audiovisual_review_requires_every_scene_and_transmits_only_teaching_med
     content['timings'] = [{'start': i, 'end': i+1} for i in range(4)]
     content['student_email'] = 'must-not-be-sent@example.invalid'
     result = {'approved': True, 'issues': [], 'scene_checks': [
-        {'scene': i+1, 'audio_matches_script': True, 'visual_matches_audio': True} for i in range(4)]}
+        {'scene': i+1, 'audio_matches_script': True, 'visual_matches_audio': True,
+         'voice_quality_ok': True} for i in range(4)]}
     monkeypatch.setattr(review.ai_provider, '_gemini_key', lambda: 'isolated-test-key')
     sent = []
     def post(url, **kwargs):
@@ -24,11 +25,12 @@ def test_audiovisual_review_requires_every_scene_and_transmits_only_teaching_med
     assert review.review_video(b'generated-test-mp4', content)['scenes_checked'] == 4
     assert 'must-not-be-sent' not in json.dumps(sent)
     assert sent[0]['contents'][0]['parts'][0]['inlineData']['mimeType'] == 'video/mp4'
-    for change in ('missing', 'duplicate', 'mismatch', 'rejected', 'issues'):
+    for change in ('missing', 'duplicate', 'mismatch', 'voice', 'rejected', 'issues'):
         good = deepcopy(result)
         if change == 'missing': result['scene_checks'].pop()
         if change == 'duplicate': result['scene_checks'][1]['scene'] = 1
         if change == 'mismatch': result['scene_checks'][0]['audio_matches_script'] = False
+        if change == 'voice': result['scene_checks'][0]['voice_quality_ok'] = False
         if change == 'rejected': result['approved'] = False
         if change == 'issues': result['issues'] = ['Narration does not match the diagram at 00:02']
         with pytest.raises(RuntimeError if change in {'missing', 'duplicate'} else ValueError):
