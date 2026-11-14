@@ -512,6 +512,37 @@ def test_neural_openai_fallback_preserves_hinglish_voice_profile(monkeypatch):
     assert '135 to 145 words per minute' in request['json']['instructions']
 
 
+def test_gemini_daily_capacity_tries_high_throughput_neural_model(monkeypatch):
+    from contextlib import contextmanager
+    import httpx
+    from app import learning_video_media as media
+    wav = io.BytesIO()
+    with wave.open(wav, 'wb') as audio:
+        audio.setnchannels(1); audio.setsampwidth(2); audio.setframerate(24000)
+        audio.writeframes(b'\0'*48000)
+    request = httpx.Request('POST', 'https://generativelanguage.googleapis.com/v1beta/interactions')
+    responses = [
+        httpx.Response(429, json={'error':{'details':[{'violations':[{
+            'quotaId':'GenerateRequestsPerDayPerProjectPerModel','quotaValue':'0'}]}]}}, request=request),
+        httpx.Response(200, json={'steps':[{'type':'model_output','content':[{'type':'audio',
+            'data':base64.b64encode(wav.getvalue()).decode()}]}]}, request=request),
+    ]
+    models = []
+    monkeypatch.delenv('LEARNING_TTS_GEMINI_MODEL', raising=False)
+    monkeypatch.delenv('LEARNING_TTS_GEMINI_FALLBACK_MODEL', raising=False)
+    monkeypatch.setattr(media.ai_provider, '_gemini_key', lambda: 'isolated-test-key')
+    monkeypatch.setattr(media.ai_provider, '_openai_keys', lambda: [])
+
+    @contextmanager
+    def streamed(*_args, **kwargs):
+        models.append(kwargs['json']['model'])
+        yield responses.pop(0)
+
+    monkeypatch.setattr(media.httpx, 'stream', streamed)
+    assert media.speak('Arrays में direct indexed access मिलता है।') == b'\0'*48000
+    assert models == ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts']
+
+
 def test_shared_course_reuses_media_but_never_another_students_progress(video, monkeypatch):
     identifier, lesson_id, path = ready_lesson(video)
     video.api.put(path+'/progress', json={'position_seconds':12})

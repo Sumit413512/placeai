@@ -133,48 +133,53 @@ def speak(narration):
     key = ai_provider._gemini_key()
     capacity = None
     if key:
-        try:
-            import json
-            for attempt in range(3):
-                try:
-                    with httpx.stream("POST", "https://generativelanguage.googleapis.com/v1beta/interactions",
-                        headers={"x-goog-api-key": key}, timeout=60,
-                        json={"model": os.getenv("LEARNING_TTS_GEMINI_MODEL", "gemini-3.8-flash-tts"),
-                              "input": [{"type": "user_input", "content": [{"type": "text", "text": narration,
-                                  "annotations": [{"type": "speech_metadata", "style": NEURAL_TUTOR_STYLE}]}]}],
-                              "response_format": {"type": "audio"}, "store": False,
-                              "generation_config": {"speech_config": [{"voice":
-                                  os.getenv("LEARNING_TTS_GEMINI_VOICE", "Sulafat")}]}}) as response:
-                        if response.status_code == 429:
-                            delay = quota_delay(response)
-                            if delay is None:
-                                # The provider may return a plain message rather than RetryInfo.
-                                # Fail promptly and keep already generated scene audio in the DB.
-                                raise NarrationCapacityError(response.extensions.get('video_retry_seconds', 86400))
-                            if attempt < 2:
-                                LOGGER.info("Video narration waiting for provider quota retry_seconds=%s", delay)
-                                time.sleep(delay)
+        models = []
+        for model in (os.getenv("LEARNING_TTS_GEMINI_MODEL", "gemini-3.8-flash-tts"),
+                      os.getenv("LEARNING_TTS_GEMINI_FALLBACK_MODEL", "gemini-3.8-flash-lite-tts")):
+            if model and model not in models:
+                models.append(model)
+        for model in models:
+            try:
+                import json
+                for attempt in range(3):
+                    try:
+                        with httpx.stream("POST", "https://generativelanguage.googleapis.com/v1beta/interactions",
+                            headers={"x-goog-api-key": key}, timeout=60,
+                            json={"model": model,
+                                  "input": [{"type": "user_input", "content": [{"type": "text", "text": narration,
+                                      "annotations": [{"type": "speech_metadata", "style": NEURAL_TUTOR_STYLE}]}]}],
+                                  "response_format": {"type": "audio"}, "store": False,
+                                  "generation_config": {"speech_config": [{"voice":
+                                      os.getenv("LEARNING_TTS_GEMINI_VOICE", "Sulafat")}]}}) as response:
+                            if response.status_code == 429:
+                                delay = quota_delay(response)
+                                if delay is None:
+                                    raise NarrationCapacityError(response.extensions.get('video_retry_seconds', 86400))
+                                if attempt < 2:
+                                    LOGGER.info("Video narration waiting for provider quota retry_seconds=%s", delay)
+                                    time.sleep(delay)
+                                    continue
+                            if response.status_code in {500, 502, 503, 504} and attempt < 2:
+                                time.sleep(2 ** attempt)
                                 continue
-                        if response.status_code in {500, 502, 503, 504} and attempt < 2:
-                            time.sleep(2 ** attempt)
-                            continue
-                        payload = json.loads(_response_bytes(response, MAX_AUDIO_BYTES * 2))
-                        break
-                except httpx.TransportError:
-                    if attempt == 2:
-                        raise
-                    time.sleep(2 ** attempt)
-            for step in reversed(payload.get("steps", [])):
-                if step.get("type") == "model_output":
-                    for item in reversed(step.get("content", [])):
-                        if item.get("type") == "audio" and item.get("data"):
-                            return _normalize_pcm(_pcm(base64.b64decode(item["data"], validate=True)))
-            raise ValueError("Narration provider returned no audio")
-        except Exception as error:
-            if isinstance(error, NarrationCapacityError):
-                capacity = error
-            LOGGER.warning("Video narration unavailable provider=gemini error_type=%s status=%s",
-                           type(error).__name__, getattr(getattr(error, "response", None), "status_code", None))
+                            payload = json.loads(_response_bytes(response, MAX_AUDIO_BYTES * 2))
+                            break
+                    except httpx.TransportError:
+                        if attempt == 2:
+                            raise
+                        time.sleep(2 ** attempt)
+                for step in reversed(payload.get("steps", [])):
+                    if step.get("type") == "model_output":
+                        for item in reversed(step.get("content", [])):
+                            if item.get("type") == "audio" and item.get("data"):
+                                return _normalize_pcm(_pcm(base64.b64decode(item["data"], validate=True)))
+                raise ValueError("Narration provider returned no audio")
+            except Exception as error:
+                if isinstance(error, NarrationCapacityError):
+                    capacity = error
+                LOGGER.warning("Video narration unavailable provider=gemini model=%s error_type=%s status=%s",
+                               model, type(error).__name__,
+                               getattr(getattr(error, "response", None), "status_code", None))
     # Free mode never silently opts the operator into paid speech.
     for key in (ai_provider._openai_keys() if os.getenv("LEARNING_TTS_ALLOW_PAID_FALLBACK") == "true" else []):
         try:
