@@ -24,7 +24,11 @@ def enabled():
 
 
 def signature():
-    return "espeak-ng-0.2.4:en-hi:150:v2" if enabled() else "board-voice-v1"
+    if enabled():
+        return "espeak-ng-0.2.4:en-hi:150:v2"
+    model = os.getenv("LEARNING_TTS_GEMINI_MODEL", "gemini-3.8-flash-tts")
+    voice = os.getenv("LEARNING_TTS_GEMINI_VOICE", "Sulafat")
+    return f"gemini:{model}:{voice}:hinglish-135-145:v2"
 
 
 def linux_peak_mib():
