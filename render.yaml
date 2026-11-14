@@ -15,7 +15,11 @@ services:
     autoDeploy: true
     envVars:
       - key: LEARNING_TTS_PROVIDER
-        value: espeak
+        value: gemini
+      - key: LEARNING_TTS_GEMINI_MODEL
+        value: gemini-3.8-flash-tts
+      - key: LEARNING_TTS_GEMINI_VOICE
+        value: Sulafat
       - key: APP_NAME
         value: PlaceAI
       - key: ENVIRONMENT
