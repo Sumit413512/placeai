@@ -54,6 +54,15 @@ def _place_brand_logo(image):
     image.paste(logo, (x, y), logo)
 
 
+def _has_bottom_presentation_chrome(image):
+    """Detect forbidden progress/fraction accents in the reserved lower edge."""
+    pixels = image.convert("RGB").crop((0, 496, 960, 540)).getdata()
+    orange = sum(r > 145 and 55 < g < 190 and b < 105 for r, g, b in pixels)
+    jade = sum(g > 70 and g > r * 1.35 and g > b * 1.12 for r, g, b in pixels)
+    burgundy = sum(r > 70 and r > g * 1.28 and b > g * .75 for r, g, b in pixels)
+    return max(orange, jade, burgundy) > 12
+
+
 def _normalize_pcm(pcm):
     """Match the reference's even, broadcast-style loudness without clipping."""
     samples = array("h")
@@ -286,10 +295,8 @@ def slide(scene, number, total):
             y += 8
     if y > 488:
         raise ValueError("Slide content exceeds its safe area; shorten the scene")
-    draw.line((44, 505, 916, 505), fill="#25334b", width=1)
-    # The former "English technical terms / Hindi explanation" footer was a
-    # language instruction, not teaching content. Keep only the lesson index.
-    draw.text((840, 515), f"{number} / {total}", font=_font(14), fill="#f59e0b")
+    # Keep the lower edge visually quiet. Playback already communicates course
+    # progress, while an in-video rule and scene fraction compete with teaching.
     return image
 
 
@@ -328,11 +335,11 @@ def board_frame(scene, number, total, phase, base=None):
     bottom = min(488, rows[step])
     if step < len(rows)-1:
         draw.rectangle((42, bottom, 920, 488), fill="#070d1c")
-    # A subtle pointer and progress line follow the measured scene duration.
+    # The pointer follows the explanation without duplicating the player's
+    # timeline inside the video frame.
     pointer_y = min(481, bottom-8)
     draw.ellipse((20, pointer_y-4, 28, pointer_y+4), fill="#f59e0b")
     draw.line((28, pointer_y, 39, pointer_y), fill="#f59e0b", width=2)
-    draw.line((44, 499, 44 + int(872 * phase), 499), fill="#f59e0b", width=3)
     return image
 
 
@@ -448,7 +455,7 @@ def inspect_video(data, content, duration):
         end = timing["end"]
     if abs(end - duration) > 1 / FPS:
         raise ValueError("Scene boundaries do not cover the video")
-    tracks, audible, branded = {}, False, False
+    tracks, audible, branded, footer_clean = {}, False, False, True
     for kind in ("video", "audio"):
         with av.open(io.BytesIO(data)) as container:
             streams = [stream for stream in container.streams if stream.type == kind]
@@ -466,10 +473,13 @@ def inspect_video(data, content, duration):
                 if kind == "video":
                     if frame.width != 960 or frame.height != 540 or abs(stamp-count/FPS) > .002:
                         raise ValueError("Video frames do not match the presentation clock")
+                    if count % FPS == 0:
+                        presentation = frame.to_image()
+                        footer_clean = footer_clean and not _has_bottom_presentation_chrome(presentation)
                     if count == 0:
                         # Requiring both the supplied logo's white plate and blue
                         # mark rejects a missing, obscured or monochrome watermark.
-                        crop = frame.to_image().crop(BRAND_SAFE_BOX).convert("RGB")
+                        crop = presentation.crop(BRAND_SAFE_BOX).convert("RGB")
                         pixels = list(crop.getdata())
                         white = sum(r > 185 and g > 185 and b > 185 for r, g, b in pixels)
                         blue = sum(b > 105 and b > r * 1.18 and b > g * 1.08 for r, g, b in pixels)
@@ -492,11 +502,14 @@ def inspect_video(data, content, duration):
         raise ValueError("Silent lessons cannot be published")
     if not branded:
         raise ValueError("PlaceAI logo is missing, recoloured or obscured")
+    if not footer_clean:
+        raise ValueError("Bottom progress lines and scene-fraction counters are not permitted")
     if abs(tracks["video"]["end_seconds"] - tracks["audio"]["end_seconds"]) > .05:
         raise ValueError("Audio and video timelines have drifted")
-    return {"passed": True, "version": 2, "sha256": hashlib.sha256(data).hexdigest(),
+    return {"passed": True, "version": 3, "sha256": hashlib.sha256(data).hexdigest(),
             "tracks": tracks, "scene_boundaries": len(timings),
             "brand_logo": {"present": True, "position": "top-left", "safe_box": BRAND_SAFE_BOX},
+            "presentation_chrome": {"bottom_progress": False, "scene_fraction": False},
             "timing_scope": "Measured scene boundaries; within-scene timing is estimated"}
 
 

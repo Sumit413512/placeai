@@ -68,13 +68,6 @@ def _center(draw, x, y, text, fill=INK, size=24, max_width=200, mono=False):
               font=_fitted(text, max_width, size=size, mono=mono), fill=fill)
 
 
-def _progress(draw, phase, number, total):
-    draw.line((55, 507, 902, 507), fill="#d9e6dd", width=4)
-    draw.line((55, 507, 55 + int(847 * _ease(phase)), 507), fill=JADE, width=4)
-    draw.text((844, 520), f"{number:02} / {total:02}",
-              font=_font(13), fill=BURGUNDY)
-
-
 def _header(draw, scene, number):
     title = scene["title"]
     if len(title) > 65:
@@ -302,5 +295,4 @@ def animated_frame(scene, number, total, phase):
     # concept checkpoint visible while the spoken worked example resolves.
     if kind != "code_trace":
         _takeaway(draw, visual["takeaway"])
-    _progress(draw, phase, number, total)
     return image
