@@ -592,6 +592,30 @@ def test_board_frames_change_during_explanation():
     assert ImageChops.difference(board_frame(scene,1,4,.1),board_frame(scene,1,4,.9)).getbbox()
 
 
+def test_video_frames_do_not_render_footer_progress_or_scene_fractions():
+    """Player controls own progress; every lesson template keeps its lower edge clean."""
+    from PIL import ImageChops
+    from app.learning_video_media import board_frame
+    from app.learning_video_animation import animated_frame
+    scene = script()['scenes'][0]
+    bottom = (0, 496, 960, 540)
+    first = slide(scene, 1, 10)
+    later = slide(scene, 7, 10)
+    assert ImageChops.difference(first.crop(bottom), later.crop(bottom)).getbbox() is None
+    early = board_frame(scene, 1, 10, .1, first)
+    late = board_frame(scene, 1, 10, .9, first)
+    assert ImageChops.difference(early.crop(bottom), late.crop(bottom)).getbbox() is None
+    animated = script()['scenes'][0]
+    animated['visual'] = {
+        'kind':'array', 'labels':['10','20','30'], 'other_labels':[],
+        'result_labels':[], 'values':[], 'focus_index':1,
+        'action':'direct', 'takeaway':'Index one selects the middle value.'}
+    animation_early = animated_frame(animated, 1, 7, .1)
+    animation_late = animated_frame(animated, 5, 7, .9)
+    assert ImageChops.difference(
+        animation_early.crop(bottom), animation_late.crop(bottom)).getbbox() is None
+
+
 def test_legacy_personalised_course_never_enters_shared_cache(video):
     legacy = VideoCourse(user_id=video.owner.id, request_id='legacy-private-00001', title='Personal SQL',
         input_json=json.dumps({'topic':'SQL','goal':'Private learner goal'}), state='ready', plan_json=json.dumps(course_plan()))
