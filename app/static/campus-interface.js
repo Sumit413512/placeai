@@ -32,7 +32,14 @@
         button.type = 'button';
         button.textContent = name;
         button.dataset.group = name;
-        button.onclick = () => showGroup(name);
+        button.onclick = () => {
+          showGroup(name);
+          const links = [...nav.querySelectorAll('button[data-view]')];
+          const first = links.find(link => link.dataset.featureGroup === name);
+          if (first && !links.some(link => link.dataset.featureGroup === name && link.classList.contains('active'))) {
+            first.click();
+          }
+        };
         return button;
       }));
     }
