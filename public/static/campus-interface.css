@@ -1,0 +1,41 @@
+/* Shared editorial palette for PlaceAI's public pages, forms and workspace views. */
+html:root{--pa-canvas:#faf8f3!important;--pa-surface:#fff!important;--pa-sidebar:#fff!important;--pa-accent:#792b42!important;--pa-accent-hover:#602034!important;--pa-ink:#292923!important;--pa-muted:#58594f!important;--pa-border:#d9d9cf!important;--pa-selected:#f5e7e9!important}
+body #marketing-site .site-header{display:flex!important;align-items:center;justify-content:space-between;gap:18px;background:white!important;border-bottom:1px solid var(--pa-border)}
+.audiences,.feature-links,#feature-groups{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+#marketing-site .audiences button,#feature-groups button{font:600 .94rem/1.3 'DM Sans',sans-serif;padding:11px 14px;border:0;background:transparent;border-radius:5px;color:#393931;cursor:pointer}
+#marketing-site .audiences button:hover,#feature-groups button:hover{background:#f3eee8}
+#marketing-site .feature-links{justify-content:center;padding:10px 5%;gap:8px 22px;background:#f2f0e9;border-bottom:1px solid var(--pa-border)}
+#marketing-site .feature-links a{font-size:.86rem;font-weight:600;color:#53544a}
+#marketing-site .mobile-menu{display:none!important}
+body #marketing-site .hero{background:#faf8f3!important}
+body #marketing-site .hero-copy h1,body #marketing-site .section-heading h2,body #marketing-site .journey-heading h2,body #app-shell .page-head h1,body #auth-overlay h2{font-family:Georgia,serif!important;letter-spacing:-.045em!important;font-weight:500!important;color:#292923!important}
+body #marketing-site .hero-copy h1 span{color:#792b42!important;-webkit-text-fill-color:#792b42!important}
+body #marketing-site .hero-photo-card{border-radius:6px 52px 6px 6px!important;overflow:hidden}
+body #marketing-site .journey-card:nth-child(1){background:#f5e8ea!important}
+body #marketing-site .journey-card:nth-child(2){background:#e9eee3!important}
+body #marketing-site .journey-card:nth-child(3){background:#f4eddc!important}
+body #marketing-site .button.button-primary,body #app-shell .button.button-primary,body #auth-overlay .button.button-primary{background:linear-gradient(110deg,#89374c,#662539)!important;color:white!important;border-color:#71283c!important}
+body #marketing-site .dark-section,body #marketing-site .cta-section,body #auth-overlay .auth-brand-panel{background:#e9eee3!important;color:#293c2b!important}
+body #marketing-site .dark-section :is(p,h2,h3,li,span,strong),body #marketing-site .cta-section :is(h2,span),body #auth-overlay .auth-brand-panel :is(h2,p,span){color:#344536!important}
+#auth-overlay[data-direct-role] .access-login-roles{display:none!important}
+body #auth-overlay .auth-form-panel{background:#fffefa!important}
+body #app-shell:not(.hidden){display:block!important;background:#faf8f3!important}
+body #app-shell .app-sidebar{position:relative!important;inset:auto!important;transform:none!important;width:100%!important;height:auto!important;max-height:none!important;min-height:0!important;display:grid!important;grid-template-columns:auto 1fr auto;align-items:center;gap:0 20px;padding:12px clamp(14px,3vw,48px)!important;overflow:visible!important;background:#fff!important;border:0!important;border-bottom:1px solid var(--pa-border)!important;z-index:5}
+body #app-shell .sidebar-brand,body #app-shell .workspace-pill,body #app-shell .sidebar-bottom{grid-row:1;margin:0!important;padding:0!important;border:0!important;min-width:0}
+body #app-shell .sidebar-bottom{grid-column:3;display:flex!important;align-items:center;gap:10px;background:transparent!important}
+body #app-shell .workspace-pill{grid-column:2;justify-self:start;background:transparent!important}
+body #app-shell .sidebar-user{display:flex!important;align-items:center;gap:8px;padding:4px 8px!important;background:white!important}
+body #app-shell .ai-policy,body #app-shell .sidebar-trigger,body #app-shell .sidebar-close,body #app-shell .sidebar-backdrop{display:none!important}
+body #app-shell #feature-groups{grid-column:1/-1;grid-row:2;gap:3px;margin-top:12px}
+#app-shell #feature-groups button[aria-pressed=true]{background:#792b42;color:white}
+body #app-shell #app-nav{grid-column:1/-1;grid-row:3;display:flex!important;align-items:center;flex-flow:row wrap!important;gap:3px;padding:8px 0 0!important;margin:7px 0 0!important;border-top:1px solid var(--pa-border);height:auto!important;overflow:visible!important}
+body #app-shell #app-nav button[data-view]:not([data-group-hidden]){display:inline-flex!important;align-items:center;width:auto!important;min-height:38px!important;padding:7px 12px!important;border:0!important;border-radius:5px!important;color:#3b3e34!important;background:transparent!important}
+body #app-shell #app-nav button.active[data-view]:not([data-group-hidden]){background:#f4e5e8!important;color:#6b243a!important}
+body #app-shell #app-nav :is([data-group-hidden],.placeai-nav-more,.nav-group-label){display:none!important}
+body #app-shell .app-content-wrap{margin:0!important;width:100%!important;min-width:0}
+body #app-shell .app-content{max-width:1500px;margin-inline:auto}
+body #app-shell .app-topbar{background:#fffefa!important;border-color:var(--pa-border)!important}
+body #app-shell :is(.metric-card,.panel,.form-panel,.data-panel){border-color:var(--pa-border)!important;border-radius:8px!important}
+body :focus-visible{outline:3px solid #9a6020;outline-offset:3px}
+@media(max-width:900px){body #marketing-site .site-header{flex-wrap:wrap;gap:4px 10px;padding:10px 4%!important}#marketing-site .audiences{order:3;width:100%;gap:0}#marketing-site .audiences button{padding:10px 8px;font-size:.85rem}body #app-shell .sidebar-bottom{flex-wrap:wrap}body #app-shell .sidebar-user-details{display:none}}
+@media(max-width:600px){#marketing-site .feature-links{justify-content:flex-start;padding:7px 4%;gap:5px 15px}body #app-shell .app-sidebar{grid-template-columns:1fr auto;gap:6px;padding:10px!important}body #app-shell .workspace-pill{grid-row:2;grid-column:1/-1}body #app-shell .sidebar-bottom{grid-column:2}body #app-shell #feature-groups{grid-row:3}body #app-shell #app-nav{grid-row:4}#feature-groups button{font-size:.87rem;padding:9px 10px}body #app-shell .sidebar-brand .brand-mark{width:100px!important}body #app-shell .sidebar-user{flex-wrap:wrap}.audiences{row-gap:0}}

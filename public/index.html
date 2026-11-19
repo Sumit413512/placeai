@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="PlaceAI is an AI-assisted campus placement operating system for institutions, recruiters, and students.">
-  <meta name="theme-color" content="#2459c4">
+  <meta name="theme-color" content="#faf8f3">
   <title>PlaceAI — Campus placement operations</title>
   <link rel="icon" type="image/png" sizes="96x96" href="/static/placeai-favicon-96.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -36,14 +36,7 @@
         <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
         <span>PlaceAI</span>
       </a>
-      <nav class="marketing-nav" aria-label="Primary navigation">
-        <a href="#platform">Platform</a>
-        <a href="#institutions">Institutions</a>
-        <a href="#recruiters">Recruiters</a>
-        <a href="#preparation-lab">Preparation Lab</a>
-        <a href="#security">Security</a>
-        <a href="/static/help.html">Help &amp; Support</a>
-      </nav>
+      <nav class="audiences" aria-label="Workspace sign in"><button type="button" data-open-auth="login" data-login-role="student">Students</button><button type="button" data-open-auth="login" data-login-role="recruiter">Recruiters</button><button type="button" data-open-auth="login" data-login-role="institution_admin">Institution Admin</button><button type="button" data-open-auth="login" data-login-role="platform_admin">Platform Admin</button></nav>
       <div class="header-actions">
         <button class="button button-ghost" data-open-auth="login">Sign in</button>
         <button class="button button-primary" data-open-access="request">Request access</button>
@@ -51,6 +44,15 @@
       <a class="mobile-support-link" href="/static/help.html" aria-label="Open Help and Support"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.7 9a2.4 2.4 0 0 1 4.6 1c0 1.8-2.3 2.1-2.3 3.7"/><path d="M12 17h.01"/></svg></a>
       <button class="mobile-menu" data-action="toggle-mobile-menu" aria-label="Open navigation">Menu</button>
     </header>
+
+          <nav class="feature-links" aria-label="Platform features">
+        <a href="#platform">Platform</a>
+        <a href="#institutions">Institutions</a>
+        <a href="#recruiters">Recruiters</a>
+        <a href="#preparation-lab">Preparation Lab</a>
+        <a href="#security">Security</a>
+        <a href="/static/help.html">Help &amp; Support</a>
+      </nav>
 
     <main id="top" tabindex="-1">
       <section class="hero section-shell">
@@ -191,6 +193,7 @@
     <aside class="app-sidebar">
       <div class="sidebar-brand"><a class="brand brand-light" href="#"><span class="brand-mark"><span></span><span></span><span></span></span><span>PlaceAI</span></a><button class="sidebar-close" data-action="toggle-sidebar" aria-label="Close sidebar">×</button></div>
       <div class="workspace-pill"><span class="workspace-avatar" id="workspace-avatar" hidden aria-hidden="true">P</span><div><small id="workspace-kind">Workspace</small><strong id="workspace-name">PlaceAI</strong></div></div>
+      <nav id="feature-groups" aria-label="Feature sections"></nav>
       <nav id="app-nav" class="app-nav" aria-label="Workspace"></nav>
       <div class="sidebar-bottom"><div class="ai-policy"><span>AI</span><p><strong>Human-reviewed intelligence</strong><small>AI features support—not replace—placement decisions.</small></p></div><div class="sidebar-user"><span class="user-avatar" id="sidebar-avatar" aria-hidden="true">U</span><span class="sidebar-user-details"><strong id="sidebar-user-name">Account</strong><small id="sidebar-user-role">Role</small></span><button class="sidebar-signout" type="button" data-action="logout">Sign out</button></div></div>
     </aside>
@@ -240,5 +243,7 @@
   <script src="/static/study-tracker.js?v=20261024-zensar1" defer></script>
   <script src="/static/notes-reader.js?v=20261024-zensar1" defer></script>
   <script src="/static/learning-hub.js?v=20261024-zensar1" defer></script>
+<link rel="stylesheet" href="/static/campus-interface.css">
+<script defer src="/static/campus-interface.js"></script>
 </body>
 </html>
