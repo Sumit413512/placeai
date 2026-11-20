@@ -35,7 +35,6 @@
 
   const roleOrder = ['student', 'recruiter', 'institution_admin', 'platform_admin'];
   let loginRole = 'student';
-  let roleEntryMode = 'login';
   let directEntry = false;
   let createRole = 'student';
   let googleLibrary;
@@ -418,21 +417,24 @@
       event.stopImmediatePropagation();
       loginRole = createRole = role;
       directEntry = true;
-      showView(roleEntryMode, entry);
+      showView('login', entry);
       return;
     }
     const loginOpen = event.target.closest('[data-open-auth="login"]');
     if (loginOpen) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      chooseRole('login', loginOpen);
+      directEntry = false;
+      showView('login', loginOpen);
       return;
     }
     const requestOpen = event.target.closest('[data-open-access="request"]');
     if (requestOpen) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      chooseRole('create', requestOpen);
+      directEntry = false;
+      createRole = 'student';
+      showView('create', requestOpen);
       return;
     }
     const switcher = event.target.closest('[data-access-switch]');
@@ -486,18 +488,13 @@
 
   const observer = new MutationObserver(() => relabelPlatformNavigation());
 
-  function chooseRole(mode, opener) {
-    const strip = $('#workspace-entry');
-    if (!strip) { showView(mode, opener); return; }
-    roleEntryMode = mode;
-    strip.querySelector('strong').textContent = mode === 'create' ? 'Choose a role to register' : 'Choose a role to sign in';
-    strip.scrollIntoView({block:'center'});
-    strip.querySelector('button').focus({preventScroll:true});
-  }
-
   function init() {
     const header = $('#marketing-site .site-header');
     if (header && !$('#workspace-entry')) {
+      const signIn = header.querySelector('[data-open-auth="login"]');
+      if (signIn) {
+        signIn.insertAdjacentHTML('afterbegin', '<svg aria-hidden="true" focusable="false" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5M3 12h11m-4-4 4 4-4 4"/></svg>');
+      }
       const strip = document.createElement('nav');
       strip.id = 'workspace-entry';
       strip.setAttribute('aria-label', 'Choose your PlaceAI workspace');

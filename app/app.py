@@ -451,14 +451,14 @@ def root():
     html = _template_html("index.html", INDEX_HTML)
     assets = (
         '<link rel="stylesheet" href="/static/api-errors.css">\n'
-        '<link rel="stylesheet" href="/static/access-portal.css">\n'
+        '<link rel="stylesheet" href="/static/access-portal.css?v=20261120-role-entry1">\n'
         '<link rel="stylesheet" href="/static/ui-fixes.css">\n'
         '<link rel="stylesheet" href="/static/account-security.css">\n'
         '<link rel="stylesheet" href="/static/workspace-experience.css">\n'
         '<script src="/static/workspace-runtime.js" defer></script>\n'
         '<script src="/static/api-errors.js" defer></script>\n'
         '<script src="/static/auth-protection.js" defer></script>\n'
-        '<script src="/static/access-portal.js?v=20261019-google-link3" defer></script>\n'
+        '<script src="/static/access-portal.js?v=20261120-role-entry1" defer></script>\n'
         '<script src="/static/ui-state-fixes.js?v=20261024-journeys1" defer></script>\n'
         '<script src="/static/account-security.js" defer></script>\n'
         '<script src="/static/provisioning-password-fix.js" defer></script>\n'
