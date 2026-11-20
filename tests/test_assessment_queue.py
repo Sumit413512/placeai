@@ -139,6 +139,9 @@ def test_expired_worker_cannot_save_or_acknowledge(queued):
     job.lease_until = utcnow() - timedelta(seconds=1)
     queued.db.commit()
     assert not queue.heartbeat(queued.db, old[0], old[3])
+    for complete in (True, False):
+        queue.finish(queued.db, old[0], old[3], complete)
+        assert queued.db.get(AssessmentJob, old[0]).state == "running"
     new = queue.claim(queued.db, 1, 10)
     assert new[3] != old[3]
     queued.db.info["assessment_lease"] = (old[0], old[3])
