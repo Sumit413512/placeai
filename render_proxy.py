@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 UPSTREAM_BASE = os.getenv("UPSTREAM_BASE", "https://placeai-rxpp.vercel.app").rstrip("/")
-ASSET_VERSION = os.getenv("ASSET_VERSION", "20261120-role-entry1")
+ASSET_VERSION = os.getenv("ASSET_VERSION", "20261001-role-focus-2")
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "app" / "static"
 TEMPLATE_DIR = ROOT / "app" / "templates"
@@ -38,13 +38,13 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 ASSET_INJECTION = (
     f'<link rel="stylesheet" href="/static/api-errors.css?v={ASSET_VERSION}">\n'
-    f'<link rel="stylesheet" href="/static/access-portal.css?v={ASSET_VERSION}">\n'
+    f'<link rel="stylesheet" href="/static/access-portal.css?v=20261120-role-entry1">\n'
     f'<link rel="stylesheet" href="/static/ui-fixes.css?v={ASSET_VERSION}">\n'
     f'<link rel="stylesheet" href="/static/account-security.css?v={ASSET_VERSION}">\n'
     f'<link rel="stylesheet" href="/static/workspace-experience.css?v={ASSET_VERSION}">\n'
     f'<script src="/static/workspace-runtime.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/api-errors.js?v={ASSET_VERSION}" defer></script>\n'
-    f'<script src="/static/access-portal.js?v={ASSET_VERSION}" defer></script>\n'
+    f'<script src="/static/access-portal.js?v=20261120-role-entry1" defer></script>\n'
     f'<script src="/static/ui-state-fixes.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/account-security.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/provisioning-password-fix.js?v={ASSET_VERSION}" defer></script>\n'
