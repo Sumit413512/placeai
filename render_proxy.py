@@ -44,7 +44,7 @@ ASSET_INJECTION = (
     f'<link rel="stylesheet" href="/static/workspace-experience.css?v={ASSET_VERSION}">\n'
     f'<script src="/static/workspace-runtime.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/api-errors.js?v={ASSET_VERSION}" defer></script>\n'
-    f'<script src="/static/access-portal.js?v=20261120-role-entry1" defer></script>\n'
+    f'<script src="/static/access-portal.js?v=20261121-role-entry2" defer></script>\n'
     f'<script src="/static/ui-state-fixes.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/account-security.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/provisioning-password-fix.js?v={ASSET_VERSION}" defer></script>\n'

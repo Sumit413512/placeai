@@ -264,24 +264,20 @@
   }
 
   function focusVisibleForm(formId) {
-    requestAnimationFrame(() => {
-      const form = document.getElementById(formId);
-      if (form) normalizeAndFocusFirstInput(form);
-    });
+    const form = document.getElementById(formId);
+    if (form) normalizeAndFocusFirstInput(form);
   }
 
   function focusAccessForm(formId) {
     const panel = $('.auth-form-panel');
     if (panel) panel.scrollTop = 0;
-    requestAnimationFrame(() => {
-      const form = document.getElementById(formId);
-      if (!form || !panel) return;
-      const formRect = form.getBoundingClientRect();
-      const panelRect = panel.getBoundingClientRect();
-      const formTop = formRect.top - panelRect.top + panel.scrollTop;
-      panel.scrollTop = Math.max(0, formTop - 12);
-      normalizeAndFocusFirstInput(form);
-    });
+    const form = document.getElementById(formId);
+    if (!form || !panel) return;
+    const formRect = form.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const formTop = formRect.top - panelRect.top + panel.scrollTop;
+    panel.scrollTop = Math.max(0, formTop - 12);
+    normalizeAndFocusFirstInput(form);
   }
 
   function showView(name, opener = null) {
@@ -307,9 +303,9 @@
     const modalState = window.PlaceAIModalState;
     if (modalState?.sync) modalState.sync();
     else document.body.classList.add('modal-open');
-    modalState?.focusAuth?.();
     if (name === 'login') focusVisibleForm('role-login-form');
     else if (name === 'create') focusVisibleForm(createRole === 'student' ? 'role-student-signup-form' : 'role-access-request-form');
+    else modalState?.focusAuth?.();
   }
 
   const apiErrors = window.PlaceAIApiErrors;
