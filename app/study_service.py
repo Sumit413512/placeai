@@ -5,9 +5,8 @@ import math
 from datetime import timedelta, timezone
 from zoneinfo import ZoneInfo
 from fastapi import HTTPException
-from sqlalchemy import and_, or_
 from app.models import (User, StudentProfile, LearningNotebook, MockInterview,
-                        VideoCourse, VideoEnrollment, utcnow)
+                        VideoCourse, utcnow)
 from app.roadmap_models import CareerRoadmap
 from app.study_models import StudyPlan, StudyGoal, NotebookProgress, StudyDaily
 
@@ -150,12 +149,10 @@ def plan_data(db, plan, user, mocks):
 def resource_catalog(db, user):
     from app.routers.learning_hub import serialize
     books = db.query(LearningNotebook).filter_by(user_id=user.id,deleted_at=None).order_by(LearningNotebook.created_at.desc()).limit(50).all()
-    courses = db.query(VideoCourse).filter(or_(
-        and_(VideoCourse.user_id == user.id, VideoCourse.shared_key.is_(None)),
-        and_(VideoCourse.shared_key.is_not(None), db.query(VideoEnrollment).filter(
-            VideoEnrollment.user_id == user.id, VideoEnrollment.course_id == VideoCourse.id).exists()))).order_by(VideoCourse.created_at.desc()).limit(30).all()
+    from app.routers.learning_video import DEMO_COURSE_ID, accessible_courses, course_data
+    courses = accessible_courses(db, user).order_by(
+        (VideoCourse.id == DEMO_COURSE_ID).desc(), VideoCourse.created_at.desc()).limit(30).all()
     roads = db.query(CareerRoadmap).join(StudentProfile).filter(StudentProfile.user_id == user.id).order_by(CareerRoadmap.created_at.desc()).limit(10).all()
-    from app.routers.learning_video import course_data
     ready_courses=[c for c in courses if course_data(db,c,user)['course_ready']]
     return {'notes':[{'id':b.id,'title':b.title,'sections':len(sections(b))} for b in books if serialize(b)['ready_to_begin']],
             'videos':[{'id':c.id,'title':c.title} for c in ready_courses],

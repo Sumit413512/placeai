@@ -757,3 +757,22 @@ def test_video_brand_asset_is_exact_and_logo_safe_area_is_reserved():
     pixels = list(frame.crop(BRAND_SAFE_BOX).getdata())
     assert sum(r > 185 and g > 185 and b > 185 for r, g, b in pixels) > 900
     assert sum(b > 105 and b > r * 1.18 and b > g * 1.08 for r, g, b in pixels) > 90
+
+
+def test_demo_course_is_available_without_enrollment_and_progress_stays_private(video, monkeypatch):
+    identifier, lesson_id, path = ready_lesson(video)
+    monkeypatch.setattr(learning_video, 'DEMO_COURSE_ID', identifier)
+    assert video.api.post(path+'/practice', json={'answers': [0, 0, 0]}).json()['practice_completed']
+
+    video.actor[0] = video.other
+    assert video.db.get(VideoEnrollment, (video.other.id, identifier)) is None
+    item = video.api.get('/learning-hub/video').json()['items'][0]
+    assert item['id'] == identifier and item['is_demo'] and item['course_ready']
+    assert item['lessons'][0]['practice_completed'] is False
+    assert video.api.get(path+'/media').content == b'private-video-test'
+    assert video.api.get(path+'/captions').text.startswith('WEBVTT')
+    assert video.api.delete(f'/learning-hub/video/{identifier}').status_code == 409
+
+    video.db.get(VideoCourse, identifier).editorial_status = 'awaiting_review'
+    video.db.commit()
+    assert video.api.get(f'/learning-hub/video/{identifier}').status_code == 404

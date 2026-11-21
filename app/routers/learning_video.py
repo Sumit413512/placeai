@@ -29,11 +29,26 @@ router = APIRouter(prefix="/learning-hub/video", tags=["Video Learning"])
 PRIVATE = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
 
 
-def owner_course(db, course_id, user):
-    course = db.query(VideoCourse).filter(VideoCourse.id == course_id, or_(
+DEMO_COURSE_ID = "4b5ca09b-837d-417e-942e-649b112cd74f"
+
+
+def demo_course_filter():
+    return and_(VideoCourse.id == DEMO_COURSE_ID, VideoCourse.shared_key.is_not(None),
+                VideoCourse.state == "ready", VideoCourse.editorial_status == "approved")
+
+
+def accessible_courses(db, user):
+    enrolled = db.query(VideoEnrollment).filter(
+        VideoEnrollment.course_id == VideoCourse.id, VideoEnrollment.user_id == user.id).exists()
+    return db.query(VideoCourse).filter(or_(
         and_(VideoCourse.shared_key.is_(None), VideoCourse.user_id == user.id),
-        and_(VideoCourse.shared_key.is_not(None), db.query(VideoEnrollment).filter(
-            VideoEnrollment.course_id == VideoCourse.id, VideoEnrollment.user_id == user.id).exists()))).first()
+        and_(VideoCourse.shared_key.is_not(None), enrolled),
+        demo_course_filter(),
+    ))
+
+
+def owner_course(db, course_id, user):
+    course = accessible_courses(db, user).filter(VideoCourse.id == course_id).first()
     if not course:
         raise HTTPException(404, "Video course not found")
     return course
@@ -121,6 +136,7 @@ def course_data(db, course, user):
         and result["ready_parts"] == len(result["lessons"])
         and all(item["editorial_status"] == "approved" for item in result["lessons"])
         and (not result["requires_full_preparation"] or result["checked_parts"] == len(result["lessons"])))
+    result["is_demo"] = course.id == DEMO_COURSE_ID and result["course_ready"] and bool(course.shared_key)
     result["course_completed"] = bool(result["lessons"]) and result["completed_parts"] == len(result["lessons"])
     result["completion_percent"] = round(100 * result["completed_parts"] / len(result["lessons"])) if result["lessons"] else 0
     from app import learning_speech
@@ -204,10 +220,8 @@ def topic_key(topic):
 
 @router.get("")
 def library(user: User = Depends(require_student), db: Session = Depends(get_db)):
-    rows = db.query(VideoCourse).filter(or_(
-        and_(VideoCourse.shared_key.is_(None), VideoCourse.user_id == user.id),
-        db.query(VideoEnrollment).filter(VideoEnrollment.course_id == VideoCourse.id,
-            VideoEnrollment.user_id == user.id).exists())).order_by(VideoCourse.created_at.desc()).limit(100).all()
+    rows = accessible_courses(db, user).order_by(
+        (VideoCourse.id == DEMO_COURSE_ID).desc(), VideoCourse.created_at.desc()).limit(100).all()
     return {"items": [course_data(db, row, user) for row in rows], "generation_available": generation_available(db)}
 
 
@@ -265,6 +279,8 @@ def remove_course(course_id: str, user: User = Depends(require_student),
     """Remove only the learner's enrollment; retained media is always reusable."""
     db.query(User).filter_by(id=user.id).with_for_update().one()
     course = owner_course(db, course_id, user)
+    if course.id == DEMO_COURSE_ID:
+        raise HTTPException(409, "The demo course is available to all students")
     lesson_ids = [identifier for identifier, in db.query(VideoLesson.id).filter_by(course_id=course.id)]
     if lesson_ids:
         db.query(VideoViewerProgress).filter(
@@ -316,6 +332,8 @@ def prepare(course_id: str, position: int, request: Request, tasks: BackgroundTa
             user: User = Depends(require_student), db: Session = Depends(get_db)):
     db.query(User).filter_by(id=user.id).with_for_update().one()
     course = owner_course(db, course_id, user)
+    if course.id == DEMO_COURSE_ID:
+        return course_data(db, course, user)
     db.query(VideoCourse).filter_by(id=course.id).with_for_update().one()
     lessons = json.loads(course.plan_json).get("lessons", [])
     if course.state != "ready" or not 0 <= position < len(lessons):
