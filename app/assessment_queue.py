@@ -182,8 +182,8 @@ def assert_lease(db):
 
 
 def finish(db, interview_id, token, complete, error_code=None):
-    job = db.query(AssessmentJob).filter_by(interview_id=interview_id).with_for_update().one()
-    if job.state != "running" or job.lease_token != token:
+    job = db.query(AssessmentJob).filter_by(interview_id=interview_id).with_for_update().populate_existing().one()
+    if job.state != "running" or job.lease_token != token or job.lease_until <= utcnow():
         db.rollback()
         return
     job.state = "complete" if complete else "failed" if job.attempts >= MAX_ATTEMPTS else "retrying"

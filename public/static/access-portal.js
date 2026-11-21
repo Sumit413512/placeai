@@ -35,6 +35,7 @@
 
   const roleOrder = ['student', 'recruiter', 'institution_admin', 'platform_admin'];
   let loginRole = 'student';
+  let directEntry = false;
   let createRole = 'student';
   let googleLibrary;
   let googleConfiguration;
@@ -205,7 +206,7 @@
     const view = $('#login-view');
     if (!view) return;
     const role = roles[loginRole];
-    view.innerHTML = `${modeTabs('login')}<span class="section-kicker">Secure workspace access</span><h2 id="auth-title">Choose your role and sign in</h2><p class="form-intro">Welcome back. Continue with Google or sign in with your email and password. Google opens your assigned workspace automatically.</p>${roleCards(loginRole, 'login')}<div class="access-selection-summary"><span class="access-role-dot" aria-hidden="true"></span><div><b data-access-summary-label>${role.label}</b><span data-access-summary-short>${role.short}</span></div></div><div id="role-login-error" class="access-form-error" role="alert"></div><div class="access-login-methods"></div><div class="access-method-divider">or continue with email</div><form id="role-login-form" class="form-stack"><input type="hidden" name="role" value="${loginRole}"><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@organization.com"></label><label>Password<div class="password-wrap"><input type="password" name="password" autocomplete="current-password" required maxlength="128" placeholder="Enter your password"><button type="button" data-access-toggle-password>Show</button></div></label><div class="form-row-between"><span></span><button type="button" class="text-button" data-action="forgot-password">Forgot password?</button></div><button class="button button-primary button-full" type="submit">Continue to ${role.label}</button></form><div class="access-security-note"><strong>Workspace access:</strong> Recruiter, Institution Admin and Platform Admin accounts cannot be created publicly. They must be provisioned or approved by an authorized administrator.</div>`;
+    view.innerHTML = `${modeTabs('login')}<span class="section-kicker">Secure workspace access</span><h2 id="auth-title">${directEntry ? role.label + ' sign in' : 'Choose your role and sign in'}</h2><p class="form-intro">Welcome back. Continue with Google or sign in with your email and password. Google opens your assigned workspace automatically.</p>${directEntry ? '' : roleCards(loginRole, 'login')}<div class="access-selection-summary"><span class="access-role-dot" aria-hidden="true"></span><div><b data-access-summary-label>${role.label}</b><span data-access-summary-short>${role.short}</span></div></div><div id="role-login-error" class="access-form-error" role="alert"></div><div class="access-login-methods"></div><div class="access-method-divider">or continue with email</div><form id="role-login-form" class="form-stack"><input type="hidden" name="role" value="${loginRole}"><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@organization.com"></label><label>Password<div class="password-wrap"><input type="password" name="password" autocomplete="current-password" required maxlength="128" placeholder="Enter your password"><button type="button" data-access-toggle-password>Show</button></div></label><div class="form-row-between"><span></span><button type="button" class="text-button" data-action="forgot-password">Forgot password?</button></div><button class="button button-primary button-full" type="submit">Continue to ${role.label}</button></form><div class="access-security-note"><strong>Workspace access:</strong> Recruiter, Institution Admin and Platform Admin accounts cannot be created publicly. They must be provisioned or approved by an authorized administrator.</div>`;
     if (!$('#auth-overlay')?.classList.contains('hidden')) renderGoogleSignIn(view);
   }
 
@@ -249,8 +250,8 @@
     const form = createRole === 'student' ? studentSignupForm() : controlledAccessForm(createRole);
     const title = student ? 'Create your student account' : 'Request your workspace';
     const intro = student ? 'Sign up with your Google account. No PlaceAI password is needed.' : 'College, recruiter and platform access is reviewed before activation.';
-    const methods = student ? '<div class="access-login-methods"></div><div class="access-method-divider">or sign up with email</div>' : roleCards(createRole, 'create');
-    const requestLink = student ? '<p class="form-intro">Need a college or recruiter workspace? <button type="button" class="text-button" data-request-workspace>Request access</button></p>' : '';
+    const methods = student ? '<div class="access-login-methods"></div><div class="access-method-divider">or sign up with email</div>' : (directEntry ? '' : roleCards(createRole, 'create'));
+    const requestLink = student && !directEntry ? '<p class="form-intro">Need a college or recruiter workspace? <button type="button" class="text-button" data-request-workspace>Request access</button></p>' : '';
     view.innerHTML = `${modeTabs('create')}<span class="section-kicker">${student ? 'New to PlaceAI?' : 'Organization access'}</span><h2 id="auth-create-title">${title}</h2><p class="form-intro">${intro}</p>${methods}${form}${requestLink}`;
     if (student && !$('#auth-overlay')?.classList.contains('hidden')) renderGoogleSignIn(view);
   }
@@ -263,24 +264,20 @@
   }
 
   function focusVisibleForm(formId) {
-    requestAnimationFrame(() => {
-      const form = document.getElementById(formId);
-      if (form) normalizeAndFocusFirstInput(form);
-    });
+    const form = document.getElementById(formId);
+    if (form) normalizeAndFocusFirstInput(form);
   }
 
   function focusAccessForm(formId) {
     const panel = $('.auth-form-panel');
     if (panel) panel.scrollTop = 0;
-    requestAnimationFrame(() => {
-      const form = document.getElementById(formId);
-      if (!form || !panel) return;
-      const formRect = form.getBoundingClientRect();
-      const panelRect = panel.getBoundingClientRect();
-      const formTop = formRect.top - panelRect.top + panel.scrollTop;
-      panel.scrollTop = Math.max(0, formTop - 12);
-      normalizeAndFocusFirstInput(form);
-    });
+    const form = document.getElementById(formId);
+    if (!form || !panel) return;
+    const formRect = form.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const formTop = formRect.top - panelRect.top + panel.scrollTop;
+    panel.scrollTop = Math.max(0, formTop - 12);
+    normalizeAndFocusFirstInput(form);
   }
 
   function showView(name, opener = null) {
@@ -306,9 +303,9 @@
     const modalState = window.PlaceAIModalState;
     if (modalState?.sync) modalState.sync();
     else document.body.classList.add('modal-open');
-    modalState?.focusAuth?.();
     if (name === 'login') focusVisibleForm('role-login-form');
     else if (name === 'create') focusVisibleForm(createRole === 'student' ? 'role-student-signup-form' : 'role-access-request-form');
+    else modalState?.focusAuth?.();
   }
 
   const apiErrors = window.PlaceAIApiErrors;
@@ -408,10 +405,22 @@
   }
 
   document.addEventListener('click', event => {
+    const entry = event.target.closest('[data-workspace-role]');
+    if (entry) {
+      const role = entry.dataset.workspaceRole;
+      if (!Object.hasOwn(roles, role)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      loginRole = createRole = role;
+      directEntry = true;
+      showView('login', entry);
+      return;
+    }
     const loginOpen = event.target.closest('[data-open-auth="login"]');
     if (loginOpen) {
       event.preventDefault();
       event.stopImmediatePropagation();
+      directEntry = false;
       showView('login', loginOpen);
       return;
     }
@@ -419,6 +428,7 @@
     if (requestOpen) {
       event.preventDefault();
       event.stopImmediatePropagation();
+      directEntry = false;
       createRole = 'student';
       showView('create', requestOpen);
       return;
@@ -427,7 +437,8 @@
     if (switcher) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (switcher.dataset.accessSwitch === 'create') createRole = 'student';
+      if (switcher.dataset.accessSwitch === 'create') createRole = directEntry ? loginRole : 'student';
+      else if (directEntry) loginRole = createRole;
       showView(switcher.dataset.accessSwitch === 'create' ? 'create' : 'login', switcher);
       return;
     }
@@ -474,6 +485,20 @@
   const observer = new MutationObserver(() => relabelPlatformNavigation());
 
   function init() {
+    const header = $('#marketing-site .site-header');
+    if (header && !$('#workspace-entry')) {
+      const signIn = header.querySelector('[data-open-auth="login"]');
+      if (signIn) {
+        signIn.insertAdjacentHTML('afterbegin', '<svg aria-hidden="true" focusable="false" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5M3 12h11m-4-4 4 4-4 4"/></svg>');
+      }
+      const strip = document.createElement('nav');
+      strip.id = 'workspace-entry';
+      strip.setAttribute('aria-label', 'Choose your PlaceAI workspace');
+      strip.innerHTML = '<strong>Your workspace</strong>' + roleOrder.map(key =>
+        '<button type="button" aria-haspopup="dialog" data-workspace-role="' + key + '">' + roles[key].label + '</button>'
+      ).join('');
+      header.after(strip);
+    }
     renderLogin();
     renderCreate();
     relabelPlatformNavigation();

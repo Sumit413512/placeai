@@ -85,3 +85,15 @@ Public production pages:
 - `/acceptable-use`
 
 These pages are baseline product policies. Institution-specific contracts, data-processing agreements and employment/privacy obligations should be reviewed by qualified counsel before large commercial deployments.
+
+### Encrypted application-data exports
+
+Run `bash scripts/backup-public-db.sh` from a trusted backup host with PostgreSQL client tools matching the source major version, Python 3, age and rclone. Set libpq connection parameters for a read-only account with access to all PlaceAI public-schema tables and sequences. Use a direct or session-mode connection with TLS certificate verification. Keep credentials in the host secret store. Set `BACKUP_RECIPIENT` to the organization's recovery public key and `BACKUP_REMOTE` to the approved private rclone directory. Keep the private key independently with the recovery owner. The exporter publishes a unique encrypted archive and checks the uploaded bytes by reading them back.
+
+Schedule the exporter daily on that host and alert on a failed run or a latest verified export older than 26 hours. Configure retention and object versioning on the destination. A daily schedule can lose up to a day of changes. Shorter recovery objectives require more frequent recovery points. This export covers the public schema only. Protect uploaded files, provider-managed configuration, database roles/grants and runtime secrets separately.
+
+For a drill, download a trusted archive onto an encrypted disposable host. Point `BACKUP_IDENTITY` at the retained private-key file and set the local PostgreSQL port and user for an isolated server. Run `bash scripts/restore-public-drill.sh /path/to/archive.dump.age`. It decrypts and authenticates the archive before creating a randomly named local database. Inspect counts, reconcile tenant records and media against an independent manifest, then exercise the application against the restored database. Record the archive date, elapsed time and validation results. Decommission the drill host after review.
+
+Run `bash scripts/test-recovery-drill.sh` as an unprivileged user to exercise the same export and restore path with two synthetic tenants and a disposable local destination. Its temporary keys and records are discarded.
+
+The repository also provides a daily GitHub Actions job in `.github/workflows/database-recovery.yml`. Configure its `database-backup` environment with the read-only database user, CA certificate, scoped destination credentials and recovery public key named in the workflow. Restrict the environment to the default branch. Enable the repository variable `PLACEAI_BACKUP_ENABLED=true` after verifying key custody and destination retention. The workflow runs the synthetic drill first, supports manual dispatch, and keeps the private decryption key outside GitHub. Monitor successful object creation independently of Actions.
