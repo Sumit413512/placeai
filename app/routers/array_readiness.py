@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from app.array_readiness_models import ArrayReadiness
 from app.database import get_db
 from app.dependencies import require_institution_admin, require_student
-from app.models import Organization, OrganizationType, StudentProfile, User, UserRole
+from app.lesson_readiness import institution, roster
+from app.models import StudentProfile, User
 from app.routers.learning_video import DEMO_COURSE_ID
 from app.study_service import lock_owner
 
@@ -62,19 +63,6 @@ class Answer(BaseModel):
     step: Literal["diagnostic", "practice", "followup"]
     choice: int = Field(ge=0, le=3, strict=True)
     track: str = Field(min_length=1, max_length=100)
-
-
-def institution(db, user):
-    return db.query(Organization).filter_by(
-        id=user.organization_id, is_active=True, organization_type=OrganizationType.institution,
-    ).first()
-
-
-def roster(db, organization_id):
-    return db.query(User, StudentProfile).join(StudentProfile, StudentProfile.user_id == User.id).filter(
-        User.organization_id == organization_id, StudentProfile.organization_id == organization_id,
-        User.role == UserRole.student, User.is_active.is_(True),
-    )
 
 
 def current_attempt(db, user):

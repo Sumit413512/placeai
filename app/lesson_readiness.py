@@ -3,6 +3,8 @@
 import hashlib
 import json
 
+from app.models import Organization, OrganizationType, StudentProfile, User, UserRole
+
 STEPS = ("diagnostic", "practice", "followup")
 
 
@@ -32,3 +34,16 @@ def view(quiz, attempt, question_version):
             }
         results[step] = {"correct": answer == item["answer"], "feedback": item["explanation"]}
     return {"step": None, "track": question_version, "results": results, "question": None}
+
+
+def institution(db, user):
+    return db.query(Organization).filter_by(
+        id=user.organization_id, is_active=True, organization_type=OrganizationType.institution,
+    ).first()
+
+
+def roster(db, organization_id):
+    return db.query(User, StudentProfile).join(StudentProfile, StudentProfile.user_id == User.id).filter(
+        User.organization_id == organization_id, StudentProfile.organization_id == organization_id,
+        User.role == UserRole.student, User.is_active.is_(True),
+    )
