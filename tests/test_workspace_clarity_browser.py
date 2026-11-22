@@ -46,15 +46,18 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
     page.goto(BASE_URL, wait_until='networkidle')
     page.get_by_role('button', name='Essential only', exact=True).click()
     page.locator('#app-shell').wait_for(state='visible')
-    assert page.locator('#sidebar-user-name').inner_text() == 'MIT account'
+    assert page.locator('.workspace-welcome').inner_text() == 'Welcome, MIT account'
+    assert page.locator('.app-sidebar').get_by_text('MIT account', exact=True).count() == 0
+    assert page.locator('#page-title').is_hidden()
     assert page.locator('#workspace-name').is_hidden()
     assert page.locator('#sidebar-user-role').is_hidden()
     assert page.locator('#workspace-avatar').is_hidden()
-    account_name = page.locator('#sidebar-user-name').bounding_box()
     logout = page.get_by_role('button', name='Sign out', exact=True)
     logout_box = logout.bounding_box()
-    assert logout_box['y'] >= account_name['y'] + account_name['height']
-    assert logout_box['height'] >= 40
+    assert page.locator('.sidebar-bottom').get_by_role('button', name='Sign out', exact=True).is_visible()
+    assert logout.evaluate('el => getComputedStyle(el).backgroundColor') == 'rgb(97, 39, 55)'
+    assert logout.evaluate('el => getComputedStyle(el).color') == 'rgb(255, 248, 237)'
+    assert logout_box['height'] >= 44
     assert logout.evaluate('el => parseFloat(getComputedStyle(el).borderTopWidth)') >= 1
     assert page.locator('.workspace-role-chip').count() == 0
     if role != 'institution_admin':

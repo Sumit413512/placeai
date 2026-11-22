@@ -1338,7 +1338,7 @@ body :is(h1, h2, h3, h4, h5),
   color: #2b302a !important;
 }
 #app-shell .app-sidebar .brand,
-#app-shell .app-sidebar :is(#workspace-name, .sidebar-user strong, .sidebar-signout) { color: #292d28 !important; }
+#app-shell .app-sidebar :is(#workspace-name, .sidebar-user strong) { color: #292d28 !important; }
 #app-shell .app-sidebar :is(#workspace-kind, .nav-group-label, .sidebar-user small) { color: #62695f !important; }
 #app-shell .workspace-pill {
   margin: 2px 2px 8px !important; padding: 13px 12px !important;
@@ -1459,4 +1459,33 @@ body :is(h1, h2, h3, h4, h5),
 @media (prefers-reduced-motion: no-preference) {
   #marketing-site :is(.journey-card, .bento-card, .preparation-grid > article),
   .button-primary, #app-shell .button-primary { transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+}
+
+#app-shell .app-topbar .workspace-welcome {
+  max-width: 100%;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px !important;
+  font-weight: 650 !important;
+}
+#app-shell .app-sidebar .sidebar-signout {
+  min-height: 44px;
+  border: 1px solid #3e1621;
+  background: #612737;
+  color: #fff8ed !important;
+  font-weight: 650;
+  box-shadow: 0 2px 4px rgb(62 22 33 / 18%);
+}
+#app-shell .app-sidebar .sidebar-signout:hover {
+  background: #4d1d2a;
+  border-color: #321019;
+}
+#app-shell .app-sidebar .sidebar-signout:focus-visible {
+  outline: 2px solid #612737;
+  outline-offset: 3px;
+}
+@media (max-width: 760px) {
+  #app-shell .app-topbar .workspace-welcome { font-size: 14px !important; }
 }
