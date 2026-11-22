@@ -22,19 +22,21 @@
     return {content, run};
   }
 
-  function mountStudent(host, api, esc) {
+  function mountStudent(host, api, esc, lessonEndpoint = null) {
     let track = '';
     const ui = setup(host, load);
     if (!ui) return;
 
-    async function load() { render(await api(endpoint + '/me')); }
+    async function load() { render(await api(lessonEndpoint || endpoint + '/me')); }
 
     function render(data) {
       track = data.track;
       const results = Object.entries(data.results).map(([step,result]) =>
         `<li><strong>${stepLabels[step]} · ${result.correct ? 'Correct' : 'Needs practice'}</strong><br>${esc(result.feedback)}</li>`).join('');
       const guidance = data.step === 'practice'
-        ? `<p>Review <a href="${esc(data.lesson_url)}" target="_blank" rel="noopener">Indexed Access &amp; Safety (opens in a new tab)</a>, then try the guided question.</p>`
+        ? lessonEndpoint
+          ? '<p>Review the lesson video above, then answer the guided practice question.</p>'
+          : `<p>Review <a href="${esc(data.lesson_url)}" target="_blank" rel="noopener">Indexed Access &amp; Safety (opens in a new tab)</a>, then try the guided question.</p>`
         : data.step === 'followup'
           ? '<p>Try this fresh question independently. Your first answer is saved for comparison.</p>' : '';
       const question = data.question;
@@ -44,11 +46,11 @@
         ${guidance}
         ${question ? `<form class="form-stack" data-array-answer data-step="${data.step}"><fieldset>
           <legend>${stepLabels[data.step]}</legend><p>${esc(question.prompt)}</p>
-          <pre><code>${esc(question.code)}</code></pre>
+          ${question.code ? `<pre><code>${esc(question.code)}</code></pre>` : ''}
           ${question.options.map((option,index) => `<label class="array-option"><input type="radio" name="choice" value="${index}" required> ${esc(option)}</label>`).join('')}
           </fieldset><button class="button button-primary" type="submit">Save answer</button></form>`
           : `<p><strong>Follow-up complete.</strong> ${data.results.followup.correct ? 'You answered the follow-up correctly.' : 'This skill would benefit from more practice.'}</p>
-             <p><a href="${esc(data.lesson_url)}" target="_blank" rel="noopener">Revisit the lesson (opens in a new tab)</a></p>`}`;
+             ${data.lesson_url ? `<p><a href="${esc(data.lesson_url)}" target="_blank" rel="noopener">Revisit the lesson (opens in a new tab)</a></p>` : ''}`}`;
       const heading = ui.content.querySelector('legend, strong');
       if (heading) {
         heading.tabIndex = -1;
@@ -64,7 +66,7 @@
       const choice = new FormData(form).get('choice');
       if (choice === null) return;
       ui.run(form.querySelector('button'), async () => {
-        render(await api(endpoint + '/me/answers', {
+        render(await api(lessonEndpoint || endpoint + '/me/answers', {
           method:'POST', body:JSON.stringify({track, step:form.dataset.step, choice:Number(choice)}),
         }));
       });
@@ -141,5 +143,14 @@
     </section>`;
   }
 
-  window.PlaceAIArrayReadiness = {panel, mountStudent, mountInstitution};
+  function lessonPanel() {
+    return `<section class="array-readiness" data-lesson-readiness>
+      <h3>Lesson readiness</h3>
+      <p>Check what you know, review the lesson, then try a follow-up question.</p>
+      <button class="button button-secondary" type="button" data-array-load>Start or resume readiness check</button>
+      <p role="status" data-array-status></p><div data-array-content></div>
+    </section>`;
+  }
+
+  window.PlaceAIArrayReadiness = {panel, lessonPanel, mountStudent, mountInstitution};
 })();
