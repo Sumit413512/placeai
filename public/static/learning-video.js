@@ -15,8 +15,9 @@
     hub.prepend(navigation);
     const panel = document.createElement('section');
     panel.className = 'learning-video-panel'; panel.hidden = true;
-    panel.innerHTML = `<div data-video-discovery><section class="panel learning-video-create"><div class="learning-video-create-copy"><span class="section-kicker">AI-taught courses</span><h2>One topic. A complete course.</h2><p>Build understanding, one lesson at a time. Follow a structured syllabus with videos, worked examples and quizzes.</p></div><form id="learning-video-form"><label for="video-topic">Video topic</label><div class="learning-video-search"><input id="video-topic" name="video_topic" required minlength="2" maxlength="180" placeholder="What would you like to learn? e.g. SQL"><button class="button button-primary" type="submit">Find or create course</button></div><p class="learning-meta">Enter a subject, not personal information. Saved courses are shared; your learning progress stays private.</p></form></section><section class="panel learning-video-library-panel"><div class="panel-head"><div><h2>Your video courses</h2><p>Pick a course and continue where you left off.</p></div><button type="button" class="button button-secondary" data-video-refresh>Refresh</button></div><div data-video-library>Loading your courses…</div></section></div><p data-video-status role="status"></p><section data-video-workspace hidden><div data-video-course></div><section data-video-overview class="panel"></section><div class="learning-video-study-layout" hidden><aside data-video-outline aria-label="Course outline"></aside><div data-video-player></div></div></section>`;
+    panel.innerHTML = `<div data-video-discovery>${window.PlaceAIArrayReadiness?.panel() || ''}<section class="panel learning-video-create"><div class="learning-video-create-copy"><span class="section-kicker">AI-taught courses</span><h2>One topic. A complete course.</h2><p>Build understanding, one lesson at a time. Follow a structured syllabus with videos, worked examples and quizzes.</p></div><form id="learning-video-form"><label for="video-topic">Video topic</label><div class="learning-video-search"><input id="video-topic" name="video_topic" required minlength="2" maxlength="180" placeholder="What would you like to learn? e.g. SQL"><button class="button button-primary" type="submit">Find or create course</button></div><p class="learning-meta">Enter a subject, not personal information. Saved courses are shared; your learning progress stays private.</p></form></section><section class="panel learning-video-library-panel"><div class="panel-head"><div><h2>Your video courses</h2><p>Pick a course and continue where you left off.</p></div><button type="button" class="button button-secondary" data-video-refresh>Refresh</button></div><div data-video-library>Loading your courses…</div></section></div><p data-video-status role="status"></p><section data-video-workspace hidden><div data-video-course></div><section data-video-overview class="panel"></section><div class="learning-video-study-layout" hidden><aside data-video-outline aria-label="Course outline"></aside><div data-video-player></div></div></section>`;
     hub.append(panel);
+    window.PlaceAIArrayReadiness?.mountStudent(panel.querySelector('[data-array-panel]'), ctx.api, esc);
     let alive = true, current = null, course = null, poll = null, player = null, position = null, studying = false;
     let libraryPoll = null;
     let urls = [], playerEpoch = 0, saving = false, lastSaved = 0, observer;
@@ -24,12 +25,13 @@
     const active = () => alive && hub.isConnected && ctx.state.view === 'learning-hub';
     const learningLocation = () => {
       const url = new URL(location.href);
-      return {course:url.searchParams.get('course') || '', lesson:url.searchParams.get('lesson')};
+      return {course:url.searchParams.get('course') || '', lesson:url.searchParams.get('lesson'), time:url.searchParams.get('t')};
     };
     const writeLearningLocation = (courseId = '', lesson = null, replace = false) => {
       const url = new URL(location.href);
       if (courseId) url.searchParams.set('course', courseId); else url.searchParams.delete('course');
       if (lesson !== null && lesson !== undefined) url.searchParams.set('lesson', String(lesson)); else url.searchParams.delete('lesson');
+      url.searchParams.delete('t');
       history[replace ? 'replaceState' : 'pushState']({...history.state, placeaiView:'learning-hub'}, '', `${url.pathname}${url.search}${url.hash}`);
     };
     const status = message => { if (active()) panel.querySelector('[data-video-status]').textContent = message; };
@@ -160,7 +162,7 @@
       if (!response.ok) throw new Error('The lesson could not be loaded. Refresh and try again.');
       return response.blob();
     }
-    async function openLesson(index, historyMode = 'push') {
+    async function openLesson(index, historyMode = 'push', startAt = null) {
       if (!course?.course_ready) { status('Your full course is still being prepared and checked.'); return; }
       await saveProgress(); stopPlayer();
       const id = current, version = playerEpoch;
@@ -180,7 +182,7 @@
       captionTrack.removeAttribute('default');
       player.src = videoUrl; captionTrack.src = captionUrl; captionTrack.track.mode = 'disabled';
       if (historyMode !== 'none') writeLearningLocation(id, index, historyMode === 'replace');
-      player.addEventListener('loadedmetadata', () => { if (player && isCurrent(id, version)) player.currentTime = data.position_seconds < data.duration_seconds - 2 ? data.position_seconds : 0; }, {once:true});
+      player.addEventListener('loadedmetadata', () => { if (player && isCurrent(id, version)) player.currentTime = startAt !== null && startAt < data.duration_seconds ? startAt : (data.position_seconds < data.duration_seconds - 2 ? data.position_seconds : 0); }, {once:true});
       player.addEventListener('error', () => status('Your browser could not play this video. Try an updated browser; the transcript and practice remain available below.'));
       player.addEventListener('timeupdate', () => { if (Date.now() - lastSaved >= 10000 && !player?.paused) saveProgress(); });
       const mounted = player;
@@ -266,7 +268,7 @@
         showCourse(await ctx.api(`${apiBase}/${encodeURIComponent(current)}`));
       }
       if (target.lesson !== null && /^\d+$/.test(target.lesson)) {
-        studying = true; showCourse(course); await openLesson(Number(target.lesson), 'none');
+        studying = true; showCourse(course); await openLesson(Number(target.lesson), 'none', /^\d+$/.test(target.time || '') ? Number(target.time) : null);
       } else if (studying) {
         await saveProgress(); stopPlayer(); studying = false; showCourse(course);
       }

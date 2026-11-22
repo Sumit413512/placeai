@@ -1,0 +1,15 @@
+#app-shell .array-readiness { margin-block: 0 20px; padding: clamp(16px, 3vw, 28px); min-width: 0; }
+.array-readiness h2 { margin-top: 0; }
+.array-readiness fieldset { min-width: 0; border: 1px solid #d8d0c0; border-radius: 8px; padding: 14px; }
+.array-readiness legend { font-weight: 650; }
+.array-readiness pre { overflow: auto; background: #f6efe4; color: #282820; padding: 12px; border-radius: 6px; }
+#app-shell .array-readiness .array-option { display: flex; gap: 10px; align-items: center; min-height: 44px; padding: 6px; }
+.array-results { padding-inline-start: 24px; }
+.array-results li + li { margin-top: 8px; }
+.array-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(95px, 1fr)); gap: 8px; }
+.array-metrics > div { padding: 10px; border: 1px solid #d8d0c0; border-radius: 6px; background: #fcf6ee; }
+.array-metrics dd { margin: 4px 0 0; font-weight: 700; color: #612737; }
+.array-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-block: 10px; }
+.array-controls label { display: grid; gap: 4px; min-width: 0; }
+.array-readiness [data-array-status]:empty { display: none; }
+.array-readiness [data-array-status] { color: #612737; }
