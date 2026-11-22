@@ -11,7 +11,7 @@ INDEX_HTML = '''<!doctype html>
 <meta name="google-site-verification" content="fS7ndOdPrIk__qy-nSLlj2SRCOGPcQiPyQvGKWSUdG0">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="PlaceAI is an AI-assisted campus placement operating system for institutions, recruiters, and students.">
+  <meta name="description" content="Learn with video lessons, quizzes and notes, prepare with proctored mock assessments, and manage campus placements in one PlaceAI workspace.">
   <meta name="theme-color" content="#2459c4">
   <title>PlaceAI — Campus placement operations</title>
   <link rel="icon" type="image/png" sizes="96x96" href="/static/placeai-favicon-96.png">
@@ -24,7 +24,7 @@ INDEX_HTML = '''<!doctype html>
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="PlaceAI">
 <meta property="og:title" content="PlaceAI — Campus placement operations">
-<meta property="og:description" content="PlaceAI is an AI-assisted campus placement operating system for institutions, recruiters, and students.">
+<meta property="og:description" content="Learn with video lessons, quizzes and notes, prepare with proctored mock assessments, and manage campus placements in one PlaceAI workspace.">
 <meta property="og:url" content="https://www.placeai.in/">
 <meta property="og:image" content="https://www.placeai.in/static/placeai-hero-approved-hd.webp">
 <meta property="og:image:alt" content="PlaceAI campus placement collaboration">
@@ -65,7 +65,7 @@ INDEX_HTML = '''<!doctype html>
           <div class="eyebrow"><span class="eyebrow-dot"></span> Campus placement operations</div>
           <h1>Placement operations,<br><span>connected end to end.</span></h1>
           <p class="hero-journey-line">Learn · Practice · Get Placed</p>
-          <p class="hero-lead">Build skills with Learning Hub, practice with prompt-led mock interviews, and connect your preparation to campus hiring — all in one PlaceAI workspace.</p>
+          <p class="hero-lead">Learn with video lessons, quizzes and downloadable notes. Prepare with proctored mock interviews and assessments, then track your campus applications from eligibility through offers.</p>
           <div class="hero-actions">
             <button class="button button-primary button-large" data-open-auth="login">Sign in to PlaceAI <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
             <button class="button button-secondary button-large" data-open-access="request">Request workspace access</button>
@@ -101,8 +101,8 @@ INDEX_HTML = '''<!doctype html>
       <section class="learning-journey section-shell" aria-labelledby="learning-journey-title">
         <div class="journey-heading"><span class="section-kicker">From learning to opportunity</span><h2 id="learning-journey-title">A clear path forward.</h2></div>
         <ol class="journey-grid">
-          <li class="journey-card"><div class="journey-card-top"><span class="journey-index" aria-hidden="true">01</span><span class="journey-symbol" aria-hidden="true">📖</span></div><h3>Learn</h3><p>Learning Hub: structured AI notes, clear diagrams and downloadable PDFs.</p><a href="#preparation-lab">Explore guided learning <span aria-hidden="true">→</span></a></li>
-          <li class="journey-card"><div class="journey-card-top"><span class="journey-index" aria-hidden="true">02</span><span class="journey-symbol" aria-hidden="true">🎙️</span></div><h3>Practice</h3><p>Prepare with prompt-led mock interviews, timed assessments and feedback that helps you improve your next answer.</p><a href="#preparation-lab">Explore interview practice <span aria-hidden="true">→</span></a></li>
+          <li class="journey-card"><div class="journey-card-top"><span class="journey-index" aria-hidden="true">01</span><span class="journey-symbol" aria-hidden="true">📖</span></div><h3>Learn</h3><p>Watch guided video lessons, test your understanding with quizzes and revise from detailed notes and PDFs.</p><a href="#preparation-lab">Explore guided learning <span aria-hidden="true">→</span></a></li>
+          <li class="journey-card"><div class="journey-card-top"><span class="journey-index" aria-hidden="true">02</span><span class="journey-symbol" aria-hidden="true">🎙️</span></div><h3>Practice</h3><p>Prepare with role-based mock interviews, timed proctored assessments and feedback you can use for your next attempt.</p><a href="#preparation-lab">Explore interview practice <span aria-hidden="true">→</span></a></li>
           <li class="journey-card"><div class="journey-card-top"><span class="journey-index" aria-hidden="true">03</span><span class="journey-symbol" aria-hidden="true">🎯</span></div><h3>Get Placed</h3><p>Connect your readiness to campus opportunities, applications and interviews coordinated by placement teams and recruiters.</p><a href="#institutions">Explore campus hiring <span aria-hidden="true">→</span></a></li>
         </ol>
       </section>
@@ -130,13 +130,17 @@ INDEX_HTML = '''<!doctype html>
       <section id="preparation-lab" class="section-shell preparation-section">
         <div class="section-heading compact preparation-heading">
           <div><span class="section-kicker">Preparation Lab</span><h2>Student preparation, connected to placement.</h2></div>
-          <p>Bring readiness, resume records, interview preparation and application context into the same authenticated student workspace.</p>
+          <p>Build skills, plan your study time and get ready for campus hiring in one student workspace.</p>
         </div>
         <div class="preparation-grid">
-          <article><span>01</span><h3>Profile readiness</h3><p>Keep academic details, skills and placement preferences connected to the signed-in student account.</p></article>
-          <article><span>02</span><h3>Resume intelligence</h3><p>Use structured resume records and AI-assisted analysis without replacing authorized human review.</p></article>
-          <article><span>03</span><h3>Interview practice</h3><p>Prepare with role-grounded mock interview workflows linked to the student's placement context.</p></article>
-          <article><span>04</span><h3>Opportunity context</h3><p>Move from preparation into eligible opportunities, applications and placement activity in one platform.</p></article>
+          <article><span aria-hidden="true">01</span><h3>Video lessons and quizzes</h3><p>Follow structured courses with guided videos, captions, worked examples and lesson quizzes. Use readiness checks to see what to practise next.</p></article>
+          <article><span aria-hidden="true">02</span><h3>Detailed notes and PDFs</h3><p>Study step-by-step explanations and diagrams in Learning Hub. Save notes and download them as PDFs for offline revision.</p></article>
+          <article><span aria-hidden="true">03</span><h3>Proctored mock interviews and assessments</h3><p>Practise role-based interviews and timed assessments. Proctored sessions include device checks and monitoring. Review your results and feedback after submission.</p></article>
+          <article><span aria-hidden="true">04</span><h3>Study tracker</h3><p>Set study goals, track time and progress, and pick up where you left off on lessons, notes or roadmap milestones.</p></article>
+          <article><span aria-hidden="true">05</span><h3>AI Career Roadmap</h3><p>Build a plan around your target role, current skills and weekly study time, with projects and milestones informed by recent job listings.</p></article>
+          <article><span aria-hidden="true">06</span><h3>Resume and document vault</h3><p>Get AI-assisted resume feedback and manage academic and placement documents in a private vault.</p></article>
+          <article><span aria-hidden="true">07</span><h3>Profile and readiness evidence</h3><p>Complete your placement profile and review the evidence behind your readiness, including profile, resume and practice activity.</p></article>
+          <article><span aria-hidden="true">08</span><h3>Campus opportunities</h3><p>Check eligibility, apply to campus openings and track applications, interviews and offers in your student workspace.</p></article>
         </div>
       </section>
 
@@ -149,9 +153,9 @@ INDEX_HTML = '''<!doctype html>
             <ul class="check-list">
               <li>Institution-scoped student records and verification</li>
               <li>Approved recruiter onboarding and campus-job approval</li>
-              <li>Drive eligibility by configured academic criteria</li>
+              <li>Drive eligibility by configured academic criteria, plus lesson and course readiness assignments</li>
               <li>Application, interview, offer and placement outcome tracking</li>
-              <li>Audit, policy, incident and reporting workflows</li>
+              <li>QR attendance, student announcements, policy controls, audit logs and placement reports</li>
             </ul>
             <button class="button button-light button-large" data-open-access="request">Request institution access</button>
           </div>
@@ -169,7 +173,7 @@ INDEX_HTML = '''<!doctype html>
         <div class="role-production">
           <div class="production-surface-card">
             <div><span class="surface-kicker">Controlled recruiter access</span><h3>Applicant data appears only when real candidates enter an authorized pipeline.</h3><p>Recruiter views do not use sample identities or fabricated match scores. AI-assisted analysis is generated only from authorized production inputs and remains human-reviewed.</p></div>
-            <div class="production-surface-grid"><div><strong>Company verification</strong><span>Evidence and institution-linked trust review.</span></div><div><strong>Application pipeline</strong><span>Actual status movement from application through final outcome.</span></div></div>
+            <div class="production-surface-grid"><div><strong>Company verification</strong><span>Evidence and institution-linked trust review.</span></div><div><strong>Application pipeline</strong><span>Review applicants, schedule interviews and manage offers.</span></div></div>
           </div>
         </div>
       </section>
