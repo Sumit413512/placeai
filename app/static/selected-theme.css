@@ -1419,7 +1419,9 @@ body :is(h1, h2, h3, h4, h5),
 #app-shell input[type="range"] { accent-color: #9f3f24 !important; }
 
 /* Marketing surfaces use warm neutrals rather than synthetic colour washes. */
-#marketing-site .hero { background: linear-gradient(180deg,#fffdf8 0%,#f7f5ef 100%) !important; }
+#marketing-site .home-hero-surface {
+  background: linear-gradient(180deg, #fffdf8 0%, #f7f3eb 72%, #fff 100%);
+}
 #marketing-site .hero .eyebrow,
 #marketing-site :is(.prep-role-badge,.legal-note) { background: #f7e5da !important; border-color: #ddbca7 !important; }
 #marketing-site .hero .eyebrow::before { background: #b95832 !important; }

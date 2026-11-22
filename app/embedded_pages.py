@@ -30,7 +30,7 @@ INDEX_HTML = '''<!doctype html>
 <meta property="og:image:alt" content="PlaceAI campus placement collaboration">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/static/privacy-preferences.css"><script src="/static/privacy-preferences.js" defer></script>
-<link rel="stylesheet" href="/static/selected-theme.css?v=20261122-welcome1">
+<link rel="stylesheet" href="/static/selected-theme.css?v=20261123-hero-surface1">
   <link rel="stylesheet" href="/static/learning-hub.css?v=20261023-notes2">
 </head>
 <body>
@@ -60,43 +60,45 @@ INDEX_HTML = '''<!doctype html>
     </header>
 
     <main id="top" tabindex="-1">
-      <section class="hero section-shell">
-        <div class="hero-copy">
-          <div class="eyebrow"><span class="eyebrow-dot"></span> Campus placement operations</div>
-          <h1>Placement operations,<br><span>connected end to end.</span></h1>
-          <p class="hero-journey-line">Learn · Practice · Get Placed</p>
-          <p class="hero-lead">Learn with video lessons, quizzes and downloadable notes. Prepare with proctored mock interviews and assessments, then track your campus applications from eligibility through offers.</p>
-          <div class="hero-actions">
-            <button class="button button-primary button-large" data-open-auth="login">Sign in to PlaceAI <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
-            <button class="button button-secondary button-large" data-open-access="request">Request workspace access</button>
+      <div class="home-hero-surface">
+        <section class="hero section-shell">
+          <div class="hero-copy">
+            <div class="eyebrow"><span class="eyebrow-dot"></span> Campus placement operations</div>
+            <h1>Placement operations,<br><span>connected end to end.</span></h1>
+            <p class="hero-journey-line">Learn · Practice · Get Placed</p>
+            <p class="hero-lead">Learn with video lessons, quizzes and downloadable notes. Prepare with proctored mock interviews and assessments, then track your campus applications from eligibility through offers.</p>
+            <div class="hero-actions">
+              <button class="button button-primary button-large" data-open-auth="login">Sign in to PlaceAI <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
+              <button class="button button-secondary button-large" data-open-access="request">Request workspace access</button>
+            </div>
+            <div class="hero-trust">
+              <div><strong>One connected workspace</strong><span>For students, placement teams and recruiters</span></div>
+              <div><strong>Clear placement progress</strong><span>Follow applications, interviews and offers</span></div>
+              <div><strong>AI with human oversight</strong><span>Prepare with guidance; keep people in control</span></div>
+            </div>
           </div>
-          <div class="hero-trust">
-            <div><strong>One connected workspace</strong><span>For students, placement teams and recruiters</span></div>
-            <div><strong>Clear placement progress</strong><span>Follow applications, interviews and offers</span></div>
-            <div><strong>AI with human oversight</strong><span>Prepare with guidance; keep people in control</span></div>
-          </div>
-        </div>
 
-        <div class="hero-product" aria-label="PlaceAI production workspace information">
-          <figure class="hero-photo-card">
-            <img src="/static/placeai-hero-approved-hd.webp" alt="Illustrative student collaboration scene for the PlaceAI placement journey" loading="eager" fetchpriority="high" decoding="async" width="1672" height="941">
-            <figcaption><span>From preparation to placement</span><strong>One connected campus journey.</strong></figcaption>
-          </figure>
-          <div class="production-surface-card hero-surface-card">
-            <div>
-              <span class="surface-kicker">Your placement journey</span>
-              <h2>Preparation and campus hiring, working together.</h2>
-              <p>A shared workspace for students, placement teams and recruiters, with the right access at every stage.</p>
-            </div>
-            <div class="production-surface-grid">
-              <div><strong>Student</strong><span>Profile, eligibility, applications, documents and interview preparation.</span></div>
-              <div><strong>Recruiter</strong><span>Approved jobs, applicant pipelines, interviews, offers and company verification.</span></div>
-              <div><strong>Institution Admin</strong><span>Students, recruiters, drives, approvals, attendance, governance and reports.</span></div>
-              <div><strong>Platform Admin</strong><span>Institution setup, access review and platform operations.</span></div>
+          <div class="hero-product" aria-label="PlaceAI production workspace information">
+            <figure class="hero-photo-card">
+              <img src="/static/placeai-hero-approved-hd.webp" alt="Illustrative student collaboration scene for the PlaceAI placement journey" loading="eager" fetchpriority="high" decoding="async" width="1672" height="941">
+              <figcaption><span>From preparation to placement</span><strong>One connected campus journey.</strong></figcaption>
+            </figure>
+            <div class="production-surface-card hero-surface-card">
+              <div>
+                <span class="surface-kicker">Your placement journey</span>
+                <h2>Preparation and campus hiring, working together.</h2>
+                <p>A shared workspace for students, placement teams and recruiters, with the right access at every stage.</p>
+              </div>
+              <div class="production-surface-grid">
+                <div><strong>Student</strong><span>Profile, eligibility, applications, documents and interview preparation.</span></div>
+                <div><strong>Recruiter</strong><span>Approved jobs, applicant pipelines, interviews, offers and company verification.</span></div>
+                <div><strong>Institution Admin</strong><span>Students, recruiters, drives, approvals, attendance, governance and reports.</span></div>
+                <div><strong>Platform Admin</strong><span>Institution setup, access review and platform operations.</span></div>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <section class="learning-journey section-shell" aria-labelledby="learning-journey-title">
         <div class="journey-heading"><span class="section-kicker">From learning to opportunity</span><h2 id="learning-journey-title">A clear path forward.</h2></div>
