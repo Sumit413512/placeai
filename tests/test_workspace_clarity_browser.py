@@ -56,7 +56,8 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
     logout_box = logout.bounding_box()
     assert page.locator('.sidebar-bottom').get_by_role('button', name='Sign out', exact=True).is_visible()
     assert logout.evaluate('el => getComputedStyle(el).backgroundColor') == 'rgb(97, 39, 55)'
-    assert logout_box['height'] >= 40
+    assert logout.evaluate('el => getComputedStyle(el).color') == 'rgb(255, 248, 237)'
+    assert logout_box['height'] >= 44
     assert logout.evaluate('el => parseFloat(getComputedStyle(el).borderTopWidth)') >= 1
     assert page.locator('.workspace-role-chip').count() == 0
     if role != 'institution_admin':
