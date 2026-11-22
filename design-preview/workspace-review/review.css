@@ -1,0 +1,12 @@
+.review-switcher {
+  background:#243d31;color:#fff7e7;display:flex;align-items:center;justify-content:center;
+  flex-wrap:wrap;gap:8px;padding:10px 12px;font: 600 .875rem system-ui;
+}
+.review-switcher p {margin:0 8px 0 0}
+.review-switcher button {
+  border:1px solid #dbc5a8;border-radius:7px;padding:8px 12px;color:#36281b;background:#f2e4ce;
+  cursor:pointer;font:inherit;
+}
+.review-switcher button:hover {background:#fff5e3}
+.review-switcher button:focus-visible {outline:2px solid #f9da9e;outline-offset:2px}
+body:has(#app-shell:not(.hidden)) .review-switcher {display:none}
