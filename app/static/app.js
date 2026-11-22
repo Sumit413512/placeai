@@ -411,12 +411,15 @@
     }
     mountNav();
     await updateNotificationBadge();
-    const attendanceToken=new URLSearchParams(location.search).get('attendance_token');
+    const workspaceLink = new URLSearchParams(location.search);
+    const attendanceToken = workspaceLink.get('attendance_token');
     if(attendanceToken && state.me.role==='student'){
       try{const checked=await api(`/enterprise/attendance/check-in?token=${encodeURIComponent(attendanceToken)}`,{method:'POST'});toast('Attendance recorded',`${checked.session} · checked in successfully.`);const u=new URL(location.href);u.searchParams.delete('attendance_token');history.replaceState({},'',u.pathname+u.search);}
       catch(err){toast('Attendance check-in failed',err.message,'error');}
     }
-    await navigate('dashboard');
+    const opensVideoCourse = state.me.role === 'student' && workspaceLink.get('view') === 'learning-hub'
+      && workspaceLink.has('course');
+    await navigate(opensVideoCourse ? 'learning-hub' : 'dashboard');
     return true;
     })();
     bootWorkspaceInFlight = run;
@@ -1162,7 +1165,8 @@
     } else if(view==='incidents'){
       setPage('Incident reports','Governance'); const rows=await api('/enterprise/incidents'); $('#app-content').innerHTML=`${pageHead('Student incident reports','Confidential review queue for recruiter, job, interview and offer concerns.')}${rows.length?enterpriseTable(['Category','Report','Status','Submitted',''],rows.map(x=>`<tr><td>${esc(x.category)}</td><td>${esc(x.description.slice(0,180))}</td><td>${statusBadge(x.status)}</td><td>${fmtDate(x.created_at)}</td><td><select class="filter-select incident-status-select" data-id="${x.id}"><option value="">Update…</option><option value="investigating">Investigating</option><option value="substantiated">Substantiated</option><option value="resolved">Resolved</option><option value="dismissed">Dismissed</option></select></td></tr>`).join('')):emptyState('IR','No incident reports','Student safety and integrity reports will appear here.')}`;
     } else if(view==='reports'){
-      setPage('Reports','Institution reporting'); const reportTypes=[['placement-report','Placement Report'],['department-placement','Department Placement Report'],['company-participation','Company Participation Report'],['unplaced-students','Unplaced Student Report'],['offer-register','Offer Register'],['internship-report','Internship Report'],['recruiter-activity','Recruiter Activity Report']]; $('#app-content').innerHTML=`${pageHead('Institution reports','One-click operational exports for placement review, management and compliance.')}${window.PlaceAIArrayReadiness?.panel(true) || ''}<div class="report-grid">${reportTypes.map(([key,label])=>`<article class="report-card"><span>REPORT</span><h3>${esc(label)}</h3><p>Export the current institution data snapshot.</p><div class="row-actions"><button class="row-button" data-action="download-report" data-id="${key}" data-value="pdf">PDF</button><button class="row-button" data-action="download-report" data-id="${key}" data-value="xlsx">XLSX</button><button class="row-button" data-action="download-report" data-id="${key}" data-value="csv">CSV</button></div></article>`).join('')}</div>`;
+      setPage('Reports','Institution reporting'); const reportTypes=[['placement-report','Placement Report'],['department-placement','Department Placement Report'],['company-participation','Company Participation Report'],['unplaced-students','Unplaced Student Report'],['offer-register','Offer Register'],['internship-report','Internship Report'],['recruiter-activity','Recruiter Activity Report']]; $('#app-content').innerHTML=`${pageHead('Institution reports','One-click operational exports for placement review, management and compliance.')}${window.PlaceAIArrayReadiness?.cataloguePanel() || ''}${window.PlaceAIArrayReadiness?.panel(true) || ''}<div class="report-grid">${reportTypes.map(([key,label])=>`<article class="report-card"><span>REPORT</span><h3>${esc(label)}</h3><p>Export the current institution data snapshot.</p><div class="row-actions"><button class="row-button" data-action="download-report" data-id="${key}" data-value="pdf">PDF</button><button class="row-button" data-action="download-report" data-id="${key}" data-value="xlsx">XLSX</button><button class="row-button" data-action="download-report" data-id="${key}" data-value="csv">CSV</button></div></article>`).join('')}</div>`;
+      window.PlaceAIArrayReadiness?.mountInstitution($('#app-content [data-readiness-catalogue]'), api, esc);
       window.PlaceAIArrayReadiness?.mountInstitution($('#app-content [data-array-panel]'), api, esc);
     }
   }

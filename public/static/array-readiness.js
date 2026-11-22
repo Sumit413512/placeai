@@ -2,6 +2,7 @@
   'use strict';
 
   const endpoint = '/array-readiness';
+  const lessonEndpoint = '/lesson-readiness';
   const stepLabels = {diagnostic:'1. Diagnostic', practice:'2. Guided practice', followup:'3. Independent follow-up'};
 
   function setup(host, onLoad) {
@@ -10,11 +11,13 @@
     const status = host.querySelector('[data-array-status]');
     const showError = error => { status.textContent = error.message || 'Please try again.'; };
     const run = async (button, work) => {
+      if (host.getAttribute('aria-busy') === 'true') return;
+      host.setAttribute('aria-busy', 'true');
       button.disabled = true;
       status.textContent = '';
       try { await work(); }
       catch (error) { showError(error); }
-      finally { button.disabled = false; }
+      finally { button.disabled = false; host.removeAttribute('aria-busy'); }
     };
     host.querySelector('[data-array-load]').addEventListener('click', event => {
       run(event.currentTarget, onLoad);
@@ -75,12 +78,48 @@
 
   function mountInstitution(host, api, esc) {
     let offset = 0, search = '';
-    const ui = setup(host, async () => display(0, ''));
+    const picker = host?.querySelector('[data-readiness-picker]');
+    const courseSelect = picker?.querySelector('[name="course"]');
+    const lessonSelect = picker?.querySelector('[name="lesson"]');
+    let courses = [], reportPath = '', assignmentPath = '', reportTitle = '', reportPosition = '';
+    const ui = setup(host, async () => {
+      if (!picker) return display(0, '');
+      courses = await api(lessonEndpoint + '/institution/courses');
+      picker.hidden = !courses.length;
+      courseSelect.replaceChildren(...courses.map(course => new Option(course.title, course.id)));
+      if (!courses.length) {
+        ui.content.textContent = 'No published readiness lessons are available to your institution.';
+        return;
+      }
+      selectCourse();
+      await selectLesson();
+    });
     if (!ui) return;
+
+    function selectCourse() {
+      const selected = courses.find(course => course.id === courseSelect.value);
+      lessonSelect.replaceChildren(...selected.lessons.map(lesson => new Option(lesson.title, lesson.position)));
+    }
+
+    async function selectLesson() {
+      ui.content.replaceChildren();
+      const base = lessonEndpoint + '/institution/courses/' + encodeURIComponent(courseSelect.value);
+      assignmentPath = base + '/assignments/';
+      reportTitle = lessonSelect.selectedOptions[0].text;
+      reportPosition = lessonSelect.value;
+      reportPath = base + '/lessons/' + encodeURIComponent(reportPosition);
+      await display(0, '');
+    }
+
+    picker?.addEventListener('submit', event => {
+      event.preventDefault();
+      ui.run(event.submitter || picker.querySelector('button'), selectLesson);
+    });
+    courseSelect?.addEventListener('change', selectCourse);
 
     async function display(nextOffset, nextSearch) {
       const query = new URLSearchParams({offset:nextOffset, search:nextSearch});
-      const data = await api(`${endpoint}/institution?${query}`);
+      const data = await api(`${reportPath || endpoint + '/institution'}?${query}`);
       offset = nextOffset;
       search = nextSearch;
       const statusLabel = student => {
@@ -98,12 +137,13 @@
         <p class="learning-meta">Improved counts students who answered the initial question incorrectly and the independent follow-up correctly.</p>
         <form class="array-controls" data-array-search><label>Find a student <input name="search" value="${esc(search)}" maxlength="80"></label>
           <button class="button button-secondary" type="submit">Search</button></form>
-        ${data.students.length ? `<div class="table-wrap"><table class="data-table"><caption>Arrays assignments</caption>
+        ${data.students.length ? `<div class="table-wrap"><table class="data-table"><caption>${picker ? esc(reportTitle) + ' assignments' : 'Arrays assignments'}</caption>
           <thead><tr><th scope="col">Student</th><th scope="col">Status</th><th scope="col">Next action</th></tr></thead>
           <tbody>${data.students.map(student => `<tr><td>${esc(student.name)}</td><td>${statusLabel(student)}</td><td>${
             student.assigned
-              ? (student.followup_correct === false ? 'Review indexing with the student' : '—')
-              : `<button class="button button-secondary" type="button" data-array-assign="${esc(student.id)}" aria-label="Assign Arrays practice to ${esc(student.name)}">Assign practice</button>`
+              ? (student.followup_correct === false ? (picker ? 'Review the lesson with the student' : 'Review indexing with the student') : '—')
+              : `<button class="button button-secondary" type="button" data-array-assign="${esc(student.id)}" aria-label="Assign ${picker ? 'lesson' : 'Arrays'} practice to ${esc(student.name)}">Assign practice</button>`
+          }${picker ? ` <button class="button button-secondary" type="button" data-array-assign="${esc(student.id)}" data-assign-course aria-label="Assign entire course to ${esc(student.name)}">Assign entire course</button>` : ''
           }</td></tr>`).join('')}</tbody></table></div>` : '<p>No matching students.</p>'}
         <div class="array-controls">
           ${offset > 0 ? '<button class="button button-secondary" type="button" data-array-page="-50">Previous</button>' : ''}
@@ -123,9 +163,14 @@
       if (!button) return;
       ui.run(button, async () => {
         if (button.dataset.arrayAssign) {
-          await api(endpoint + '/institution/assignments/' + encodeURIComponent(button.dataset.arrayAssign), {method:'PUT'});
+          const wholeCourse = button.hasAttribute('data-assign-course');
+          const path = (assignmentPath || endpoint + '/institution/assignments/') + encodeURIComponent(button.dataset.arrayAssign);
+          const query = picker && !wholeCourse ? '?position=' + encodeURIComponent(reportPosition) : '';
+          await api(path + query, {method:'PUT'});
           await display(offset, search);
-          host.querySelector('[data-array-status]').textContent = 'Arrays practice assigned.';
+          host.querySelector('[data-array-status]').textContent = wholeCourse
+            ? 'All available readiness lessons in the course are assigned.'
+            : (picker ? 'Lesson practice assigned.' : 'Arrays practice assigned.');
         } else {
           await display(offset + Number(button.dataset.arrayPage), search);
         }
@@ -143,6 +188,37 @@
     </section>`;
   }
 
+  function cataloguePanel() {
+    return `<section class="panel array-readiness" data-readiness-catalogue>
+      <h2>Lesson readiness</h2>
+      <p>Assign a lesson or a full course to an eligible student and review follow-up results by lesson.</p>
+      <button class="button button-secondary" type="button" data-array-load>Browse available courses</button>
+      <form class="array-controls" data-readiness-picker hidden>
+        <label>Course <select name="course"></select></label>
+        <label>Lesson <select name="lesson"></select></label>
+        <button class="button button-secondary" type="submit">View lesson report</button>
+      </form>
+      <p role="status" data-array-status></p><div data-array-content></div>
+    </section>`;
+  }
+
+  function mountAssignments(host, api, esc) {
+    if (!host) return;
+    api(lessonEndpoint + '/me').then(items => {
+      if (!items.length) return;
+      host.innerHTML = `<section class="panel array-readiness">
+        <h2>Assigned readiness practice</h2>
+        <ul data-assignment-list>${items.map(item => {
+          const query = new URLSearchParams({view:'learning-hub', course:item.course_id, lesson:item.position});
+          return `<li><a href="/?${esc(query.toString())}">${esc(item.course)} · ${esc(item.lesson)}</a>
+            <span class="learning-meta">${item.complete ? 'Complete' : 'To do'}</span></li>`;
+        }).join('')}</ul>
+      </section>`;
+    }).catch(() => {
+      host.textContent = 'Assigned readiness practice could not be loaded. Refresh to try again.';
+    });
+  }
+
   function lessonPanel() {
     return `<section class="array-readiness" data-lesson-readiness>
       <h3>Lesson readiness</h3>
@@ -152,5 +228,5 @@
     </section>`;
   }
 
-  window.PlaceAIArrayReadiness = {panel, lessonPanel, mountStudent, mountInstitution};
+  window.PlaceAIArrayReadiness = {panel, cataloguePanel, lessonPanel, mountAssignments, mountStudent, mountInstitution};
 })();

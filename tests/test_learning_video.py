@@ -812,3 +812,77 @@ def test_readiness_uses_each_lesson_quiz_and_keeps_first_attempt_private(video):
     row.content_json = json.dumps(content)
     video.db.commit()
     assert video.api.post(path, json={'track': track, 'step': 'diagnostic', 'choice': 0}).status_code == 409
+
+
+def test_institution_readiness_assigns_all_demo_and_enrolled_lessons_without_sharing_personal_results(video, monkeypatch):
+    from app.models import Organization, OrganizationType, StudentProfile, User
+    from app.routers import institution_readiness
+
+    video.api.app.include_router(institution_readiness.router)
+    identifier, _, _ = ready_lesson(video)
+    course = video.db.get(VideoCourse, identifier)
+    for key in ('college-a', 'college-b'):
+        video.db.add(Organization(id=key, slug=key, name=key, organization_type=OrganizationType.institution))
+    video.db.flush()
+    video.owner.organization_id = 'college-a'
+    video.other.organization_id = 'college-b'
+    admins = [User(username=key, email=f'{key}@example.invalid', hashed_password='fixture',
+                   organization_id=key, role=UserRole.institution_admin) for key in ('college-a', 'college-b')]
+    video.db.add_all(admins)
+    video.db.add_all([StudentProfile(user_id=student.id, organization_id=student.organization_id)
+                      for student in (video.owner, video.other)])
+    video.db.commit()
+
+    base = '/lesson-readiness'
+    catalog = base + '/institution/courses'
+    admin_course = f'{catalog}/{identifier}'
+    assign = f'{admin_course}/assignments/{video.owner.id}'
+    report = f'{admin_course}/lessons'
+    lesson_path = f'/learning-hub/video/{identifier}/lessons/1/readiness'
+    personal_track = video.api.get(lesson_path).json()['track']
+    answer = {'track': personal_track, 'step': 'diagnostic', 'choice': 0}
+    assert video.api.post(lesson_path, json=answer).status_code == 200
+    assert video.api.get(catalog).status_code == 403
+
+    video.actor[0] = admins[1]
+    assert video.api.get(catalog).json() == []
+    assert video.api.put(assign).status_code == 404
+    video.actor[0] = admins[0]
+    assert len(video.api.get(catalog).json()[0]['lessons']) == 4
+    assert video.api.put(f'{assign}?position=0').status_code == 204
+    assert video.api.get(f'{report}/0').json()['assigned'] == 1
+    assert video.api.get(f'{report}/1').json()['assigned'] == 0
+    assert video.api.put(assign).status_code == 204
+    assert video.api.put(assign).status_code == 204
+    assert video.api.get(f'{report}/1').json()['started'] == 0
+    assert video.api.get(base + '/me').status_code == 403
+
+    video.actor[0] = video.owner
+    assert len(video.api.get(base + '/me').json()) == 4
+    assigned = video.api.get(lesson_path).json()
+    assert assigned['institution'] == 'college-a' and assigned['results'] == {}
+    assert video.api.post(lesson_path, json=answer).status_code == 409
+    for step, choice in (('diagnostic', 1), ('practice', 0), ('followup', 0)):
+        response = video.api.post(lesson_path, json={'track': assigned['track'], 'step': step, 'choice': choice})
+        assert response.status_code == 200, response.text
+    assert video.api.get(base + '/me').json()[1]['complete']
+
+    video.actor[0] = admins[0]
+    counts = video.api.get(f'{report}/1').json()
+    assert (counts['assigned'], counts['started'], counts['reassessed'], counts['improved']) == (1, 1, 1, 1)
+    assert video.api.get(f'{report}/2').json()['started'] == 0
+    assert video.api.put(f'{admin_course}/assignments/{video.other.id}').status_code == 404
+
+    monkeypatch.setattr(learning_video, 'DEMO_COURSE_ID', identifier)
+    video.actor[0] = admins[1]
+    assert video.api.get(catalog).json()[0]['id'] == identifier
+    assert video.api.get(f'{report}/1').json()['started'] == 0
+    assert video.api.put(f'{admin_course}/assignments/{video.other.id}').status_code == 204
+    video.actor[0] = video.other
+    assert len(video.api.get(base + '/me').json()) == 4
+    assert video.api.get(lesson_path).json()['institution'] == 'college-b'
+
+    course.editorial_status = 'rejected'
+    video.db.commit()
+    assert video.api.get(base + '/me').json() == []
+    assert video.api.get(lesson_path).status_code in (404, 409)

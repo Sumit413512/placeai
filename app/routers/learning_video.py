@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, defer
 from sqlalchemy.orm.attributes import flag_modified
 
 from app import lesson_readiness
-from app.array_readiness_models import LessonReadiness
+from app.array_readiness_models import InstitutionLessonReadiness, LessonReadiness
 from app.ai_rate_limit import student_ai_guard
 from app.database import get_db
 from app.dependencies import require_student
@@ -501,26 +501,32 @@ def readiness_context(db, course_id, position, user):
         raise HTTPException(409, "This lesson needs three distinct knowledge checks.")
     revision = lesson_readiness.version(quiz)
     key = (user.id, lesson_row.id, revision)
-    return quiz, revision, key, db.get(LessonReadiness, key)
+    org = lesson_readiness.institution(db, user)
+    if org and lesson_readiness.roster(db, org.id).filter(User.id == user.id).first():
+        assignment = db.get(InstitutionLessonReadiness, (org.id, *key))
+        if assignment:
+            track = hashlib.sha256(f"{org.id}:{revision}".encode()).hexdigest()
+            return quiz, track, key, assignment, org.name
+    return quiz, revision, key, db.get(LessonReadiness, key), None
 
 
 @router.get("/{course_id}/lessons/{position}/readiness")
 def get_readiness(course_id: str, position: int, user: User = Depends(require_student),
                   db: Session = Depends(get_db)):
-    quiz, revision, _, attempt = readiness_context(db, course_id, position, user)
-    return lesson_readiness.view(quiz, attempt, revision)
+    quiz, track, _, attempt, institution = readiness_context(db, course_id, position, user)
+    return {**lesson_readiness.view(quiz, attempt, track), "institution": institution}
 
 
 @router.post("/{course_id}/lessons/{position}/readiness")
 def save_readiness(course_id: str, position: int, body: ReadinessAnswer, user: User = Depends(require_student),
                    db: Session = Depends(get_db)):
     lock_owner(db, user)
-    quiz, revision, key, attempt = readiness_context(db, course_id, position, user)
-    if body.track != revision:
-        raise HTTPException(409, "This lesson was updated. Reopen the readiness check to continue.")
+    quiz, track, key, attempt, institution = readiness_context(db, course_id, position, user)
+    if body.track != track:
+        raise HTTPException(409, "This lesson or its assignment changed. Reopen the readiness check to continue.")
     if body.choice >= len(quiz[body.step]["options"]):
         raise HTTPException(422, "Select one of the available answers.")
-    state = lesson_readiness.view(quiz, attempt, revision)
+    state = {**lesson_readiness.view(quiz, attempt, track), "institution": institution}
     field = f"{body.step}_answer"
     if attempt and getattr(attempt, field) == body.choice:
         return state
@@ -531,4 +537,4 @@ def save_readiness(course_id: str, position: int, body: ReadinessAnswer, user: U
         db.add(attempt)
     setattr(attempt, field, body.choice)
     db.commit()
-    return lesson_readiness.view(quiz, attempt, revision)
+    return {**lesson_readiness.view(quiz, attempt, track), "institution": institution}

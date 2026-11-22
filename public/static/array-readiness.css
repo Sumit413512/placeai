@@ -13,3 +13,8 @@
 .array-controls label { display: grid; gap: 4px; min-width: 0; }
 .array-readiness [data-array-status]:empty { display: none; }
 .array-readiness [data-array-status] { color: #612737; }
+
+.array-controls[hidden] { display: none; }
+.array-controls select { max-width: 100%; }
+.array-readiness [data-assignment-list] li { margin-block: 8px; }
+.array-readiness [data-assignment-list] .learning-meta { margin-inline-start: 8px; }

@@ -54,6 +54,9 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
         elif path in {'/students/applications','/students/jobs'}: data = []
         elif path == '/billing/status': data = {"student_kind":"university","premium_access":True,"access_mode":"institution_sponsored"}
         elif path == '/learning-hub': data = {"items":[],"generation_available":True}
+        elif path == '/lesson-readiness/me':
+            data = [{'course_id': course['id'], 'course': course['title'], 'position': 1,
+                     'lesson': 'Assigned query concept', 'complete': False}]
         elif path == '/learning-hub/video':
             data = {"items":[course,{**deepcopy(course),"id":"failed-course","title":"Failed video course","status":"failed"}],"generation_available":True}
             if route.request.method == 'POST': calls.append(route.request.post_data_json); data = course
@@ -87,6 +90,7 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
     output = Path(__file__).resolve().parents[1] / 'work/ui-review'
     output.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(output / 'video-catalogue-desktop.png'), full_page=True)
+    expect(page.get_by_role('link', name='SQL foundations · Assigned query concept')).to_be_visible()
     page.get_by_label('Video topic',exact=True).fill('SQL')
     page.get_by_role('button',name='Find or create course',exact=True).click()
     expect(page.get_by_role('heading',name='Course overview',exact=True)).to_be_visible()
@@ -176,4 +180,54 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
     page.locator('#app-nav [data-view="opportunities"]').click()
     assert not page.locator('.learning-video-player').count()
     assert not errors
+    page.goto(BASE_URL + '/?view=learning-hub&course=video-browser-course&lesson=1')
+    expect(page.locator('.learning-video-player')).to_have_attribute('aria-label', 'Query concept 1')
     page.close()
+
+
+def test_institution_can_select_a_lesson_and_assign_its_whole_course(video_browser):
+    page = video_browser.new_page(viewport={'width': 980, 'height': 800})
+    page.add_init_script("localStorage.setItem('placeai.analytics.preference.v1','declined')")
+    calls = []
+    error_messages = []
+    page.on('pageerror', lambda error: error_messages.append(str(error)))
+
+    def api(route):
+        if route.request.resource_type not in {'fetch', 'xhr'}:
+            return route.continue_()
+        path = route.request.url.split(BASE_URL)[-1].split('?')[0]
+        data = {}
+        if path == '/auth/refresh':
+            data = {'access_token': 'isolated-browser-token'}
+        elif path == '/auth/me':
+            data = {'id': 'admin', 'role': 'institution_admin', 'username': 'Coordinator'}
+        elif path == '/lesson-readiness/institution/courses':
+            data = [{'id': 'demo', 'title': 'DSA Fundamentals', 'lessons': [
+                {'position': 0, 'title': 'Foundations'}, {'position': 1, 'title': 'Arrays'}
+            ]}]
+        elif path == '/lesson-readiness/institution/courses/demo/assignments/student':
+            calls.append(route.request.url.split(BASE_URL)[-1])
+            return route.fulfill(status=204)
+        elif '/lessons/' in path:
+            data = {'assigned': len(calls), 'started': 0, 'reassessed': 0, 'improved': 0, 'needs_help': 0,
+                    'has_more': False, 'students': [{'id': 'student', 'name': 'Student', 'assigned': bool(calls),
+                                                     'diagnostic_correct': None, 'followup_correct': None}]}
+        route.fulfill(json=data)
+
+    page.route(BASE_URL + '/**', api)
+    try:
+        page.goto(BASE_URL)
+        page.locator('#app-nav [data-view="reports"]').click()
+        panel = page.locator('[data-readiness-catalogue]')
+        expect(panel.get_by_label('Course')).to_be_hidden()
+        panel.get_by_role('button', name='Browse available courses').click()
+        expect(panel.get_by_role('table', name='Foundations assignments')).to_be_visible()
+        panel.get_by_label('Lesson', exact=True).select_option('1')
+        panel.get_by_role('button', name='View lesson report').click()
+        expect(panel.get_by_role('table', name='Arrays assignments')).to_be_visible()
+        panel.get_by_role('button', name='Assign entire course to Student').click()
+        expect(panel.get_by_role('status')).to_have_text('All available readiness lessons in the course are assigned.')
+        assert calls == ['/lesson-readiness/institution/courses/demo/assignments/student']
+        assert not error_messages
+    finally:
+        page.close()
