@@ -34,8 +34,8 @@ def script():
                         "bullets": ["SELECT chooses columns", "FROM identifies the table"],
                         "code": "SELECT name FROM students;", "diagram": None, "source_ids": [1]} for i in range(4)],
             "takeaways": ["SELECT names the output columns.", "FROM names the input relation."],
-            "quiz": [{"question": "Which clause identifies the source table?", "options": ["FROM", "SELECT", "ORDER BY"],
-                      "answer": 0, "explanation": "FROM identifies the relation from which the query reads rows."} for _ in range(3)],
+            "quiz": [{"question": f"Which clause identifies the source table in example {i+1}?", "options": ["FROM", "SELECT", "ORDER BY"],
+                      "answer": 0, "explanation": "FROM identifies the relation from which the query reads rows."} for i in range(3)],
             "exercise": "Write a query selecting the name column from the students table.",
             "solution": "Use SELECT name FROM students. SELECT identifies the requested column and FROM identifies the relation. Verify these identifiers against your schema first."}
 
@@ -776,3 +776,39 @@ def test_demo_course_is_available_without_enrollment_and_progress_stays_private(
     video.db.get(VideoCourse, identifier).editorial_status = 'awaiting_review'
     video.db.commit()
     assert video.api.get(f'/learning-hub/video/{identifier}').status_code == 404
+
+
+def test_readiness_uses_each_lesson_quiz_and_keeps_first_attempt_private(video):
+    identifier, lesson_id, _ = ready_lesson(video)
+    prefix = f'/learning-hub/video/{identifier}/lessons'
+    path = prefix + '/0/readiness'
+    second = prefix + '/1/readiness'
+    assert video.api.get(prefix + '/0').json()['readiness_available']
+    started = video.api.get(path).json()
+    track = started['track']
+    assert started['step'] == 'diagnostic'
+    assert set(started['question']) == {'prompt', 'options'}
+    assert video.api.post(path, json={'track': track, 'step': 'followup', 'choice': 0}).status_code == 409
+    for step, choice in (('diagnostic', 1), ('practice', 0), ('followup', 0)):
+        body = {'track': track, 'step': step, 'choice': choice}
+        result = video.api.post(path, json=body)
+        assert result.status_code == 200, result.text
+        assert video.api.post(path, json=body).json() == result.json()
+    finished = video.api.get(path).json()
+    assert finished['step'] is None
+    assert finished['results']['diagnostic']['correct'] is False
+    assert finished['results']['followup']['correct'] is True
+    assert video.api.post(path, json={'track': track, 'step': 'diagnostic', 'choice': 0}).status_code == 409
+    assert video.api.get(second).json()['step'] == 'diagnostic'
+    video.actor[0] = video.other
+    assert video.api.get(path).status_code == 404
+    video.db.add(VideoEnrollment(user_id=video.other.id, course_id=identifier, request_id='separate-enrollment'))
+    video.db.commit()
+    assert video.api.get(path).json()['results'] == {}
+
+    row = video.db.get(VideoLesson, lesson_id)
+    content = json.loads(row.content_json)
+    content['quiz'][0]['question'] += ' Consider the table in the example.'
+    row.content_json = json.dumps(content)
+    video.db.commit()
+    assert video.api.post(path, json={'track': track, 'step': 'diagnostic', 'choice': 0}).status_code == 409

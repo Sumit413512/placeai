@@ -5,6 +5,7 @@ import json
 import hashlib
 import unicodedata
 from datetime import timedelta
+from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, Request
 from pydantic import Field
@@ -12,6 +13,8 @@ from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session, defer
 from sqlalchemy.orm.attributes import flag_modified
 
+from app import lesson_readiness
+from app.array_readiness_models import LessonReadiness
 from app.ai_rate_limit import student_ai_guard
 from app.database import get_db
 from app.dependencies import require_student
@@ -392,10 +395,12 @@ def lesson(course_id: str, position: int, user: User = Depends(require_student),
     course = db.get(VideoCourse, row.course_id)
     published = row.state == "ready" and row.editorial_status == "approved" and course.editorial_status == "approved"
     content = json.loads(row.content_json) if published else {}
+    readiness_available = lesson_readiness.questions(content) is not None
     content.pop("solution", None)
     content["quiz"] = [{"question": q["question"], "options": q["options"]} for q in content.get("quiz", [])]
     return {"title": row.title, "status": "ready" if published else "awaiting_review", "duration_seconds": row.duration_seconds,
-            "content": content, **progress_data(viewer_record(db, row, user))}
+            "content": content, "readiness_available": readiness_available,
+            **progress_data(viewer_record(db, row, user))}
 
 
 @router.get("/{course_id}/lessons/{position}/media")
@@ -481,3 +486,49 @@ def practice(course_id: str, position: int, body: Answers,
     flag_modified(record, "updated_at")
     db.commit()
     return {"results": results, "solution": content["solution"], **progress_data(record)}
+
+
+class ReadinessAnswer(ContentModel):
+    step: Literal["diagnostic", "practice", "followup"]
+    choice: int = Field(ge=0, strict=True)
+    track: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+def readiness_context(db, course_id, position, user):
+    lesson_row = owner_lesson(db, course_id, position, user)
+    quiz = lesson_readiness.questions(json.loads(lesson_row.content_json))
+    if not quiz:
+        raise HTTPException(409, "This lesson needs three distinct knowledge checks.")
+    revision = lesson_readiness.version(quiz)
+    key = (user.id, lesson_row.id, revision)
+    return quiz, revision, key, db.get(LessonReadiness, key)
+
+
+@router.get("/{course_id}/lessons/{position}/readiness")
+def get_readiness(course_id: str, position: int, user: User = Depends(require_student),
+                  db: Session = Depends(get_db)):
+    quiz, revision, _, attempt = readiness_context(db, course_id, position, user)
+    return lesson_readiness.view(quiz, attempt, revision)
+
+
+@router.post("/{course_id}/lessons/{position}/readiness")
+def save_readiness(course_id: str, position: int, body: ReadinessAnswer, user: User = Depends(require_student),
+                   db: Session = Depends(get_db)):
+    lock_owner(db, user)
+    quiz, revision, key, attempt = readiness_context(db, course_id, position, user)
+    if body.track != revision:
+        raise HTTPException(409, "This lesson was updated. Reopen the readiness check to continue.")
+    if body.choice >= len(quiz[body.step]["options"]):
+        raise HTTPException(422, "Select one of the available answers.")
+    state = lesson_readiness.view(quiz, attempt, revision)
+    field = f"{body.step}_answer"
+    if attempt and getattr(attempt, field) == body.choice:
+        return state
+    if state["step"] != body.step:
+        raise HTTPException(409, "This step has already been saved or is out of order.")
+    if attempt is None:
+        attempt = LessonReadiness(student_id=key[0], lesson_id=key[1], question_version=key[2])
+        db.add(attempt)
+    setattr(attempt, field, body.choice)
+    db.commit()
+    return lesson_readiness.view(quiz, attempt, revision)

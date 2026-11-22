@@ -16,3 +16,16 @@ class ArrayReadiness(Base):
     diagnostic_answer = Column(SmallInteger)
     practice_answer = Column(SmallInteger)
     followup_answer = Column(SmallInteger)
+
+
+class LessonReadiness(Base):
+    """Keep readiness evidence private per learner, lesson and question revision."""
+
+    __tablename__ = "lesson_readiness"
+
+    student_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    lesson_id = Column(String, ForeignKey("learning_video_lessons.id", ondelete="CASCADE"), primary_key=True)
+    question_version = Column(String(64), primary_key=True)
+    diagnostic_answer = Column(SmallInteger)
+    practice_answer = Column(SmallInteger)
+    followup_answer = Column(SmallInteger)

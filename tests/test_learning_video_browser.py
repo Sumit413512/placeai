@@ -67,10 +67,17 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
             data = {"results":[{"correct":True,"answer":0,"explanation":q['explanation']} for q in content['quiz']],
                     "solution":content['solution'],"practice_completed":True,"video_completed":True}
             course['lessons'][index].update(practice_completed=True,video_completed=True)
+        elif path.endswith('/readiness'):
+            saved = route.request.method == 'POST'
+            if saved:
+                assert route.request.post_data_json == {'step': 'diagnostic', 'track': 'fixture', 'choice': 0}
+            data = {'track': 'fixture', 'step': 'practice' if saved else 'diagnostic',
+                    'results': {'diagnostic': {'correct': True, 'feedback': 'Diagnostic saved.'}} if saved else {},
+                    'question': {'prompt': 'Choose the source clause', 'options': ['FROM', 'SELECT']}}
         elif '/lessons/' in path:
             index = int(path.split('/lessons/')[1].split('/')[0])
             safe = deepcopy(content); safe.pop('solution'); safe['quiz']=[{"question":q['question'],"options":q['options']} for q in content['quiz']]
-            data = {"title":f"Query concept {index}","status":"ready","content":safe,"duration_seconds":duration,"position_seconds":course['lessons'][index]['position_seconds']}
+            data = {"title":f"Query concept {index}","status":"ready","content":safe,"readiness_available":True,"duration_seconds":duration,"position_seconds":course['lessons'][index]['position_seconds']}
         elif path.startswith('/learning-hub/video/'): data = course
         route.fulfill(json=data)
     page.route(BASE_URL+'/**', api)
@@ -123,6 +130,11 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
     expect(page.locator('.learning-video-player-help')).to_contain_text('video menu')
     assert video.locator('track').get_attribute('default') is None
     assert video.evaluate("v=>v.textTracks[0].mode") == 'disabled'
+    readiness = page.locator('[data-lesson-readiness]')
+    readiness.get_by_role('button', name='Start or resume readiness check').click()
+    readiness.get_by_role('radio', name='FROM', exact=True).check()
+    readiness.get_by_role('button', name='Save answer').click()
+    expect(readiness.get_by_text('Diagnostic saved.')).to_be_visible()
     for fieldset in page.locator('[data-video-practice] fieldset').all():
         fieldset.locator('input').first.check()
     page.get_by_role('button',name='Check answers',exact=True).click()
