@@ -186,7 +186,7 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
 
 
 def test_institution_can_select_a_lesson_and_assign_its_whole_course(video_browser):
-    page = video_browser.new_page(viewport={'width': 980, 'height': 800})
+    page = video_browser.new_page(viewport={'width': 1440, 'height': 900})
     page.add_init_script("localStorage.setItem('placeai.analytics.preference.v1','declined')")
     calls = []
     error_messages = []
@@ -217,6 +217,7 @@ def test_institution_can_select_a_lesson_and_assign_its_whole_course(video_brows
     page.route(BASE_URL + '/**', api)
     try:
         page.goto(BASE_URL)
+        page.locator('.placeai-nav-more').click()
         page.locator('#app-nav [data-view="reports"]').click()
         panel = page.locator('[data-readiness-catalogue]')
         expect(panel.get_by_label('Course')).to_be_hidden()
