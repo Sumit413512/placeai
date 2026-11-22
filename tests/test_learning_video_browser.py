@@ -223,7 +223,7 @@ def test_institution_can_select_a_lesson_and_assign_its_whole_course(video_brows
         expect(panel.get_by_label('Course')).to_be_hidden()
         panel.get_by_role('button', name='Browse available courses').click()
         expect(panel.get_by_role('table', name='Foundations assignments')).to_be_visible()
-        panel.get_by_label('Lesson', exact=True).select_option('1')
+        panel.locator('select[name="lesson"]').select_option('1')
         panel.get_by_role('button', name='View lesson report').click()
         expect(panel.get_by_role('table', name='Arrays assignments')).to_be_visible()
         panel.get_by_role('button', name='Assign entire course to Student').click()
