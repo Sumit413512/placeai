@@ -1,0 +1,141 @@
+/* PlaceAI workspace and marketing palette. Load after the base theme. */
+:root {
+  --studio-paper: #f5f0e7;
+  --studio-ink: #242d24;
+  --studio-muted: #575b4e;
+  --studio-line: #d8cbbc;
+  --studio-forest: #243d31;
+  --studio-green: #3b6754;
+  --studio-wine: #733146;
+  --studio-clay: #a34832;
+  --studio-gold: #8a6026;
+}
+body { --navy: #25372c; --accent: #733146; --teal: #35634c; }
+#marketing-site, #app-shell { background: var(--studio-paper) !important; color: var(--studio-ink); }
+#marketing-site .hero.section-shell {
+  width: min(100% - 56px, 1450px); max-width: 1450px;
+  padding: clamp(24px, 4vw, 66px) !important; margin: clamp(14px, 2vw, 28px) auto 0;
+  background: linear-gradient(120deg, #faf4e7 12%, #f0dfcf 100%) !important;
+  border: 1px solid #dec9b4; border-radius: 22px;
+}
+#marketing-site .hero h1 { font-size: clamp(36px, 4.2vw, 76px) !important; line-height: 1.02; color: #26392e !important; }
+#marketing-site .hero h1 span { color: var(--studio-wine) !important; }
+#marketing-site .hero-photo-card { border-color: #78513a !important; background: #30291f !important; }
+#marketing-site .hero-photo-card img { filter: sepia(.22) saturate(.72); }
+#marketing-site .hero-photo-card figcaption { background: linear-gradient(0deg,#221d16 0%,#221d1600 100%) !important; }
+#marketing-site .journey-card, #marketing-site .bento-card { border-color: #d7c4ad !important; }
+#marketing-site .journey-card:nth-child(1), #marketing-site .bento-card:nth-child(2) { background: #e6ecdc !important; }
+#marketing-site .journey-card:nth-child(2), #marketing-site .bento-card:nth-child(3) { background: #f2e3d6 !important; }
+#marketing-site .journey-card:nth-child(3), #marketing-site .bento-card:nth-child(4) { background: #f2e8d1 !important; }
+#marketing-site .bento-card:first-child { background: #e9d9dd !important; }
+#marketing-site .journey-index, #marketing-site .card-number { display: none; }
+#marketing-site .proof-strip { background: #e7dfce !important; border-block: 1px solid #d3c4ad; }
+#marketing-site :is(.dark-section,.cta-section) { background: linear-gradient(120deg,#22362b,#334d3a 61%,#4c392c) !important; border-color: #334b3b !important; }
+#marketing-site :is(.dark-section,.cta-section) :is(h2,h3,strong) { color: #fff7e9 !important; }
+#marketing-site :is(.dark-section,.cta-section) :is(p,small, .section-kicker,.cta-inner > div > span) { color: #e9d9c2 !important; }
+#marketing-site .dark-section :is(.dark-card,.operation-card) { background: #304639 !important; }
+#marketing-site .cta-inner .button { color: #30241d !important; background: #f6e6cb !important; border-color: #e4c498 !important; }
+
+#app-shell .app-sidebar { background: linear-gradient(175deg,#263b30,#1e3028) !important; border-color: #445746 !important; }
+#app-shell .app-sidebar .workspace-pill { background: #344a3d !important; border-color: #607360 !important; border-radius: 10px !important; }
+#app-shell .app-sidebar :is(#workspace-kind,.nav-group-label) { color: #dfddc8 !important; }
+#app-shell .app-sidebar :is(.brand,.sidebar-close,.app-nav button) { color: #f1ecdf !important; }
+#app-shell .app-sidebar .app-nav button :is(svg,span) { color: inherit !important; }
+#app-shell .app-sidebar .app-nav button:hover { background: #40574a !important; }
+#app-shell .app-sidebar .app-nav button.active { background: #eedac0 !important; color: #38271e !important; border-color: #e6be90 !important; }
+#app-shell .app-sidebar .app-nav button.active::after { background: #88402e !important; }
+#app-shell .app-sidebar .sidebar-signout { background: #512b34 !important; border-color: #a8777e !important; color: #fff6e9 !important; }
+#app-shell .app-topbar { background: #fbf6eb !important; border-color: var(--studio-line) !important; }
+#app-shell #app-content .page-head h1 { color: #23372a !important; }
+#app-shell #app-content :is(.panel,.data-panel,.form-panel,.operation-card,.report-card) { border-color: var(--studio-line) !important; }
+#app-shell #app-content .data-table th { background: #eee5d4 !important; color: #494638 !important; }
+#app-shell #app-content :is(.status-applied,.status-draft,.skill-tag,.status-pill) { background: #efe0d0 !important; color: #663921 !important; }
+#app-shell #app-content :is(.activity-icon,.empty-state > span) { background: #ebded0 !important; color: #723a24 !important; }
+#app-shell #app-content :is(.ai-box,.note-box) { background: #f1e9d9 !important; border-color: #ddcdb3 !important; }
+#app-shell #app-content .progress-bar { background: #e4dbcc !important; }
+#app-shell #app-content .progress-item:nth-child(3n+1) .progress-bar i { background: #396350 !important; }
+#app-shell #app-content .progress-item:nth-child(3n+2) .progress-bar i { background: #a54d36 !important; }
+#app-shell #app-content .progress-item:nth-child(3n+3) .progress-bar i { background: #8a6026 !important; }
+
+#app-shell #app-content .metric-card,
+#app-shell #app-content .workspace-shortcut {
+  --tile: #e5ecdf; --tile-line: #9cb299; --tile-ink: #315341;
+  background: var(--tile) !important; border-color: var(--tile-line) !important;
+  min-width: 0;
+}
+#app-shell #app-content :is(.metric-card,.workspace-shortcut):nth-child(4n+2) { --tile:#f4e1d6; --tile-line:#c69b83; --tile-ink:#783925; }
+#app-shell #app-content :is(.metric-card,.workspace-shortcut):nth-child(4n+3) { --tile:#f1e5cb; --tile-line:#c8aa71; --tile-ink:#674614; }
+#app-shell #app-content :is(.metric-card,.workspace-shortcut):nth-child(4n+4) { --tile:#eddee3; --tile-line:#be99a7; --tile-ink:#69354a; }
+#app-shell #app-content .metric-card { border-top: 3px solid var(--tile-ink) !important; }
+#app-shell #app-content :is(.metric-card strong,.workspace-shortcut-label) { color: var(--tile-ink) !important; }
+#app-shell #app-content :is(.metric-symbol,.workspace-shortcut .nav-icon) { color: var(--tile-ink) !important; background: #fff9ed !important; }
+#app-shell #app-content .workspace-shortcut .nav-icon { border-radius: 8px !important; width: 38px; height: 38px; flex: 0 0 38px; }
+#app-shell #app-content > .panel:has(.activity-item button[data-view]):has(.panel-head button[data-view="readiness"]) {
+  background: linear-gradient(115deg,#243e31,#355142) !important; border-color: #4a6857 !important;
+}
+#app-shell #app-content > .panel:has(.activity-item button[data-view]):has(.panel-head button[data-view="readiness"]) :is(h2,strong) { color: #fff8eb !important; }
+#app-shell #app-content > .panel:has(.activity-item button[data-view]):has(.panel-head button[data-view="readiness"]) :is(p,small,.panel-head button) { color: #f2dfc4 !important; }
+#app-shell #app-content > .panel:has(.activity-item button[data-view]):has(.panel-head button[data-view="readiness"]) .activity-item { border-color: #5d7363 !important; }
+
+:where(#app-shell,#marketing-site,#auth-overlay) :is(.button.button-primary,.row-button.primary) {
+  background: linear-gradient(120deg,#743348,#632b38 55%,#8f442f) !important;
+  color: #fff8ed !important; border-color: #783749 !important;
+}
+:where(#app-shell,#marketing-site,#auth-overlay) :is(.button,.row-button,.workspace-shortcut) { transition: transform .16s ease, filter .16s ease, box-shadow .16s ease; }
+@media (hover:hover) {
+  :where(#app-shell,#marketing-site,#auth-overlay) :is(.button,.row-button,.workspace-shortcut):not(:disabled):hover { filter: brightness(1.09); transform: translateY(-2px); }
+}
+:where(#app-shell,#marketing-site,#auth-overlay) :is(.button,.row-button,.workspace-shortcut):not(:disabled):active { transform: translateY(0); }
+:where(#app-shell,#marketing-site,#auth-overlay) :is(button,a,select,input,textarea):focus-visible { outline: 2px solid #a75c24 !important; outline-offset: 3px; }
+#app-shell #app-content .roadmap-focus-panel { background: linear-gradient(115deg,#533127,#753a46) !important; border-color: #844b4b !important; }
+#app-shell #app-content .roadmap-focus-panel :is(h2,p,small,span,strong) { color: #fff1dc !important; }
+#app-shell #app-content .roadmap-target-card { background: #603b35 !important; border-color: #a9806f !important; }
+#app-shell #app-content .roadmap-phase-map { gap: 10px; }
+#app-shell #app-content .roadmap-phase-node { background: #f8f1e4 !important; border-color: #dac6ae !important; }
+#app-shell #app-content .roadmap-phase-node > span { background: var(--phase-fill) !important; color: #fff8ef !important; }
+#app-shell #app-content :is(.roadmap-phase-node,.roadmap-chart li,.roadmap-phase-stack > article) { --phase-fill:#3f6653; }
+#app-shell #app-content :is(.roadmap-phase-node,.roadmap-chart li,.roadmap-phase-stack > article):nth-child(4n+2) { --phase-fill:#9b4934; }
+#app-shell #app-content :is(.roadmap-phase-node,.roadmap-chart li,.roadmap-phase-stack > article):nth-child(4n+3) { --phase-fill:#866026; }
+#app-shell #app-content :is(.roadmap-phase-node,.roadmap-chart li,.roadmap-phase-stack > article):nth-child(4n+4) { --phase-fill:#75435a; }
+#app-shell #app-content .roadmap-phase-stack > article { border-inline-start: 4px solid var(--phase-fill) !important; scroll-margin-top: 130px; }
+#app-shell #app-content .roadmap-chart { margin-block: 16px; background: #fbf5e9 !important; }
+.roadmap-chart h2 { margin-block: 0 5px; }
+.roadmap-chart > p { color: var(--studio-muted); margin-block: 0 18px; }
+.roadmap-chart ol { display: grid; gap: 14px; padding: 0; margin: 0; list-style: none; }
+.roadmap-chart li { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.5fr) minmax(6ch,auto); gap: 12px; align-items: center; }
+.roadmap-chart a { color: var(--studio-ink); text-decoration: underline; text-underline-offset: .2em; overflow-wrap: anywhere; }
+.roadmap-chart-track { background: #e9decb; height: 12px; border-radius: 4px; overflow: hidden; }
+.roadmap-chart-track i { display: block; background: var(--phase-fill); height: 100%; border-radius: inherit; }
+.roadmap-chart li > strong { font-variant-numeric: tabular-nums; text-align: end; }
+@media (max-width: 680px) {
+  #marketing-site .hero.section-shell { width: calc(100% - 24px); padding: 22px 16px !important; }
+  #marketing-site .hero h1 { font-size: clamp(29px, 7.6vw, 43px) !important; }
+  #marketing-site .hero h1 br { display: none; }
+  .roadmap-chart li { grid-template-columns: minmax(0,1fr) auto; gap: 6px 10px; }
+  .roadmap-chart-track { grid-row: 2; grid-column: 1 / -1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :where(#app-shell,#marketing-site,#auth-overlay) :is(.button,.row-button,.workspace-shortcut) { transition: none !important; transform: none !important; }
+}
+@media print {
+  .roadmap-chart { break-inside: avoid; print-color-adjust: exact; }
+}
+
+#app-shell #app-content .dashboard-grid > .panel { border-top: 3px solid #90623b !important; }
+#app-shell #app-content .dashboard-grid > .panel:has(.progress-stack) { border-top-color: #426c54 !important; background: #f0f2e6 !important; }
+#app-shell #app-content :is(.learning-video-create,.roadmap-builder,.study-heading,.readiness-hero) {
+  background: linear-gradient(120deg,#f8f0df,#ece3d6) !important;
+  border-color: #cdb89c !important;
+}
+#app-shell #app-content :is(.learning-video-card-art,.roadmap-chip-list span,.roadmap-form-step > span) { background: #e5eadb !important; color: #315341 !important; }
+#app-shell #app-content :is(.learning-video-card-progress i,.professional-meter i) { background: #436d53 !important; }
+#app-shell #app-content .report-card:nth-child(3n+1) { border-top: 3px solid #486955 !important; }
+#app-shell #app-content .report-card:nth-child(3n+2) { border-top: 3px solid #a4583e !important; }
+#app-shell #app-content .report-card:nth-child(3n+3) { border-top: 3px solid #895463 !important; }
+#auth-overlay .auth-brand-panel { background: linear-gradient(145deg,#283f33,#373d2d) !important; }
+#auth-overlay .auth-brand-panel :is(h2,p,small,strong,.auth-panel-kicker) { color: #fff0db !important; }
+#auth-overlay .auth-form-panel { background: #fbf5e9 !important; }
+#marketing-site :is(.feature-bento,.preparation-section,.security-section) .feature-card { background: #f7eee0 !important; border-color: #d7c4ad !important; }
+main.shell .assessment-hero { background: linear-gradient(120deg,#e5eadb,#f0e1ce) !important; border-color: #cbbb9f !important; }
+main.shell .assessment-hero :is(h1,p,small) { color: #243d31 !important; }
+main.shell .button-primary { background: #733146 !important; color: #fff6e9 !important; border-color: #733146 !important; }

@@ -84,10 +84,10 @@
     printExpandedNotes = [];
   });
 
-  function phaseHtml(phase, esc) {
+  function phaseHtml(phase, esc, index) {
     const skills = Array.isArray(phase.skills) ? phase.skills : [];
     const projects = Array.isArray(phase.projects) ? phase.projects : [];
-    return '<article class="panel">' +
+    return '<article class="panel" id="roadmap-phase-' + (index + 1) + '" tabindex="-1">' +
       '<div class="panel-head"><div><span class="section-kicker">Phase ' + esc(phase.phase || '') + '</span><h2>' + esc(phase.name || 'Learning phase') + '</h2></div><span class="status-badge status-approved">' + esc(phase.days || 0) + ' days</span></div>' +
       '<div class="two-panel">' +
         '<div><h3>Outcomes</h3>' + listHtml(phase.outcomes, esc) + '<h3>Practice pattern</h3>' + listHtml(phase.practice, esc) + '</div>' +
@@ -138,6 +138,26 @@
 
   function normalizeSkill(value) {
     return String(value || '').trim().toLowerCase().replace(/[^a-z0-9+#.]+/g, ' ');
+  }
+
+  function durationChart(phases, esc) {
+    const durations = phases.map(phase => {
+      const days = Number(phase.days);
+      return Number.isFinite(days) && days > 0 ? days : 0;
+    });
+    const longest = Math.max(0, ...durations);
+    if (!longest) return '';
+    const bars = phases.map((phase, index) => {
+      const days = durations[index];
+      return '<li><a href="#roadmap-phase-' + (index + 1) + '">' +
+        esc(phase.name || 'Phase ' + (index + 1)) + '</a>' +
+        '<span class="roadmap-chart-track" aria-hidden="true"><i style="width:' +
+        (days / longest * 100) + '%"></i></span><strong>' +
+        (days ? esc(days) + (days === 1 ? ' day' : ' days') : 'Unspecified') + '</strong></li>';
+    }).join('');
+    return '<section class="panel roadmap-chart" aria-labelledby="roadmap-chart-title">' +
+      '<h2 id="roadmap-chart-title">Time by phase</h2><p>Compare estimated duration. Select a phase to see its skills, projects and milestones.</p>' +
+      '<ol>' + bars + '</ol></section>';
   }
 
   function roadmapHtml(data, esc, fmtDate) {
@@ -195,7 +215,8 @@
 
     '<section class="roadmap-path-head"><div><span class="section-kicker">YOUR ROADMAP</span><h2>' + esc(data.title || 'Career Roadmap') + '</h2><p>Complete each phase in order. Every phase ends with something you can demonstrate, not just something you have watched or read.</p></div><span class="roadmap-generated">Updated ' + esc(fmtDate(data.created_at)) + '</span></section>' +
     '<div class="roadmap-phase-map" aria-label="Roadmap phase chart">' + phases.map((phase,index) => '<div class="roadmap-phase-node roadmap-phase-node-' + (index % 4) + '"><span>' + esc(phase.phase || index + 1) + '</span><div><strong>' + esc(phase.name || 'Learning phase') + '</strong><small>' + esc(phase.days || 0) + ' days</small></div></div>').join('') + '</div>' +
-    '<div class="roadmap-phase-stack">' + phases.map(phase => phaseHtml(phase, esc)).join('') + '</div>' +
+    durationChart(phases, esc) +
+    '<div class="roadmap-phase-stack">' + phases.map((phase, index) => phaseHtml(phase, esc, index)).join('') + '</div>' +
 
     '<div class="roadmap-support-grid">' +
       supportingSection('Portfolio plan', roadmap.portfolio_plan, esc) +

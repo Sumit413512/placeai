@@ -470,7 +470,7 @@ def root():
         '<script src="/static/integration-readiness.js" defer></script>\n'
         '<script src="/static/ai-readiness.js" defer></script>\n'
         '<script src="/static/workspace-experience.js?v=20261016-interface-guidelines" defer></script>\n'
-        '<script src="/static/career-roadmap.js?v=20261016-interface-guidelines" defer></script>\n'
+        '<script src="/static/career-roadmap.js?v=20261122-atelier1" defer></script>\n'
         '<script src="/static/legal-links.js" defer></script>\n'
     )
     if "/static/access-portal.js" not in html:
