@@ -77,3 +77,45 @@
 @media(max-width:640px) {
   .study-target-periods,.study-target-inputs { grid-template-columns:1fr; }
 }
+
+/* Readable, date-driven study dashboard. Study time remains server-verified. */
+#study-tracker{--study-accent:#80384a;color:#332b27}
+#study-tracker :is(h2,h3){font-weight:760!important}
+#study-tracker h2{font-size:clamp(22px,2.6vw,29px)}
+#study-tracker :is(label,p,summary){font-size:15px;line-height:1.6;color:#463b36}
+#study-tracker :is(small,.study-basis,.study-target-detail,.study-goal>div>span){font-size:13px;color:#5c514b;line-height:1.55}
+#study-tracker .study-text-button,#study-tracker summary{color:#7b3546}
+#study-tracker .button-primary{background:#80384a;border-color:#80384a}
+#study-tracker .study-metrics strong{font-weight:780!important}
+#study-tracker .study-calendar-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px}
+#study-tracker .study-date-kicker{display:block;font-size:12px;font-weight:800;letter-spacing:.09em;color:#824252}
+#study-tracker .study-calendar-header h2{margin:4px 0 5px}
+#study-tracker .study-calendar-header p{margin:0}
+#study-tracker .study-calendar-key{display:flex;gap:8px;align-items:center;color:#584d46;font-size:13px}
+#study-tracker .study-key-dot{height:12px;width:12px;border-radius:4px;background:#43886b;margin-left:6px}
+#study-tracker .study-key-idle{background:#eae4dc;border:1px solid #d8cabe}
+#study-tracker .study-calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:9px;list-style:none;margin:18px 0;padding:0}
+#study-tracker .study-calendar li{min-width:0}
+#study-tracker .study-calendar-day{display:grid;place-items:center;gap:3px;min-height:84px;width:100%;padding:9px 3px;border:1.5px solid #e3d8cf;border-radius:13px;background:#fcf9f5;color:#493831;cursor:pointer;box-sizing:border-box;transition:transform .18s ease,box-shadow .18s ease}
+#study-tracker .study-calendar-day:hover{transform:translateY(-2px);box-shadow:0 7px 18px #573a3020}
+#study-tracker .study-calendar-day.is-active{background:linear-gradient(155deg,#e7f5eb,#d6ece0);border-color:#afd5bd}
+#study-tracker .study-calendar-day.is-selected{outline:3px solid #823947;outline-offset:1px;box-shadow:0 6px 16px #703d4820}
+#study-tracker .study-calendar-weekday{font-size:12px;color:#5b4e47;font-weight:650}
+#study-tracker .study-calendar-day strong{font-size:21px!important;color:#3a2b28;font-weight:800!important;line-height:1.15}
+#study-tracker .study-calendar-dot{height:9px;width:9px;background:#d6c9bd;border-radius:50%}
+#study-tracker .is-active .study-calendar-dot{background:#43886b}
+#study-tracker .study-calendar-detail{display:grid;grid-template-columns:minmax(165px,.8fr) 2fr;gap:18px;padding:20px;background:linear-gradient(120deg,#fff8ee,#fff);border:1px solid #e7d9ca;border-radius:14px;animation:study-date-open .23s ease}
+#study-tracker .study-calendar-detail h3{font-size:22px;margin:5px 0 3px}
+#study-tracker .study-calendar-detail p{font-size:14px;margin:0;color:#60564e}
+#study-tracker .study-day-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+#study-tracker .study-day-stats>div{background:#fff;border:1px solid #eadfd2;border-radius:11px;padding:12px 10px}
+#study-tracker .study-day-stats span,#study-tracker .study-day-stats strong{display:block}
+#study-tracker .study-day-stats span{font-size:13px;color:#584d46}
+#study-tracker .study-day-stats strong{font-size:21px;color:#512d36;margin-top:4px}
+#study-tracker .study-history{margin-top:17px}
+#study-tracker .study-history summary{font-size:14px}
+#study-tracker .study-targets .panel-head p{font-size:13px}
+@keyframes study-date-open{from{opacity:.6;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media(max-width:850px){#study-tracker .study-calendar-detail{grid-template-columns:1fr}#study-tracker .study-day-stats{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:550px){#study-tracker .study-calendar{gap:5px}#study-tracker .study-calendar-day{min-height:65px;padding:6px 2px;border-radius:9px}#study-tracker .study-calendar-weekday{font-size:11px}#study-tracker .study-calendar-day strong{font-size:17px!important}#study-tracker .study-day-stats>div{padding:10px}}
+@media(prefers-reduced-motion:reduce){#study-tracker .study-calendar-day{transition:none}#study-tracker .study-calendar-day:hover{transform:none}#study-tracker .study-calendar-detail{animation:none}}
