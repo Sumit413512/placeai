@@ -720,7 +720,7 @@
     state.readingQuestionId=q.question_id;
     const spec=q.coding_spec || {};
     const examples=(spec.sample_tests || []).map((sample,i)=>'Example '+(i+1)+'. Input. '+sample.input+'. Expected output. '+sample.output).join(' ');
-    const text=q.question+(q.options?.length?' Options. '+q.options.map((v,i)=>'Option '+(i+1)+'. '+v).join(' '):'')+' '+(spec.constraints || []).join('. ')+' '+examples;
+    const text=q.question+(q.options?.length?' Options. '+q.options.map((v,i)=>'Option '+(i+1)+'. '+v).join(' '):'')+' '+(spec.constraints || []).join('. ')+' '+examples+' '+(record?'Record your answer.':'You may answer now.');
     if(!window.speechSynthesis)throw new Error('Question reading is unavailable in this browser. Read the displayed question, then select Start answer.');
     // Let cancellation finish before queuing another utterance. Chrome can
     // otherwise discard speech queued in the same task as cancel().

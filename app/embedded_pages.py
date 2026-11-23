@@ -35,6 +35,7 @@ INDEX_HTML = '''<!doctype html>
 </head>
 <body>
   <div id="toast-region" class="toast-region" aria-live="polite"></div>
+  <form id="home-sign-in" action="/sign-in" method="get" hidden></form>
 
   <div id="marketing-site">
     <a class="placeai-skip-link" href="#top">Skip to main content</a>
@@ -52,7 +53,7 @@ INDEX_HTML = '''<!doctype html>
         <a href="/static/help.html">Help &amp; Support</a>
       </nav>
       <div class="header-actions">
-        <button class="button button-ghost" data-open-auth="login">Sign in</button>
+        <button class="button button-ghost" data-open-auth="login" form="home-sign-in" type="submit">Sign in</button>
         <button class="button button-primary" data-open-access="request">Request access</button>
       </div>
       <a class="mobile-support-link" href="/static/help.html" aria-label="Open Help and Support"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.7 9a2.4 2.4 0 0 1 4.6 1c0 1.8-2.3 2.1-2.3 3.7"/><path d="M12 17h.01"/></svg></a>
@@ -68,7 +69,7 @@ INDEX_HTML = '''<!doctype html>
             <p class="hero-journey-line">Learn · Practice · Get Placed</p>
             <p class="hero-lead">Learn with video lessons, quizzes and downloadable notes. Prepare with proctored mock interviews and assessments, then track your campus applications from eligibility through offers.</p>
             <div class="hero-actions">
-              <button class="button button-primary button-large" data-open-auth="login">Sign in to PlaceAI <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
+              <button class="button button-primary button-large" data-open-auth="login" form="home-sign-in" type="submit">Sign in to PlaceAI <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
               <button class="button button-secondary button-large" data-open-access="request">Request workspace access</button>
             </div>
             <div class="hero-trust">
@@ -645,7 +646,7 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
 <script src="/static/api-errors.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.es2017.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js" defer></script>
-<script src="/static/mock-interview.js?v=20261124-interviewer-call1" defer></script>
+<script src="/static/mock-interview.js?v=20261124-interviewer-call2" defer></script>
 </body>
 </html>
 '''
