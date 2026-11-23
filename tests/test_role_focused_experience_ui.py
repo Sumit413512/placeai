@@ -64,7 +64,7 @@ def test_normal_user_copy_hides_operational_implementation_details():
     assert "student database from becoming an open recruiter directory" not in core
     assert "production delivery provider is configured" not in core
 
-    assert "Your placement updates, deadlines and required actions appear here in one place." in core
+    assert "Review placement updates, deadlines and approvals." in core
     assert "You can view only candidates who have applied to your jobs." in core
     assert "Email and other external alerts are not available yet." in core
 

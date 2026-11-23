@@ -1620,7 +1620,7 @@ body :is(h1, h2, h3, h4, h5),
   font-size: .9375rem;
 }
 #app-shell .notification-panel .row-button {
-  min-height: 44px;
+  min-height: 44px !important;
   font-size: .9375rem !important;
 }
 @media (max-width: 760px) {
