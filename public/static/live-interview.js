@@ -81,5 +81,5 @@
       headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
       body:JSON.stringify({conversation_id:prior.conversation_id,session_proof:prior.session_proof})}).catch(()=>{});
   });
-  window.PlaceAILiveInterview={init:initialize};
+  window.PlaceAILiveInterview={init:initialize,disableForAssessment:()=>{if(session)return; $('live-coach').hidden=true;}};
 })();

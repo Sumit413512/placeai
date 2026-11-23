@@ -1913,7 +1913,7 @@
       toast(error.message || 'Full-screen permission is required to start the assessment.','error');
       return;
     }
-    state.assessmentActive=true;state.finishing=false;state.current=0;state.totalRemaining=TOTAL_SECONDS;state.sectionRemaining=0;state.integrityEvents=[];state.integrityWarnings=0;state.lastWarningAt=0;state.autoSubmittedIntegrity=false;state.integrityTerminationReason='';state.proctorVisionBusy=false;state.proctorModelBusy=false;state.faceMissStreak=0;state.multipleFaceStreak=0;state.phoneDetectionStreak=0;state.signalStreaks={candidate:0,multiple:0,phone:0};state.signalLastWarning={candidate:0,multiple:0,phone:0,monitor:0};
+    state.assessmentActive=true;window.PlaceAILiveInterview?.disableForAssessment();state.finishing=false;state.current=0;state.totalRemaining=TOTAL_SECONDS;state.sectionRemaining=0;state.integrityEvents=[];state.integrityWarnings=0;state.lastWarningAt=0;state.autoSubmittedIntegrity=false;state.integrityTerminationReason='';state.proctorVisionBusy=false;state.proctorModelBusy=false;state.faceMissStreak=0;state.multipleFaceStreak=0;state.phoneDetectionStreak=0;state.signalStreaks={candidate:0,multiple:0,phone:0};state.signalLastWarning={candidate:0,multiple:0,phone:0,monitor:0};
     document.body.classList.remove('integrity-critical');
     updateIntegrityWarningUI();
     document.body.classList.add('secure-assessment');
