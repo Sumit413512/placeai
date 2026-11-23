@@ -26,11 +26,11 @@ INDEX_HTML = '''<!doctype html>
 <meta property="og:title" content="PlaceAI — Campus placement operations">
 <meta property="og:description" content="Learn with video lessons, quizzes and notes, prepare with proctored mock assessments, and manage campus placements in one PlaceAI workspace.">
 <meta property="og:url" content="https://www.placeai.in/">
-<meta property="og:image" content="https://www.placeai.in/static/placeai-hero-approved-hd.webp">
+<meta property="og:image" content="https://www.placeai.in/static/placeai-hero-laptop.webp">
 <meta property="og:image:alt" content="PlaceAI campus placement collaboration">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/static/privacy-preferences.css"><script src="/static/privacy-preferences.js" defer></script>
-<link rel="stylesheet" href="/static/selected-theme.css?v=20261123-workspace-clarity1">
+<link rel="stylesheet" href="/static/selected-theme.css?v=20261123-student-guidance1">
   <link rel="stylesheet" href="/static/learning-hub.css?v=20261023-notes2">
 </head>
 <body>
@@ -80,7 +80,7 @@ INDEX_HTML = '''<!doctype html>
 
           <div class="hero-product" aria-label="PlaceAI production workspace information">
             <figure class="hero-photo-card">
-              <img src="/static/placeai-hero-approved-hd.webp" alt="Illustrative student collaboration scene for the PlaceAI placement journey" loading="eager" fetchpriority="high" decoding="async" width="1672" height="941">
+              <div class="hero-photo-composition"><img src="/static/placeai-hero-laptop.webp" alt="Illustrative student collaboration scene for the PlaceAI placement journey" loading="eager" fetchpriority="high" decoding="async" width="1672" height="941"><img class="hero-laptop-logo" src="/static/placeai-logo.svg" alt="" aria-hidden="true"></div>
               <figcaption><span>From preparation to placement</span><strong>One connected campus journey.</strong></figcaption>
             </figure>
             <div class="production-surface-card hero-surface-card">
@@ -196,7 +196,7 @@ INDEX_HTML = '''<!doctype html>
       <section class="cta-section"><div class="section-shell cta-inner"><div><span>Need a PlaceAI workspace?</span><h2>Choose the correct role<br>and request controlled access.</h2></div><button class="button button-light button-large" data-open-access="request">Request access</button></div></section>
     </main>
 
-    <footer class="site-footer section-shell"><a class="brand" href="#top"><span class="brand-mark"><span></span><span></span><span></span></span><span>PlaceAI</span></a><p>AI-assisted campus placement operating system.</p><nav class="site-footer-quick-links" aria-label="Support"><a href="/static/help.html">Help Centre</a><a href="/static/contact.html">Contact</a></nav><span>© 2026 PlaceAI · Privacy-first campus hiring.</span></footer>
+    <footer class="site-footer section-shell"><a class="brand" href="#top"><span class="brand-mark"><span></span><span></span><span></span></span><span>PlaceAI</span></a><div><p>AI-assisted campus placement operating system.</p><p class="footer-location">Pune, Maharashtra, India</p></div><nav class="site-footer-quick-links" aria-label="Support"><a href="/static/help.html">Help Centre</a><a href="/static/contact.html">Contact</a></nav><span>© 2026 PlaceAI · Privacy-first campus hiring.</span></footer>
   </div>
 
   <div id="app-shell" class="app-shell hidden">
@@ -209,7 +209,7 @@ INDEX_HTML = '''<!doctype html>
     </aside>
     <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" data-action="toggle-sidebar" aria-label="Close navigation"></button>
     <div class="app-content-wrap">
-      <header class="app-topbar"><button class="sidebar-trigger" data-action="toggle-sidebar">Menu</button><div class="topbar-context"><strong class="workspace-welcome">Welcome, <span id="sidebar-user-name"></span></strong></div><div hidden><small id="page-eyebrow">Workspace</small><strong id="page-title">Dashboard</strong></div><div class="topbar-actions"><button class="icon-button command-launch" data-action="open-command-palette" title="Search PlaceAI" aria-label="Search PlaceAI"><svg class="command-launch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>Search <kbd>Ctrl K</kbd></button><button class="icon-button help-centre-button" data-action="open-help-centre" title="Help Centre" aria-label="Open Help Centre"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M9.7 9a2.4 2.4 0 0 1 4.6 1c0 1.8-2.3 2.1-2.3 3.7"/><path d="M12 17h.01"/></svg><span>Help</span></button><button class="icon-button" id="notifications-button" data-action="open-notifications" title="Notifications" aria-label="Notifications"><span class="notification-dot"></span>Updates <b id="notification-count" class="notification-count">0</b></button><button class="button button-primary button-small" id="context-action">New</button></div></header>
+      <header class="app-topbar"><button class="sidebar-trigger" data-action="toggle-sidebar">Menu</button><div class="topbar-context"><strong class="workspace-welcome">Welcome, <span id="sidebar-user-name"></span></strong></div><div hidden><small id="page-eyebrow">Workspace</small><strong id="page-title">Dashboard</strong></div><div class="topbar-actions"><button class="icon-button command-launch" data-action="open-command-palette" title="Search PlaceAI" aria-label="Search PlaceAI"><svg class="command-launch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>Search <kbd>Ctrl K</kbd></button><button class="icon-button help-centre-button" data-action="open-help-centre" title="Help Centre" aria-label="Open Help Centre"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M9.7 9a2.4 2.4 0 0 1 4.6 1c0 1.8-2.3 2.1-2.3 3.7"/><path d="M12 17h.01"/></svg><span>Help</span></button><button class="icon-button workspace-tool" id="workspace-tour-button" data-action="start-workspace-tour" title="Workspace tour" aria-label="Workspace tour" hidden></button><button class="icon-button workspace-tool" id="announcements-button" data-view="announcements" title="Announcements" aria-label="Announcements" hidden></button><button class="icon-button workspace-tool" id="notifications-button" data-view="notifications" title="Notifications" aria-label="Notifications"><span class="notification-dot" aria-hidden="true"></span><span class="workspace-tool-label">Notifications</span><b id="notification-count" class="notification-count" aria-hidden="true">0</b></button><button class="button button-primary button-small" id="context-action">New</button></div></header>
       <main id="app-content" class="app-content" tabindex="-1"><div class="loading-state"><span class="loader"></span><p>Loading your workspace…</p></div></main>
     </div>
   </div>
@@ -243,7 +243,7 @@ INDEX_HTML = '''<!doctype html>
     </section>
   </div>
 
-  <script src="/static/app.js?v=20261123-workspace-clarity1" defer></script>
+  <script src="/static/app.js?v=20261123-student-guidance1" defer></script>
   <script src="/static/opportunities.js?v=20261021-detail1" defer></script>
   <link rel="stylesheet" href="/static/opportunities.css?v=20261021-detail1">
   <link rel="stylesheet" href="/static/learning-video.css?v=20261017-full-course4">
@@ -252,7 +252,7 @@ INDEX_HTML = '''<!doctype html>
   <script src="/static/learning-video.js?v=20261122-readiness3" defer></script>
   <link rel="stylesheet" href="/static/study-tracker.css?v=20261024-zensar1">
 <link rel="stylesheet" href="/static/evidence-vault.css?v=20261024-zensar1">
-  <script src="/static/study-tracker.js?v=20261024-zensar1" defer></script>
+  <script src="/static/study-tracker.js?v=20261123-student-guidance1" defer></script>
   <script src="/static/notes-reader.js?v=20261024-zensar1" defer></script>
   <script src="/static/learning-hub.js?v=20261024-zensar1" defer></script>
 </body>
@@ -266,7 +266,7 @@ PRIVACY_HTML = '''<!doctype html><html lang="en"><head><meta charset="utf-8"><me
 <meta property="og:title" content="Privacy Policy — PlaceAI">
 <meta property="og:description" content="PlaceAI Privacy Policy">
 <meta property="og:url" content="https://www.placeai.in/privacy">
-<meta property="og:image" content="https://www.placeai.in/static/placeai-hero-approved-hd.webp">
+<meta property="og:image" content="https://www.placeai.in/static/placeai-hero-laptop.webp">
 <meta property="og:image:alt" content="PlaceAI campus placement collaboration">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/static/selected-theme.css?v=20261111-warm2">
@@ -279,7 +279,7 @@ TERMS_HTML = '''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta
 <meta property="og:title" content="Terms of Use — PlaceAI">
 <meta property="og:description" content="PlaceAI Terms of Use">
 <meta property="og:url" content="https://www.placeai.in/terms">
-<meta property="og:image" content="https://www.placeai.in/static/placeai-hero-approved-hd.webp">
+<meta property="og:image" content="https://www.placeai.in/static/placeai-hero-laptop.webp">
 <meta property="og:image:alt" content="PlaceAI campus placement collaboration">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/static/selected-theme.css?v=20261111-warm2">
@@ -292,7 +292,7 @@ ACCEPTABLE_USE_HTML = '''<!doctype html><html lang="en"><head><meta charset="utf
 <meta property="og:title" content="Acceptable Use — PlaceAI">
 <meta property="og:description" content="PlaceAI Acceptable Use Policy">
 <meta property="og:url" content="https://www.placeai.in/acceptable-use">
-<meta property="og:image" content="https://www.placeai.in/static/placeai-hero-approved-hd.webp">
+<meta property="og:image" content="https://www.placeai.in/static/placeai-hero-laptop.webp">
 <meta property="og:image:alt" content="PlaceAI campus placement collaboration">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/static/selected-theme.css?v=20261111-warm2">
@@ -331,7 +331,6 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
 <header class="topbar">
   <a class="brand" href="/"><span class="brand-mark"><i></i><i></i><i></i></span><span>PlaceAI</span></a>
   <div class="top-actions">
-    <span class="secure"><span class="secure-dot"></span> Interview Intelligence</span>
     <a href="/">Back to PlaceAI</a>
   </div>
 </header>
@@ -346,12 +345,10 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
         <span>Role-based blueprint</span><span>Section timers</span><span>Forward-only flow</span><span>Secure browser controls</span><span>AI-assisted proctoring</span>
       </div>
     </div>
-    <aside class="hero-score-card assessment-standard-card">
-      <span class="card-kicker">Assessment standard</span>
-      <strong>Institution-grade simulation</strong>
-      <p>Coverage, difficulty, timing and integrity controls are defined by the assessment blueprint. Students complete the assigned structure without reducing or bypassing sections.</p>
-      <div class="mini-stats"><div><b>10</b><span>Sections</span></div><div><b>Proctored</b><span>Environment</span></div><div><b>AI + Rules</b><span>Evaluation</span></div></div>
-    </aside>
+    <figure class="assessment-practice-photo">
+      <img src="/static/workspace-mock-interview.webp" alt="Student speaking to a laptop camera during a mock interview" width="960" height="640" decoding="async">
+      <figcaption>Structured placement practice</figcaption>
+    </figure>
   </section>
 
   <div id="preview-banner" class="preview-banner hidden"><strong>Assessment preview</strong><span>This preview uses sample assessment data. Camera, screen-share and on-device proctoring checks run when you grant permission; no biometric identity matching is performed.</span></div>

@@ -212,11 +212,12 @@
     setContextAction();
 
     const status = await api('/roadmap/status');
+    const photo = '<img class="workspace-feature-photo" src="/static/workspace-roadmap.webp" alt="" width="800" height="533" decoding="async">';
     if (!status.allowed) {
-      root().innerHTML = pageHead(
+      root().innerHTML = '<div class="workspace-feature-heading">' + pageHead(
         'AI Career Roadmap',
         'A personalized, current-market learning plan built from your interests, target roles, existing skills and time commitment.'
-      ) +
+      ) + photo + '</div>' +
       '<div class="metric-grid">' +
         '<article class="metric-card"><small>Roadmap-only unlock</small><strong>₹' + esc(status.price_inr || 20) + '</strong><span>one-time feature access</span></article>' +
         '<article class="metric-card"><small>Free trial</small><strong>Not included</strong><span>The 3-day free trial cannot generate Career Roadmaps</span></article>' +
@@ -234,10 +235,10 @@
 
     let latest = null;
     if (status.latest_available) latest = await api('/roadmap/latest');
-    const page = pageHead(
+    const page = '<div class="workspace-feature-heading">' + pageHead(
       'AI Career Roadmap',
       'Turn your target role into a clear sequence of skills, projects and milestones based on your profile and the current market.'
-    );
+    ) + photo + '</div>';
     const editor = builderForm(esc, latest);
 
     if (latest) {

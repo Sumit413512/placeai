@@ -30,7 +30,7 @@ def test_workspace_guard_accepts_institution_access_before_extension_button_moun
     assert app_guard == public_guard
     assert f"const INSTITUTION_ACCESS_VIEW = '{VIEW_ID}';" in app_guard
     assert "if (role === 'institution admin') allowed.add(INSTITUTION_ACCESS_VIEW);" in app_guard
-    assert "const active = nav.querySelector('button.active[data-view]');" in app_guard
+    assert "const active = buttons.find(button => button.classList.contains('active'));" in app_guard
     assert "const unsupportedLoadingView = loading && !activeValid;" in app_guard
 
 

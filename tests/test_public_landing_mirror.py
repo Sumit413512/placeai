@@ -31,7 +31,9 @@ def test_public_landing_preview_is_mirrored_and_keeps_approved_brand():
     assert 'href="#security">Security</a>' in app_html
 
     assert 'id="preparation-lab"' in app_html
-    assert '/static/placeai-hero-approved-hd.webp' in app_html
+    assert '/static/placeai-hero-laptop.webp' in app_html
+    assert 'class="hero-laptop-logo" src="/static/placeai-logo.svg"' in app_html
+    assert 'Pune, Maharashtra, India' in app_html
     assert "<video" not in app_html.lower()
 
 

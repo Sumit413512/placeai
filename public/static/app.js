@@ -23,16 +23,16 @@
     '/static/api-errors.js',
     '/static/auth-protection.js?v=20261123-mfa-layout1',
     '/static/access-portal.js?v=20261123-workspace-clarity1',
-    '/static/ui-state-fixes.js?v=20261024-zensar1',
+    '/static/ui-state-fixes.js?v=20261123-student-guidance1',
     '/static/account-security.js',
     '/static/provisioning-password-fix.js',
     '/static/release-ux-fixes.js',
     '/static/integration-readiness.js',
     '/static/ai-readiness.js',
-    '/static/workspace-experience.js?v=20261016-interface-guidelines',
-    '/static/legal-links.js',
-    '/static/career-roadmap.js?v=20261123-workspace-clarity1',
-    '/static/app-core.js?v=20261123-workspace-clarity1'
+    '/static/workspace-experience.js?v=20261123-student-guidance1',
+    '/static/legal-links.js?v=20261123-student-guidance1',
+    '/static/career-roadmap.js?v=20261123-student-guidance1',
+    '/static/app-core.js?v=20261123-student-guidance1'
   ];
 
   const loadNext = (index) => {

@@ -173,14 +173,19 @@ def test_google_first_signup_returning_signin_refresh_and_logout(google_server):
             assert db.execute('select count(*) from google_identities').fetchone()[0] == 1
         page.set_viewport_size({"width":1440,"height":1000})
         views = page.locator('#app-nav [data-view]').evaluate_all('els=>els.map(el=>el.dataset.view)')
-        assert {'drives','calendar','announcements','roadmap','learning-hub','mock-interview','resume','documents'} <= set(views)
+        assert {'drives','calendar','roadmap','learning-hub','mock-interview','resume','documents'} <= set(views)
+        assert 'announcements' not in views
+        announcements = page.locator('.app-topbar').get_by_role('button', name='Announcements', exact=True)
+        expect(announcements).to_be_visible()
         assert 'billing' not in views
-        for view in ['readiness','roadmap','learning-hub','drives','calendar','announcements','documents']:
+        for view in ['readiness','roadmap','learning-hub','drives','calendar','documents']:
             nav = page.locator(f'#app-nav [data-view="{view}"]')
             if not nav.is_visible(): page.locator('.placeai-nav-more').click()
             nav.click()
             page.locator('#app-content .page-head').wait_for()
             assert not page.locator('#app-content').get_by_text('Unable to load this view',exact=True).count()
+        announcements.click()
+        expect(page.get_by_role('heading', name='Placement announcements', exact=True)).to_be_visible()
         page.reload(wait_until="networkidle")
         page.locator('#app-shell').wait_for(state="visible")
         assert page.evaluate("Object.values(sessionStorage).every(v=>!v.includes('eyJ'))")

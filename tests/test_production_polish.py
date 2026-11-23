@@ -20,7 +20,7 @@ def test_polish_loader_and_mobile_navigation_contract() -> None:
     styles = _read("app/static/production-polish.css")
     template = _read("app/templates/index.html")
 
-    assert "'/static/production-polish.js'" in loader
+    assert "'/static/production-polish.js?v=20261123-student-guidance1'" in loader
     assert 'data-action="toggle-mobile-menu"' in template
     assert ".mobile-menu[data-action=\"toggle-mobile-menu\"]" in polish
     assert "setMobileNavigation(!header?.classList.contains('mobile-open'))" in polish

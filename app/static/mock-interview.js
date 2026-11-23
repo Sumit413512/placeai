@@ -709,6 +709,7 @@
     state.narrationCancel?.();
     state.narrationCancel=null;
     state.narrationUtterance=null;
+    state.narrationSpeaking=false;
     state.readingQuestionId=null;
     if(window.speechSynthesis)speechSynthesis.cancel();
   }
@@ -741,13 +742,13 @@
         const finish=(error)=>{
           if(settled)return;settled=true;clearTimeout(startTimer);clearTimeout(timer);
           utterance.onend=null;utterance.onerror=null;utterance.onstart=null;
-          if(state.narrationUtterance===utterance){state.narrationUtterance=null;state.narrationCancel=null;}
+          if(state.narrationUtterance===utterance){state.narrationUtterance=null;state.narrationCancel=null;state.narrationSpeaking=false;updateSpokenIndicator();}
           if(error)reject(error);else resolve();
         };
         state.narrationCancel=()=>finish();
         timer=setTimeout(()=>finish(new Error('Question reading was interrupted. Select Read question again to retry.')),60000);
         startTimer=setTimeout(()=>finish(new Error('Question reading did not start. Select Read question again to retry.')),2500);
-        utterance.onstart=()=>clearTimeout(startTimer);
+        utterance.onstart=()=>{clearTimeout(startTimer);state.narrationSpeaking=true;updateSpokenIndicator();};
         utterance.onend=()=>finish();
         utterance.onerror=()=>finish(state.narrationGeneration!==generation?null:new Error('Question reading was interrupted. Select Read question again to retry.'));
         speechSynthesis.resume?.();
@@ -933,6 +934,14 @@
     indicator.classList.toggle('listening',recording);
     const reading=state.readingQuestionId===q?.question_id;
     indicator.classList.toggle('reading',!recording && reading);
+    const interviewer=$('.hr-interviewer');
+    if(interviewer){
+      const phase=recording?'listening':state.narrationSpeaking?'speaking':'ready';
+      if(interviewer.dataset.phase!==phase){
+        interviewer.dataset.phase=phase;
+        $('.hr-interviewer-state',interviewer).textContent={listening:'Listening to your answer',speaking:'Asking your question',ready:'Ready for your answer'}[phase];
+      }
+    }
     const label=$('#spoken-mic-label'),help=$('#spoken-mic-help'),timer=$('#spoken-question-timer');
     if(label)label.textContent=recording?'Microphone on · Listening':state.answerStarting?'Starting microphone…':reading?'Question is being read aloud':clip?'Recording stopped':'Ready to record your answer';
     if(help)help.textContent=recording?(q?.response_mode==='video'?'Camera and microphone are recording this answer.':'Your voice is recording for this question.'):reading?'You can select Start answer now to finish reading and turn on your microphone.':clip?'Continue to save the captured answer.':'Select Start answer now. If your device is unavailable, reconnect the microphone.';
@@ -963,11 +972,33 @@
     finally{replacement?.getTracks().forEach(track=>track.stop());state.reconnectingMicrophone=false;button.disabled=false;updateSpokenIndicator();}
   }
 
+  function interviewerMarkup() {
+    return `<div class="hr-interviewer" data-phase="ready">
+      <svg class="hr-interviewer-avatar" viewBox="0 0 176 124" aria-hidden="true" focusable="false">
+        <rect width="176" height="124" rx="16" fill="#f0e3d8"/>
+        <circle cx="147" cy="30" r="22" fill="#ead5cb"/>
+        <path d="M0 107h176v17H0z" fill="#dbc3b5"/>
+        <path class="hr-avatar-jacket" d="M35 124c3-26 20-40 41-43h24c22 3 39 17 42 43Z" fill="#63343d"/>
+        <path d="m73 83 15 28 15-28" fill="#fff3e8"/>
+        <g class="hr-avatar-head">
+          <path d="M80 66h16v22l-8 9-8-9z" fill="#a96755"/>
+          <path d="M62 57c-5-4-7-13-3-16-3-25 15-35 30-35 22 0 34 16 30 34 4 5 2 14-4 18-5 13-14 24-27 24-12 0-22-10-26-25z" fill="#b97761"/>
+          <path d="M60 45c-11-25 6-41 25-41 19-4 37 9 35 28l-4 16c-1-8-4-15-9-19-17 4-31-1-38-6-4 4-7 12-8 22z" fill="#412b29"/>
+          <path d="M70 46q5-4 10-1m16 0q5-3 10 1" fill="none" stroke="#4a2a2a" stroke-width="2" stroke-linecap="round"/>
+          <g class="hr-avatar-eyes" fill="#372423"><ellipse cx="76" cy="51" rx="2" ry="2.5"/><ellipse cx="100" cy="51" rx="2" ry="2.5"/></g>
+          <path d="m86 55-2 6 5 1" fill="none" stroke="#8a4e42" stroke-width="1.5" stroke-linecap="round"/>
+          <ellipse class="hr-avatar-mouth" cx="88" cy="69" rx="6" ry="3" fill="#552d32"/>
+        </g>
+      </svg>
+      <div class="hr-interviewer-copy"><strong>PlaceAI interviewer</strong><span class="hr-interviewer-state" aria-live="polite">Ready to ask your question</span></div>
+    </div>`;
+  }
+
   function renderSpokenAnswer(q) {
     state.answerClip=null;
     const answerSeconds=Math.max(45,Math.min(150,Number(q.answer_time_seconds)||150));
     const answerWindow=answerSeconds%60===0?(answerSeconds/60)+' minute'+(answerSeconds===60?'':'s'):Math.floor(answerSeconds/60)+' min '+(answerSeconds%60)+' sec';
-    $('#answer-area').innerHTML='<div class="answer-field"><strong>'+(q.response_mode==='video'?'HR camera and voice answer':'Spoken answer')+'</strong><p>Listen to the question, then answer aloud. This question has its own private recording with up to '+answerWindow+' of answer time.</p>'+spokenIndicatorMarkup(answerSeconds,q.response_mode==='video')+'<p id="spoken-answer-status" role="status">Reading question…</p><button id="start-spoken-answer" type="button" class="button secondary">Start answer now</button><button id="reconnect-answer-microphone" type="button" class="button secondary hidden">Reconnect microphone</button>'+(q.response_mode==='video'?'<video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video>':'')+'</div>';
+    $('#answer-area').innerHTML=(q.response_mode==='video'?interviewerMarkup():'')+'<div class="answer-field"><strong>'+(q.response_mode==='video'?'HR camera and voice answer':'Spoken answer')+'</strong><p>Listen to the question, then answer aloud. This question has its own private recording with up to '+answerWindow+' of answer time.</p>'+spokenIndicatorMarkup(answerSeconds,q.response_mode==='video')+'<p id="spoken-answer-status" role="status">Reading question…</p><button id="start-spoken-answer" type="button" class="button secondary">Start answer now</button><button id="reconnect-answer-microphone" type="button" class="button secondary hidden">Reconnect microphone</button>'+(q.response_mode==='video'?'<video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video>':'')+'</div>';
     const preview=$('#hr-answer-preview');if(preview){preview.srcObject=state.mediaStream;preview.play().catch(()=>{});}
     $('#start-spoken-answer').onclick=()=>beginQuestionAnswer(q);
     $('#reconnect-answer-microphone').onclick=()=>reconnectAnswerMicrophone(q);
@@ -2752,11 +2783,11 @@
     }
     try {
       if(!(await refreshToken())){
-        $('#auth-state').innerHTML='No active student session. <a href="/?portal=student">Sign in to PlaceAI</a>, then return to Interview Intelligence.';
+        $('#auth-state').innerHTML='No active student session. <a href="/?portal=student">Sign in to PlaceAI</a>, then return to mock interview practice.';
         return;
       }
       state.me=await api('/auth/me');
-      if(state.me.role!=='student'){ $('#auth-state').textContent='Interview Intelligence is available to student accounts only.'; return; }
+      if(state.me.role!=='student'){ $('#auth-state').textContent='Mock interview practice is available to student accounts only.'; return; }
       state.recordingPolicy=await api('/mock-interview/recording-policy').catch(()=>null);
       if(state.recordingPolicy?.processor==='groq'){
         $('#consent-check').closest('label').querySelector('span').textContent='I understand that this proctored practice assessment uses camera, microphone, screen sharing and browser monitoring for integrity signals reviewed by institution staff. I consent to sending my spoken answers, HR camera recordings and selected video frames to Groq for transcription and practice coaching, with Zero Data Retention enabled. PlaceAI keeps recordings private for 30 days for me and authorized institution staff. Speech-recognition and sampled-frame feedback cannot assess pronunciation or continuous-video behavior. All section results appear together after analysis finishes. These are practice insights for human review, not hiring decisions.';
