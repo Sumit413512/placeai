@@ -42,6 +42,7 @@
     busy=true;end.disabled=true;clearTimeout(expireTimer);clearInterval(clockTimer);
     const prior=session;session=null;
     frame.removeAttribute('src');room.hidden=true;form.hidden=false;start.disabled=!ready;
+    $('live-coach-consent').checked=false;
     say('Live interview ended. You can start a new practice session.','ready');
     try{await api('/mock-interview/live/end',{method:'POST',body:JSON.stringify({
       conversation_id:prior.conversation_id,session_proof:prior.session_proof

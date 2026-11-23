@@ -140,8 +140,17 @@ def test_live_start_and_end_provider_contract_without_real_credentials(monkeypat
     assert calls[0][3]["properties"]["max_call_duration"]==600
     assert calls[0][3]["properties"]["enable_recording"] is False
     assert calls[0][3]["properties"]["enable_closed_captions"] is True
+    assert calls[0][3]["properties"]["language"]=="english"
     assert limits[0]["limit"]==2 and limits[0]["window_seconds"]==3600
     end=asyncio.run(live.live_end(live.LiveEnd(
         conversation_id=result["conversation_id"],session_proof=result["session_proof"]),student))
     assert end=={"ended":True}
     assert calls[1][1]=="https://tavusapi.com/v2/conversations/c12345/end"
+
+def test_language_maps_hindi_and_hinglish_to_tavus_settings():
+    # Tavus expects full names and multilingual for mixed Hindi/English speech.
+    assert live.LiveStart(role="Analyst",language="hindi",consent=True).language=="hindi"
+    assert live.LiveStart(role="Analyst",language="hinglish",consent=True).language=="hinglish"
+    source=(ROOT/"app/routers/live_interview.py").read_text()
+    assert '"hinglish": "multilingual"' in source
+    assert '"hindi": "hindi"' in source

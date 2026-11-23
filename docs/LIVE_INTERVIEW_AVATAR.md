@@ -9,7 +9,7 @@ The existing HR/spoken-answer assessment uses a still portrait and browser speec
 ## Setup
 
 1. Create a Tavus account with a consented stock face (or a properly consented custom face).
-2. Configure a Tavus **PAL** to act as a professional interview coach, with live listening, role-based follow-ups, conversational voice, natural expressions and an appropriate visual-perception setting. Enable English/Hindi support in the PAL where supported and test Hinglish; a language selector alone does not guarantee natural code-switching.
+2. Configure a Tavus **PAL** to act as a professional interview coach, with live listening, role-based follow-ups, conversational voice, natural expressions and an appropriate visual-perception setting. Enable English/Hindi support in the PAL where supported and test Hinglish; the backend maps Hindi to `hindi` and Hinglish to Tavus `multilingual` for automatic language detection. The configured PAL voice/STT must still be tested for natural code-switching.
 3. Set these three Vercel project **server-side** environment variables in the production and preview environments:
    - `TAVUS_API_KEY` — secret, never exposed in the browser.
    - `TAVUS_PAL_ID` — your configured PAL ID.

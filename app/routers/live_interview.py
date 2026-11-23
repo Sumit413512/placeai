@@ -180,6 +180,7 @@ async def live_start(
             "participant_absent_timeout": 60,
             "enable_recording": False,
             "enable_closed_captions": True,
+            "language": {"english": "english", "hindi": "hindi", "hinglish": "multilingual"}[request.language],
         },
     }
     result = await _provider("POST", PROVIDER_URL, key, payload=payload)
