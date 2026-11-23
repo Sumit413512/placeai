@@ -154,3 +154,10 @@ def test_language_maps_hindi_and_hinglish_to_tavus_settings():
     source=(ROOT/"app/routers/live_interview.py").read_text()
     assert '"hinglish": "multilingual"' in source
     assert '"hindi": "hindi"' in source
+
+def test_live_context_prioritizes_natural_followups_and_no_biometric_scoring():
+    source=(ROOT/"app/routers/live_interview.py").read_text()
+    assert "acknowledge a specific point and ask a natural follow-up" in source
+    assert "Do not interrupt" in source
+    assert "never to judge emotions" in source
+    assert "For Hinglish" in source

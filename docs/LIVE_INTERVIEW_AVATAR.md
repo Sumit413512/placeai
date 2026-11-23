@@ -31,3 +31,19 @@ The existing HR/spoken-answer assessment uses a still portrait and browser speec
 
 - https://docs.tavus.io/api-reference/conversations/create-conversation
 - https://docs.tavus.io/api-reference/conversations/end-conversation
+
+## PAL quality configuration and acceptance tests
+
+Configure the Tavus PAL with a **consented, camera-facing professional face**, a clear, warm, human-sounding voice, natural conversational turn-taking, and optional visual perception. The selected face should look toward the camera while speaking. The backend provides per-session interview instructions, but the PAL's own voice, visual-perception, speech-recognition and conversational-flow settings control the actual live quality.
+
+**Suggested PAL system behavior**: Act as an attentive, respectful mock interviewer. Ask a single concise question, listen to the full answer, acknowledge a concrete detail, then ask a relevant follow-up. Use short natural pauses, don't lecture or interrupt, and let the student ask for clarification. When discussing programming, use technical terms accurately. For Hinglish, keep technical terms in English and use natural Hindi-English code switching. Provide constructive verbal feedback at the end. Never pretend to be a human interviewer or a real employer. Never infer personality, emotion or hiring suitability from the student's face, gaze or surroundings.
+
+**Acceptance checklist before production**:
+- Confirm the provider actually shows a **moving, speaking avatar**, not a static image, on desktop and mobile.
+- Ask a question, answer partially, and confirm the next question **references that answer**.
+- Interrupt the interviewer and confirm turn-taking behaves naturally without talking over the student.
+- Test English, Hindi and Hinglish with real voices, including technical vocabulary and realistic pauses.
+- Verify lip-sync, camera-facing gaze, latency, audio echo cancellation, captions, poor network recovery, and denied camera/microphone permissions.
+- Confirm a denied permission prompt does **not** create a billable Tavus conversation.
+- Verify the 10-minute server-side cap, automatic cleanup, two starts per student per hour, no recording, and the student-facing third-party privacy disclosure.
+- Verify the existing scored/proctored assessment remains unchanged, and do not enable this provider for high-stakes hiring judgments.
