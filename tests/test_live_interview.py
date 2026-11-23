@@ -65,3 +65,34 @@ def test_live_session_requires_explicit_consent():
         live.LiveStart(role="<script>",consent=True)
     with pytest.raises(ValidationError):
         live.LiveStart(role="Software Engineer",language="unknown",consent=True)
+
+def test_session_creation_fails_closed_without_provider_credentials(monkeypatch):
+    import asyncio
+    from fastapi import Response
+    monkeypatch.delenv("TAVUS_API_KEY",raising=False)
+    monkeypatch.delenv("TAVUS_PAL_ID",raising=False)
+    monkeypatch.delenv("TAVUS_FACE_ID",raising=False)
+    async def call():
+        return await live.live_start(
+            live.LiveStart(role="Software Engineer",consent=True),
+            Response(),None,SimpleNamespace(id="user-1"),None,
+        )
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(call())
+    assert error.value.status_code==503
+
+
+def test_provider_is_never_called_without_consent(monkeypatch):
+    import asyncio
+    from fastapi import Response
+    monkeypatch.setenv("TAVUS_API_KEY","test-only")
+    monkeypatch.setenv("TAVUS_PAL_ID","pal-test")
+    monkeypatch.setenv("TAVUS_FACE_ID","face-test")
+    async def call():
+        return await live.live_start(
+            live.LiveStart(role="Software Engineer",consent=False),
+            Response(),None,SimpleNamespace(id="user-1"),None,
+        )
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(call())
+    assert error.value.status_code==422

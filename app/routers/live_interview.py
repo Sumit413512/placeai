@@ -6,6 +6,7 @@ Tavus credentials remain server-side; no synthetic 'live' placeholder is shown.
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -16,10 +17,13 @@ import time
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 from app.ai_rate_limit import student_ai_guard
 from app.config import get_settings
+from app.database import get_db
+from app.rate_limit import enforce_rate_limit
 from app.dependencies import require_student
 from app.models import User
 from app.student_entitlements import require_student_premium_access
@@ -33,7 +37,7 @@ CONVERSATION_ID = re.compile(r"^[a-zA-Z0-9_-]{4,64}$")
 
 class LiveStart(BaseModel):
     model_config = {"extra": "forbid"}
-    role: str = Field(min_length=2, max_length=80, pattern=r"^[\w\s.+#()/,&-]+$")
+    role: str = Field(min_length=2, max_length=80, pattern=r"^[\w .+#()/,&-]+$")
     focus: str = Field(default="balanced", pattern="^(balanced|technical|behavioral|hr)$")
     language: str = Field(default="english", pattern="^(english|hindi|hinglish)$")
     consent: bool
@@ -55,13 +59,17 @@ def _configuration() -> tuple[str, str, str]:
 
 
 def _room_url(value: str) -> str:
-    parsed = urlsplit(value)
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError as exc:
+        raise HTTPException(502, "The live video service returned an invalid meeting address.") from exc
     if (
         parsed.scheme != "https"
         or not parsed.hostname
         or parsed.hostname != "tavus.daily.co"
         or parsed.username or parsed.password or parsed.fragment
-        or parsed.port not in (None, 443)
+        or port not in (None, 443)
     ):
         raise HTTPException(502, "The live interview provider returned an unsafe meeting address.")
     return value
@@ -90,7 +98,7 @@ def _verify_proof(proof: str, conversation_id: str, user_id: str) -> None:
                 or int(data["e"]) < int(time.time()) - 120
                 or int(data["e"]) > int(time.time()) + SESSION_SECONDS + 60):
             raise ValueError("Invalid session")
-    except (ValueError, KeyError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (ValueError, KeyError, TypeError, UnicodeDecodeError, binascii.Error, json.JSONDecodeError) as exc:
         raise HTTPException(403, "This live interview session cannot be ended by this account.") from exc
 
 
@@ -130,7 +138,9 @@ def live_status(response: Response, _: User = Depends(require_student)):
 async def live_start(
     request: LiveStart,
     response: Response,
+    http_request: Request,
     current_user: User = Depends(require_student_premium_access),
+    db: Session = Depends(get_db),
 ):
     response.headers["Cache-Control"] = "no-store"
     if not request.consent:
@@ -138,6 +148,10 @@ async def live_start(
     key, pal, face = _configuration()
     if not all((key, pal, face)):
         raise HTTPException(503, "Live AI interviewer is not configured yet. Use the existing practice assessment.")
+    enforce_rate_limit(
+        db, http_request, scope="ai:live-video", identifier=current_user.id,
+        limit=2, window_seconds=3600, block_seconds=900, include_client_address=False,
+    )
     # No resume, profile, biometric score, student identity, or contact details are sent.
     context = (
         "You are a professional, welcoming PlaceAI practice interviewer. "

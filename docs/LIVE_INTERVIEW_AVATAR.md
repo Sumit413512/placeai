@@ -20,7 +20,7 @@ The existing HR/spoken-answer assessment uses a still portrait and browser speec
 ## Security and limitations
 
 - All Tavus API calls are server-side. Only a short-lived private meeting URL and a user-bound, HMAC-signed end-session proof reach the browser.
-- The session requires student authentication, active preparation entitlement, AI request throttling and explicit per-call consent.
+- The session requires student authentication, active preparation entitlement, AI request throttling (two live starts per student per hour) and explicit per-call consent.
 - Sessions are capped at 10 minutes, with a 30-second participant-left timeout. The browser attempts an authenticated end call on normal exit. Unexpected network disconnects may take longer to terminate.
 - Camera, microphone and conversation are handled by the video provider; PlaceAI does not save a recording or generate a score for this feature. Configure Tavus retention, recordings and perception appropriately and update institutional data-processing agreements before wide release.
 - Do not use gaze or inferred emotion as a hiring score. The AI avatar's apparent eye contact and expression quality depend on the provider's chosen face/PAL.
