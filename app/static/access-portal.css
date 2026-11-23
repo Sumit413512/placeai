@@ -332,24 +332,28 @@
 #auth-overlay .access-method-divider::after { content:""; flex:1; height:1px; background:#e2e8f0; }
 #auth-overlay .access-form-error:empty { display:none; }
 
-/* Role entry sits below the existing public navigation at every breakpoint. */
-#marketing-site #workspace-entry {
-  display:flex; align-items:center; justify-content:center; flex-wrap:wrap;
-  gap:4px 12px; padding:9px max(4vw,16px); background:#f7f4ec;
-  border-block:1px solid #dcd6c8; scroll-margin-top:80px;
+/* Use one warm palette across the header, hero and workspace summary. */
+#marketing-site .site-header {
+  background: rgb(250 246 238 / 96%) !important;
+  border-bottom-color: #e5d9c9;
+  box-shadow: 0 4px 16px rgb(75 54 42 / 5%) !important;
 }
-#workspace-entry strong {font-size:.9rem; color:#504a40; margin-right:10px}
-#workspace-entry button {
-  line-height:1.35; font-family:inherit; font-weight:600; font-size:.93rem;
-  min-height:42px; padding:8px 15px; color:#3f3833; background:transparent;
-  border:1px solid transparent; border-radius:5px; cursor:pointer;
+#marketing-site .marketing-nav a { color: #453b32; }
+#marketing-site .marketing-nav a:hover { color: #873b29; }
+#marketing-site .home-hero-surface {
+  background: linear-gradient(180deg, #faf6ee 0%, #f6eee2 72%, #fff 100%);
 }
-#workspace-entry button:hover {background:#f0e4e4; color:#682738}
-#workspace-entry button:focus-visible {outline:2px solid #773146;outline-offset:1px}
-@media(max-width:620px) {
-  #marketing-site #workspace-entry {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
-  #workspace-entry strong {grid-column:1/-1;padding:2px 8px}
-  #workspace-entry button {text-align:left;background:#fffcf7;border-color:#ded8cc}
+#marketing-site .hero-trust,
+#marketing-site .hero-trust > div { border-color: #dfd1c0; }
+#marketing-site .hero-trust strong { color: #40382f; }
+#marketing-site .hero-trust span { color: #625547; }
+#marketing-site .hero-surface-card {
+  background: #f3e9dc !important;
+  border-color: #dfd0be;
+}
+#marketing-site .hero-surface-card .production-surface-grid > div {
+  background: #fffaf3;
+  border-color: #e6d8c7;
 }
 
 #marketing-site .site-header .header-actions [data-open-auth="login"] {

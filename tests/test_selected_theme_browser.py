@@ -112,3 +112,20 @@ def test_editorial_cards_and_footer_remain_readable_on_mobile_and_desktop(browse
             footer.scroll_into_view_if_needed()
             page.screenshot(path=str(Path(directory) / f"footer-{width}.png"))
     page.close()
+
+
+def test_homepage_header_leads_directly_to_hero_and_sign_in_keeps_roles(browser):
+    page = browser.new_page()
+    page.add_init_script("localStorage.setItem('placeai.analytics.preference.v1', 'declined')")
+    for width in (1440, 390):
+        page.set_viewport_size({"width": width, "height": 850})
+        page.goto(BASE_URL, wait_until="networkidle")
+        assert page.locator("#workspace-entry").count() == 0
+        header = page.locator("#marketing-site .site-header").bounding_box()
+        hero = page.locator("#marketing-site .home-hero-surface").bounding_box()
+        assert abs(hero["y"] - header["y"] - header["height"]) <= 1
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+        page.locator('.hero button[data-open-auth="login"]').click()
+        assert page.locator('#login-view [data-access-role]').count() == 4
+        assert page.url.endswith("/sign-in?role=student")
+    page.close()
