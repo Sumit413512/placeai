@@ -58,7 +58,7 @@ def test_saved_roadmap_readability_structure_and_supplementary_notes(browser, wi
     assert page.locator('.roadmap-support-section').count() == 2
     assert page.get_by_role('heading', name='Advanced next steps', exact=True).count() == 0
     assert 'No additional items were returned' not in page.locator('#app-content').inner_text()
-    assert page.locator('.roadmap-phase-stack .check-list li').first.evaluate('el => getComputedStyle(el).color') == 'rgb(59, 57, 53)'
+    assert page.locator('.roadmap-phase-stack .check-list li').first.evaluate('el => getComputedStyle(el).color') == 'rgb(36, 40, 35)'
 
     notes = page.locator('.roadmap-market-notes')
     context = page.locator('.roadmap-research-notes')
