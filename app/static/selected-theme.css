@@ -1651,7 +1651,7 @@ body :is(h1, h2, h3, h4, h5),
 }
 #marketing-site .hero-photo-composition .hero-laptop-logo {
   position: absolute; inset: 66.9% auto auto 45.3%; transform: translate(-50%, -50%) rotate(-1deg);
-  width: 7.2%; height: auto; min-height: 0; object-fit: contain;
+  width: 7.2%; height: auto; min-height: 0; object-fit: contain; mix-blend-mode: multiply;
 }
 #marketing-site .footer-location { margin: .25rem 0 0; color: #47302d; font-weight: 700; }
 
@@ -1709,7 +1709,10 @@ body :is(h1, h2, h3, h4, h5),
 .workspace-tour-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .workspace-tour-actions .row-button, #workspace-issue-panel [data-issue-minimize] { min-height: 44px; }
 #app-shell .workspace-tour-target { outline: 2px solid #7c3a46; outline-offset: -3px; }
-#app-shell .workspace-tour-target::after { content: "→"; color: #612737; font-size: 1.1rem; font-weight: 800; }
+#app-shell .workspace-tour-target::after {
+  content: ""; display: inline-block; width: .45em; height: .45em; margin-inline: .6em;
+  border: solid #612737; border-width: 2px 2px 0 0; transform: rotate(45deg); vertical-align: .1em;
+}
 
 @media (max-width: 1150px) {
   #app-shell .topbar-actions .workspace-tool-label { display: none; }
