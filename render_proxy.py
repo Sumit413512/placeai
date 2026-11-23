@@ -38,13 +38,13 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 ASSET_INJECTION = (
     f'<link rel="stylesheet" href="/static/api-errors.css?v={ASSET_VERSION}">\n'
-    f'<link rel="stylesheet" href="/static/access-portal.css?v=20261120-role-entry1">\n'
+    f'<link rel="stylesheet" href="/static/access-portal.css?v=20261123-role-pages1">\n'
     f'<link rel="stylesheet" href="/static/ui-fixes.css?v={ASSET_VERSION}">\n'
-    f'<link rel="stylesheet" href="/static/account-security.css?v={ASSET_VERSION}">\n'
+    f'<link rel="stylesheet" href="/static/account-security.css?v=20261123-role-pages1">\n'
     f'<link rel="stylesheet" href="/static/workspace-experience.css?v={ASSET_VERSION}">\n'
     f'<script src="/static/workspace-runtime.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/api-errors.js?v={ASSET_VERSION}" defer></script>\n'
-    f'<script src="/static/access-portal.js?v=20261121-role-entry2" defer></script>\n'
+    f'<script src="/static/access-portal.js?v=20261123-role-pages1" defer></script>\n'
     f'<script src="/static/ui-state-fixes.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/account-security.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/provisioning-password-fix.js?v={ASSET_VERSION}" defer></script>\n'
@@ -96,7 +96,7 @@ async def recovery_security_headers(request: Request, call_next):
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["X-PlaceAI-Gateway"] = "render"
-    if request.url.path in {"/", "/mock-interview", "/privacy", "/terms", "/acceptable-use"}:
+    if request.url.path in {"/", "/sign-in", "/register", "/mock-interview", "/privacy", "/terms", "/acceptable-use"}:
         response.headers["Cache-Control"] = "no-store"
     elif request.url.path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-cache, must-revalidate"
@@ -109,12 +109,15 @@ async def recovery_security_headers(request: Request, call_next):
     return response
 
 
+@app.api_route("/sign-in", methods=["GET", "HEAD"], include_in_schema=False)
+@app.api_route("/register", methods=["GET", "HEAD"], include_in_schema=False)
 @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
-def root() -> HTMLResponse:
+def root(request: Request) -> HTMLResponse:
     html = (TEMPLATE_DIR / "index.html").read_text(encoding="utf-8")
     if "/static/access-portal.js" not in html:
         html = html.replace("</head>", f"{ASSET_INJECTION}</head>", 1)
-    return HTMLResponse(html)
+    headers = {"X-Robots-Tag": "noindex, follow"} if request.url.path != "/" else None
+    return HTMLResponse(html, headers=headers)
 
 
 @app.get("/favicon.ico", include_in_schema=False)

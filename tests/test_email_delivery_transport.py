@@ -162,3 +162,21 @@ def test_brevo_api_transport_distinguishes_timeout_and_network_failures(monkeypa
     )
     assert outcome == "failed"
     assert reason == "brevo_api_network_failed"
+
+
+def test_verification_sender_override_is_used_by_brevo(monkeypatch):
+    deliveries = []
+
+    def accept(_url, *, json, **_kwargs):
+        deliveries.append(json)
+        return SimpleNamespace(status_code=201)
+
+    monkeypatch.setattr(email_delivery.httpx, "post", accept)
+    settings = _settings(smtp_from="default@example.com", brevo_api_key="test")
+    outcome = email_delivery.send_transactional_email(
+        settings, recipient="student@example.com", subject="Verify", body="Use link",
+        from_email="sumitjagtap@placeai.in",
+    )
+    assert outcome == ("sent", None)
+    assert deliveries[0]["sender"]["email"] == "sumitjagtap@placeai.in"
+    assert settings.smtp_from == "default@example.com"

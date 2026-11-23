@@ -57,7 +57,9 @@ def _post_brevo(settings, payload: dict) -> httpx.Response:
     )
 
 
-def send_transactional_email(settings, *, recipient: str, subject: str, body: str) -> tuple[str, str | None]:
+def send_transactional_email(
+    settings, *, recipient: str, subject: str, body: str, from_email: str | None = None
+) -> tuple[str, str | None]:
     """Send mail through configured SMTP, with Brevo HTTPS API as a safe fallback.
 
     Brevo normally accepts a textContent payload with a verified sender. Some account
@@ -73,6 +75,7 @@ def send_transactional_email(settings, *, recipient: str, subject: str, body: st
     if not recipient:
         return "failed", "recipient_missing"
 
+    sender = from_email or settings.smtp_from
     smtp_ready = smtp_transport_configured(settings)
     api_ready = brevo_api_configured(settings)
     smtp_failed = False
@@ -80,7 +83,7 @@ def send_transactional_email(settings, *, recipient: str, subject: str, body: st
     if smtp_ready:
         message = EmailMessage()
         message["Subject"] = subject
-        message["From"] = f"{settings.app_name} <{settings.smtp_from}>"
+        message["From"] = f"{settings.app_name} <{sender}>"
         message["To"] = recipient
         message.set_content(body)
         try:
@@ -91,6 +94,10 @@ def send_transactional_email(settings, *, recipient: str, subject: str, body: st
                     smtp.login(settings.smtp_user, settings.smtp_password)
                 smtp.send_message(message)
             return "sent", None
+        except smtplib.SMTPSenderRefused:
+            smtp_failed = True
+            if not api_ready:
+                return "failed", "smtp_sender_refused"
         except smtplib.SMTPAuthenticationError:
             smtp_failed = True
             if not api_ready:
@@ -106,7 +113,7 @@ def send_transactional_email(settings, *, recipient: str, subject: str, body: st
 
     if api_ready:
         payload = {
-            "sender": {"name": settings.app_name, "email": settings.smtp_from},
+            "sender": {"name": settings.app_name, "email": sender},
             "to": [{"email": recipient}],
             "subject": subject,
             "textContent": body,
@@ -118,7 +125,7 @@ def send_transactional_email(settings, *, recipient: str, subject: str, body: st
 
             if response.status_code == 400:
                 compatibility_payload = {
-                    "sender": {"email": settings.smtp_from},
+                    "sender": {"email": sender},
                     "to": [{"email": recipient}],
                     "subject": subject,
                     "htmlContent": _plain_body_as_html(body),

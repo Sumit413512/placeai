@@ -35,7 +35,8 @@
 
   const roleOrder = ['student', 'recruiter', 'institution_admin', 'platform_admin'];
   let loginRole = 'student';
-  let directEntry = false;
+  const accessPages = {login: '/sign-in', create: '/register'};
+  let returnTo = '/';
   let createRole = 'student';
   let googleLibrary;
   let googleConfiguration;
@@ -192,7 +193,7 @@
   }
 
   function roleCards(selected, mode) {
-    return `<div class="access-role-grid ${mode === 'login' ? 'access-login-roles' : ''}" role="tablist" aria-label="${mode === 'login' ? 'Sign-in role' : 'Account access role'}">${roleOrder.map(key => {
+    return `<div class="access-role-grid access-login-roles" role="tablist" aria-label="${mode === 'login' ? 'Sign-in role' : 'Account access role'}">${roleOrder.map(key => {
       const role = roles[key];
       return `<button type="button" class="access-role-card ${selected === key ? 'is-selected' : ''}" data-access-role="${key}" data-access-role-mode="${mode}" role="tab" aria-selected="${selected === key ? 'true' : 'false'}"><strong>${role.label}</strong><span>${role.description}</span><em>${role.access}</em></button>`;
     }).join('')}</div>`;
@@ -206,7 +207,7 @@
     const view = $('#login-view');
     if (!view) return;
     const role = roles[loginRole];
-    view.innerHTML = `${modeTabs('login')}<span class="section-kicker">Secure workspace access</span><h2 id="auth-title">${directEntry ? role.label + ' sign in' : 'Choose your role and sign in'}</h2><p class="form-intro">Welcome back. Continue with Google or sign in with your email and password. Google opens your assigned workspace automatically.</p>${directEntry ? '' : roleCards(loginRole, 'login')}<div class="access-selection-summary"><span class="access-role-dot" aria-hidden="true"></span><div><b data-access-summary-label>${role.label}</b><span data-access-summary-short>${role.short}</span></div></div><div id="role-login-error" class="access-form-error" role="alert"></div><div class="access-login-methods"></div><div class="access-method-divider">or continue with email</div><form id="role-login-form" class="form-stack"><input type="hidden" name="role" value="${loginRole}"><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@organization.com"></label><label>Password<div class="password-wrap"><input type="password" name="password" autocomplete="current-password" required maxlength="128" placeholder="Enter your password"><button type="button" data-access-toggle-password>Show</button></div></label><div class="form-row-between"><span></span><button type="button" class="text-button" data-action="forgot-password">Forgot password?</button></div><button class="button button-primary button-full" type="submit">Continue to ${role.label}</button></form><div class="access-security-note"><strong>Workspace access:</strong> Recruiter, Institution Admin and Platform Admin accounts cannot be created publicly. They must be provisioned or approved by an authorized administrator.</div>`;
+    view.innerHTML = `${roleCards(loginRole, 'login')}${modeTabs('login')}<h2 id="auth-title">${role.label} sign in</h2><p class="form-intro">Continue with Google or use your email and password.</p><div class="access-selection-summary"><span class="access-role-dot" aria-hidden="true"></span><div><b data-access-summary-label>${role.label}</b><span data-access-summary-short>${role.short}</span></div></div><div id="role-login-error" class="access-form-error" role="alert"></div><div class="access-login-methods"></div><div class="access-method-divider">or continue with email</div><form id="role-login-form" class="form-stack"><input type="hidden" name="role" value="${loginRole}"><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@organization.com"></label><label>Password<div class="password-wrap"><input type="password" name="password" autocomplete="current-password" required maxlength="128" placeholder="Enter your password"><button type="button" data-access-toggle-password>Show</button></div></label><div class="form-row-between"><span></span><button type="button" class="text-button" data-action="forgot-password">Forgot password?</button></div><button class="button button-primary button-full" type="submit">Continue to ${role.label}</button></form><p class="access-new-account">New to PlaceAI? <button type="button" class="text-button" data-register-link>${loginRole === 'student' ? 'Create an account' : 'Request workspace access'}</button></p>`;
     if (!$('#auth-overlay')?.classList.contains('hidden')) renderGoogleSignIn(view);
   }
 
@@ -214,7 +215,15 @@
     const role = roles[roleKey];
     const view = $('#login-view');
     if (!role || !view) return;
+    if (loginRole !== roleKey) {
+      const password = view.querySelector('input[name="password"]');
+      if (password) password.value = '';
+      $('#role-login-error', view).textContent = '';
+    }
     loginRole = roleKey;
+    $('#auth-title', view).textContent = role.label + ' sign in';
+    $('[data-register-link]', view).textContent = roleKey === 'student' ? 'Create an account' : 'Request workspace access';
+    if (document.body.classList.contains('placeai-access-page')) writeAccessPage('login', roleKey);
     view.querySelectorAll('[data-access-role-mode="login"]').forEach(button => {
       const selected = button.dataset.accessRole === roleKey;
       button.classList.toggle('is-selected', selected);
@@ -248,11 +257,11 @@
     if (!view) return;
     const student = createRole === 'student';
     const form = createRole === 'student' ? studentSignupForm() : controlledAccessForm(createRole);
-    const title = student ? 'Create your student account' : 'Request your workspace';
-    const intro = student ? 'Sign up with your Google account. No PlaceAI password is needed.' : 'College, recruiter and platform access is reviewed before activation.';
-    const methods = student ? '<div class="access-login-methods"></div><div class="access-method-divider">or sign up with email</div>' : (directEntry ? '' : roleCards(createRole, 'create'));
-    const requestLink = student && !directEntry ? '<p class="form-intro">Need a college or recruiter workspace? <button type="button" class="text-button" data-request-workspace>Request access</button></p>' : '';
-    view.innerHTML = `${modeTabs('create')}<span class="section-kicker">${student ? 'New to PlaceAI?' : 'Organization access'}</span><h2 id="auth-create-title">${title}</h2><p class="form-intro">${intro}</p>${methods}${form}${requestLink}`;
+    const title = student ? 'Create your student account' : 'Request ' + roles[createRole].label + ' access';
+    const intro = student ? 'Create an account with Google or your email address.' : 'College, recruiter and platform access is reviewed before activation.';
+    const methods = student ? '<div class="access-login-methods"></div><div class="access-method-divider">or sign up with email</div>' : '';
+    const requestLink = student ? '<p class="form-intro">Need a college or recruiter workspace? <button type="button" class="text-button" data-request-workspace>Request access</button></p>' : '';
+    view.innerHTML = `${roleCards(createRole, 'create')}${modeTabs('create')}<h2 id="auth-create-title">${title}</h2><p class="form-intro">${intro}</p>${methods}${form}${requestLink}`;
     if (student && !$('#auth-overlay')?.classList.contains('hidden')) renderGoogleSignIn(view);
   }
 
@@ -280,9 +289,36 @@
     normalizeAndFocusFirstInput(form);
   }
 
+  function writeAccessPage(mode, role) {
+    if (!accessPages[mode]) return;
+    const active = Object.values(accessPages).includes(location.pathname);
+    if (!active) returnTo = location.pathname + location.search + location.hash;
+    history[active ? 'replaceState' : 'pushState'](history.state, '', accessPages[mode] + '?role=' + role);
+    document.body.classList.add('placeai-access-page');
+  }
+
+  function syncAccessPage() {
+    const mode = Object.keys(accessPages).find(key => accessPages[key] === location.pathname);
+    const overlay = $('#auth-overlay');
+    if (!mode) {
+      if (document.body.classList.contains('placeai-access-page') && !overlay.classList.contains('hidden')) {
+        $('[data-action="close-auth"]', overlay)?.click();
+      }
+      return;
+    }
+    if ($('#app-shell:not(.hidden)')) {
+      history.replaceState(history.state, '', '/');
+      return;
+    }
+    const role = new URLSearchParams(location.search).get('role');
+    loginRole = createRole = Object.hasOwn(roles, role) ? role : 'student';
+    showView(mode);
+  }
+
   function showView(name, opener = null) {
     const overlay = $('#auth-overlay');
     if (!overlay) return;
+    writeAccessPage(name, name === 'login' ? loginRole : createRole);
     window.PlaceAIModalState?.rememberOpener?.('auth', opener || document.activeElement);
     overlay.classList.remove('hidden');
     overlay.setAttribute('aria-labelledby', name === 'create' ? 'auth-create-title' : 'auth-title');
@@ -307,6 +343,18 @@
     else if (name === 'create') focusVisibleForm(createRole === 'student' ? 'role-student-signup-form' : 'role-access-request-form');
     else modalState?.focusAuth?.();
   }
+
+  document.addEventListener('keydown', event => {
+    const tab = event.target.closest('[data-access-role]');
+    const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+    if (!tab || !keys.includes(event.key)) return;
+    const tabs = [...tab.parentElement.querySelectorAll('[data-access-role]')];
+    const index = tabs.indexOf(tab);
+    const target = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+      : (index + (event.key === 'ArrowLeft' ? -1 : 1) + tabs.length) % tabs.length;
+    event.preventDefault();
+    tabs[target].focus();
+  });
 
   const apiErrors = window.PlaceAIApiErrors;
 
@@ -337,7 +385,11 @@
       const session = await requestJson('/auth/login-role', {method: 'POST', body: JSON.stringify(body)});
       await completeSignIn(session);
     } catch (error) {
-      apiErrors.applyToForm(form, error, $('#role-login-error'));
+      const summary = $('#role-login-error', form.closest('#login-view') || form);
+      apiErrors.applyToForm(form, error, summary);
+      if (error.status === 401 && summary) {
+        summary.append(' If you are new to PlaceAI, register or request access below.');
+      }
       setBusy(form, false);
     }
   }
@@ -412,7 +464,6 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       loginRole = createRole = role;
-      directEntry = true;
       showView('login', entry);
       return;
     }
@@ -420,7 +471,6 @@
     if (loginOpen) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      directEntry = false;
       showView('login', loginOpen);
       return;
     }
@@ -428,18 +478,17 @@
     if (requestOpen) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      directEntry = false;
       createRole = 'student';
       showView('create', requestOpen);
       return;
     }
-    const switcher = event.target.closest('[data-access-switch]');
+    const switcher = event.target.closest('[data-access-switch], [data-register-link]');
     if (switcher) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (switcher.dataset.accessSwitch === 'create') createRole = directEntry ? loginRole : 'student';
-      else if (directEntry) loginRole = createRole;
-      showView(switcher.dataset.accessSwitch === 'create' ? 'create' : 'login', switcher);
+      if (switcher.closest('#login-view')) createRole = loginRole;
+      if (switcher.closest('#signup-view')) loginRole = createRole;
+      showView(switcher.dataset.accessSwitch === 'login' ? 'login' : 'create', switcher);
       return;
     }
     const workspaceRequest = event.target.closest('[data-request-workspace]');
@@ -455,6 +504,7 @@
         updateLoginRole(roleButton.dataset.accessRole);
       } else {
         createRole = roleButton.dataset.accessRole;
+        writeAccessPage('create', createRole);
         renderCreate();
         focusAccessForm(createRole === 'student' ? 'role-student-signup-form' : 'role-access-request-form');
       }
@@ -501,6 +551,17 @@
     }
     renderLogin();
     renderCreate();
+    const overlay = $('#auth-overlay');
+    if (overlay) {
+      const accessObserver = new MutationObserver(() => {
+        if (!overlay.classList.contains('hidden') || !document.body.classList.contains('placeai-access-page')) return;
+        document.body.classList.remove('placeai-access-page');
+        if (Object.values(accessPages).includes(location.pathname)) history.replaceState(history.state, '', returnTo);
+      });
+      accessObserver.observe(overlay, {attributes: true, attributeFilter: ['class']});
+      window.addEventListener('popstate', syncAccessPage);
+      syncAccessPage();
+    }
     relabelPlatformNavigation();
     const nav = $('#app-nav');
     if (nav) observer.observe(nav, {childList: true, subtree: true});
