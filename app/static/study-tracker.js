@@ -139,7 +139,7 @@
   });
   document.addEventListener('click',async event=>{
     const button=event.target.closest('[data-study-day],[data-study-open],[data-study-refresh],[data-study-resume],[data-study-offline],[data-study-remove]');if(!button||!active(epoch)||button.disabled)return;
-    if(button.dataset.studyDay){selectedActivityDate=button.dataset.studyDay;renderContent();document.querySelector('[data-study-day="'+selectedActivityDate+'"]')?.focus({preventScroll:true});return;}
+    if(button.dataset.studyDay){selectedActivityDate=button.dataset.studyDay;const calendar=document.querySelector('#study-tracker .study-activity');if(calendar)calendar.outerHTML=activityPanel();document.querySelector('[data-study-day="'+selectedActivityDate+'"]')?.focus({preventScroll:true});return;}
     const v=epoch;button.disabled=true;
     try{
       if(button.dataset.studyOpen){
