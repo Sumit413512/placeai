@@ -1918,3 +1918,16 @@ body :is(h1, h2, h3, h4, h5),
     display:grid!important;grid-template-columns:minmax(0,1fr)!important;
   }
 }
+
+
+/* The Study Tracker photograph's small tabletop clock is preserved as a
+   feathered crop of the approved artwork, clear of the readable live heading. */
+@media (min-width:691px) {
+  #app-shell .placeai-study-photo::after {
+    content:"";position:absolute;z-index:0;pointer-events:none;
+    width:clamp(130px,17vw,225px);aspect-ratio:6/5;right:32%;bottom:0;
+    background:url("/static/placeai-study-clock-detail.webp") center/cover no-repeat;
+    -webkit-mask-image:radial-gradient(ellipse 68% 69% at 50% 57%,#000 55%,transparent 98%);
+    mask-image:radial-gradient(ellipse 68% 69% at 50% 57%,#000 55%,transparent 98%);
+  }
+}
