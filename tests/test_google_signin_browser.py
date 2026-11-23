@@ -182,7 +182,7 @@ def test_google_first_signup_returning_signin_refresh_and_logout(google_server):
             nav = page.locator(f'#app-nav [data-view="{view}"]')
             if not nav.is_visible(): page.locator('.placeai-nav-more').click()
             nav.click()
-            page.locator('#app-content .page-head').wait_for()
+            page.locator('#app-content .page-head, #app-content .roadmap-photo-hero, #app-content .placeai-photo-hero').first.wait_for()
             assert not page.locator('#app-content').get_by_text('Unable to load this view',exact=True).count()
         announcements.click()
         expect(page.get_by_role('heading', name='Placement announcements', exact=True)).to_be_visible()

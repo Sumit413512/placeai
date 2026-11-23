@@ -1903,3 +1903,18 @@ body :is(h1, h2, h3, h4, h5),
   #app-shell .learning-video-workflow li{font-size:13px;line-height:1.4}
   #app-shell .learning-video-lessons small,#app-shell .learning-video-card-art>span{font-size:13px!important}
 }
+
+
+/* Mobile transformed tables must never inherit the desktop 680px minimum width. */
+@media (max-width:760px) {
+  #app-shell table.data-table[data-placeai-responsive="true"] {
+    display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;
+    box-sizing:border-box!important;table-layout:fixed!important;
+  }
+  #app-shell table[data-placeai-responsive="true"] :is(tbody,tr,td) {
+    box-sizing:border-box!important;min-width:0!important;max-width:100%!important;overflow-wrap:anywhere;
+  }
+  #app-shell table[data-placeai-responsive="true"] tbody {
+    display:grid!important;grid-template-columns:minmax(0,1fr)!important;
+  }
+}

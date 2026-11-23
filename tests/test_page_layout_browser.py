@@ -81,7 +81,7 @@ def test_every_workspace_page_remains_readable_and_operable(browser, layout_acco
             root = page.locator("main.shell")
             root.locator("h1").wait_for(state="visible")
         else:
-            page.locator("#app-content .page-head").wait_for(state="visible")
+            page.locator("#app-content .page-head, #app-content .roadmap-photo-hero, #app-content .placeai-photo-hero").first.wait_for(state="visible")
             root = page.locator("#app-content")
         for width in (1440, 768, 390, 320):
             page.set_viewport_size({"width": width, "height": 1000})
@@ -124,7 +124,7 @@ def test_every_workspace_page_remains_readable_and_operable(browser, layout_acco
         if not button.is_visible():
             page.locator(".placeai-nav-more").click()
         button.click()
-        page.locator("#app-content .page-head").wait_for(state="visible")
+        page.locator("#app-content .page-head, #app-content .roadmap-photo-hero, #app-content .placeai-photo-hero").first.wait_for(state="visible")
         page.locator("#context-action").click()
         dialog = page.locator("#generic-modal")
         dialog.wait_for(state="visible")
