@@ -310,7 +310,6 @@
     state.nav = items;
     const canOpen = id => items.some(([,view]) => view === id);
     $('#announcements-button').hidden = !canOpen('announcements');
-    $('#workspace-tour-button').hidden = state.me.role !== 'student';
     $$('.topbar-actions .workspace-tool[data-view], [data-issue-history]').forEach(button => {
       const selected = button.dataset.view === state.view;
       button.classList.toggle('active', selected);
@@ -400,30 +399,52 @@
     await updateNotificationBadge();
   }
 
-  const workspaceTourSteps = [
-    { view: 'profile', title: 'Set up your profile', description: 'Add your academic and placement details here. You can come back and finish your profile whenever you’re ready.' },
-    { view: 'learning-hub', title: 'Find the Learning Hub', description: 'Open course notes, video lessons and quizzes from one place.' },
-    { view: 'study-tracker', title: 'Plan your study sessions', description: 'Set a study goal and see what you have completed.' },
-    { view: 'calendar', title: 'See what’s coming up', description: 'Use the Campus calendar for placement drives, deadlines and interviews.' },
-    { view: 'announcements', title: 'Read placement announcements', description: 'The megaphone in the top bar opens official placement-office announcements.' },
-  ];
+  const workspaceTourDescriptions = {
+    dashboard: 'See your next actions and an overview of your placement and preparation activity.',
+    profile: 'Add your academic and placement details. You can finish your profile when you’re ready.',
+    'learning-hub': 'Open notes, watch video lessons and take the lesson quizzes.',
+    'study-tracker': 'Set daily and weekly targets, check completed work and choose your next study activity.',
+    'mock-interview': 'Practise role-specific questions and review feedback on your answers.',
+    readiness: 'See how your assessment results contribute to your placement readiness.',
+    roadmap: 'Build and save a preparation plan for the role you’re targeting.',
+    resume: 'Prepare your résumé and review AI suggestions.',
+    documents: 'Manage the documents you use for placement.',
+    assistant: 'Ask for help with placement preparation and your next steps.',
+    opportunities: 'Explore roles, check requirements and apply.',
+    applications: 'Follow your applications and their current status.',
+    drives: 'Check campus placement drives and eligibility requirements.',
+    interviews: 'Review scheduled interviews and related updates.',
+    offers: 'Review offer terms and record your decision.',
+    calendar: 'See upcoming drives, deadlines and interviews in one calendar.',
+    announcements: 'Open official placement-office announcements from the top bar.',
+    notifications: 'Find placement updates and, if enabled, your study recaps.',
+    incidents: 'Raise a confidential placement concern using Report an issue.',
+    approvals: 'Follow requests to verify changes to your academic profile.',
+    billing: 'Manage your individual subscription and billing.',
+  };
   let workspaceTour = null;
-  const tourKey = () => `placeai.workspace-tour.v1.${state.me.id}`;
+  const tourKey = id => `placeai.workspace-tour.v1.${id}`;
 
   function workspaceTourSeen() {
-    try { return localStorage.getItem(tourKey()) === 'seen'; }
+    try { return localStorage.getItem(tourKey(state.me.id)) === 'seen'; }
     catch { return false; }
   }
 
   function closeWorkspaceTour(markSeen = true, restoreFocus = true) {
     if (!workspaceTour) return;
     if (markSeen) {
-      try { localStorage.setItem(tourKey(), 'seen'); } catch {}
+      state.me.workspace_guide_pending = false;
+      try { localStorage.setItem(tourKey(state.me.id), 'seen'); } catch {}
+      api('/auth/workspace-guide', {method:'PUT'}).catch(() => {});
     }
     workspaceTour.card.remove();
     workspaceTour.target?.classList.remove('workspace-tour-target');
     workspaceTour = null;
-    if (restoreFocus) $('#workspace-tour-button').focus();
+    if (restoreFocus) {
+      const active = $('#app-nav [data-view].active');
+      (active?.getBoundingClientRect().width && active.getBoundingClientRect().left >= 0
+        ? active : $('.sidebar-trigger'))?.focus({preventScroll:true});
+    }
   }
 
   function renderWorkspaceTour() {
@@ -432,25 +453,26 @@
     tour.step = step;
     tour.target?.classList.remove('workspace-tour-target');
     const button = state.view === step.view ? $('#app-content .page-head h1') :
-      step.view === 'announcements' ? $('#announcements-button') : $(`#app-nav [data-view="${step.view}"]`);
+      $(`.topbar-actions [data-view="${step.view}"]`) || $(`#app-nav [data-view="${step.view}"]`) ||
+      (step.view === 'incidents' ? $('#workspace-issue-button') : null);
     const frame = button?.getBoundingClientRect();
     tour.target = frame?.width && frame.right > 0 && frame.left >= 0 && frame.top >= 0 && frame.bottom < innerHeight
       ? button : null;
     tour.target?.classList.add('workspace-tour-target');
     tour.card.innerHTML = `<div class="workspace-tour-step">${navIcon(step.view)} Step ${tour.index + 1} of ${tour.steps.length}</div><h2 id="workspace-tour-title">${esc(step.title)}</h2><p>${esc(step.description)}</p><div class="workspace-tour-actions"><button type="button" class="row-button" data-tour="skip">Skip tour</button><button type="button" class="row-button" data-tour="open">Open section</button><button type="button" class="row-button primary" data-tour="next">${tour.index + 1 === tour.steps.length ? 'Done' : 'Next'}</button></div>`;
-    if (tour.focus) $('[data-tour="next"]', tour.card).focus({preventScroll:true});
+    $('[data-tour="next"]', tour.card).focus({preventScroll:true});
   }
 
-  function startWorkspaceTour(focus = true) {
-    if (state.me?.role !== 'student' || !state.me.id || workspaceTour) return;
+  function startWorkspaceTour() {
+    if (state.me?.role !== 'student' || !state.me.workspace_guide_pending || workspaceTour) return;
     $('#workspace-issue-panel')?.toggleAttribute('hidden', true);
     $('#workspace-issue-button')?.setAttribute('aria-expanded','false');
-    const steps = workspaceTourSteps.filter(step => state.nav.some(([,view]) => view === step.view));
+    const steps = state.nav.map(([,view,title]) => ({ view, title, description:workspaceTourDescriptions[view] }));
     if (!steps.length) return;
     const card = document.createElement('section');
     card.className = 'workspace-tour-card';
     card.setAttribute('aria-labelledby','workspace-tour-title');
-    workspaceTour = {card, steps, index: 0, focus};
+    workspaceTour = {card, steps, index: 0};
     document.body.append(card);
     card.addEventListener('keydown', event => {
       if (event.key === 'Escape') closeWorkspaceTour();
@@ -461,12 +483,15 @@
       const tour = workspaceTour;
       if (action === 'skip' || (action === 'next' && tour.index === tour.steps.length - 1)) return closeWorkspaceTour();
       if (action === 'open') {
+        if (tour.step.view === 'mock-interview' && state.studentAccess?.premium_access) {
+          window.open('/mock-interview', '_blank', 'noopener');
+          return;
+        }
         await navigate(tour.step.view);
         if (workspaceTour === tour) renderWorkspaceTour();
         return;
       }
       tour.index++;
-      tour.focus = true;
       renderWorkspaceTour();
     });
     renderWorkspaceTour();
@@ -483,10 +508,8 @@
   }
 
   function mountWorkspaceTools() {
-    const tour = $('#workspace-tour-button');
     const announcements = $('#announcements-button');
     const notifications = $('#notifications-button');
-    tour.innerHTML = `${navIcon('assistant')}<span class="workspace-tool-label">Tour</span>`;
     announcements.innerHTML = `${navIcon('announcements')}<span class="workspace-tool-label">Announcements</span>`;
     if (!$('.nav-icon', notifications)) notifications.insertAdjacentHTML('afterbegin',navIcon('notifications'));
     if (state.me.role !== 'student' || $('#workspace-issue-button')) return;
@@ -537,7 +560,7 @@
   let bootWorkspaceCompleted = false;
   let bootWorkspaceInFlight = null;
 
-  function bootWorkspace({ interactive = false } = {}) {
+  function bootWorkspace() {
     if (bootWorkspaceCompleted) return Promise.resolve(true);
     if (bootWorkspaceInFlight) return bootWorkspaceInFlight;
     const run = (async () => {
@@ -574,7 +597,10 @@
       && workspaceLink.has('course');
     mountWorkspaceTools();
     await navigate(opensVideoCourse ? 'learning-hub' : 'dashboard');
-    if (interactive && !opensVideoCourse && state.me.role === 'student' && !workspaceTourSeen()) startWorkspaceTour(false);
+    if (!opensVideoCourse && state.me.role === 'student' && state.me.workspace_guide_pending) {
+      if (workspaceTourSeen()) api('/auth/workspace-guide', {method:'PUT'}).catch(() => {});
+      else startWorkspaceTour();
+    }
     return true;
     })();
     bootWorkspaceInFlight = run;
@@ -599,7 +625,7 @@
       if (bootWorkspaceInFlight) await bootWorkspaceInFlight.catch(() => false);
       state.token = session.access_token;
       bootWorkspaceCompleted = false;
-      if (!await bootWorkspace({ interactive: true })) {
+      if (!await bootWorkspace()) {
         showAuth('login');
         throw new Error('Your session could not be opened. Please try signing in again.');
       }
@@ -608,7 +634,7 @@
   });
 
   async function navigate(view) {
-    if (workspaceTour && view !== workspaceTour.step?.view) closeWorkspaceTour(false, false);
+    if (workspaceTour && view !== workspaceTour.step?.view) closeWorkspaceTour(true, false);
     const epoch = ++navigationEpoch;
     const premiumViews = new Set(['readiness','mock-interview','resume','documents','assistant']);
     if (state.me?.role === 'student' && state.studentAccess?.student_kind === 'independent' && premiumViews.has(view) && !state.studentAccess.premium_access) {
@@ -1095,7 +1121,6 @@
       else if(a==='logout'){await fetch('/auth/logout',{method:'POST',credentials:'include'});state.token='';location.href='/';}
       else if(a==='reload-view')navigate(state.view);
       else if(a==='open-notifications')navigate('notifications');
-      else if(a==='start-workspace-tour')startWorkspaceTour();
       else if(a==='open-help-centre')window.open('/static/help.html','_blank','noopener');
       else if(a==='open-job-form')openJobForm();
       else if(a==='open-student-form')openStudentForm();
@@ -1205,8 +1230,8 @@
   document.addEventListener('submit',async e=>{
     const f=e.target; e.preventDefault(); const fd=new FormData(f); const obj=Object.fromEntries(fd.entries());
     try{
-      if(f.id==='login-form'){const data=await api('/auth/login-json',{method:'POST',body:JSON.stringify({email:obj.email,password:obj.password})},false);state.token=data.access_token;closeAuth();await bootWorkspace({ interactive: true });toast('Signed in');}
-      else if(f.id==='signup-form'){const data={username:obj.username,email:obj.email,password:obj.password,role:'student',organization_slug:obj.organization_slug||null};const registration=await api('/auth/signup',{method:'POST',body:JSON.stringify(data)},false);if(registration.verification_required){f.reset();window.PlaceAIVerification.showPending(obj.email,registration.message);return;}const login=await api('/auth/login-json',{method:'POST',body:JSON.stringify({email:obj.email,password:obj.password})},false);state.token=login.access_token;closeAuth();await bootWorkspace({ interactive: true });if(obj.full_name)await api('/students/profile',{method:'PUT',body:JSON.stringify({full_name:obj.full_name})});toast('Student account created');}
+      if(f.id==='login-form'){const data=await api('/auth/login-json',{method:'POST',body:JSON.stringify({email:obj.email,password:obj.password})},false);state.token=data.access_token;closeAuth();await bootWorkspace();toast('Signed in');}
+      else if(f.id==='signup-form'){const data={username:obj.username,email:obj.email,password:obj.password,role:'student',organization_slug:obj.organization_slug||null};const registration=await api('/auth/signup',{method:'POST',body:JSON.stringify(data)},false);if(registration.verification_required){f.reset();window.PlaceAIVerification.showPending(obj.email,registration.message);return;}const login=await api('/auth/login-json',{method:'POST',body:JSON.stringify({email:obj.email,password:obj.password})},false);state.token=login.access_token;closeAuth();await bootWorkspace();if(obj.full_name)await api('/students/profile',{method:'PUT',body:JSON.stringify({full_name:obj.full_name})});toast('Student account created');}
       else if(f.id==='forgot-form'){await api('/auth/forgot-password',{method:'POST',body:JSON.stringify({email:obj.email})},false);toast('Request accepted','If the account exists, reset instructions will be sent.');showAuth('login');}
       else if(f.id==='student-profile-form'){const num=(v)=>v!==''&&v!=null?Number(v):null;const customValues={};for(const [k,v] of Object.entries(obj)){if(k.startsWith('custom__')){customValues[k.slice(8)]=String(v??'');delete obj[k];}}const data={...obj,skills:String(obj.skills||'').split(',').map(x=>x.trim()).filter(Boolean),certifications:String(obj.certifications||'').split(',').map(x=>x.trim()).filter(Boolean),desired_roles:String(obj.desired_roles||'').split(',').map(x=>x.trim()).filter(Boolean),graduation_year:num(obj.graduation_year),current_semester:num(obj.current_semester),cgpa:num(obj.cgpa),tenth_percentage:num(obj.tenth_percentage),twelfth_percentage:num(obj.twelfth_percentage),diploma_percentage:num(obj.diploma_percentage),active_backlogs:num(obj.active_backlogs),historical_backlogs:num(obj.historical_backlogs),academic_gap_months:num(obj.academic_gap_months)};await api('/students/profile',{method:'PUT',body:JSON.stringify(data)});if(state.profile?.id&&Object.keys(customValues).length)await api(`/enterprise/custom-fields/values/${state.profile.id}`,{method:'PUT',body:JSON.stringify({values:customValues})});toast('Profile saved','Verified academic changes may appear under Profile approvals until your placement office reviews them.');navigate('profile');}
       else if(f.id==='recruiter-profile-form'){await api('/recruiters/profile',{method:'PUT',body:JSON.stringify(obj)});toast('Company profile saved');navigate('profile');}

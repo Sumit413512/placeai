@@ -44,6 +44,7 @@ def test_real_student_can_track_read_delete_restore_and_resume_notes(browser,loc
     page.get_by_label('Send an evening recap to Notifications').check()
     page.get_by_role('button',name='Save study targets',exact=True).click()
     expect(page.get_by_role('region',name='Today',exact=True)).to_contain_text('2 sections left')
+    expect(page.locator('.study-next-target')).to_contain_text('Read one more note section')
     page.get_by_label('Plan name',exact=True).fill('SQL preparation')
     page.get_by_role('button',name='Create study plan',exact=True).click()
     page.locator('.study-add-goal summary').click()

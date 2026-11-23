@@ -309,3 +309,14 @@ def test_claiming_a_college_code_does_not_grant_private_campus_access(secured):
         assert student_access_status(user,db)['campus_access'] is True
         db.get(Organization,'audit-college').is_active=False; db.commit()
         assert student_access_status(user,db)['campus_access'] is False
+
+
+def test_new_student_workspace_guide_is_dismissed_for_the_account(secured):
+    client, sessions = secured
+    headers = bearer(login(client)['access_token'])
+    assert client.get('/auth/me', headers=headers).json()['workspace_guide_pending'] is True
+    assert client.put('/auth/workspace-guide', headers=headers).status_code == 204
+    assert client.put('/auth/workspace-guide', headers=headers).status_code == 204
+    with sessions() as db:
+        assert db.get(User, 'audit-user').workspace_guide_pending is False
+    assert client.get('/auth/me', headers=bearer(login(client)['access_token'])).json()['workspace_guide_pending'] is False

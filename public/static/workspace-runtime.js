@@ -6,7 +6,6 @@
   const shortCache = new Map();
   const CACHE_MS = 1200;
   const CACHEABLE = new Set([
-    '/auth/me',
     '/ai/status',
     '/students/profile',
     '/students/resume',

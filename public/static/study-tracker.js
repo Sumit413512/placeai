@@ -47,12 +47,30 @@
     </section>`;
   }
 
+  function nextTarget(targets) {
+    for (const [period, label] of [['daily','today'], ['weekly','this week']]) {
+      const key = ['notes','lessons','mocks','minutes'].find(metric => targets[period][metric].left);
+      if (!key) continue;
+      const left = targets[period][key].left;
+      const actions = {
+        notes: 'Read one more note section',
+        lessons: 'Finish one video lesson and its quiz',
+        mocks: 'Complete one practice interview',
+        minutes: `Study for ${Math.min(left, 15)} more minutes`
+      };
+      return `<div class="study-next-target"><p><strong>Next ${label}</strong><span>${actions[key]}</span></p>
+        <button type="button" class="button button-secondary" data-study-open="${key}">${metrics[key].action}</button></div>`;
+    }
+    return '';
+  }
+
   function targetPanel(targets) {
     const hasTargets = ['daily','weekly'].some(period => Object.values(targets[period]).some(item => item.target));
     const dateLabel = value => new Intl.DateTimeFormat(undefined,{day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(value));
     return `<section class="panel study-targets" aria-labelledby="study-target-heading">
       <div class="panel-head"><div><h2 id="study-target-heading">Your study targets</h2>
         <p>${dateLabel(targets.day)} · Week of ${dateLabel(targets.week_start)}–${dateLabel(targets.week_end)} · ${e(overview.timezone)}</p></div></div>
+      ${nextTarget(targets)}
       <div class="study-target-periods">${activityPeriod('Today', targets.daily)}${activityPeriod('This week', targets.weekly)}</div>
       <details class="study-target-settings" ${hasTargets ? '' : 'open'}>
         <summary>${hasTargets ? 'Edit daily and weekly targets' : 'Set daily and weekly targets'}</summary>
