@@ -161,3 +161,10 @@ def test_live_context_prioritizes_natural_followups_and_no_biometric_scoring():
     assert "Do not interrupt" in source
     assert "never to judge emotions" in source
     assert "For Hinglish" in source
+
+def test_live_video_cannot_overlap_secure_proctored_assessment():
+    js=(ROOT/"app/static/mock-interview.js").read_text()
+    live_js=(ROOT/"app/static/live-interview.js").read_text()
+    assert "if(window.PlaceAILiveInterview?.isActive())" in js
+    assert "End the live AI interview before starting the secure assessment" in js
+    assert "isActive:()=>Boolean(session)" in live_js

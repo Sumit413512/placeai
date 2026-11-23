@@ -1887,6 +1887,7 @@
   }
 
   async function startAssessment() {
+    if(window.PlaceAILiveInterview?.isActive()){toast('End the live AI interview before starting the secure assessment.','error');return;}
     if(state.assessmentActive || $('#start-assessment').disabled)return;
     if(!state.systemReady || !$('#consent-check').checked){toast('Complete all required secure checks first.','error');return;}
     const startButton=$('#start-assessment');
