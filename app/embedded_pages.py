@@ -30,7 +30,7 @@ INDEX_HTML = '''<!doctype html>
 <meta property="og:image:alt" content="PlaceAI campus placement collaboration">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/static/privacy-preferences.css"><script src="/static/privacy-preferences.js" defer></script>
-<link rel="stylesheet" href="/static/selected-theme.css?v=20261123-student-guidance1">
+<link rel="stylesheet" href="/static/selected-theme.css?v=20261124-learning-visual1">
   <link rel="stylesheet" href="/static/learning-hub.css?v=20261023-notes2">
 </head>
 <body>
@@ -251,11 +251,11 @@ INDEX_HTML = '''<!doctype html>
   <link rel=\"stylesheet\" href=\"/static/array-readiness.css?v=2\">
   <script src=\"/static/array-readiness.js?v=20261122-readiness3\" defer></script>
   <script src="/static/learning-video.js?v=20261123-study-targets1" defer></script>
-  <link rel="stylesheet" href="/static/study-tracker.css?v=20261124-next-study-step1">
+  <link rel="stylesheet" href="/static/study-tracker.css?v=20261124-learning-visual1">
 <link rel="stylesheet" href="/static/evidence-vault.css?v=20261024-zensar1">
-  <script src="/static/study-tracker.js?v=20261124-next-study-step1" defer></script>
+  <script src="/static/study-tracker.js?v=20261124-learning-visual1" defer></script>
   <script src="/static/notes-reader.js?v=20261024-zensar1" defer></script>
-  <script src="/static/learning-hub.js?v=20261024-zensar1" defer></script>
+  <script src="/static/learning-hub.js?v=20261124-learning-visual1" defer></script>
 </body>
 </html>
 '''
@@ -313,7 +313,7 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/api-errors.css">
-  <link rel="stylesheet" href="/static/mock-interview.css?v=20261124-interviewer-call1">
+  <link rel="stylesheet" href="/static/mock-interview.css?v=20261124-feature-hero1">
   <link rel="stylesheet" href="/static/brand.css">
   <link rel="stylesheet" href="/static/ui-fixes.css">
 <link rel="canonical" href="https://www.placeai.in/mock-interview">
@@ -337,19 +337,11 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
 </header>
 
 <main class="shell">
-  <section class="hero assessment-hero">
+  <section class="hero assessment-hero assessment-photo-hero" aria-label="Mock Interview Coach">
     <div class="hero-copy">
-      <span class="eyebrow">Secure Placement Assessment</span>
-      <h1>Placement Assessment &amp; Interview Simulation</h1><span class="hidden" aria-hidden="true">Mock Interview Coach</span>
-      <p>A role-aligned assessment environment for campus placement preparation, combining aptitude, reasoning, communication, technical knowledge, coding, resume defence and behavioural evaluation under structured proctoring controls.</p>
-      <div class="hero-meta">
-        <span>Role-based blueprint</span><span>Section timers</span><span>Forward-only flow</span><span>Secure browser controls</span><span>AI-assisted proctoring</span>
-      </div>
+      <h1>Mock Interview Coach</h1>
+      <p>Practice your answers. Build confidence.</p>
     </div>
-    <figure class="assessment-practice-photo">
-      <img src="/static/workspace-mock-interview.webp" alt="Student speaking to a laptop camera during a mock interview" width="960" height="640" decoding="async">
-      <figcaption>Structured placement practice</figcaption>
-    </figure>
   </section>
 
   <div id="preview-banner" class="preview-banner hidden"><strong>Assessment preview</strong><span>This preview uses sample assessment data. Camera, screen-share and on-device proctoring checks run when you grant permission; no biometric identity matching is performed.</span></div>

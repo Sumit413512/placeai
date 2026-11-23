@@ -82,7 +82,7 @@ def test_mcq_interaction_and_expandable_navigator_contract():
     css = _text("app/static/mock-interview.css")
     js = _text("app/static/mock-interview.js")
 
-    assert "mock-interview.css?v=20261124-interviewer-call1" in html
+    assert "mock-interview.css?v=20261124-feature-hero1" in html
     assert "mock-interview.js?v=20261124-interviewer-call2" in html
     assert 'role="radiogroup"' in js
     assert 'role="radio"' in js
@@ -154,7 +154,8 @@ def test_render_assessment_demo_requires_real_preflight_instead_of_bypassing_pro
 def test_mock_assessment_copy_is_professional_and_drops_plus_marketing():
     html = _text("app/templates/mock-interview.html")
     assert "Secure Placement Assessment" in html
-    assert "Structured placement practice" in html
+    assert "Mock Interview Coach" in html
+    assert "assessment-photo-hero" in html
     assert "50+" not in html
     assert "50-question minimum" not in html
 
@@ -178,7 +179,7 @@ def test_executable_coding_workspace_is_mirrored_and_cache_busted():
     js = _text("app/static/mock-interview.js")
     css = _text("app/static/mock-interview.css")
 
-    assert "mock-interview.css?v=20261124-interviewer-call1" in html
+    assert "mock-interview.css?v=20261124-feature-hero1" in html
     assert "mock-interview.js?v=20261124-interviewer-call2" in html
     assert "code-workspace" in js
     assert "code-language" in js

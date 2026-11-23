@@ -37,7 +37,7 @@ def test_real_student_can_track_read_delete_restore_and_resume_notes(browser,loc
     page.get_by_role('button',name='Skip for now',exact=True).click()
     expect(page.locator('#auth-overlay')).to_be_hidden()
     page.locator('#app-nav [data-view="study-tracker"]').click()
-    expect(page.get_by_role('heading',name='Make the next session count.',exact=True)).to_be_visible()
+    expect(page.get_by_role('heading',name='Study Tracker',exact=True)).to_be_visible()
     page.locator('[name="daily-notes"]').fill('2')
     page.locator('[name="weekly-notes"]').fill('4')
     page.locator('[name="weekly-lessons"]').fill('1')
@@ -75,7 +75,9 @@ def test_real_student_can_track_read_delete_restore_and_resume_notes(browser,loc
     page.set_viewport_size({'width':1440,'height':1000})
     reader_out=Path('../../outputs/placeai-study-20261024');reader_out.mkdir(parents=True,exist_ok=True);page.locator('.notes-focus-reader').screenshot(path=str(reader_out/'local-notes-reader.png'))
     page.get_by_role('button',name='Back to notebook',exact=True).click()
-    page.get_by_role('button',name='Delete notebook: SQL study verification',exact=True).click()
+    delete_button=page.get_by_role('button',name='Delete notebook: SQL study verification',exact=True)
+    delete_button.evaluate("el => el.scrollIntoView({block:'center',behavior:'instant'})")
+    delete_button.click()
     page.get_by_role('button',name='Delete notebook',exact=True).click()
     expect(page.locator('#learning-library [data-learning-id]')).to_have_count(0)
     page.get_by_role('button',name='Deleted notes',exact=True).click()
@@ -86,12 +88,13 @@ def test_real_student_can_track_read_delete_restore_and_resume_notes(browser,loc
     page.locator('#app-nav [data-view="study-tracker"]').click()
     expect(page.locator('.study-plan>.panel-head')).to_contain_text('100%')
     expect(page.get_by_role('button',name='Another reminder',exact=True)).to_have_count(0)
-    text=page.locator('#study-reminder').inner_text()
-    art=page.locator('.study-illustration').get_attribute('aria-label')
+    assert page.locator('.study-calendar-day').count() >= 1
+    page.locator('.study-calendar-day').first.click()
+    expect(page.locator('.study-calendar-day').first).to_have_attribute('aria-pressed','true')
+    expect(page.locator('#study-calendar-detail')).to_contain_text('Study time')
     page.locator('#app-nav [data-view="dashboard"]').click()
     page.locator('#app-nav [data-view="study-tracker"]').click()
-    expect(page.locator('#study-reminder')).not_to_have_text(text)
-    assert page.locator('.study-illustration').get_attribute('aria-label') != art
+    expect(page.locator('.placeai-study-photo')).to_be_visible()
     for width in (1440,768,390,320):
         page.set_viewport_size({'width':width,'height':900});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),width
     page.set_viewport_size({'width':1440,'height':1000})

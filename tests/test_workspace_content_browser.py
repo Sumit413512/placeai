@@ -48,34 +48,39 @@ def test_saved_roadmap_readability_structure_and_supplementary_notes(browser, wi
     for pattern in ('**/auth/**', '**/roadmap/**', '**/students/**', '**/enterprise/**', '**/billing/**', '**/ai/**', '**/intelligence/**'):
         page.route(pattern, api_response)
     page.goto(BASE_URL + '/?view=roadmap', wait_until='load')
-    signals = page.locator('.roadmap-market-panel > .check-list li')
-    signals.first.wait_for()
-    assert signals.count() == 2
-    assert signals.first.evaluate('el => getComputedStyle(el).color') == 'rgb(36, 40, 35)'
-    assert signals.first.evaluate('el => getComputedStyle(el).fontSize') == '16px'
-    assert signals.first.evaluate('el => getComputedStyle(el).display') == 'list-item'
-    for selector in ('.roadmap-summary-grid .metric-card span', '.roadmap-target-card small', '.roadmap-evidence > summary small'):
-        caption = page.locator(selector).first
-        assert caption.evaluate('el => getComputedStyle(el).color') == 'rgb(95, 103, 95)'
-        assert caption.evaluate('el => getComputedStyle(el).fontSize') == '14px'
-    assert page.locator('.roadmap-priority-grid > .panel').first.bounding_box()['height'] < 300
+    page.locator('.roadmap-journey-node').first.wait_for()
+    assert page.locator('.roadmap-photo-hero h1').inner_text() == 'Your Career Roadmap'
+    assert page.locator('.roadmap-journey-node').count() == 1
+    assert page.locator('.roadmap-journey-node strong').first.inner_text() == 'SQL foundations'
+    assert page.locator('.roadmap-cover-stat').count() == 3
+    assert page.locator('.roadmap-cover-chips span').count() == 3
+    assert page.locator('.roadmap-print-cover').bounding_box()['width'] > 250
     assert page.locator('.roadmap-support-section').count() == 2
     assert page.get_by_role('heading', name='Advanced next steps', exact=True).count() == 0
     assert 'No additional items were returned' not in page.locator('#app-content').inner_text()
     assert page.locator('.roadmap-phase-stack .check-list li').first.evaluate('el => getComputedStyle(el).color') == 'rgb(36, 40, 35)'
 
     notes = page.locator('.roadmap-market-notes')
-    summary = notes.locator('summary')
+    context = page.locator('.roadmap-research-notes')
+    assert context.get_attribute('open') is None
+    context.locator('summary').first.click()
+    assert context.get_attribute('open') is not None
     assert notes.get_attribute('open') is None
-    summary.press('Enter')
+    notes.locator('summary').press('Enter')
     assert notes.get_attribute('open') is not None
     assert notes.locator('li').is_visible()
-    summary.press('Enter')
+    notes.locator('summary').press('Enter')
     assert notes.get_attribute('open') is None
+    context.locator('summary').first.click()
+    assert context.get_attribute('open') is None
     page.evaluate("window.dispatchEvent(new Event('beforeprint'))")
+    assert page.locator('body').evaluate("el => el.classList.contains('roadmap-printing')")
     assert notes.get_attribute('open') is not None
+    assert context.get_attribute('open') is not None
     page.evaluate("window.dispatchEvent(new Event('afterprint'))")
     assert notes.get_attribute('open') is None
+    assert context.get_attribute('open') is None
+    assert not page.locator('body').evaluate("el => el.classList.contains('roadmap-printing')")
 
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
     output = Path(__file__).resolve().parents[1] / 'work/readable-content-review'
