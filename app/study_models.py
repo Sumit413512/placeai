@@ -1,5 +1,5 @@
 """Private study plans and self-reported reading, separate from assessment scores."""
-from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from app.database import Base
 from app.models import generate_uuid, utcnow
 
@@ -51,5 +51,17 @@ class StudyDaily(Base):
     day = Column(Date, primary_key=True)
     notes_seconds = Column(Integer, nullable=False, default=0)
     video_seconds = Column(Integer, nullable=False, default=0)
+    lessons_completed = Column(Integer, nullable=False, default=0, server_default="0")
     sections_completed = Column(Integer, nullable=False, default=0)
     last_pulse_at = Column(DateTime)
+
+
+class StudyTargets(Base):
+    __tablename__ = 'study_targets'
+    user_id = Column(String, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    daily_json = Column(Text, nullable=False, default='{}')
+    weekly_json = Column(Text, nullable=False, default='{}')
+    timezone = Column(String(64), nullable=False, default='Asia/Kolkata')
+    reminders = Column(Boolean, nullable=False, default=False)
+    reminder_start_day = Column(Date)
+    last_digest_day = Column(Date)

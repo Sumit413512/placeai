@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.ai_rate_limit import student_ai_guard
 from app.database import get_db
 from app.dependencies import require_student
-from app.models import AssessmentJob, ApprovalStatus, HRRecording, Job, MockInterview, StudentProfile, User
+from app.models import AssessmentJob, ApprovalStatus, HRRecording, Job, MockInterview, StudentProfile, User, utcnow
 from app.placement_access import job_is_visible_to_student
 from app.routers.ai import PROMPT_GUARDRAIL, call_gemini, extract_json_from_response, get_gemini_client
 from app.trial_demo_access import trial_demo_access_state
@@ -319,6 +319,7 @@ SERVER-ISSUED QUESTIONS AND ANSWERS
     interview.answers_json = json.dumps(answers_payload)
     interview.evaluation_json = json.dumps(result)
     interview.overall_score = overall_score
+    interview.completed_at = interview.completed_at or utcnow()
     interview.overall_feedback = result["overall_feedback"]
     db.commit()
     db.refresh(interview)

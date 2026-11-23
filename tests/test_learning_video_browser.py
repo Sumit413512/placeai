@@ -32,6 +32,8 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
     page.add_init_script("localStorage.setItem('placeai.analytics.preference.v1','declined')")
     errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
     content = script()
+    for scene in content['scenes']:
+        scene['english_explanation'] = 'Compare each candidate row with the filter in order.'
     media, duration, timings = render_video(content, narrate=lambda _: b'\0'*48000)
     content.update(timings=timings, sources=[{"title":"PostgreSQL SELECT","url":"https://www.postgresql.org/docs/current/sql-select.html"}])
     course = {"id":"video-browser-course", "title":"SQL foundations", "status":"ready", "introduction":course_plan()['introduction'],
@@ -127,6 +129,11 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
     assert video.evaluate('v=>v.duration') == duration
     assert video.evaluate('v=>v.currentTime') == 1
     assert video.locator('track').get_attribute('src').startswith('blob:')
+    expect(video.locator('track')).to_have_attribute('label', 'Hinglish')
+    page.get_by_text('English explanations', exact=True).click()
+    expect(page.get_by_text('Compare each candidate row with the filter in order.', exact=True).first).to_be_visible()
+    page.get_by_text('Hinglish transcript and visual explanations', exact=True).click()
+    expect(page.locator('[lang="hi"]').first).to_be_visible()
     expect(page.locator('[data-video-outline] [data-video-lesson="0"]')).to_have_attribute('aria-current','step')
     expect(page.get_by_role('button',name='Previous lesson',exact=True)).to_be_disabled()
     assert page.locator('.learning-video-quiz').evaluate('(el)=>Boolean(el.previousElementSibling)')

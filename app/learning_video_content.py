@@ -139,6 +139,8 @@ class VideoStoryboard(ContentModel):
 class VideoScene(ContentModel):
     title: str = Field(min_length=3, max_length=65)
     narration: str = Field(min_length=100, max_length=1000)
+    english_explanation: str = Field(default="", max_length=1000,
+                                     description="Plain English explanation of the scene, including its worked example.")
     bullets: list[str] = Field(min_length=1, max_length=3)
     code: str = Field(default="", max_length=600,
                       description="At most seven short lines; at most 65 characters per line.")
@@ -204,6 +206,8 @@ Use correct Hindi gender, tense, grammar and natural concise phrasing. Explain e
 term through an everyday analogy before introducing its formal definition. Speak English
 technical names accurately, without translating them into awkward Hindi. Only speak content
 the learner needs to hear; never pronounce stage directions, slide labels or metadata.
+Write english_explanation for each scene in clear English for learners who prefer to read it.
+Cover the same concept and worked example as the narration. Keep bullets in English.
 Keep the language respectful, calm and suitable for an Indian college learner.
 Teach one coherent objective in 6-12 progressively ordered scenes, targeting 5-10 minutes total.
 Write three distinct quiz prompts in order: a diagnostic, a guided practice item,

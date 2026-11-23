@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import date, timedelta
+import json
 from typing import Literal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -9,8 +10,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import require_student
 from app.models import User, utcnow
-from app.study_models import StudyPlan, StudyGoal, NotebookProgress, StudyDaily
-from app import study_service as service
+from app.study_models import StudyPlan, StudyGoal, NotebookProgress, StudyDaily, StudyTargets
+from app import study_service as service, study_targets
 
 router = APIRouter(prefix='/study-tracker', tags=['Study tracker'])
 
@@ -19,20 +20,59 @@ class Input(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
 
 
-class PlanInput(Input):
+class ZonedInput(Input):
+    timezone: str = Field(default='Asia/Kolkata', max_length=64)
+
+    @field_validator('timezone')
+    @classmethod
+    def valid_zone(cls, value):
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError('Choose a valid time zone') from None
+        return value
+
+
+class PlanInput(ZonedInput):
     request_id: UUID = Field(default_factory=uuid4)
     title: str = Field(min_length=3,max_length=180)
     roadmap_id: str | None = Field(default=None,max_length=100)
     daily_minutes: int = Field(default=45,ge=5,le=480)
     target_date: date | None = None
-    timezone: str = Field(default='Asia/Kolkata',max_length=64)
 
-    @field_validator('timezone')
-    @classmethod
-    def valid_zone(cls, value):
-        try: ZoneInfo(value)
-        except (ZoneInfoNotFoundError, ValueError): raise ValueError('Choose a valid time zone') from None
-        return value
+
+class TargetCounts(Input):
+    minutes: int = Field(default=0, ge=0, le=3360, strict=True)
+    notes: int = Field(default=0, ge=0, le=500, strict=True)
+    lessons: int = Field(default=0, ge=0, le=500, strict=True)
+    mocks: int = Field(default=0, ge=0, le=100, strict=True)
+
+
+class TargetsInput(ZonedInput):
+    daily: TargetCounts
+    weekly: TargetCounts
+    reminders: bool = False
+
+
+@router.put('/targets')
+def save_targets(body: TargetsInput, user: User=Depends(require_student), db: Session=Depends(get_db)):
+    service.lock_owner(db, user)
+    row = db.get(StudyTargets, user.id)
+    if row is None:
+        existing_plan = db.query(StudyPlan).filter_by(user_id=user.id).order_by(StudyPlan.created_at).first()
+        has_history = db.query(StudyDaily.user_id).filter_by(user_id=user.id).first() is not None
+        zone = service.user_zone(db, user.id) if existing_plan or has_history else body.timezone
+        row = StudyTargets(user_id=user.id, timezone=zone)
+        db.add(row)
+    today = service.local_day(utcnow(), row.timezone)
+    if body.reminders and not row.reminders:
+        row.reminder_start_day = today
+    row.daily_json = json.dumps(body.daily.model_dump())
+    row.weekly_json = json.dumps(body.weekly.model_dump())
+    row.reminders = body.reminders
+    db.commit()
+    return study_targets.progress(db, user, today, row.timezone,
+                                  service.mock_records(db, user, since=today-timedelta(days=6), zone=row.timezone))
 
 
 class PlanUpdate(Input):
@@ -75,21 +115,23 @@ def overview(user:User=Depends(require_student),db:Session=Depends(get_db)):
     daily = {row.day:row for row in db.query(StudyDaily).filter(StudyDaily.user_id==user.id,StudyDaily.day>=today-timedelta(days=27)).all()}
     mock_days = {}
     for row in mocks:
-        day=service.local_day(row.created_at,zone);mock_days[day]=mock_days.get(day,0)+1
+        day=service.local_day(row.completed_at or row.created_at,zone);mock_days[day]=mock_days.get(day,0)+1
     days=[]
     for offset in range(27,-1,-1):
         day=today-timedelta(days=offset); row=daily.get(day)
         days.append({'date':str(day),'minutes':round(((row.notes_seconds+row.video_seconds) if row else 0)/60,1),
-                     'sections_completed':row.sections_completed if row else 0,'mock_sessions':mock_days.get(day,0)})
-    active=lambda item:item['minutes']>0 or item['sections_completed']>0 or item['mock_sessions']>0
+                     'sections_completed':row.sections_completed if row else 0,
+                     'lessons_completed':row.lessons_completed if row else 0,'mock_sessions':mock_days.get(day,0)})
+    active=lambda item:item['minutes']>0 or item['sections_completed']>0 or item['mock_sessions'] or item['lessons_completed']>0
     streak=0
     for item in reversed(days if active(days[-1]) else days[:-1]):
         if not active(item):break
         streak+=1
     return {'plans':[service.plan_data(db,p,user,mocks) for p in plans], 'daily':days,'timezone':zone,
+            'targets':study_targets.progress(db,user,today,zone,mocks),
             'today_minutes':days[-1]['minutes'],'average_daily_minutes':round(sum(d['minutes'] for d in days[-7:])/7,1),
             'active_days':sum(active(d) for d in days),'streak_days':streak,'completed_mock_sessions':len(mocks),
-            'activity_basis':'Recorded active reading and playback time; offline reading is not timed. Mock activity uses session start dates.'}
+            'activity_basis':'Study time includes active reading and playback. Offline reading records completed sections only. Older mock interviews use their session date.'}
 
 
 @router.get('/resources')
@@ -106,13 +148,15 @@ def create_plan(body:PlanInput,user:User=Depends(require_student),db:Session=Dep
             raise HTTPException(409,'This request identifier already belongs to another study plan')
         return service.plan_data(db,existing_request,user,service.mock_records(db,user))
     if db.query(StudyPlan).filter_by(user_id=user.id).count()>=20:raise HTTPException(409,'You can keep up to 20 study plans')
-    if body.target_date and body.target_date<service.local_day(utcnow(),body.timezone):raise HTTPException(422,'Choose today or a future target date')
     if body.roadmap_id:service.owned_roadmap(db,body.roadmap_id,user)
     # One calendar convention per student avoids splitting the same activity across days.
     existing=db.query(StudyPlan).filter_by(user_id=user.id).order_by(StudyPlan.created_at).first()
     data=body.model_dump()
     data['request_id']=str(body.request_id)
-    if existing:data['timezone']=existing.timezone
+    if existing or db.get(StudyTargets, user.id) or db.query(StudyDaily.user_id).filter_by(user_id=user.id).first():
+        data['timezone']=service.user_zone(db,user.id)
+    if body.target_date and body.target_date < service.local_day(utcnow(), data['timezone']):
+        raise HTTPException(422, 'Choose today or a future target date')
     row=StudyPlan(user_id=user.id,**data);db.add(row);db.commit()
     return service.plan_data(db,row,user,service.mock_records(db,user))
 

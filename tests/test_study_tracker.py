@@ -124,3 +124,111 @@ def test_other_roles_cannot_open_student_tracking(tracker):
     row=book(tracker);tracker.actor[0]=SimpleNamespace(role='recruiter')
     for path in ['/study-tracker','/study-tracker/resources','/study-tracker/notes/'+row.id]:
         assert tracker.client.get(path).status_code==403
+
+
+def test_recurring_targets_use_calendar_activity_and_stay_private(tracker, monkeypatch):
+    from datetime import datetime
+    from app.study_service import day_row
+
+    now = datetime(2026, 11, 23, 19, 5)  # Tuesday in Kolkata, Monday in UTC.
+    monkeypatch.setattr(study_tracker, 'utcnow', lambda: now)
+    settings = {'daily': {'notes': 2, 'minutes': 30, 'mocks': 1},
+                'weekly': {'notes': 5, 'lessons': 4}, 'reminders': True, 'timezone': 'Asia/Kolkata'}
+    response = tracker.client.put('/study-tracker/targets', json=settings)
+    assert response.status_code == 200, response.text
+    assert response.json()['day'] == '2026-11-24'
+    assert response.json()['week_start'] == '2026-11-23'
+    assert response.json()['week_end'] == '2026-11-29'
+
+    previous_day = day_row(tracker.db, tracker.owner.id, now - timedelta(days=1))
+    previous_day.lessons_completed = 3
+    previous_day.notes_seconds = 30
+    today = day_row(tracker.db, tracker.owner.id, now)
+    today.video_seconds = 1830
+    tracker.db.commit()
+
+    row = book(tracker)
+    mark = {'section_key': '1.2', 'event_id': str(uuid4()), 'completed': True, 'through': True, 'source': 'offline'}
+    assert tracker.client.put('/study-tracker/notes/' + row.id, json=mark).status_code == 200
+
+    profile = StudentProfile(user_id=tracker.owner.id)
+    job = Job(recruiter_id='isolated-fixture', title='SQL engineer', description='Isolated test role')
+    tracker.db.add_all([profile, job])
+    tracker.db.flush()
+    tracker.db.add(MockInterview(student_id=profile.id, job_id=job.id,
+                                 questions_json='[]', answers_json='[]', overall_score=70,
+                                 created_at=now-timedelta(days=1), completed_at=now))
+    tracker.db.commit()
+    targets = tracker.client.get('/study-tracker').json()['targets']
+    assert targets['daily']['notes'] == {'done': 2, 'target': 2, 'left': 0}
+    assert targets['daily']['minutes'] == {'done': 30, 'target': 30, 'left': 0}
+    assert targets['daily']['mocks'] == {'done': 1, 'target': 1, 'left': 0}
+    assert targets['weekly']['lessons'] == {'done': 3, 'target': 4, 'left': 1}
+    assert targets['weekly']['minutes']['done'] == 31
+
+    now += timedelta(days=6)
+    targets = tracker.client.get('/study-tracker').json()['targets']
+    assert targets['weekly']['lessons'] == {'done': 0, 'target': 4, 'left': 4}
+    assert tracker.client.put('/study-tracker/targets', json={**settings, 'daily': {'notes': -1}}).status_code == 422
+    tracker.actor[0] = tracker.other
+    targets = tracker.client.get('/study-tracker').json()['targets']
+    assert targets['weekly']['lessons'] == {'done': 0, 'target': 0, 'left': 0}
+    assert not targets['reminders']
+
+
+def test_recaps_honor_local_evening_preferences_and_retries(tracker, monkeypatch):
+    from datetime import datetime
+    from app.models import Notification, NotificationPreference
+    from app.study_service import day_row
+    from app.study_targets import create_due_digest
+
+    now = datetime(2026, 11, 23, 14, 29)
+    monkeypatch.setattr(study_tracker, 'utcnow', lambda: now)
+    settings = {'daily': {'notes': 2, 'lessons': 1}, 'weekly': {'notes': 5},
+                'reminders': True, 'timezone': 'Asia/Kolkata'}
+    assert tracker.client.put('/study-tracker/targets', json=settings).status_code == 200
+    day_row(tracker.db, tracker.owner.id, now).sections_completed = 2
+    preference = NotificationPreference(user_id=tracker.owner.id, in_app=False)
+    tracker.db.add(preference)
+    tracker.db.commit()
+    assert not create_due_digest(tracker.db, tracker.owner, now)
+    now += timedelta(minutes=1)
+    assert not create_due_digest(tracker.db, tracker.owner, now)
+    preference.in_app = True
+    tracker.db.commit()
+    assert create_due_digest(tracker.db, tracker.owner, now)
+    assert not create_due_digest(tracker.db, tracker.owner, now)
+    assert not create_due_digest(tracker.db, tracker.owner, now+timedelta(hours=22))
+    item = tracker.db.query(Notification).one()
+    assert item.user_id == tracker.owner.id and item.link == 'study-tracker'
+    assert item.title == 'Study recap · 23 Nov'
+    assert item.message == ('Completed 2 note sections. Daily targets still need 1 video lesson with quiz. '
+                            'Weekly targets still need 3 note sections.')
+    assert create_due_digest(tracker.db, tracker.owner, now+timedelta(days=1, hours=22))
+    assert tracker.db.query(Notification).count() == 2
+    assert tracker.client.put('/study-tracker/targets', json={**settings, 'reminders': False}).status_code == 200
+    tracker.db.expire_all()
+    assert not create_due_digest(tracker.db, tracker.owner, now+timedelta(days=3))
+
+
+@pytest.mark.parametrize('quiz_first', [False, True])
+def test_video_and_quiz_count_once_in_daily_targets(video, quiz_first):
+    video.api.app.include_router(study_tracker.router)
+    _, lesson_id, path = ready_lesson(video)
+    if quiz_first:
+        assert video.api.post(path+'/practice', json={'answers': [0, 0, 0]}).status_code == 200
+        assert video.api.get('/study-tracker').json()['targets']['daily']['lessons']['done'] == 0
+    for position in (0, 25, 50, 75, 95):
+        record = video.db.get(VideoViewerProgress, (video.owner.id, lesson_id))
+        if record:
+            record.updated_at = utcnow() - timedelta(seconds=15)
+            video.db.commit()
+        assert video.api.put(path+'/progress', json={'position_seconds': position}).status_code == 200
+    if not quiz_first:
+        assert video.api.get('/study-tracker').json()['targets']['daily']['lessons']['done'] == 0
+    for _ in range(2):
+        assert video.api.post(path+'/practice', json={'answers': [0, 0, 0]}).status_code == 200
+    assert video.api.put(path+'/progress', json={'position_seconds': 96}).status_code == 200
+    assert video.api.get('/study-tracker').json()['targets']['daily']['lessons']['done'] == 1
+    video.actor[0] = video.other
+    assert video.api.get('/study-tracker').json()['targets']['daily']['lessons']['done'] == 0

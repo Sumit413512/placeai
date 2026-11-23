@@ -26,7 +26,7 @@ from app.media_delivery import private_media_response
 from app.models import (User, VideoCourse, VideoLesson, VideoProgress, VideoEnrollment,
                         VideoViewerProgress, utcnow)
 from app.routers.learning_hub import generation_available, wake_worker
-from app.study_service import lock_owner, record_video_time
+from app.study_service import day_row, lock_owner, record_video_time
 
 router = APIRouter(prefix="/learning-hub/video", tags=["Video Learning"])
 PRIVATE = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
@@ -425,6 +425,11 @@ def subtitles(course_id: str, position: int, user: User = Depends(require_studen
     return Response(captions(json.loads(row.content_json)), media_type="text/vtt", headers=PRIVATE)
 
 
+def count_lesson_completion(db, user, record, previously_complete, now):
+    if not previously_complete and record.video_completed and record.practice_completed:
+        day_row(db, user.id, now).lessons_completed += 1
+
+
 class Playback(ContentModel):
     position_seconds: float = Field(ge=0, le=600, allow_inf_nan=False)
 
@@ -456,7 +461,9 @@ def progress(course_id: str, position: int, body: Playback,
     record.coverage_json = json.dumps(merged)
     record.watched_seconds = sum(end - start for start, end in merged)
     record.position_seconds, record.updated_at = endpoint, now
+    previously_complete = record.video_completed and record.practice_completed
     record.video_completed = record.video_completed or record.watched_seconds >= row.duration_seconds * .9
+    count_lesson_completion(db, user, record, previously_complete, now)
     db.commit()
     return progress_data(record)
 
@@ -479,11 +486,14 @@ def practice(course_id: str, position: int, body: Answers,
             raise HTTPException(422, "Select one of the available answers")
         results.append({"correct": answer == question["answer"], "answer": question["answer"],
                         "explanation": question["explanation"]})
+    lock_owner(db, user)
     record = viewer_record(db, row, user, lock=True)
+    previously_complete = record.video_completed and record.practice_completed
     record.practice_completed = record.practice_completed or all(item["correct"] for item in results)
     # This timestamp is the playback clock. A practice submission must not reset
     # it or the next legitimate timeupdate looks like a seek and loses coverage.
     flag_modified(record, "updated_at")
+    count_lesson_completion(db, user, record, previously_complete, utcnow())
     db.commit()
     return {"results": results, "solution": content["solution"], **progress_data(record)}
 

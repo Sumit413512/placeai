@@ -376,6 +376,13 @@
     }
   }
 
+  function refreshStudentNotificationBadge() {
+    if (!document.hidden && state.me?.role === 'student' && state.token) void updateNotificationBadge();
+  }
+
+  document.addEventListener('visibilitychange', refreshStudentNotificationBadge);
+  window.setInterval(refreshStudentNotificationBadge, 5 * 60 * 1000);
+
   function notificationTarget(link) {
     const candidate = String(link || '').trim().split(':', 1)[0];
     return (state.nav || []).some(item => item[1] === candidate) ? candidate : 'notifications';

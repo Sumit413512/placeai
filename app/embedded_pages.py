@@ -243,16 +243,16 @@ INDEX_HTML = '''<!doctype html>
     </section>
   </div>
 
-  <script src="/static/app.js?v=20261123-student-guidance1" defer></script>
+  <script src="/static/app.js?v=20261123-study-targets1" defer></script>
   <script src="/static/opportunities.js?v=20261021-detail1" defer></script>
   <link rel="stylesheet" href="/static/opportunities.css?v=20261021-detail1">
   <link rel="stylesheet" href="/static/learning-video.css?v=20261017-full-course4">
   <link rel=\"stylesheet\" href=\"/static/array-readiness.css?v=2\">
   <script src=\"/static/array-readiness.js?v=20261122-readiness3\" defer></script>
-  <script src="/static/learning-video.js?v=20261122-readiness3" defer></script>
-  <link rel="stylesheet" href="/static/study-tracker.css?v=20261024-zensar1">
+  <script src="/static/learning-video.js?v=20261123-study-targets1" defer></script>
+  <link rel="stylesheet" href="/static/study-tracker.css?v=20261123-study-targets1">
 <link rel="stylesheet" href="/static/evidence-vault.css?v=20261024-zensar1">
-  <script src="/static/study-tracker.js?v=20261123-student-guidance1" defer></script>
+  <script src="/static/study-tracker.js?v=20261123-study-targets1" defer></script>
   <script src="/static/notes-reader.js?v=20261024-zensar1" defer></script>
   <script src="/static/learning-hub.js?v=20261024-zensar1" defer></script>
 </body>

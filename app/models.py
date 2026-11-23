@@ -495,6 +495,7 @@ class MockInterview(Base):
     overall_score = Column(Integer, nullable=True)
     overall_feedback = Column(Text, nullable=True)
     created_at = Column(DateTime, default=utcnow)
+    completed_at = Column(DateTime)
 
     student = relationship("StudentProfile", back_populates="mock_interviews")
     job = relationship("Job")
