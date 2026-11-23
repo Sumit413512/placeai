@@ -15,6 +15,7 @@ def test_live_interview_is_real_provider_backed_not_static_pretend():
     html=(ROOT/"app/templates/mock-interview.html").read_text()
     assert html==(ROOT/"public/mock-interview.html").read_text()
     assert 'id="live-coach-frame"' in html
+    assert 'aria-labelledby="live-coach-title" hidden' in html
     assert 'id="live-coach-consent"' in html
     assert 'id="live-coach-end"' in html
     assert 'id="live-coach-preview"' in html

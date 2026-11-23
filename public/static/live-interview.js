@@ -32,6 +32,7 @@
     try{
       const info=await api('/mock-interview/live/status');
       ready=Boolean(info.available);
+      $('live-coach').hidden=!ready;
       start.disabled=!ready;
       say(ready?'Live video interviewer ready. Allow camera and microphone access when you join.':
         'Real-time video is being configured. You can use the spoken-answer practice assessment below.',ready?'ready':'unavailable');
