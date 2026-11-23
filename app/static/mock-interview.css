@@ -564,3 +564,29 @@ body.secure-assessment .protected-question,body.secure-assessment .answer-option
 .assessment-photo-hero p{max-width:320px!important;color:#68413b!important;font-size:clamp(15px,1.6vw,18px)!important;line-height:1.5!important;font-weight:650}
 @media(max-width:700px){.assessment-photo-hero{min-height:260px;padding:22px;background-position:center,calc(100% + 75px) center;background-size:cover,auto 107%;background-image:linear-gradient(90deg,#fff2e8 0%,#fff2e8fa 25%,#fff2e8e8 46%,#fff2e88c 66%,transparent 88%),url("/static/placeai-interview-hero.webp")}.assessment-photo-hero .hero-copy{max-width:70%}.assessment-photo-hero h1{font-size:clamp(32px,7vw,45px)!important}}
 @media(max-width:420px){.assessment-photo-hero{min-height:230px;background-position:center,calc(100% + 90px) center}}
+
+/* Genuine provider-backed video call, not a motion filter over a static photo. */
+.live-coach{margin:22px 0 30px;border:1px solid #e9d4c5;border-radius:20px;padding:clamp(19px,3vw,32px);background:linear-gradient(125deg,#fff9f2,#fffdf9);box-shadow:0 10px 30px #623d2812}
+.live-coach-intro{display:flex;align-items:start;justify-content:space-between;gap:16px;margin-bottom:20px}
+.live-coach-eyebrow{font-size:12px;font-weight:800;letter-spacing:.12em;color:#833d4f;text-transform:uppercase}
+.live-coach-intro h2{font-size:clamp(25px,3vw,36px);letter-spacing:-.04em;color:#4b2931;margin:6px 0 10px}
+.live-coach-intro p{font-size:15px;line-height:1.65;color:#584a42;max-width:700px;margin:0}
+.live-coach-chip{flex:none;background:#e8f3eb;border:1px solid #c1d9c6;color:#306044;padding:9px 12px;border-radius:100px;font-weight:750;font-size:13px}
+.live-coach-form{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:15px}
+.live-coach-form>label{display:flex;flex-direction:column;gap:8px;font-size:14px;font-weight:700;color:#483931}
+.live-coach-form :is(input[type=text],select){width:100%;min-width:0;box-sizing:border-box;border:1px solid #d6c7bb;border-radius:11px;padding:13px 12px;background:white;color:#342a25;font-size:15px}
+.live-coach-consent{grid-column:1/-1;display:flex!important;flex-direction:row!important;align-items:start;gap:11px!important;font-weight:500!important;line-height:1.6;color:#5d4b43!important}
+.live-coach-consent input{margin-top:5px;flex:none;accent-color:#81394c}
+.live-coach-actions{grid-column:1/-1;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.live-coach-actions .button{background:#81394c;color:white;border-color:#81394c;min-width:210px}
+.live-coach-actions .button:disabled{opacity:.55;cursor:not-allowed}
+.live-coach-status{font-size:14px;line-height:1.5;color:#5b5149;margin:0;flex:1}
+.live-coach-status[data-kind=unavailable]{color:#803f3a}
+.live-coach-status[data-kind=ready]{color:#286345}
+.live-coach-room{margin-top:16px}
+.live-coach-frame{display:block;width:100%;min-height:520px;aspect-ratio:16/9;border:0;border-radius:16px;background:#211d1b}
+.live-coach-call-controls{display:flex;justify-content:space-between;gap:14px;align-items:center;padding:14px 0 0;color:#51453d;font-size:13px}
+.live-coach-call-controls button{background:#81394c;color:white;border-color:#81394c}
+.live-coach[hidden],.live-coach-form[hidden],.live-coach-room[hidden]{display:none!important}
+@media(max-width:800px){.live-coach-form{grid-template-columns:1fr 1fr}.live-coach-form>label:first-child{grid-column:1/-1}.live-coach-intro{flex-direction:column}.live-coach-frame{min-height:390px}}
+@media(max-width:520px){.live-coach-form{grid-template-columns:1fr}.live-coach-form>label:first-child{grid-column:auto}.live-coach-frame{min-height:340px;aspect-ratio:4/5}.live-coach-call-controls{flex-wrap:wrap}}

@@ -2817,6 +2817,7 @@
         $('#consent-check').closest('label').querySelector('span').textContent='I understand that this proctored practice assessment uses camera, microphone, screen sharing and browser monitoring for integrity signals reviewed by institution staff. I consent to sending my spoken answers, HR camera recordings and selected video frames to Groq for transcription and practice coaching, with Zero Data Retention enabled. PlaceAI keeps recordings private for 30 days for me and authorized institution staff. Speech-recognition and sampled-frame feedback cannot assess pronunciation or continuous-video behavior. All section results appear together after analysis finishes. These are practice insights for human review, not hiring decisions.';
       }
       state.candidateLabel=(state.me.full_name || state.me.username || 'Candidate').toUpperCase().slice(0,40);
+       window.PlaceAILiveInterview?.init(state.token);
       $('#auth-state').classList.add('hidden'); $('#setup-panel').classList.remove('hidden');
       await Promise.all([loadJobs(),loadHistory()]);
       const requestedResult=new URLSearchParams(location.search).get('result');

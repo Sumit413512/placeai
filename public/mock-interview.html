@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/api-errors.css">
-  <link rel="stylesheet" href="/static/mock-interview.css?v=20261124-feature-hero1">
+  <link rel="stylesheet" href="/static/mock-interview.css?v=20261124-live-avatar1">
   <link rel="stylesheet" href="/static/brand.css">
   <link rel="stylesheet" href="/static/ui-fixes.css">
 <link rel="canonical" href="https://www.placeai.in/mock-interview">
@@ -45,6 +45,40 @@
 
   <div id="preview-banner" class="preview-banner hidden"><strong>Assessment preview</strong><span>This preview uses sample assessment data. Camera, screen-share and on-device proctoring checks run when you grant permission; no biometric identity matching is performed.</span></div>
   <div id="auth-state" class="notice">Checking your student session…</div>
+
+  <section id="live-coach" class="panel live-coach" aria-labelledby="live-coach-title">
+    <header class="live-coach-intro">
+      <div><span class="live-coach-eyebrow">Optional · face-to-face practice</span>
+        <h2 id="live-coach-title">Meet your AI interviewer</h2>
+        <p>Speak with a responsive, on-screen interviewer who listens to your answers and asks follow-up questions. This is a real-time video call, separate from the scored, proctored placement assessment below.</p>
+      </div>
+      <span class="live-coach-chip">Live video practice</span>
+    </header>
+    <form id="live-coach-form" class="live-coach-form">
+      <label>Role you're preparing for
+        <input id="live-coach-role" type="text" maxlength="80" minlength="2" required autocomplete="off" placeholder="e.g. Software Engineer Intern">
+      </label>
+      <label>Interview focus
+        <select id="live-coach-focus"><option value="balanced">Balanced</option><option value="technical">Technical</option><option value="behavioral">Behavioral</option><option value="hr">HR and communication</option></select>
+      </label>
+      <label>Conversation language
+        <select id="live-coach-language"><option value="english">English</option><option value="hinglish">Hinglish</option><option value="hindi">Hindi</option></select>
+      </label>
+      <label class="live-coach-consent"><input id="live-coach-consent" type="checkbox" required>
+        <span>I understand this optional practice uses my camera, microphone and conversation with the third-party real-time video provider Tavus. I consent to that processing. It is not a proctored exam or a hiring decision; provider data handling follows its policies. No PlaceAI assessment score is generated from this call.</span>
+      </label>
+      <div class="live-coach-actions">
+        <button id="live-coach-start" class="button primary" type="submit" disabled>Start face-to-face interview</button>
+        <p id="live-coach-status" class="live-coach-status" role="status" aria-live="polite">Sign in with your student account to check live video availability.</p>
+      </div>
+    </form>
+    <div id="live-coach-room" class="live-coach-room" hidden>
+      <iframe id="live-coach-frame" class="live-coach-frame" title="Live AI interviewer video conversation"
+        allow="camera; microphone; autoplay; fullscreen" referrerpolicy="no-referrer"></iframe>
+      <div class="live-coach-call-controls"><span>Private practice · up to 10 minutes · not part of your scored assessment</span>
+        <button id="live-coach-end" class="button secondary" type="button">End interview</button></div>
+    </div>
+  </section>
 
   <section id="setup-panel" class="panel hidden">
     <div class="panel-head">
@@ -342,6 +376,7 @@
 
 <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 <script src="/static/api-errors.js" defer></script>
-<script src="/static/mock-interview.js?v=20261124-interviewer-call2" defer></script>
+<script src="/static/mock-interview.js?v=20261124-live-avatar1" defer></script>
+<script src="/static/live-interview.js?v=20261124-live-avatar1" defer></script>
 </body>
 </html>
