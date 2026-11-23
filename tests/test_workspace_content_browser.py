@@ -1,5 +1,7 @@
 import json
 from pathlib import Path
+from io import BytesIO
+from pypdf import PdfReader
 
 import pytest
 
@@ -81,6 +83,25 @@ def test_saved_roadmap_readability_structure_and_supplementary_notes(browser, wi
     assert notes.get_attribute('open') is None
     assert context.get_attribute('open') is None
     assert not page.locator('body').evaluate("el => el.classList.contains('roadmap-printing')")
+
+    if width == 1440:
+        # Use Chromium's actual print engine, not only CSS string checks.
+        page.evaluate("window.dispatchEvent(new Event('beforeprint'))")
+        try:
+            document = PdfReader(BytesIO(page.pdf(format='A4', print_background=True,
+                                                   prefer_css_page_size=True)))
+        finally:
+            page.evaluate("window.dispatchEvent(new Event('afterprint'))")
+        assert len(document.pages) >= 2
+        cover_text = document.pages[0].extract_text() or ''
+        detail_text = '\n'.join((item.extract_text() or '') for item in document.pages[1:])
+        assert 'Your Career Roadmap' in cover_text
+        assert 'SQL foundations' in cover_text
+        assert 'Follow your plan, one step at a time' not in cover_text
+        assert 'Follow your plan, one step at a time' in detail_text
+        assert 'SQL foundations' in detail_text
+        assert 'PlaceAI' in cover_text
+        assert 'Marketing' not in cover_text
 
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
     output = Path(__file__).resolve().parents[1] / 'work/readable-content-review'
