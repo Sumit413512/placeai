@@ -407,7 +407,7 @@
     'mock-interview': 'Practise role-specific questions and review feedback on your answers.',
     readiness: 'See how your assessment results contribute to your placement readiness.',
     roadmap: 'Build and save a preparation plan for the role you’re targeting.',
-    resume: 'Prepare your résumé and review AI suggestions.',
+    resume: 'Prepare your resume and review AI suggestions.',
     documents: 'Manage the documents you use for placement.',
     assistant: 'Ask for help with placement preparation and your next steps.',
     opportunities: 'Explore roles, check requirements and apply.',
