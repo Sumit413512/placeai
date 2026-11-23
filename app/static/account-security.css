@@ -109,3 +109,16 @@ html.placeai-password-rotation-open body { overflow: hidden !important; }
   height:34px;
   border-radius:7px;
 }
+
+.authenticator-secondary {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #ddd4c6;
+}
+.authenticator-secondary .row-button {
+  min-height: 44px;
+  padding-inline: 14px;
+  font-size: 14px;
+}

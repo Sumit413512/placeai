@@ -99,6 +99,10 @@
       const show = (title, content, label = 'Skip for now') => {
         active?.close();
         active = dialog(title, content);
+        const footer = document.createElement('footer');
+        footer.className = 'authenticator-secondary';
+        footer.append(active.cancel);
+        active.overlay.firstElementChild.append(footer);
         active.cancel.textContent = label;
         active.cancel.onclick = finish;
         return active.overlay;

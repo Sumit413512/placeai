@@ -168,6 +168,9 @@ class Settings:
         self.smtp_user = _first_env("SMTP_USER") or brevo_smtp_user
         self.smtp_password = _first_env("SMTP_PASSWORD") or brevo_smtp_password
         self.smtp_from = _first_env("SMTP_FROM", "BREVO_FROM_EMAIL", "BREVO_SENDER_EMAIL")
+        self.verification_from_email = _first_env("VERIFICATION_FROM_EMAIL") or (
+            "sumitjagtap@placeai.in" if self.is_production else ""
+        )
         self.smtp_host = _first_env("SMTP_HOST", "BREVO_SMTP_HOST")
         if not self.smtp_host and (brevo_smtp_user or brevo_smtp_password):
             self.smtp_host = "smtp-relay.brevo.com"

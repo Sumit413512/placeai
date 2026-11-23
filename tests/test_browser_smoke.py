@@ -177,6 +177,11 @@ def test_authenticator_browser_enrollment_signin_and_logout(browser, local_serve
     form.locator('button[type=submit]').click()
     choice=page.get_by_role('dialog',name='Add an extra layer of protection',exact=True)
     choice.wait_for(state='visible')
+    skip = choice.locator('.authenticator-secondary').get_by_role('button', name='Skip for now')
+    assert skip.is_visible()
+    setup_box = choice.get_by_role('button', name='Set up authenticator').bounding_box()
+    skip_box = skip.bounding_box()
+    assert skip_box['y'] >= setup_box['y'] + setup_box['height'] + 24
     assert page.locator('#app-shell').is_hidden()
     assert choice.get_by_role('button',name='Skip for now').is_visible()
     page.screenshot(path=str(ROOT / 'work/auth-onboarding-preview.png'))
@@ -397,7 +402,7 @@ def test_auth_modal_reflows_at_extreme_narrow_widths(browser) -> None:
                 const label = rect('#role-login-form label');
                 const email = rect('#role-login-form input[name="email"]');
                 const submit = rect('#role-login-form button[type="submit"]');
-                const note = rect('#login-view .access-security-note');
+                const note = rect('#login-view .access-new-account');
                 return {
                     viewport: window.innerWidth,
                     scrollWidth: document.documentElement.scrollWidth,
@@ -423,12 +428,12 @@ def test_auth_modal_reflows_at_extreme_narrow_widths(browser) -> None:
 
 def test_email_verification_initializes_when_loaded_after_page_ready(browser) -> None:
     page = browser.new_page()
-    page.route('**/static/auth-protection.js', lambda route: route.abort())
+    page.route('**/static/auth-protection.js*', lambda route: route.abort())
     page.route('**/auth/email-verification/confirm', lambda route: route.fulfill(
         status=200, json={'message': 'Your email is verified.'}))
     page.goto(BASE_URL + '/?verify_email_token=isolated-browser-test-token', wait_until='load')
     assert page.evaluate('document.readyState') == 'complete'
-    page.unroute('**/static/auth-protection.js')
+    page.unroute('**/static/auth-protection.js*')
     page.add_script_tag(url=BASE_URL + '/static/auth-protection.js')
     dialog = page.get_by_role('dialog', name='Email verification', exact=True)
     expect(dialog.get_by_role('status')).to_contain_text('Your email is verified.')
@@ -455,6 +460,11 @@ def test_optional_authenticator_can_be_skipped_before_workspace(browser, action)
     form.locator('button[type=submit]').click()
     choice = page.get_by_role('dialog',name='Add an extra layer of protection',exact=True)
     choice.wait_for(state='visible')
+    skip = choice.locator('.authenticator-secondary').get_by_role('button', name='Skip for now')
+    assert skip.is_visible()
+    setup_box = choice.get_by_role('button', name='Set up authenticator').bounding_box()
+    skip_box = skip.bounding_box()
+    assert skip_box['y'] >= setup_box['y'] + setup_box['height'] + 24
     assert page.locator('#app-shell').is_hidden()
     if action == 'escape':
         page.keyboard.press('Escape')
@@ -472,3 +482,23 @@ def test_optional_authenticator_can_be_skipped_before_workspace(browser, action)
         'Authorization':'Bearer '+status.json()['access_token']})
     assert protection.json()['mfa_enabled'] is False
     context.close()
+
+
+def test_role_entry_pages_reload_and_keep_registration_under_the_selected_role(browser):
+    page = browser.new_page(viewport={"width": 390, "height": 844})
+    try:
+        page.goto(BASE_URL + "/sign-in?role=recruiter")
+        page.get_by_role("heading", name="Recruiter sign in", exact=True).wait_for()
+        assert page.locator("#login-view [data-access-role]").count() == 4
+        page.locator("[data-register-link]").click()
+        page.wait_for_url("**/register?role=recruiter")
+        page.get_by_role("heading", name="Request Recruiter access", exact=True).wait_for()
+        page.reload()
+        page.locator("#role-access-request-form").wait_for()
+        assert page.locator("[name=requested_role]").input_value() == "recruiter"
+        page.locator('#signup-view [data-access-role="student"]').click()
+        page.get_by_role("heading", name="Create your student account").wait_for()
+        assert page.url.endswith("/register?role=student")
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+    finally:
+        page.close()

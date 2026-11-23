@@ -5,9 +5,9 @@
 
   const styles = [
     '/static/api-errors.css',
-    '/static/access-portal.css',
+    '/static/access-portal.css?v=20261123-role-pages1',
     '/static/ui-fixes.css',
-    '/static/account-security.css',
+    '/static/account-security.css?v=20261123-role-pages1',
     '/static/workspace-experience.css'
   ];
   for (const href of styles) {
@@ -21,8 +21,8 @@
   const scripts = [
     '/static/workspace-runtime.js',
     '/static/api-errors.js',
-    '/static/auth-protection.js',
-    '/static/access-portal.js?v=20261019-google-link3',
+    '/static/auth-protection.js?v=20261123-mfa-layout1',
+    '/static/access-portal.js?v=20261123-role-pages1',
     '/static/ui-state-fixes.js?v=20261024-zensar1',
     '/static/account-security.js',
     '/static/provisioning-password-fix.js',

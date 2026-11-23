@@ -143,9 +143,16 @@ def deliver_verification(sessions, email: str) -> tuple[str, str | None]:
         user_id = user.id
         db.commit()
     settings = get_settings()
-    outcome, reason = send_transactional_email(settings, recipient=email,
-        subject="Verify your PlaceAI email",
-        body=f"Verify your email using this one-time link (expires in 15 minutes):\n\n{settings.base_url}/?verify_email_token={token}\n\nIf you did not request this, ignore this email.")
+    body = (f"Verify your email using this one-time link (expires in 15 minutes):\n\n"
+            f"{settings.base_url}/?verify_email_token={token}\n\nIf you did not request this, ignore this email.")
+    sender = getattr(settings, "verification_from_email", "")
+    outcome, reason = send_transactional_email(settings, recipient=email, subject="Verify your PlaceAI email",
+                                                body=body, from_email=sender or None)
+    # Preserve access if a provider has yet to approve the new sender. Retry
+    # only after a definitive rejection, never after a timeout or unknown result.
+    if sender and sender != settings.smtp_from and reason in {"smtp_sender_refused", "brevo_api_request_rejected"}:
+        outcome, reason = send_transactional_email(settings, recipient=email, subject="Verify your PlaceAI email",
+                                                    body=body)
     if outcome != "sent":
         with sessions() as db:
             db.query(AccountProtection).filter_by(user_id=user_id, email_token_hash=digest).update(

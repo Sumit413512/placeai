@@ -60,7 +60,7 @@
       ]
     },
     {
-      "source": "/",
+      "source": "/:accountEntry(sign-in|register)?",
       "headers": [
         {
           "key": "Cache-Control",

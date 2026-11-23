@@ -374,3 +374,18 @@
   outline: 3px solid #823e50;
   outline-offset: 3px;
 }
+
+/* Role-first access pages use a warm, focused backdrop. */
+body.placeai-access-page #marketing-site { visibility: hidden; }
+body.placeai-access-page #auth-overlay.modal-overlay {
+  background: linear-gradient(140deg, #faf6ed, #ede4d7) !important;
+  backdrop-filter: none;
+}
+body.placeai-access-page #auth-overlay .auth-modal { box-shadow: 0 12px 38px rgb(70 48 28 / 13%); }
+#auth-overlay .access-login-roles .access-role-card { min-width: 0; text-align: center; }
+#auth-overlay .access-login-roles .access-role-card strong { margin: 0; overflow-wrap: anywhere; }
+#auth-overlay .access-login-roles .access-role-card.is-selected { box-shadow: inset 0 -3px #9c4c34; }
+#auth-overlay .access-new-account { margin-top: 18px; padding-top: 14px; border-top: 1px solid #ded4c6; }
+@media (min-width: 1180px) {
+  #auth-overlay .access-login-roles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

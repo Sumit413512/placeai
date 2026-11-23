@@ -137,6 +137,7 @@ _DIAGNOSTIC_PATHS = {
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     path = request.url.path
+    account_entry = path in {"/", "/sign-in", "/register"}
     # CORS prevents reading a foreign response; it does not stop a plain HTML
     # form from reaching login and setting a victim's refresh cookie.
     foreign_auth_request = False
@@ -202,9 +203,9 @@ async def security_headers(request: Request, call_next):
         )
     else:
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-        google_script = " https://accounts.google.com/gsi/client" if path == "/" else ""
-        google_style = " https://accounts.google.com/gsi/style" if path == "/" else ""
-        google_frames = "frame-src https://accounts.google.com/gsi/; connect-src 'self' https://accounts.google.com/gsi/; " if path == "/" else ""
+        google_script = " https://accounts.google.com/gsi/client" if account_entry else ""
+        google_style = " https://accounts.google.com/gsi/style" if account_entry else ""
+        google_frames = "frame-src https://accounts.google.com/gsi/; connect-src 'self' https://accounts.google.com/gsi/; " if account_entry else ""
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             f"script-src 'self'{google_script}; "
@@ -219,7 +220,7 @@ async def security_headers(request: Request, call_next):
         response.headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'"
     if path.startswith("/static/vendor/proctor-v1/"):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-    response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups" if path == "/" else "same-origin"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups" if account_entry else "same-origin"
     if request.headers.get("authorization"):
         if "no-store" not in response.headers.get("Cache-Control", "").lower():
             response.headers["Cache-Control"] = "private, no-store"
@@ -228,7 +229,7 @@ async def security_headers(request: Request, call_next):
         response.headers["Cache-Control"] = "private, no-store"
         response.headers["X-Robots-Tag"] = "noindex, nofollow"
     if path == "/health" or path.startswith("/auth/") or path in {
-        "/", "/mock-interview", "/privacy", "/terms", "/acceptable-use"
+        "/", "/sign-in", "/register", "/mock-interview", "/privacy", "/terms", "/acceptable-use"
     }:
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
@@ -449,20 +450,22 @@ async def safe_validation_error(request: Request, exc: RequestValidationError):
     ]})
 
 
+@app.get("/sign-in", include_in_schema=False)
+@app.get("/register", include_in_schema=False)
 @app.get("/", include_in_schema=False)
-def root():
+def root(request: Request):
     """Serve the production workspace shell with the role-aware access layer."""
     html = _template_html("index.html", INDEX_HTML)
     assets = (
         '<link rel="stylesheet" href="/static/api-errors.css">\n'
-        '<link rel="stylesheet" href="/static/access-portal.css?v=20261120-role-entry1">\n'
+        '<link rel="stylesheet" href="/static/access-portal.css?v=20261123-role-pages1">\n'
         '<link rel="stylesheet" href="/static/ui-fixes.css">\n'
-        '<link rel="stylesheet" href="/static/account-security.css">\n'
+        '<link rel="stylesheet" href="/static/account-security.css?v=20261123-role-pages1">\n'
         '<link rel="stylesheet" href="/static/workspace-experience.css">\n'
         '<script src="/static/workspace-runtime.js" defer></script>\n'
         '<script src="/static/api-errors.js" defer></script>\n'
-        '<script src="/static/auth-protection.js" defer></script>\n'
-        '<script src="/static/access-portal.js?v=20261121-role-entry2" defer></script>\n'
+        '<script src="/static/auth-protection.js?v=20261123-mfa-layout1" defer></script>\n'
+        '<script src="/static/access-portal.js?v=20261123-role-pages1" defer></script>\n'
         '<script src="/static/ui-state-fixes.js?v=20261024-journeys1" defer></script>\n'
         '<script src="/static/account-security.js" defer></script>\n'
         '<script src="/static/provisioning-password-fix.js" defer></script>\n'
@@ -477,7 +480,8 @@ def root():
         html = html.replace("</head>", f"{assets}</head>", 1)
     if "/static/privacy-preferences.js" not in html:
         html = html.replace("</head>", '<link rel="stylesheet" href="/static/privacy-preferences.css"><script src="/static/privacy-preferences.js" defer></script></head>', 1)
-    return HTMLResponse(html)
+    headers = {"X-Robots-Tag": "noindex, follow"} if request.url.path != "/" else None
+    return HTMLResponse(html, headers=headers)
 
 
 @app.get("/favicon.ico", include_in_schema=False)
