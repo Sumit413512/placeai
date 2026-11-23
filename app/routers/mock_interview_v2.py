@@ -2526,6 +2526,7 @@ def _evaluate_saved_answers(db, current_user, profile, interview, job, issued, s
     interview.evaluation_json = json.dumps(saved_evaluation)
     if result["analysis_status"] == "complete":
         interview.overall_score = result["overall_score"]
+        interview.completed_at = interview.completed_at or utcnow()
         interview.overall_feedback = result["overall_feedback"]
     else:
         # Preserve retryability: an incomplete AI analysis must never be persisted as a

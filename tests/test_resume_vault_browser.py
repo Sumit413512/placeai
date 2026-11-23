@@ -11,7 +11,7 @@ from test_resume_evidence_vault import pdf_bytes
 
 
 def sign_in(page,email,password,role='student'):
-    page.goto(BASE_URL,wait_until='networkidle')
+    page.goto(BASE_URL,wait_until='load')
     page.locator('.hero [data-open-auth="login"]').click()
     page.locator(f'#login-view [data-access-role="{role}"]').click()
     page.locator('#role-login-form input[name=email]').fill(email)
@@ -33,7 +33,7 @@ def test_resume_review_and_consented_semester_documents(browser,local_server):
     context=browser.new_context(viewport={'width':1440,'height':1000});page=context.new_page()
     page.add_init_script("localStorage.setItem('placeai.analytics.preference.v1','declined')")
     sign_in(page,email,password)
-    page.goto(BASE_URL+'/?view=resume',wait_until='networkidle')
+    page.goto(BASE_URL+'/?view=resume',wait_until='load')
     raw=pdf_bytes(['Education: Bachelor of Engineering','Projects','Built Python pipelines for 100 records','Skills: Python, SQL'])
     page.locator('#resume-file').set_input_files({'name':'evidence-resume.pdf','mimeType':'application/pdf','buffer':raw})
     expect(page.locator('.resume-card')).to_contain_text('evidence-resume.pdf')
@@ -56,10 +56,10 @@ def test_resume_review_and_consented_semester_documents(browser,local_server):
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),width
     page.set_viewport_size({'width':1440,'height':1000})
     page.screenshot(path=str(output/'local-resume-review.png'),full_page=True)
-    page.reload(wait_until='networkidle')
+    page.reload(wait_until='load')
     expect(page.locator('.evidence-score-grid')).to_contain_text('66')
     expect(page.locator('#auth-overlay')).to_be_hidden()
-    page.goto(BASE_URL+'/?view=documents',wait_until='networkidle')
+    page.goto(BASE_URL+'/?view=documents',wait_until='load')
     page.get_by_label('Document semester',exact=True).fill('4')
     page.get_by_label('Label',exact=True).fill('Semester 4 marksheet')
     page.locator('#student-document-file').set_input_files({'name':'semester4.pdf','mimeType':'application/pdf','buffer':raw})
@@ -71,7 +71,7 @@ def test_resume_review_and_consented_semester_documents(browser,local_server):
     page.set_viewport_size({'width':1440,'height':1000})
     staff_context=browser.new_context(viewport={'width':1440,'height':1000});staff=staff_context.new_page()
     sign_in(staff,admin_email,password,'institution_admin')
-    staff.goto(BASE_URL+'/?view=documents',wait_until='networkidle')
+    staff.goto(BASE_URL+'/?view=documents',wait_until='load')
     staff.get_by_label('Current semester',exact=True).fill('4')
     staff.get_by_label('Course',exact=True).fill('B.Tech')
     staff.get_by_role('button',name='Filter records',exact=True).click()

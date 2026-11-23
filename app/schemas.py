@@ -85,6 +85,7 @@ class UserOut(BaseModel):
     is_active: bool = True
     email_verified: bool = False
     must_change_password: bool = False
+    workspace_guide_pending: bool = False
 
     model_config = {"from_attributes": True}
 

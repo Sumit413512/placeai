@@ -132,7 +132,7 @@ def test_google_first_signup_returning_signin_refresh_and_logout(google_server):
         page.route("https://accounts.google.com/gsi/client",lambda route: route.fulfill(content_type="application/javascript",body=GOOGLE_BUTTON))
         errors = []
         page.on("pageerror",lambda error: errors.append(str(error)))
-        page.goto(URL,wait_until="networkidle")
+        page.goto(URL,wait_until="load")
         assert page.evaluate("window.__googleInitializations || 0") == 0
         page.locator('.hero [data-open-auth=login]').click()
         page.get_by_role("button",name="Continue with Google",exact=True).wait_for()
@@ -186,7 +186,7 @@ def test_google_first_signup_returning_signin_refresh_and_logout(google_server):
             assert not page.locator('#app-content').get_by_text('Unable to load this view',exact=True).count()
         announcements.click()
         expect(page.get_by_role('heading', name='Placement announcements', exact=True)).to_be_visible()
-        page.reload(wait_until="networkidle")
+        page.reload(wait_until="load")
         page.locator('#app-shell').wait_for(state="visible")
         assert page.evaluate("Object.values(sessionStorage).every(v=>!v.includes('eyJ'))")
         page.set_viewport_size({"width":390,"height":844})

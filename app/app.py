@@ -62,6 +62,7 @@ def _release_sha() -> str | None:
 async def lifespan(_: FastAPI):
     worker_stop, worker_thread = Event(), None
     learning_thread = None
+    study_recap_thread = None
     video_threads = []
     if runtime_readiness_errors:
         for code in runtime_readiness_errors:
@@ -91,10 +92,16 @@ async def lifespan(_: FastAPI):
                             name=f"video-learning-worker-{index + 1}")
             thread.start()
             video_threads.append(thread)
+    if not runtime_readiness_errors and os.getenv("RENDER") and not settings.running_on_vercel:
+        from app.study_targets import run_recaps
+        study_recap_thread = Thread(target=run_recaps, args=(worker_stop,), daemon=True, name="study-recaps")
+        study_recap_thread.start()
     try:
         yield
     finally:
         worker_stop.set()
+        if study_recap_thread:
+            study_recap_thread.join(timeout=5)
         if worker_thread:
             worker_thread.join(timeout=5)
         if learning_thread:
@@ -462,7 +469,7 @@ def root(request: Request):
         '<link rel="stylesheet" href="/static/ui-fixes.css">\n'
         '<link rel="stylesheet" href="/static/account-security.css?v=20261123-role-pages1">\n'
         '<link rel="stylesheet" href="/static/workspace-experience.css">\n'
-        '<script src="/static/workspace-runtime.js" defer></script>\n'
+        '<script src="/static/workspace-runtime.js?v=20261124-workspace-guide1" defer></script>\n'
         '<script src="/static/api-errors.js" defer></script>\n'
         '<script src="/static/auth-protection.js?v=20261123-mfa-layout1" defer></script>\n'
         '<script src="/static/access-portal.js?v=20261123-workspace-clarity1" defer></script>\n'

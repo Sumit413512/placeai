@@ -14,7 +14,7 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app import document_vault
+from app import document_vault, study_targets
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_current_user, require_institution_admin, require_recruiter, require_student
@@ -586,6 +586,8 @@ def save_interview_evaluation(interview_id: str, data: InterviewEvaluationCreate
 # -----------------------------------------------------------------------------
 @router.get("/notifications")
 def list_notifications(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role == UserRole.student and current_user.is_active:
+        study_targets.create_due_digest(db, current_user, utcnow())
     rows = db.query(Notification).filter(Notification.user_id == current_user.id).order_by(Notification.created_at.desc()).limit(100).all()
     return {"unread": sum(1 for n in rows if not n.is_read), "items": [_serialize_notification(n) for n in rows]}
 

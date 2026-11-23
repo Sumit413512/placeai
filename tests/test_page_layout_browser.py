@@ -62,7 +62,7 @@ def test_every_workspace_page_remains_readable_and_operable(browser, layout_acco
     page = context.new_page()
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.goto(BASE_URL, wait_until="networkidle")
+    page.goto(BASE_URL, wait_until="load")
     page.locator("#app-shell").wait_for(state="visible")
     views = page.locator("#app-nav [data-view]").evaluate_all("els => els.map(el => el.dataset.view)")
     output = Path(__file__).resolve().parents[1] / "work/page-layout-audit" / role
@@ -71,7 +71,7 @@ def test_every_workspace_page_remains_readable_and_operable(browser, layout_acco
     for view in views:
         page.set_viewport_size({"width": 1440, "height": 1000})
         if "/mock-interview" in page.url:
-            page.goto(BASE_URL, wait_until="networkidle")
+            page.goto(BASE_URL, wait_until="load")
         button = page.locator(f'#app-nav [data-view="{view}"]')
         if not button.is_visible():
             page.locator(".placeai-nav-more").click()
@@ -146,7 +146,7 @@ def test_public_pages_fit_mobile_and_desktop(browser):
     paths = ["/", "/privacy", "/terms", "/acceptable-use", "/static/about.html", "/static/contact.html",
              "/static/pricing.html", "/static/refund-cancellation.html", "/static/service-delivery.html", "/404"]
     for index, path in enumerate(paths):
-        response = page.goto(BASE_URL+path, wait_until="networkidle")
+        response = page.goto(BASE_URL+path, wait_until="load")
         assert response.status == (404 if path == "/404" else 200)
         for width in (1440, 768, 390, 320):
             page.set_viewport_size({"width": width, "height": 1000})
@@ -171,7 +171,7 @@ def test_production_bootstrap_deduplicates_versioned_assets(browser, layout_acco
     page.route("**/static/app.js?*", lambda route: route.fulfill(body=bootstrap, content_type="text/javascript"))
     page.route("**/static/app-core.js?*", lambda route: route.fulfill(
         body=(root / "public/static/app-core.js").read_bytes(), content_type="text/javascript"))
-    page.goto(BASE_URL, wait_until="networkidle")
+    page.goto(BASE_URL, wait_until="load")
     nav = page.locator("#app-nav")
     nav.locator(".placeai-nav-more").wait_for(state="visible")
     nav.locator(".placeai-nav-more").click()

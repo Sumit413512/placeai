@@ -7,11 +7,11 @@ def test_optional_analytics_require_consent_and_can_be_withdrawn(browser):  # no
     page.route(
         "**/telemetry/page-view", lambda route: (events.append(route.request.post_data_json), route.fulfill(status=204))
     )
-    page.goto(BASE_URL, wait_until="networkidle")
+    page.goto(BASE_URL, wait_until="load")
     assert not events
     assert page.evaluate("localStorage.getItem('placeai_visitor_id')") is None
     page.get_by_role("button", name="Essential only", exact=True).click()
-    page.reload(wait_until="networkidle")
+    page.reload(wait_until="load")
     assert not events
     assert page.locator("#privacy-preferences").is_hidden()
     page.get_by_role("button", name="Privacy choices", exact=True).click()

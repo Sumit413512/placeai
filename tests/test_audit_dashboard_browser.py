@@ -9,7 +9,7 @@ def test_dashboard_action_labels_do_not_stack_vertically(browser, layout_account
     login = context.request.post(BASE_URL+'/auth/login-json', data={'email':email,'password':password})
     assert login.status == 200
     page = context.new_page()
-    page.goto(BASE_URL, wait_until='networkidle')
+    page.goto(BASE_URL, wait_until='load')
     action = page.locator('#app-content .activity-item .row-actions button[data-view="profile"]')
     action.wait_for(state='visible')
     for width in (320, 390, 768, 1440):

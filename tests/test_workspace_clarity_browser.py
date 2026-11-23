@@ -43,7 +43,7 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
                     '**/institutions/**', '**/platform/**', '**/billing/**', '**/ai/**',
                     '**/jobs/**', '**/intelligence/**', '**/learning-hub*'):
         page.route(pattern, api_response)
-    page.goto(BASE_URL, wait_until='networkidle')
+    page.goto(BASE_URL, wait_until='load')
     page.get_by_role('button', name='Essential only', exact=True).click()
     page.locator('#app-shell').wait_for(state='visible')
     assert page.locator('.workspace-welcome').inner_text() == 'Welcome, MIT account'
@@ -192,6 +192,7 @@ def test_student_guidance_topbar_and_minimizable_report(browser):
     page.add_init_script("localStorage.setItem('placeai.analytics.preference.v1','declined')")
     signed_in = False
     submitted = []
+    guide_dismissed = []
 
     def respond(route):
         path = route.request.url.split(BASE_URL, 1)[-1].split('?', 1)[0]
@@ -200,7 +201,12 @@ def test_student_guidance_topbar_and_minimizable_report(browser):
             route.fulfill(status=401, json={})
             return
         if path == '/auth/me':
-            data = {'id': 'guidance-test', 'username': 'Tour student', 'role': 'student'}
+            data = {'id': 'guidance-test', 'username': 'Tour student', 'role': 'student',
+                    'workspace_guide_pending': not guide_dismissed}
+        elif path == '/auth/workspace-guide' and route.request.method == 'PUT':
+            guide_dismissed.append(True)
+            route.fulfill(status=204)
+            return
         elif path == '/billing/status':
             data = {'student_kind': 'institution', 'premium_access': True}
         elif path == '/enterprise/notifications':
@@ -220,21 +226,22 @@ def test_student_guidance_topbar_and_minimizable_report(browser):
 
     for prefix in ('auth', 'billing', 'students', 'intelligence', 'enterprise', 'ai'):
         page.route(f'**/{prefix}/**', respond)
-    page.goto(BASE_URL, wait_until='networkidle')
+    page.goto(BASE_URL, wait_until='load')
     signed_in = True
     page.evaluate("() => window.PlaceAIAuth.completeSignIn({access_token:'synthetic-fixture-token'})")
     tour = page.locator('.workspace-tour-card')
-    assert tour.get_by_role('heading', name='Set up your profile').is_visible()
-    tour.get_by_role('button', name='Open section').click()
-    page.get_by_role('heading', name='Student profile', exact=True).wait_for()
+    tour.get_by_role('heading', name='Dashboard', exact=True).wait_for()
     tour.get_by_role('button', name='Next').click()
-    assert tour.get_by_role('heading', name='Find the Learning Hub').is_visible()
-    tour.get_by_role('button', name='Skip tour').click()
+    assert tour.get_by_role('heading', name='Opportunities', exact=True).is_visible()
+    tour.get_by_role('button', name='Open section').click()
+    page.locator('#app-nav [data-view=opportunities].active').wait_for(state='attached')
+    with page.expect_response('**/auth/workspace-guide') as dismissed:
+        tour.get_by_role('button', name='Skip tour').click()
+    assert dismissed.value.status == 204
     assert tour.count() == 0
-    assert page.evaluate("localStorage.getItem('placeai.workspace-tour.v1.guidance-test')") == 'seen'
-    page.get_by_role('button', name='Workspace tour', exact=True).click()
-    assert tour.get_by_role('heading', name='Set up your profile').is_visible()
-    page.keyboard.press('Escape')
+    assert page.get_by_role('button', name='Workspace tour', exact=True).count() == 0
+    page.evaluate("localStorage.removeItem('placeai.workspace-tour.v1.guidance-test')")
+    page.evaluate("() => window.PlaceAIAuth.completeSignIn({access_token:'synthetic-fixture-token'})")
     assert tour.count() == 0
     assert page.locator('#app-nav [data-view="announcements"], #app-nav [data-view="notifications"]').count() == 0
     assert page.locator('#notification-count').is_visible()

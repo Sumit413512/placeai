@@ -19,7 +19,7 @@
   }
 
   const scripts = [
-    '/static/workspace-runtime.js',
+    '/static/workspace-runtime.js?v=20261124-workspace-guide1',
     '/static/api-errors.js',
     '/static/auth-protection.js?v=20261123-mfa-layout1',
     '/static/access-portal.js?v=20261123-workspace-clarity1',
@@ -32,7 +32,7 @@
     '/static/workspace-experience.js?v=20261123-student-guidance1',
     '/static/legal-links.js?v=20261123-student-guidance1',
     '/static/career-roadmap.js?v=20261123-student-guidance1',
-    '/static/app-core.js?v=20261123-student-guidance1'
+    '/static/app-core.js?v=20261124-workspace-guide1'
   ];
 
   const loadNext = (index) => {

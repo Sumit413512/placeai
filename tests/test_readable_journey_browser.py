@@ -6,7 +6,7 @@ def test_hero_message_aligns_with_photo_and_stacks_without_overlap(browser):
 
     page = browser.new_page(viewport={"width": 1920, "height": 1080}, reduced_motion="reduce")
     page.add_init_script("localStorage.setItem('placeai.analytics.preference.v1','declined')")
-    page.goto(BASE_URL, wait_until="networkidle")
+    page.goto(BASE_URL, wait_until="load")
     output = Path(__file__).resolve().parents[1] / "work/hero-alignment"
     output.mkdir(parents=True, exist_ok=True)
     for width in (1920, 1440, 1100, 1050, 768, 390, 320):
@@ -27,7 +27,7 @@ def test_hero_message_aligns_with_photo_and_stacks_without_overlap(browser):
 
 def test_learning_journey_is_readable_responsive_and_links_to_existing_flows(browser):  # noqa: F811
     page = browser.new_page(viewport={"width": 1440, "height": 1000})
-    page.goto(BASE_URL, wait_until="networkidle")
+    page.goto(BASE_URL, wait_until="load")
     page.get_by_role("button", name="Essential only", exact=True).click()
     assert page.locator(".hero h1").inner_text().replace("\n", " ") == "Placement operations, connected end to end."
     assert page.locator(".hero-journey-line").inner_text() == "Learn · Practice · Get Placed"

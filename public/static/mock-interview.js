@@ -720,7 +720,7 @@
     state.readingQuestionId=q.question_id;
     const spec=q.coding_spec || {};
     const examples=(spec.sample_tests || []).map((sample,i)=>'Example '+(i+1)+'. Input. '+sample.input+'. Expected output. '+sample.output).join(' ');
-    const text='Reading question. '+q.question+(q.options?.length?' Options. '+q.options.map((v,i)=>'Option '+(i+1)+'. '+v).join(' '):'')+' '+(spec.constraints || []).join('. ')+' '+examples+'. '+(record?'Record your answer.':'You may answer now.');
+    const text=q.question+(q.options?.length?' Options. '+q.options.map((v,i)=>'Option '+(i+1)+'. '+v).join(' '):'')+' '+(spec.constraints || []).join('. ')+' '+examples+' '+(record?'Record your answer.':'You may answer now.');
     if(!window.speechSynthesis)throw new Error('Question reading is unavailable in this browser. Read the displayed question, then select Start answer.');
     // Let cancellation finish before queuing another utterance. Chrome can
     // otherwise discard speech queued in the same task as cancel().
@@ -736,7 +736,16 @@
       for(let attempt=0;attempt<2;attempt++){
       if(state.narrationGeneration!==generation || !state.assessmentActive)return;
       try { await new Promise((resolve,reject)=>{
-        const utterance=new SpeechSynthesisUtterance(chunk);utterance.lang='en-IN';utterance.rate=0.95;
+        const utterance=new SpeechSynthesisUtterance(chunk);
+        utterance.lang='en-IN';
+        utterance.rate=0.95;
+        if (record) {
+          const voices = speechSynthesis.getVoices?.() || [];
+          const namedVoice = /\b(heera|lekha|aditi|neerja|samantha|zira|aria|jenny|female)\b/i;
+          const preferred = voices.find(voice => voice.lang.toLowerCase() === 'en-in' && namedVoice.test(voice.name))
+            || voices.find(voice => voice.lang.startsWith('en') && namedVoice.test(voice.name));
+          if (preferred) { utterance.voice=preferred; utterance.lang=preferred.lang; }
+        }
         state.narrationUtterance=utterance;
         let settled=false,startTimer=null,timer=null;
         const finish=(error)=>{
@@ -972,25 +981,19 @@
     finally{replacement?.getTracks().forEach(track=>track.stop());state.reconnectingMicrophone=false;button.disabled=false;updateSpokenIndicator();}
   }
 
-  function interviewerMarkup() {
-    return `<div class="hr-interviewer" data-phase="ready">
-      <svg class="hr-interviewer-avatar" viewBox="0 0 176 124" aria-hidden="true" focusable="false">
-        <rect width="176" height="124" rx="16" fill="#f0e3d8"/>
-        <circle cx="147" cy="30" r="22" fill="#ead5cb"/>
-        <path d="M0 107h176v17H0z" fill="#dbc3b5"/>
-        <path class="hr-avatar-jacket" d="M35 124c3-26 20-40 41-43h24c22 3 39 17 42 43Z" fill="#63343d"/>
-        <path d="m73 83 15 28 15-28" fill="#fff3e8"/>
-        <g class="hr-avatar-head">
-          <path d="M80 66h16v22l-8 9-8-9z" fill="#a96755"/>
-          <path d="M62 57c-5-4-7-13-3-16-3-25 15-35 30-35 22 0 34 16 30 34 4 5 2 14-4 18-5 13-14 24-27 24-12 0-22-10-26-25z" fill="#b97761"/>
-          <path d="M60 45c-11-25 6-41 25-41 19-4 37 9 35 28l-4 16c-1-8-4-15-9-19-17 4-31-1-38-6-4 4-7 12-8 22z" fill="#412b29"/>
-          <path d="M70 46q5-4 10-1m16 0q5-3 10 1" fill="none" stroke="#4a2a2a" stroke-width="2" stroke-linecap="round"/>
-          <g class="hr-avatar-eyes" fill="#372423"><ellipse cx="76" cy="51" rx="2" ry="2.5"/><ellipse cx="100" cy="51" rx="2" ry="2.5"/></g>
-          <path d="m86 55-2 6 5 1" fill="none" stroke="#8a4e42" stroke-width="1.5" stroke-linecap="round"/>
-          <ellipse class="hr-avatar-mouth" cx="88" cy="69" rx="6" ry="3" fill="#552d32"/>
-        </g>
-      </svg>
-      <div class="hr-interviewer-copy"><strong>PlaceAI interviewer</strong><span class="hr-interviewer-state" aria-live="polite">Ready to ask your question</span></div>
+  function interviewerMarkup(videoAnswer) {
+    const camera = state.mediaStream?.getVideoTracks().some(track => track.readyState === 'live');
+    return `<div class="interviewer-call${camera ? ' with-camera' : ''}">
+      <figure class="hr-interviewer" data-phase="ready">
+        <div class="hr-interviewer-frame"><img class="hr-interviewer-avatar"
+          src="/static/placeai-interviewer.webp" width="840" height="473" alt="" decoding="async"></div>
+        <figcaption class="hr-interviewer-copy"><strong>PlaceAI AI interviewer</strong>
+          <span class="hr-interviewer-state" role="status">Ready to ask your question</span></figcaption>
+      </figure>
+      ${camera ? `<figure class="interviewer-candidate">
+        <video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live camera preview"></video>
+        <figcaption><strong>Your camera</strong><span>${videoAnswer ? 'Video answer' : 'Audio answer'}</span></figcaption>
+      </figure>` : ''}
     </div>`;
   }
 
@@ -998,7 +1001,7 @@
     state.answerClip=null;
     const answerSeconds=Math.max(45,Math.min(150,Number(q.answer_time_seconds)||150));
     const answerWindow=answerSeconds%60===0?(answerSeconds/60)+' minute'+(answerSeconds===60?'':'s'):Math.floor(answerSeconds/60)+' min '+(answerSeconds%60)+' sec';
-    $('#answer-area').innerHTML=(q.response_mode==='video'?interviewerMarkup():'')+'<div class="answer-field"><strong>'+(q.response_mode==='video'?'HR camera and voice answer':'Spoken answer')+'</strong><p>Listen to the question, then answer aloud. This question has its own private recording with up to '+answerWindow+' of answer time.</p>'+spokenIndicatorMarkup(answerSeconds,q.response_mode==='video')+'<p id="spoken-answer-status" role="status">Reading question…</p><button id="start-spoken-answer" type="button" class="button secondary">Start answer now</button><button id="reconnect-answer-microphone" type="button" class="button secondary hidden">Reconnect microphone</button>'+(q.response_mode==='video'?'<video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video>':'')+'</div>';
+    $('#answer-area').innerHTML=interviewerMarkup(q.response_mode==='video')+'<div class="answer-field"><strong>'+(q.response_mode==='video'?'HR camera and voice answer':'Spoken answer')+'</strong><p>Listen to the question, then answer aloud. This question has its own private recording with up to '+answerWindow+' of answer time.</p>'+spokenIndicatorMarkup(answerSeconds,q.response_mode==='video')+'<p id="spoken-answer-status" role="status">Reading question…</p><button id="start-spoken-answer" type="button" class="button secondary">Start answer now</button><button id="reconnect-answer-microphone" type="button" class="button secondary hidden">Reconnect microphone</button>'+'</div>';
     const preview=$('#hr-answer-preview');if(preview){preview.srcObject=state.mediaStream;preview.play().catch(()=>{});}
     $('#start-spoken-answer').onclick=()=>beginQuestionAnswer(q);
     $('#reconnect-answer-microphone').onclick=()=>reconnectAnswerMicrophone(q);
@@ -1027,6 +1030,8 @@
     speechSynthesis.cancel();
     const speech=new SpeechSynthesisUtterance(state.questions[state.current].question);
     speech.lang='en-IN';speech.rate=0.95;
+    speech.onstart=()=>{state.narrationSpeaking=true;updateSpokenIndicator();};
+    speech.onend=speech.onerror=()=>{state.narrationSpeaking=false;updateSpokenIndicator();};
     speechSynthesis.speak(speech);
   }
 
@@ -1094,12 +1099,11 @@
     $('#question-watermark').textContent=`${state.candidateLabel} · Q${state.current+1}`;
     if(q.response_mode)renderSpokenAnswer(q);
     else if(q.answer_type==='video') {
-      $('#answer-area').innerHTML='<div class="answer-field"><strong>HR video answer</strong><p>Answer aloud in English. One private video captures all four HR answers. Each answer has up to 2 minutes 30 seconds; the next question opens automatically when its time expires.</p>'+spokenIndicatorMarkup(150,true)+'<p id="hr-recording-status" role="status">Camera and microphone ready. Read the question, then start your answer.</p><button type="button" id="start-hr-recording" class="button primary">Start HR recording</button><button type="button" id="repeat-hr-question" class="button secondary">Read question aloud</button><button type="button" id="retry-hr-recording" class="button secondary hidden">Retry recording setup</button><video id="hr-answer-preview" autoplay playsinline muted aria-label="Your live HR camera preview"></video></div>';
+      $('#answer-area').innerHTML=interviewerMarkup(true)+'<div class="answer-field"><strong>HR video answer</strong><p>Answer aloud in English. One private video captures all four HR answers. Each answer has up to 2 minutes 30 seconds; the next question opens automatically when its time expires.</p>'+spokenIndicatorMarkup(150,true)+'<p id="hr-recording-status" role="status">Camera and microphone ready. Read the question, then start your answer.</p><button type="button" id="start-hr-recording" class="button primary">Start HR recording</button><button type="button" id="repeat-hr-question" class="button secondary">Read question aloud</button><button type="button" id="retry-hr-recording" class="button secondary hidden">Retry recording setup</button></div>';
       $('#repeat-hr-question').onclick=speakHRQuestion;
       $('#retry-hr-recording').onclick=beginHRVideo;
       const preview=$('#hr-answer-preview');
-      preview.srcObject=state.mediaStream;
-      preview.play().catch(()=>{});
+      if(preview){preview.srcObject=state.mediaStream;preview.play().catch(()=>{});}
       const recording=state.hr?.recorder?.state==='recording';
       if(recording)hrStatus('Recording · camera and microphone on · answer timer continues');
       $('#start-hr-recording').classList.toggle('hidden',recording);
@@ -2495,6 +2499,11 @@
       const rubric=item.rubric||{};
       const rubricEntries=Object.entries(rubric).filter(function(entry){return entry[1]!==null&&entry[1]!==undefined;});
       const expected=item.correct_answer||item.ideal_answer||'';
+      const spokenRubricLabels = {
+        answer_correctness:'Answer effectiveness · 70%',
+        communication_clarity:'Communication clarity · 20%',
+        english_fluency:'English fluency · 10%'
+      };
       let html='<article class="answer-review review-'+bucket+'"><header class="answer-review-header"><div><div class="question-meta-line">';
       html+='<span class="review-chip '+bucket+'">'+esc(item.answer_type==='mcq' ? (bucket==='correct'?'✓ Correct':bucket==='insufficient'?'– Not answered':'✕ Incorrect') : (bucket==='correct'?'✓ Strong response':bucket==='partial'?'◐ Developing':bucket==='insufficient'?'– Insufficient evidence':'↗ Needs practice'))+'</span>';
       html+='<span class="review-chip">'+esc((item.section||'interview').replaceAll('_',' '))+'</span>';
@@ -2509,11 +2518,26 @@
       html+='<div class="answer-pane correct-pane"><span>'+(item.answer_type==='mcq'?'Correct answer':item.answer_type==='code'?'Execution result':'Strong answer / reference')+'</span><p>'+esc(item.answer_type==='code'?(item.feedback||'See execution evidence below.'):(expected||'See detailed feedback below.'))+'</p></div></div>';
       html+='<p class="review-feedback"><strong>Assessment:</strong> '+esc(item.feedback||'No detailed feedback returned.')+'</p>';
       if(rubricEntries.length && item.answer_type!=='mcq'){
-        html+='<div class="rubric-grid">'+rubricEntries.map(function(entry){return '<div class="rubric-item"><span>'+esc(entry[0].replaceAll('_',' '))+'</span><strong>'+entry[1]+'/100</strong></div>';}).join('')+'</div>';
+        html+='<div class="rubric-grid">'+rubricEntries.map(function(entry){return '<div class="rubric-item"><span>'+esc(spokenRubricLabels[entry[0]] || entry[0].replaceAll('_',' '))+'</span><strong>'+entry[1]+'/100</strong></div>';}).join('')+'</div>';
       }
       html+='<div class="review-details">'+reviewDetailsList('What worked',item.strengths||[])+reviewDetailsList('Errors / gaps',[].concat(item.issues||[],item.missing_points||[]))+'</div>';
-      if(['audio','video'].includes(item.answer_type) && Array.isArray(item.evidence)){
-        html+='<div class="review-detail-box"><h5>Recording evidence</h5><ul>'+item.evidence.map(e=>'<li><button type="button" class="button secondary" '+(item.recording_url?'data-answer-recording="'+Number(item.question_id)+'" ':'')+'data-recording-second="'+Number(e.at_seconds || 0)+'">'+esc(formatTime(e.at_seconds))+'</button> '+esc(e.observation)+'</li>').join('')+'</ul>'+(item.recording_url?'<p role="status" id="answer-playback-status-'+Number(item.question_id)+'"></p><'+(item.answer_type==='audio'?'audio':'video')+' id="answer-playback-'+Number(item.question_id)+'" class="hidden" controls playsinline preload="none" style="max-width:100%"></'+(item.answer_type==='audio'?'audio':'video')+'>':'')+'</div>';
+      const evidence = Array.isArray(item.evidence) ? item.evidence : [];
+      if (['audio','video'].includes(item.answer_type) && (item.recording_url || evidence.length)) {
+        const id = Number(item.question_id);
+        const player = item.answer_type === 'audio' ? 'audio' : 'video';
+        const recording = item.recording_url
+          ? `<button type="button" class="button secondary" data-answer-recording="${id}" data-recording-second="0">Replay your answer</button>
+             <p role="status" id="answer-playback-status-${id}"></p>
+             <${player} id="answer-playback-${id}" class="hidden" controls playsinline preload="none" style="max-width:100%"></${player}>`
+          : '';
+        const observations = evidence.map(entry => {
+          const seconds = Number(entry.at_seconds) || 0;
+          return `<li><button type="button" class="button secondary" data-recording-second="${seconds}"
+              ${item.recording_url ? `data-answer-recording="${id}"` : ''}>${esc(formatTime(seconds))}</button>
+              ${esc(entry.observation)}</li>`;
+        }).join('');
+        html += `<div class="review-detail-box"><h5>Recording evidence</h5>${recording}
+          ${observations ? `<ul>${observations}</ul>` : ''}</div>`;
       }
       if(item.better_answer_outline)html+='<div class="ideal-answer-box"><strong>Better answer structure</strong><p>'+esc(item.better_answer_outline)+'</p></div>';
       html+='</article>';
@@ -2607,7 +2631,7 @@
     renderSectionPerformance(result.section_scores||[]);
     $('#dimension-grid').innerHTML=Object.entries(result.dimensions||{}).map(function(entry){
       const score=entry[1];
-      return '<article class="dimension"><small>'+esc(entry[0].replaceAll('_',' '))+'</small><strong>'+score+'</strong><div class="meter"><i style="width:'+Math.max(0,Math.min(100,Number(score)||0))+'%"></i></div></article>';
+      return '<article class="dimension"><small>'+esc(spokenRubricLabels[entry[0]] || entry[0].replaceAll('_',' '))+'</small><strong>'+score+'</strong><div class="meter"><i style="width:'+Math.max(0,Math.min(100,Number(score)||0))+'%"></i></div></article>';
     }).join('');
     const list=function(values,fallback){return (values||[]).map(function(x){return '<li>'+esc(x)+'</li>';}).join('')||'<li>'+esc(fallback)+'</li>';};
     $('#strength-list').innerHTML=list(result.strengths,'No strong area identified yet.');

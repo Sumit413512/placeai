@@ -32,7 +32,7 @@ def test_student_can_create_read_and_download_notes_without_leaving_workspace(br
         elif path.startswith("/learning-hub/"): data = ready if phase[0] == "ready" else {**ready,"status":phase[0],"completed_chapters":1,"pdf_available":False}
         route.fulfill(json=data)
     page.route(BASE_URL + "/**", api)
-    page.goto(BASE_URL, wait_until="networkidle")
+    page.goto(BASE_URL, wait_until="load")
     page.locator('#app-nav [data-view="learning-hub"]').click()
     page.get_by_label("Topic or subject", exact=True).fill("SQL")
     page.get_by_text("Add subject context (optional)", exact=True).click()

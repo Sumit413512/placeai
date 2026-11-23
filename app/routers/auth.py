@@ -267,6 +267,15 @@ def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+@router.put("/workspace-guide", status_code=status.HTTP_204_NO_CONTENT)
+def complete_workspace_guide(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    if current_user.role == UserRole.student and current_user.workspace_guide_pending:
+        current_user.workspace_guide_pending = False
+        db.commit()
+
+
 @router.get("/google-config")
 def google_config(request: Request, response: Response):
     from app.google_login import challenge

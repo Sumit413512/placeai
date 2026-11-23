@@ -47,7 +47,7 @@ def test_saved_roadmap_readability_structure_and_supplementary_notes(browser, wi
 
     for pattern in ('**/auth/**', '**/roadmap/**', '**/students/**', '**/enterprise/**', '**/billing/**', '**/ai/**', '**/intelligence/**'):
         page.route(pattern, api_response)
-    page.goto(BASE_URL + '/?view=roadmap', wait_until='networkidle')
+    page.goto(BASE_URL + '/?view=roadmap', wait_until='load')
     signals = page.locator('.roadmap-market-panel > .check-list li')
     signals.first.wait_for()
     assert signals.count() == 2

@@ -231,3 +231,45 @@ def test_google_sign_in_uses_selected_role_and_email_link_challenge(browser):
     assert calls[-1]["link_code"] == "123456"
     assert 'password' not in calls[-1]
     page.close()
+
+
+def test_audio_and_video_answers_share_the_interviewer_and_live_camera(browser):
+    page = browser.new_page(viewport={"width": 390, "height": 844})
+    script = (ROOT / "app/static/mock-interview.js").read_text(encoding="utf-8")
+    script = script.rsplit("})();", 1)[0] + (
+        "window.callTest={state,renderSpokenAnswer,updateSpokenIndicator};})();"
+    )
+    page.route("**/static/mock-interview.js*", lambda route: route.fulfill(body=script, content_type="application/javascript"))
+    page.goto(f"{BASE_URL}/mock-interview?preview=1", wait_until="domcontentloaded")
+    page.wait_for_function("() => window.callTest")
+    page.evaluate("""() => {
+      const source=document.createElement('canvas');
+      source.width=640; source.height=360;
+      source.getContext('2d').fillRect(0,0,640,360);
+      callTest.state.mediaStream=source.captureStream(2);
+      callTest.state.assessmentActive=false;
+      document.querySelector('#interview-panel').classList.remove('hidden');
+    }""")
+    for mode in ('audio', 'video'):
+        page.evaluate("""mode => {
+          const question={question_id:1,response_mode:mode,question:'Tell me about your project'};
+          const {state,renderSpokenAnswer,updateSpokenIndicator}=callTest;
+          state.questions=[question]; state.current=0;
+          renderSpokenAnswer(question);
+          state.narrationSpeaking=true; updateSpokenIndicator();
+        }""", mode)
+        interviewer = page.locator('.hr-interviewer')
+        assert interviewer.is_visible()
+        assert interviewer.get_attribute('data-phase') == 'speaking'
+        candidate = page.locator('.interviewer-candidate')
+        assert candidate.is_visible()
+        assert interviewer.bounding_box()['x'] < candidate.bounding_box()['x']
+        page.wait_for_function("document.querySelector('.hr-interviewer-avatar').naturalWidth > 0")
+        assert page.locator('#hr-answer-preview').evaluate('video => video.muted && video.srcObject.getVideoTracks().length === 1')
+        assert page.locator('.interviewer-candidate figcaption').inner_text().endswith(f'{mode.capitalize()} answer')
+        page.evaluate("""() => {
+          callTest.state.answerClip={questionId:1,recorder:{state:'recording'}};
+          callTest.updateSpokenIndicator();
+        }""")
+        assert page.locator('.hr-interviewer').get_attribute('data-phase') == 'listening'
+    page.close()

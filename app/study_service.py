@@ -2,13 +2,14 @@
 from __future__ import annotations
 import json
 import math
-from datetime import timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from fastapi import HTTPException
+from sqlalchemy import func
 from app.models import (User, StudentProfile, LearningNotebook, MockInterview,
                         VideoCourse, utcnow)
 from app.roadmap_models import CareerRoadmap
-from app.study_models import StudyPlan, StudyGoal, NotebookProgress, StudyDaily
+from app.study_models import StudyPlan, StudyGoal, NotebookProgress, StudyDaily, StudyTargets
 
 
 def local_day(now, zone='Asia/Kolkata'):
@@ -17,7 +18,10 @@ def local_day(now, zone='Asia/Kolkata'):
 
 def user_zone(db, user_id):
     plan = db.query(StudyPlan).filter_by(user_id=user_id).order_by(StudyPlan.created_at).first()
-    return plan.timezone if plan else 'Asia/Kolkata'
+    if plan:
+        return plan.timezone
+    targets = db.get(StudyTargets, user_id)
+    return targets.timezone if targets else 'Asia/Kolkata'
 
 
 def lock_owner(db, user):
@@ -88,9 +92,14 @@ def roadmap_milestones(row):
     return result
 
 
-def mock_records(db, user):
-    rows = db.query(MockInterview).join(StudentProfile).filter(StudentProfile.user_id == user.id,
-        MockInterview.overall_score.is_not(None)).order_by(MockInterview.created_at.desc()).limit(2000).all()
+def mock_records(db, user, *, since=None, zone="Asia/Kolkata"):
+    query = db.query(MockInterview).join(StudentProfile).filter(
+        StudentProfile.user_id == user.id, MockInterview.overall_score.is_not(None))
+    completed = func.coalesce(MockInterview.completed_at, MockInterview.created_at)
+    if since is not None:
+        boundary = datetime.combine(since, time.min, ZoneInfo(zone)).astimezone(timezone.utc)
+        query = query.filter(completed >= boundary.replace(tzinfo=None))
+    rows = query.order_by(completed.desc()).limit(2000).all()
     return [r for r in rows if isinstance(json.loads(r.evaluation_json or '{}'), dict)
             and json.loads(r.evaluation_json or '{}').get('analysis_status', 'complete') == 'complete']
 

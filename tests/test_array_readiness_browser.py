@@ -36,7 +36,7 @@ def test_arrays_practice_is_available_in_video_learning_and_submits_answers(brow
 
     page.route(BASE_URL + "/**", mock)
     try:
-        page.goto(BASE_URL, wait_until="networkidle")
+        page.goto(BASE_URL, wait_until="load")
         page.get_by_role("button", name="Essential only", exact=True).click()
         page.locator(".sidebar-trigger").click()
         page.locator('#app-nav button[data-view="learning-hub"]').click()

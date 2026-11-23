@@ -5,7 +5,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint, false
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -112,6 +112,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     email_verified = Column(Boolean, default=False)
     must_change_password = Column(Boolean, nullable=False, default=False)
+    workspace_guide_pending = Column(Boolean, nullable=False, default=True, server_default=false())
     last_login_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     reset_token_hash = Column(String(64), nullable=True, index=True)
@@ -495,6 +496,7 @@ class MockInterview(Base):
     overall_score = Column(Integer, nullable=True)
     overall_feedback = Column(Text, nullable=True)
     created_at = Column(DateTime, default=utcnow)
+    completed_at = Column(DateTime)
 
     student = relationship("StudentProfile", back_populates="mock_interviews")
     job = relationship("Job")
