@@ -6,7 +6,7 @@
   if(!form || !start || !status || !room || !frame || !end)return;
   const preview=new URLSearchParams(location.search).get('preview')==='1';
   if(preview){$('live-coach').hidden=true;return;}
-  let token='',ready=false,session=null,busy=false,expireTimer=0;
+  let token='',ready=false,session=null,busy=false,expireTimer=0,clockTimer=0;
   const say=(message,kind='')=>{status.textContent=message;status.dataset.kind=kind;};
   const safeRoom=url=>{
     try{const u=new URL(url);return u.protocol==='https:'&&u.hostname==='tavus.daily.co'&&!u.username&&!u.password&&!u.hash;}
@@ -39,7 +39,7 @@
   }
   async function closeSession(){
     if(busy||!session)return;
-    busy=true;end.disabled=true;clearTimeout(expireTimer);
+    busy=true;end.disabled=true;clearTimeout(expireTimer);clearInterval(clockTimer);
     const prior=session;session=null;
     frame.removeAttribute('src');room.hidden=true;form.hidden=false;start.disabled=!ready;
     say('Live interview ended. You can start a new practice session.','ready');
@@ -52,8 +52,17 @@
     event.preventDefault();
     if(!ready||busy||session)return;
     if(!$('live-coach-consent').checked){say('Please confirm your camera and microphone consent first.','unavailable');return;}
-    busy=true;start.disabled=true;say('Creating your private face-to-face interview…');
+    busy=true;start.disabled=true;
+    let localStream=null;
     try{
+      if(!navigator.mediaDevices?.getUserMedia)throw new Error('This browser does not support camera and microphone access. Try an up-to-date browser over HTTPS.');
+      say('Checking your camera and microphone before creating the private call…');
+      localStream=await navigator.mediaDevices.getUserMedia({audio:true,video:{facingMode:'user'}});
+      const preview=$('live-coach-preview');
+      if(preview){preview.srcObject=localStream;preview.hidden=false;await preview.play().catch(()=>{});}
+      localStream.getTracks().forEach(track=>track.stop());localStream=null;
+      if(preview){preview.pause();preview.srcObject=null;preview.hidden=true;}
+      say('Camera and microphone are ready. Connecting to your AI interviewer…');
       const data=await api('/mock-interview/live/start',{method:'POST',body:JSON.stringify({
         role:$('live-coach-role').value.trim(),focus:$('live-coach-focus').value,
         language:$('live-coach-language').value,consent:true
@@ -62,10 +71,16 @@
       session=data;frame.src=data.conversation_url;room.hidden=false;form.hidden=true;
       say('Your AI interviewer is connecting. You can speak naturally and ask follow-up questions.','ready');
       const remaining=Math.max(0,Number(data.expires_at)*1000-Date.now());
-      expireTimer=setTimeout(()=>{if(session){say('Your 10-minute session has ended. Select End interview to close the call.','unavailable');end.focus();}},remaining);
+      const timer=$('live-coach-timer');
+      const updateClock=()=>{
+        const left=Math.max(0,Math.ceil((Number(data.expires_at)*1000-Date.now())/1000));
+        if(timer)timer.textContent=String(Math.floor(left/60)).padStart(2,'0')+':'+String(left%60).padStart(2,'0');
+      };
+      updateClock();clockTimer=setInterval(updateClock,1000);
+      expireTimer=setTimeout(()=>{if(session){say('Your 10-minute practice is complete. Closing the call…','ready');void closeSession();}},remaining);
       room.scrollIntoView({behavior:'smooth',block:'nearest'});
-    }catch(error){say(error.message,'unavailable');start.disabled=!ready;}
-    finally{busy=false;}
+    }catch(error){say(error.name==='NotAllowedError'?'Camera or microphone access was denied. Allow both permissions in your browser and try again.':error.message,'unavailable');start.disabled=!ready;}
+    finally{if(localStream)localStream.getTracks().forEach(track=>track.stop());const preview=$('live-coach-preview');if(preview){preview.pause();preview.srcObject=null;preview.hidden=true;}busy=false;}
   });
   end.addEventListener('click',closeSession);
   $('setup-form')?.addEventListener('submit',event=>{
@@ -76,6 +91,7 @@
   },true);
   window.addEventListener('pagehide',()=>{
     if(!session)return;
+    clearTimeout(expireTimer);clearInterval(clockTimer);
     const prior=session;session=null;frame.removeAttribute('src');
     fetch('/mock-interview/live/end',{method:'POST',keepalive:true,credentials:'include',
       headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},

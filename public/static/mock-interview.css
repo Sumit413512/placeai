@@ -590,3 +590,7 @@ body.secure-assessment .protected-question,body.secure-assessment .answer-option
 .live-coach[hidden],.live-coach-form[hidden],.live-coach-room[hidden]{display:none!important}
 @media(max-width:800px){.live-coach-form{grid-template-columns:1fr 1fr}.live-coach-form>label:first-child{grid-column:1/-1}.live-coach-intro{flex-direction:column}.live-coach-frame{min-height:390px}}
 @media(max-width:520px){.live-coach-form{grid-template-columns:1fr}.live-coach-form>label:first-child{grid-column:auto}.live-coach-frame{min-height:340px;aspect-ratio:4/5}.live-coach-call-controls{flex-wrap:wrap}}
+
+.live-coach-preview{grid-column:1/-1;width:100%;max-width:300px;max-height:180px;object-fit:cover;border-radius:12px;background:#251d1d;transform:scaleX(-1)}
+.live-coach-preview[hidden]{display:none!important}
+#live-coach-timer{font-variant-numeric:tabular-nums;color:#823b4d;font-size:15px}

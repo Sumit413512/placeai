@@ -368,6 +368,7 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
       <label class="live-coach-consent"><input id="live-coach-consent" type="checkbox" required>
         <span>I understand this optional practice uses my camera, microphone and conversation with the third-party real-time video provider Tavus. I consent to that processing. It is not a proctored exam or a hiring decision; provider data handling follows its policies. No PlaceAI assessment score is generated from this call.</span>
       </label>
+      <video id="live-coach-preview" class="live-coach-preview" autoplay muted playsinline aria-label="Camera permission check preview" hidden></video>
       <div class="live-coach-actions">
         <button id="live-coach-start" class="button primary" type="submit" disabled>Start face-to-face interview</button>
         <p id="live-coach-status" class="live-coach-status" role="status" aria-live="polite">Sign in with your student account to check live video availability.</p>
@@ -376,7 +377,7 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
     <div id="live-coach-room" class="live-coach-room" hidden>
       <iframe id="live-coach-frame" class="live-coach-frame" title="Live AI interviewer video conversation"
         allow="camera; microphone; autoplay; fullscreen" referrerpolicy="no-referrer"></iframe>
-      <div class="live-coach-call-controls"><span>Private practice · up to 10 minutes · not part of your scored assessment</span>
+      <div class="live-coach-call-controls"><span>Private practice · not scored · <strong id="live-coach-timer" role="timer" aria-label="Time remaining">10:00</strong> remaining</span>
         <button id="live-coach-end" class="button secondary" type="button">End interview</button></div>
     </div>
   </section>
@@ -673,7 +674,7 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.es2017.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js" defer></script>
 <script src="/static/mock-interview.js?v=20261124-live-avatar1" defer></script>
-<script src="/static/live-interview.js?v=20261124-live-avatar1" defer></script>
+<script src="/static/live-interview.js?v=20261124-live-avatar2" defer></script>
 </body>
 </html>
 '''

@@ -177,6 +177,9 @@ async def live_start(
         "properties": {
             "max_call_duration": SESSION_SECONDS,
             "participant_left_timeout": 30,
+            "participant_absent_timeout": 60,
+            "enable_recording": False,
+            "enable_closed_captions": True,
         },
     }
     result = await _provider("POST", PROVIDER_URL, key, payload=payload)

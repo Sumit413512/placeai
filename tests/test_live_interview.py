@@ -17,12 +17,17 @@ def test_live_interview_is_real_provider_backed_not_static_pretend():
     assert 'id="live-coach-frame"' in html
     assert 'id="live-coach-consent"' in html
     assert 'id="live-coach-end"' in html
+    assert 'id="live-coach-preview"' in html
+    assert 'id="live-coach-timer"' in html
     assert "separate from the scored" in html
     for name in ("mock-interview.js","mock-interview.css","live-interview.js"):
         assert (ROOT/"app/static"/name).read_text()==(ROOT/"public/static"/name).read_text()
     js=(ROOT/"app/static/live-interview.js").read_text()
     assert "tavus.daily.co" in js
     assert "frame.src=data.conversation_url" in js
+    assert "navigator.mediaDevices.getUserMedia" in js
+    assert "localStream.getTracks().forEach(track=>track.stop())" in js
+    assert "void closeSession()" in js
     assert "/mock-interview/live/end" in js
     assert "window.PlaceAILiveInterview" in js
     assert "window.PlaceAILiveInterview?.init(state.token)" in (ROOT/"app/static/mock-interview.js").read_text()
@@ -133,6 +138,8 @@ def test_live_start_and_end_provider_contract_without_real_credentials(monkeypat
     assert calls[0][3]["require_auth"] is True
     assert calls[0][3]["max_participants"]==2
     assert calls[0][3]["properties"]["max_call_duration"]==600
+    assert calls[0][3]["properties"]["enable_recording"] is False
+    assert calls[0][3]["properties"]["enable_closed_captions"] is True
     assert limits[0]["limit"]==2 and limits[0]["window_seconds"]==3600
     end=asyncio.run(live.live_end(live.LiveEnd(
         conversation_id=result["conversation_id"],session_proof=result["session_proof"]),student))
