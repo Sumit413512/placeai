@@ -96,3 +96,10 @@ def test_provider_is_never_called_without_consent(monkeypatch):
     with pytest.raises(HTTPException) as error:
         asyncio.run(call())
     assert error.value.status_code==422
+
+def test_live_provider_is_disclosed_in_privacy_policy():
+    html=(ROOT/"app/templates/privacy.html").read_text()
+    assert "Optional live video interview practice" in html
+    assert "Tavus" in html
+    assert "explicitly opts in" in html
+    assert html==(ROOT/"public/privacy.html").read_text()
