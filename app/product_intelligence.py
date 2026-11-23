@@ -77,16 +77,7 @@ def readiness_evidence(student: StudentProfile, db: Session) -> dict:
     parsed = resume.ai_parsed_data if resume else None
     parsed_experience = parsed.get("experience") if isinstance(parsed, dict) else []
     parsed_experience = parsed_experience if isinstance(parsed_experience, list) else []
-    profile_fields = {
-        "full_name": student.full_name,
-        "degree": student.degree,
-        "branch": student.branch,
-        "graduation_year": student.graduation_year,
-        "cgpa": student.cgpa,
-        "phone": student.phone,
-        "linkedin_url": student.linkedin_url,
-    }
-    present_profile_fields = [key for key, value in profile_fields.items() if value not in (None, "")]
+    completion = base["profile_completion"]
     evidence = [
         {
             "key": "profile",
@@ -94,7 +85,7 @@ def readiness_evidence(student: StudentProfile, db: Session) -> dict:
             "score": components.get("Profile completeness", 0),
             "confidence": "high" if student.is_verified else "medium",
             "source": "Student profile + institution verification",
-            "evidence": f"{len(present_profile_fields)}/{len(profile_fields)} core fields present; institution verification {'complete' if student.is_verified else 'pending'}.",
+            "evidence": f"{completion['complete_count']}/{completion['required_count']} required profile items complete; institution verification {'complete' if student.is_verified else 'pending'}.",
             "observed_at": _iso(student.updated_at),
         },
         {
@@ -152,7 +143,9 @@ def readiness_evidence(student: StudentProfile, db: Session) -> dict:
             "observed_at": _iso(resume.uploaded_at if resume else None),
         },
     ]
-    if base["score"] >= 85:
+    if base["score"] is None:
+        band = "Profile incomplete"
+    elif base["score"] >= 85:
         band = "Strong evidence"
     elif base["score"] >= 70:
         band = "Building readiness"
@@ -163,7 +156,9 @@ def readiness_evidence(student: StudentProfile, db: Session) -> dict:
     first_action = (base.get("recommended_actions") or ["Review your next eligible opportunity."])[0]
     lower = first_action.lower()
     view = "profile"
-    if "resume" in lower or "project" in lower:
+    if base["score"] is None:
+        view = "resume" if completion["missing"] == ["resume"] else "profile"
+    elif "resume" in lower or "project" in lower:
         view = "resume"
     elif "interview" in lower:
         view = "mock-interview"
@@ -184,7 +179,11 @@ def readiness_evidence(student: StudentProfile, db: Session) -> dict:
         "next_best_action": {
             "title": first_action,
             "view": view,
-            "reason": "Selected from the lowest-confidence or lowest-scoring evidence currently available.",
+            "reason": (
+                "Required items remaining: " + ", ".join(completion["missing"]) + "."
+                if base["score"] is None
+                else "Selected from the lowest-confidence or lowest-scoring evidence currently available."
+            ),
         },
     }
 

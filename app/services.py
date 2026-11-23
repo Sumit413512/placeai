@@ -342,7 +342,9 @@ def company_trust_assessment(profile: RecruiterProfile, db: Session | None = Non
 def placement_readiness(student: StudentProfile, db: Session) -> dict:
     """Evidence-backed readiness, not a prediction of hiring success."""
     from app.profile_completeness import profile_completion
-    profile_score = profile_completion(student)["percent"]
+    completion = profile_completion(student)
+    profile_score = completion["percent"]
+    locked = bool(completion["missing"])
     from app.resume_evidence import saved_review, alignment
     review = saved_review(student)
     resume_score = int(review.get("resume_score", 0)) if review else 0
@@ -378,14 +380,16 @@ def placement_readiness(student: StudentProfile, db: Session) -> dict:
     }
     score = round(sum(components[k] * weights[k] for k in components))
     actions: list[str] = []
-    if profile_score < 85: actions.append("Complete missing academic and contact fields and keep institution-verifiable details current.")
+    if locked:
+        actions.append("Complete the required profile details to unlock your readiness score.")
     if resume_score < 75: actions.append("Upload a current text-based resume and run the resume analysis after reviewing your profile data.")
     if skills_score < 75: actions.append("Add evidence-backed technical skills and certifications relevant to your target roles.")
     if interview_readiness < 75: actions.append("Complete role-specific mock interviews and review weak answer areas.")
     if project_evidence < 75: actions.append("Add measurable project outcomes, responsibilities and technologies to your resume.")
     if not actions: actions.append("Maintain current evidence and focus preparation on the next eligible drive.")
     return {
-        "score": score,
+        "score": None if locked else score,
+        "profile_completion": completion,
         "components": [{"name": k, "score": int(v)} for k, v in components.items()],
         "recommended_actions": actions[:5],
         "disclaimer": "Placement Readiness measures profile evidence and preparation signals. It does not predict or guarantee employment.",

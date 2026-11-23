@@ -22,7 +22,7 @@
     '/static/workspace-runtime.js',
     '/static/api-errors.js',
     '/static/auth-protection.js?v=20261123-mfa-layout1',
-    '/static/access-portal.js?v=20261123-home-header1',
+    '/static/access-portal.js?v=20261123-workspace-clarity1',
     '/static/ui-state-fixes.js?v=20261024-zensar1',
     '/static/account-security.js',
     '/static/provisioning-password-fix.js',
@@ -31,8 +31,8 @@
     '/static/ai-readiness.js',
     '/static/workspace-experience.js?v=20261016-interface-guidelines',
     '/static/legal-links.js',
-    '/static/career-roadmap.js?v=20261110-learning-style3',
-    '/static/app-core.js?v=20261122-readiness3'
+    '/static/career-roadmap.js?v=20261123-workspace-clarity1',
+    '/static/app-core.js?v=20261123-workspace-clarity1'
   ];
 
   const loadNext = (index) => {

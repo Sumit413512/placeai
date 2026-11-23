@@ -47,6 +47,9 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
     page.get_by_role('button', name='Essential only', exact=True).click()
     page.locator('#app-shell').wait_for(state='visible')
     assert page.locator('.workspace-welcome').inner_text() == 'Welcome, MIT account'
+    if role == 'student':
+        assert page.locator('#workspace-kind').inner_text() == 'STUDENT WORKSPACE'
+        assert page.locator('#workspace-kind').evaluate('el => Number(getComputedStyle(el).fontWeight) >= 700')
     assert page.locator('.app-sidebar').get_by_text('MIT account', exact=True).count() == 0
     assert page.locator('#page-title').is_hidden()
     assert page.locator('#workspace-name').is_hidden()
@@ -148,4 +151,37 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
     page.set_viewport_size({'width':1440,'height':960})
     with page.expect_request(lambda request: request.url == BASE_URL+'/auth/logout' and request.method == 'POST'):
         logout.click()
+    page.close()
+
+
+@pytest.mark.parametrize('width', [320, 1440])
+def test_notifications_keep_dates_and_actions_readable(browser, width):
+    page = browser.new_page(viewport={'width': width, 'height': 900})
+
+    def respond(route):
+        path = route.request.url.split(BASE_URL, 1)[-1].split('?', 1)[0]
+        if path == '/auth/me':
+            data = {'id': 'notification-review', 'username': 'Review student', 'role': 'student'}
+        elif path == '/enterprise/notifications':
+            data = {'unread': 1, 'items': [{
+                'id': 'update-1', 'is_read': False, 'title': 'Your video course is ready',
+                'message': 'DSA Fundamentals passed the full course review and is ready to begin.',
+                'category': 'learning', 'priority': 'high', 'link': 'learning-hub',
+                'created_at': '2026-11-17T10:00:00Z',
+            }]}
+        else:
+            data = {}
+        route.fulfill(status=200, content_type='application/json', body=json.dumps(data))
+
+    for pattern in ('**/auth/**', '**/enterprise/**', '**/billing/**', '**/ai/**'):
+        page.route(pattern, respond)
+    page.goto(BASE_URL + '/?view=notifications', wait_until='domcontentloaded')
+    notice = page.locator('.notification-item')
+    notice.wait_for()
+    assert notice.locator('p').evaluate('el => parseFloat(getComputedStyle(el).fontSize) >= 16')
+    date = notice.locator('time').bounding_box()
+    button = notice.get_by_role('button', name='Open', exact=True).bounding_box()
+    assert date['x'] + date['width'] < button['x'] or date['y'] + date['height'] < button['y']
+    assert button['height'] >= 44
+    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
     page.close()

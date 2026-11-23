@@ -371,7 +371,10 @@ def test_enterprise_placement_operations_suite():
 
     # Readiness and explainable eligibility.
     r = client.get("/enterprise/readiness", headers=auth(student))
-    assert r.status_code == 200 and 0 <= r.json()["score"] <= 100 and len(r.json()["components"]) == 7
+    assert r.status_code == 200
+    assert r.json()["score"] is None
+    assert "resume" in r.json()["profile_completion"]["missing"]
+    assert len(r.json()["components"]) == 7
     r = client.get(f"/enterprise/drives/{drive_id}/eligibility", headers=auth(student))
     assert r.status_code == 200 and "checks" in r.json() and "summary" in r.json()
 

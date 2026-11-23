@@ -9,25 +9,21 @@
   const roles = {
     student: {
       label: 'Student',
-      short: 'Student workspace',
       description: 'Applications, placement drives, readiness, documents and interview preparation.',
       access: 'Self-service registration'
     },
     recruiter: {
       label: 'Recruiter',
-      short: 'Recruiter workspace',
       description: 'Verified jobs, approved candidate pipelines, interviews, offers and company verification.',
       access: 'Authorized provisioning'
     },
     institution_admin: {
       label: 'Institution Admin',
-      short: 'Placement office',
       description: 'Students, recruiters, campus drives, approvals, attendance, reports and placement operations.',
       access: 'Institution-controlled access'
     },
     platform_admin: {
       label: 'Platform Admin',
-      short: 'Platform control',
       description: 'Institution provisioning, platform operations, access review and administrative controls.',
       access: 'Restricted internal access'
     }
@@ -207,7 +203,7 @@
     const view = $('#login-view');
     if (!view) return;
     const role = roles[loginRole];
-    view.innerHTML = `${roleCards(loginRole, 'login')}${modeTabs('login')}<h2 id="auth-title">${role.label} sign in</h2><p class="form-intro">Continue with Google or use your email and password.</p><div class="access-selection-summary"><span class="access-role-dot" aria-hidden="true"></span><div><b data-access-summary-label>${role.label}</b><span data-access-summary-short>${role.short}</span></div></div><div id="role-login-error" class="access-form-error" role="alert"></div><div class="access-login-methods"></div><div class="access-method-divider">or continue with email</div><form id="role-login-form" class="form-stack"><input type="hidden" name="role" value="${loginRole}"><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@organization.com"></label><label>Password<div class="password-wrap"><input type="password" name="password" autocomplete="current-password" required maxlength="128" placeholder="Enter your password"><button type="button" data-access-toggle-password>Show</button></div></label><div class="form-row-between"><span></span><button type="button" class="text-button" data-action="forgot-password">Forgot password?</button></div><button class="button button-primary button-full" type="submit">Continue to ${role.label}</button></form><p class="access-new-account">New to PlaceAI? <button type="button" class="text-button" data-register-link>${loginRole === 'student' ? 'Create an account' : 'Request workspace access'}</button></p>`;
+    view.innerHTML = `${roleCards(loginRole, 'login')}${modeTabs('login')}<h2 id="auth-title">${role.label} sign in</h2><p class="form-intro">Continue with Google or use your email and password.</p><div id="role-login-error" class="access-form-error" role="alert"></div><div class="access-login-methods"></div><div class="access-method-divider">or continue with email</div><form id="role-login-form" class="form-stack"><input type="hidden" name="role" value="${loginRole}"><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@organization.com"></label><label>Password<div class="password-wrap"><input type="password" name="password" autocomplete="current-password" required maxlength="128" placeholder="Enter your password"><button type="button" data-access-toggle-password>Show</button></div></label><div class="form-row-between"><span></span><button type="button" class="text-button" data-action="forgot-password">Forgot password?</button></div><button class="button button-primary button-full" type="submit">Continue to ${role.label}</button></form><p class="access-new-account">New to PlaceAI? <button type="button" class="text-button" data-register-link>${loginRole === 'student' ? 'Create an account' : 'Request workspace access'}</button></p>`;
     if (!$('#auth-overlay')?.classList.contains('hidden')) renderGoogleSignIn(view);
   }
 
@@ -232,11 +228,6 @@
     const form = $('#role-login-form', view);
     const hiddenRole = form?.querySelector('input[name="role"]');
     if (hiddenRole) hiddenRole.value = roleKey;
-    const summary = view.querySelector('.access-selection-summary');
-    const summaryLabel = summary?.querySelector('[data-access-summary-label]');
-    const summaryShort = summary?.querySelector('[data-access-summary-short]');
-    if (summaryLabel) summaryLabel.textContent = role.label;
-    if (summaryShort) summaryShort.textContent = role.short;
     const submit = form?.querySelector('button[type="submit"]');
     if (submit) submit.textContent = `Continue to ${role.label}`;
     focusAccessForm('role-login-form');
