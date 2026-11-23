@@ -44,7 +44,7 @@ ASSET_INJECTION = (
     f'<link rel="stylesheet" href="/static/workspace-experience.css?v={ASSET_VERSION}">\n'
     f'<script src="/static/workspace-runtime.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/api-errors.js?v={ASSET_VERSION}" defer></script>\n'
-    f'<script src="/static/access-portal.js?v=20261123-home-header1" defer></script>\n'
+    f'<script src="/static/access-portal.js?v=20261123-workspace-clarity1" defer></script>\n'
     f'<script src="/static/ui-state-fixes.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/account-security.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/provisioning-password-fix.js?v={ASSET_VERSION}" defer></script>\n'
@@ -52,7 +52,7 @@ ASSET_INJECTION = (
     f'<script src="/static/integration-readiness.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/ai-readiness.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/static/workspace-experience.js?v={ASSET_VERSION}" defer></script>\n'
-    f'<script src="/static/career-roadmap.js?v={ASSET_VERSION}" defer></script>\n'
+    f'<script src="/static/career-roadmap.js?v=20261123-workspace-clarity1" defer></script>\n'
     f'<script src="/static/legal-links.js?v={ASSET_VERSION}" defer></script>\n'
 )
 

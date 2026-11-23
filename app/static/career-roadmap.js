@@ -106,30 +106,26 @@
     const input = latest && latest.input ? latest.input : {};
     const join = values => Array.isArray(values) ? values.join(', ') : '';
     return '<section class="form-panel roadmap-builder">' +
-      '<div class="panel-head"><div><span class="section-kicker">BUILD YOUR PLAN</span><h2>Create a roadmap around the role you actually want</h2><p>PlaceAI combines your current skills, available time and current market evidence into one practical learning path.</p></div></div>' +
+      '<div class="panel-head"><div><h2>Build your career roadmap</h2><p>Choose a target role and weekly study time. You can add more detail for a more tailored plan.</p></div></div>' +
       '<form id="career-roadmap-form" class="form-stack">' +
-        '<div class="roadmap-form-section"><div class="roadmap-form-step"><span>1</span><div><strong>Choose your direction</strong><small>Tell us the role and domain you want to prepare for.</small></div></div>' +
+        '<div class="roadmap-form-section">' +
           '<div class="form-two">' +
             '<label>Target roles<input name="target_roles" required maxlength="800" placeholder="Data Engineer, ML Engineer" value="' + esc(join(input.target_roles)) + '"></label>' +
-            '<label>Fields or domains<input name="target_fields" maxlength="800" placeholder="AI, Data, Cloud" value="' + esc(join(input.target_fields)) + '"></label>' +
-          '</div>' +
-          '<label>What interests you most?<input name="interests" maxlength="1000" placeholder="Building data products, automation, analytics" value="' + esc(join(input.interests)) + '"></label>' +
-        '</div>' +
-        '<div class="roadmap-form-section"><div class="roadmap-form-step"><span>2</span><div><strong>Set your starting point</strong><small>We use this to avoid recommending things you already know.</small></div></div>' +
-          '<label>Skills you already know<input name="current_skills" maxlength="2000" placeholder="Python, SQL, React" value="' + esc(join(input.current_skills)) + '"></label>' +
-          '<div class="form-two">' +
+            '<label>Hours per week<input name="hours_per_week" type="number" min="1" max="80" value="' + esc(input.hours_per_week || 10) + '"></label>' +
             '<label>Current level<select name="experience_level"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></label>' +
             '<label>Target job market<input name="market_region" required maxlength="120" value="' + esc(input.market_region || 'India') + '"></label>' +
           '</div>' +
+          '<label>Skills you already know<input name="current_skills" maxlength="2000" placeholder="Python, SQL, React" value="' + esc(join(input.current_skills)) + '"></label>' +
         '</div>' +
-        '<div class="roadmap-form-section"><div class="roadmap-form-step"><span>3</span><div><strong>Make the plan realistic</strong><small>Choose a pace that fits around classes, exams and placement preparation.</small></div></div>' +
-          '<div class="form-three">' +
-            '<label>Hours per week<input name="hours_per_week" type="number" min="1" max="80" value="' + esc(input.hours_per_week || 10) + '"></label>' +
-            '<label>Preferred timeline <span class="optional">optional</span><input name="desired_timeline_days" type="number" min="14" max="730" value="' + esc(input.desired_timeline_days || '') + '" placeholder="120 days"></label>' +
-            '<label>Learning style <span class="optional">optional</span><input name="learning_style" maxlength="500" value="' + esc(input.learning_style || '') + '" placeholder="Project-first, visual, structured"></label>' +
+        '<details class="roadmap-extra-options"><summary>More options</summary><div class="form-stack">' +
+          '<div class="form-two">' +
+            '<label>Fields or domains<input name="target_fields" maxlength="800" placeholder="AI, Data, Cloud" value="' + esc(join(input.target_fields)) + '"></label>' +
+            '<label>What interests you most?<input name="interests" maxlength="1000" placeholder="Building data products, automation, analytics" value="' + esc(join(input.interests)) + '"></label>' +
+            '<label>Preferred timeline (days)<input name="desired_timeline_days" type="number" min="14" max="730" value="' + esc(input.desired_timeline_days || '') + '" placeholder="120"></label>' +
+            '<label>Learning style<input name="learning_style" maxlength="500" value="' + esc(input.learning_style || '') + '" placeholder="Project-first, visual, structured"></label>' +
           '</div>' +
-          '<label>Goals or constraints <span class="optional">optional</span><textarea name="goals_constraints" rows="3" maxlength="2000" placeholder="Placement deadline, college schedule, weak areas, internship target...">' + esc(input.goals_constraints || '') + '</textarea></label>' +
-        '</div>' +
+          '<label>Goals or constraints<textarea name="goals_constraints" rows="3" maxlength="2000" placeholder="Placement deadline, college schedule, weak areas, internship target...">' + esc(input.goals_constraints || '') + '</textarea></label>' +
+        '</div></details>' +
         '<div class="roadmap-builder-footer"><p><strong>Market-aware by default.</strong> Your roadmap uses fresh evidence for the selected region and can be regenerated whenever your target changes.</p>' +
         '<button class="button button-primary" type="submit">' + (latest ? 'Update my roadmap' : 'Build my roadmap') + '</button></div>' +
       '</form>' +
@@ -256,6 +252,8 @@
       root().innerHTML = page + editor;
     }
 
+    const extraOptions = root().querySelector('.roadmap-extra-options');
+    extraOptions?.addEventListener('invalid', () => { extraOptions.open = true; }, true);
     const level = root().querySelector('#career-roadmap-form select[name="experience_level"]');
     if (level && latest && latest.input && latest.input.experience_level) level.value = latest.input.experience_level;
   }

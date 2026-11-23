@@ -1491,3 +1491,154 @@ body :is(h1, h2, h3, h4, h5),
 @media (max-width: 760px) {
   #app-shell .app-topbar .workspace-welcome { font-size: 14px !important; }
 }
+
+/* Keep the homepage surfaces continuous and give supporting copy room to wrap. */
+#marketing-site .home-hero-surface {
+  background: linear-gradient(180deg, #f4ede0, #faf7ee 86%, #fbf8f1) !important;
+}
+#marketing-site .proof-content {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 18px;
+  line-height: 1.5;
+}
+#marketing-site .proof-content :is(span, strong) {
+  font-size: .9375rem !important;
+  color: #4f4339 !important;
+}
+#marketing-site .proof-content > span { text-align: center; }
+#marketing-site .preparation-grid > article {
+  padding: clamp(1rem, 2vw, 1.75rem);
+  border-radius: 16px !important;
+}
+#marketing-site .preparation-icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-inline-start: auto;
+  border: 1px solid #d5bcb3;
+  border-radius: 12px;
+  background: #fff8f1;
+  color: #682e35;
+}
+#marketing-site .preparation-icon svg {
+  width: 1.4rem;
+  height: 1.4rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+#marketing-site .preparation-grid h3 { margin: .875rem 0 .5rem; }
+#marketing-site .role-production .production-surface-grid > div {
+  min-height: 0;
+  border-radius: 14px;
+}
+#marketing-site .role-production .production-surface-grid strong {
+  font-size: 1.0625rem !important;
+}
+#marketing-site .role-production .production-surface-grid span {
+  font-size: 1rem !important;
+  line-height: 1.55;
+}
+
+#app-shell .app-sidebar #workspace-kind {
+  color: var(--pa-ink) !important;
+  font-size: .9375rem !important;
+  font-weight: 750 !important;
+  letter-spacing: .03em !important;
+  text-transform: uppercase;
+}
+
+#app-shell .readiness-unlock ul {
+  padding-inline-start: 1.25rem;
+  line-height: 1.7;
+  text-transform: capitalize;
+}
+
+#app-shell .notification-panel {
+  width: 100%;
+  max-width: none;
+  padding: clamp(12px, 2.4vw, 24px);
+}
+#app-shell .notification-panel-head {
+  flex-wrap: wrap;
+  align-items: center;
+}
+#app-shell .notification-panel-head h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+#app-shell .notification-panel-head .row-actions { flex-wrap: wrap; }
+#app-shell .notification-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "category category" "copy controls";
+  align-items: start;
+  gap: 6px 20px;
+  padding: 16px clamp(8px, 1.5vw, 16px);
+  border-color: var(--pa-border);
+}
+#app-shell .notification-item.unread {
+  background: #f8efe3;
+  border-inline-start: 3px solid #7c3d3f;
+}
+#app-shell .notification-type {
+  grid-area: category;
+  justify-self: start;
+  color: #65463c;
+  border-color: #dbc8ba;
+  font-size: .875rem;
+  text-transform: capitalize;
+  overflow-wrap: anywhere;
+}
+#app-shell .notification-copy {
+  grid-area: copy;
+  overflow-wrap: anywhere;
+}
+#app-shell .notification-copy strong { font-size: 1.0625rem; }
+#app-shell .notification-copy p {
+  margin: 4px 0 8px;
+  color: #4f4339 !important;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+#app-shell .notification-copy .priority-label {
+  color: #65463c !important;
+  font-size: .875rem !important;
+}
+#app-shell .notification-end {
+  grid-area: controls;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+#app-shell .notification-end time {
+  color: #4f4339 !important;
+  font-size: .9375rem;
+}
+#app-shell .notification-panel .row-button {
+  min-height: 44px !important;
+  font-size: .9375rem !important;
+}
+@media (max-width: 760px) {
+  #app-shell .notification-item {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "category" "copy" "controls";
+  }
+}
+
+#app-shell .roadmap-extra-options {
+  padding: 14px 16px;
+  border: 1px solid var(--pa-border);
+  border-radius: var(--radius-panel);
+}
+#app-shell .roadmap-extra-options > summary {
+  color: var(--pa-ink);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+#app-shell .roadmap-extra-options > div { margin-top: 14px; }

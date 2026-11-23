@@ -203,3 +203,45 @@ def test_drive_rescue_auto_resolves_after_application_exists():
         assert row.resolution_outcome == "condition_cleared"
     finally:
         db.close()
+
+
+def test_readiness_unlocks_at_full_required_profile_completion():
+    from app.models import Resume
+
+    data = _fixture()
+    headers = _auth(data["student"])
+    paths = ["/enterprise/readiness", "/intelligence/student/readiness"]
+
+    def payloads():
+        for path in paths:
+            response = client.get(path, headers=headers)
+            assert response.status_code == 200, response.text
+            yield response.json()
+
+    with SessionLocal() as db:
+        student = db.get(StudentProfile, data["student_id"])
+        original_phone = student.phone
+        assert student.resume is None
+        try:
+            student.phone = "  "
+            db.commit()
+            for payload in payloads():
+                assert payload["score"] is None
+                assert payload["profile_completion"]["missing"] == ["phone", "resume"]
+
+            student.phone = original_phone
+            db.commit()
+            for payload in payloads():
+                assert payload["score"] is None
+                assert payload["profile_completion"]["missing"] == ["resume"]
+
+            student.resume = Resume(original_filename="resume.pdf", filepath="test-only.pdf")
+            db.commit()
+            for payload in payloads():
+                assert payload["profile_completion"]["percent"] == 100
+                assert isinstance(payload["score"], int)
+                assert 0 <= payload["score"] <= 100
+        finally:
+            student.phone = original_phone
+            student.resume = None
+            db.commit()

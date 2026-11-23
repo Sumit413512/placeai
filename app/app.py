@@ -465,7 +465,7 @@ def root(request: Request):
         '<script src="/static/workspace-runtime.js" defer></script>\n'
         '<script src="/static/api-errors.js" defer></script>\n'
         '<script src="/static/auth-protection.js?v=20261123-mfa-layout1" defer></script>\n'
-        '<script src="/static/access-portal.js?v=20261123-home-header1" defer></script>\n'
+        '<script src="/static/access-portal.js?v=20261123-workspace-clarity1" defer></script>\n'
         '<script src="/static/ui-state-fixes.js?v=20261024-journeys1" defer></script>\n'
         '<script src="/static/account-security.js" defer></script>\n'
         '<script src="/static/provisioning-password-fix.js" defer></script>\n'
@@ -473,7 +473,7 @@ def root(request: Request):
         '<script src="/static/integration-readiness.js" defer></script>\n'
         '<script src="/static/ai-readiness.js" defer></script>\n'
         '<script src="/static/workspace-experience.js?v=20261016-interface-guidelines" defer></script>\n'
-        '<script src="/static/career-roadmap.js?v=20261016-interface-guidelines" defer></script>\n'
+        '<script src="/static/career-roadmap.js?v=20261123-workspace-clarity1" defer></script>\n'
         '<script src="/static/legal-links.js" defer></script>\n'
     )
     if "/static/access-portal.js" not in html:

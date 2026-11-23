@@ -108,17 +108,17 @@ def test_login_role_cards_switch_without_a_mutation_loop(browser) -> None:
     page.goto(BASE_URL, wait_until="domcontentloaded")
     page.locator('.hero button[data-open-auth="login"]').click()
 
-    for role, label, short in (
-        ("recruiter", "Recruiter", "Recruiter workspace"),
-        ("institution_admin", "Institution Admin", "Placement office"),
-        ("platform_admin", "Platform Admin", "Platform control"),
-        ("student", "Student", "Student workspace"),
+    for role, label in (
+        ("recruiter", "Recruiter"),
+        ("institution_admin", "Institution Admin"),
+        ("platform_admin", "Platform Admin"),
+        ("student", "Student"),
     ):
         page.locator(f'#login-view [data-access-role="{role}"]').click(timeout=5000)
         assert page.locator('#role-login-form input[name="role"]').input_value() == role
         assert page.locator('#login-view .access-role-card.is-selected').get_attribute("data-access-role") == role
-        assert page.locator('#login-view .access-selection-summary b').inner_text() == label
-        assert page.locator('#login-view .access-selection-summary div > span').inner_text() == short
+        assert page.locator('#login-view .access-selection-summary').count() == 0
+        assert page.locator('#login-view #auth-title').inner_text() == f"{label} sign in"
         assert page.locator('#role-login-form button[type="submit"]').inner_text() == f"Continue to {label}"
         assert page.locator('.placeai-recruiter-login-help').count() == (1 if role == "recruiter" else 0)
 
@@ -502,3 +502,15 @@ def test_role_entry_pages_reload_and_keep_registration_under_the_selected_role(b
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
     finally:
         page.close()
+
+
+def test_homepage_preparation_cards_have_eight_distinct_icons(browser):
+    page = browser.new_page(viewport={'width': 390, 'height': 844})
+    page.goto(BASE_URL, wait_until='domcontentloaded')
+    cards = page.locator('#preparation-lab .preparation-grid article')
+    assert cards.count() == 8
+    assert len(set(cards.locator('.preparation-icon[aria-hidden="true"] path').evaluate_all(
+        "paths => paths.map(path => path.getAttribute('d'))"
+    ))) == 8
+    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
+    page.close()
