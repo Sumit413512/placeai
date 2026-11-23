@@ -24,10 +24,10 @@
   function goalForm(plan){return `<details class="study-add-goal"><summary>Add a goal</summary><form data-study-goal-form data-plan="${e(plan.id)}"><label>Activity<select name="kind"><option value="notes">Read notes</option><option value="video">Complete a video course</option><option value="mock">Mock interview practice</option>${plan.roadmap_id?'<option value="milestone">Roadmap outcome</option>':''}<option value="task">My own study task</option></select></label><label data-study-resource-label>Notebook<select name="resource_id">${options(catalog.notes)}</select></label><label data-study-title-label hidden>Task description<input name="title" maxlength="240"></label><label data-study-target-label hidden>Target sessions or units<input name="target" type="number" min="1" max="1000" value="15" required></label><button class="button button-primary" type="submit">Add goal</button><p role="status"></p></form></details>`;}
   function goalCard(goal){return `<article class="study-goal" data-goal="${e(goal.id)}"><div><small>${e({notes:'Notes',video:'Video + quiz',mock:'Completed interviews',milestone:'Roadmap outcome',task:'Self-reported task'}[goal.kind])}</small><h3>${e(goal.title)}</h3><p>${goal.unavailable?'Resource unavailable. Restore deleted notes to continue.':`${goal.completed} of ${goal.target} ${goal.kind==='notes'?'sections':goal.kind==='mock'?'sessions':'units'} complete`}</p>${goal.kind==='notes'&&goal.resume?.section?`<p>Last opened: section ${e(goal.resume.section)}</p>`:''}<progress max="100" value="${goal.percent}" aria-label="${e(goal.title)} completion"></progress><span>${goal.percent}% complete</span></div><div class="study-goal-actions">${goal.resume&&!goal.unavailable?`<button class="button button-secondary" data-study-resume="${e(goal.id)}">${goal.kind==='mock'?'Practise':'Continue'}</button>`:''}${goal.kind==='notes'&&!goal.unavailable?`<button class="button button-secondary" data-study-offline="${e(goal.resource_id)}">Update PDF reading</button>`:''}${goal.manual?`<form data-study-manual-form data-goal="${e(goal.id)}"><label>Completed units<input name="completed" type="number" min="0" max="${goal.target}" value="${goal.completed}" required></label><button class="button button-secondary" type="submit">Save</button></form>`:''}<button class="study-text-button" data-study-remove="${e(goal.id)}">Remove goal</button></div></article>`;}
   const metrics = {
-    minutes: { label:'Study time', unit:'min', limit:3360, view:'learning-hub', action:'Open Learning Hub' },
-    notes: { label:'Note sections', unit:'sections', limit:500, view:'learning-hub', action:'Open Learning Hub' },
-    lessons: { label:'Video lessons + quizzes', unit:'lessons', limit:500, view:'learning-hub', action:'Open Learning Hub' },
-    mocks: { label:'Mock interviews', unit:'interviews', limit:100, view:'mock-interview', action:'Open interview coach' }
+    minutes: { label:'Study time', unit:'min', singular:'min', limit:3360, view:'learning-hub', action:'Open Learning Hub' },
+    notes: { label:'Note sections', unit:'sections', singular:'section', limit:500, view:'learning-hub', action:'Open notes' },
+    lessons: { label:'Video lessons + quizzes', unit:'lessons', singular:'lesson', limit:500, view:'learning-hub', action:'Open video learning' },
+    mocks: { label:'Mock interviews', unit:'interviews', singular:'interview', limit:100, view:'mock-interview', action:'Open interview coach' }
   };
 
   function activityPeriod(label, entries) {
@@ -37,10 +37,11 @@
       <div class="study-period-heading"><h3>${label}</h3>${allMet ? '<strong>All targets met</strong>' : ''}</div>
       <ul>${Object.entries(entries).map(([key, item]) => {
         const metric = metrics[key];
+        const unit = count => count === 1 ? metric.singular : metric.unit;
         return `<li>
-          <div class="study-progress-label"><span>${metric.label}</span><strong>${item.done}${item.target ? ' / ' + item.target : ''} ${metric.unit}</strong></div>
+          <div class="study-progress-label"><span>${metric.label}</span><strong>${item.done}${item.target ? ' / ' + item.target : ''} ${unit(item.target || item.done)}</strong></div>
           ${item.target ? `<progress aria-label="${label}: ${metric.label}" value="${Math.min(item.done,item.target)}" max="${item.target}"></progress>
-          <span class="study-target-detail">${item.left ? item.left + ' ' + metric.unit + ' left' : 'Target met'}${item.left ? ` · <button type="button" class="study-text-button" data-study-open="${metric.view}">${metric.action}</button>` : ''}</span>` : ''}
+          <span class="study-target-detail">${item.left ? item.left + ' ' + unit(item.left) + ' left' : 'Target met'}${item.left ? ` · <button type="button" class="study-text-button" data-study-open="${key}">${metric.action}</button>` : ''}</span>` : ''}
         </li>`;
       }).join('')}</ul>
     </section>`;
@@ -107,10 +108,13 @@
   document.addEventListener('click',async event=>{
     const button=event.target.closest('[data-study-open],[data-study-refresh],[data-study-resume],[data-study-offline],[data-study-remove]');if(!button||!active(epoch)||button.disabled)return;const v=epoch;button.disabled=true;
     try{
-      if(button.dataset.studyOpen)await ctx.navigate(button.dataset.studyOpen);
+      if(button.dataset.studyOpen){
+        if (button.dataset.studyOpen === 'lessons') window.PlaceAIStudySelection = {kind:'video'};
+        await ctx.navigate(metrics[button.dataset.studyOpen].view);
+      }
       else if(button.hasAttribute('data-study-refresh'))await reload();
 
-      else if(button.dataset.studyResume){const goal=overview.plans.flatMap(p=>p.goals).find(g=>g.id===button.dataset.studyResume);if(goal?.resume){window.PlaceAIStudySelection=goal.kind==='notes'?{kind:'notes',id:goal.resource_id,section:goal.resume.section}:{kind:'video',id:goal.resource_id};await ctx.navigate(goal.resume.view);}}
+      else if(button.dataset.studyResume){const goal=overview.plans.flatMap(p=>p.goals).find(g=>g.id===button.dataset.studyResume);if(goal?.resume){if(goal.kind==='notes'||goal.kind==='video')window.PlaceAIStudySelection={kind:goal.kind,id:goal.resource_id,section:goal.resume.section};await ctx.navigate(goal.resume.view);}}
       else if(button.dataset.studyOffline){const data=await ctx.api(`/study-tracker/notes/${encodeURIComponent(button.dataset.studyOffline)}`);if(active(v)){const panel=document.querySelector('#study-offline-panel');panel.innerHTML=`<section class="panel"><h2>Update your PDF reading</h2><p>Select the last section you have finished. This marks it and all earlier sections complete. Offline study time is not recorded.</p><form id="study-offline-form" data-notebook="${e(button.dataset.studyOffline)}"><label>Finished through section<select name="section_key">${data.sections.map(s=>`<option value="${e(s.key)}">${e(s.key+' · '+s.title)}</option>`).join('')}</select></label><button class="button button-primary" type="submit">Mark through this section</button><p role="status"></p></form></section>`;panel.scrollIntoView({block:'center',behavior:'auto'});panel.querySelector('select').focus();}}
       else if(button.dataset.studyRemove){await ctx.api(`/study-tracker/goals/${encodeURIComponent(button.dataset.studyRemove)}`,{method:'DELETE'});if(active(v)){await reload();document.querySelector('#study-status').textContent='Goal removed. Your notes, course and learning progress are unchanged.';}}
     }catch(error){if(active(v))document.querySelector('#study-status').textContent=error.message;}finally{if(button.isConnected)button.disabled=false;}

@@ -298,7 +298,7 @@
     if (requested?.kind === 'video') {
       window.PlaceAIStudySelection = null;
       navigation.querySelector('[data-format="video"]').click();
-      ctx.api(`${apiBase}/${encodeURIComponent(requested.id)}`).then(data => {
+      if (requested.id) ctx.api(`${apiBase}/${encodeURIComponent(requested.id)}`).then(data => {
         if (active()) { current = data.id; showCourse(data); }
       }).catch(error => status(error.message));
     } else if (learningLocation().course) {
