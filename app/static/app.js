@@ -287,7 +287,7 @@
 
   const navByRole = {
     student: [
-      ['Workspace','dashboard','Dashboard'],['Workspace','opportunities','Opportunities'],['Workspace','applications','Applications'],['Campus','drives','Placement drives'],['Campus','interviews','Interviews'],['Campus','offers','Offers'],['Career','readiness','Readiness score'],['Career','roadmap','AI Career Roadmap'],['Career','learning-hub','Learning Hub'],['Career','study-tracker','Study tracker'],['Career','mock-interview','Mock interview coach'],['Career','resume','Resume & AI'],['Career','documents','Document vault'],['Career','assistant','AI placement assistant'],['Planning','calendar','Placement calendar'],['Updates','announcements','Announcements'],['Updates','notifications','Notifications'],['Safety','incidents','Report an issue'],['Account','approvals','Profile approvals'],['Account','profile','Profile']
+      ['Workspace','dashboard','Dashboard'],['Workspace','opportunities','Opportunities'],['Workspace','applications','Applications'],['Campus','drives','Placement drives'],['Campus','interviews','Interviews'],['Campus','offers','Offers'],['Campus','calendar','Placement calendar'],['Career','readiness','Readiness score'],['Career','roadmap','AI Career Roadmap'],['Career','learning-hub','Learning Hub'],['Career','study-tracker','Study tracker'],['Career','mock-interview','Mock interview coach'],['Career','resume','Resume & AI'],['Career','documents','Document vault'],['Career','assistant','AI placement assistant'],['Updates','announcements','Announcements'],['Updates','notifications','Notifications'],['Safety','incidents','Report an issue'],['Account','approvals','Profile approvals'],['Account','profile','Profile']
     ],
     recruiter: [
       ['Workspace','dashboard','Dashboard'],['Hiring','jobs','Jobs'],['Hiring','pipeline','Drive pipeline'],['Hiring','candidates','Candidates'],['Hiring','interviews','Interviews'],['Hiring','offers','Offers'],['Trust','verification','Company verification'],['Collaboration','communications','Placement office messages'],['Insights','analytics','Analytics'],['Insights','assistant','AI placement assistant'],['Updates','notifications','Notifications'],['Account','profile','Company profile']
@@ -308,8 +308,20 @@
       items = [...items, ['Account','billing','Plan & billing']];
     }
     state.nav = items;
+    const canOpen = id => items.some(([,view]) => view === id);
+    $('#announcements-button').hidden = !canOpen('announcements');
+    $('#workspace-tour-button').hidden = state.me.role !== 'student';
+    $$('.topbar-actions .workspace-tool[data-view], [data-issue-history]').forEach(button => {
+      const selected = button.dataset.view === state.view;
+      button.classList.toggle('active', selected);
+      if (selected) button.setAttribute('aria-current','page');
+      else button.removeAttribute('aria-current');
+    });
+    $('#workspace-issue-button')?.toggleAttribute('hidden', state.me.role !== 'student');
     let group = '';
-    $('#app-nav').innerHTML = items.map(([g,id,label]) => {
+    $('#app-nav').innerHTML = items.filter(([,id]) =>
+      id !== 'announcements' && id !== 'notifications' && !(id === 'incidents' && state.me.role === 'student')
+    ).map(([g,id,label]) => {
       const heading = g !== group ? `<div class="nav-group-label">${esc(g)}</div>` : '';
       group = g;
       return `${heading}<button data-view="${id}" class="${state.view === id ? 'active' : ''}">${navIcon(id)}<span class="nav-label">${esc(label)}</span></button>`;
@@ -370,7 +382,7 @@
   }
 
   async function renderNotifications() {
-    setPage('Notifications','Updates'); setContextAction();
+    setPage('Notifications','Workspace'); setContextAction();
     const data = await api('/enterprise/notifications');
     const items = data.items || [];
     $('#app-content').innerHTML = `${pageHead('Notification centre','Review placement updates, deadlines and approvals.')}
@@ -381,10 +393,144 @@
     await updateNotificationBadge();
   }
 
+  const workspaceTourSteps = [
+    { view: 'profile', title: 'Set up your profile', description: 'Add your academic and placement details here. You can come back and finish your profile whenever you’re ready.' },
+    { view: 'learning-hub', title: 'Find the Learning Hub', description: 'Open course notes, video lessons and quizzes from one place.' },
+    { view: 'study-tracker', title: 'Plan your study sessions', description: 'Set a study goal and see what you have completed.' },
+    { view: 'calendar', title: 'See what’s coming up', description: 'Use the Campus calendar for placement drives, deadlines and interviews.' },
+    { view: 'announcements', title: 'Read placement announcements', description: 'The megaphone in the top bar opens official placement-office announcements.' },
+  ];
+  let workspaceTour = null;
+  const tourKey = () => `placeai.workspace-tour.v1.${state.me.id}`;
+
+  function workspaceTourSeen() {
+    try { return localStorage.getItem(tourKey()) === 'seen'; }
+    catch { return false; }
+  }
+
+  function closeWorkspaceTour(markSeen = true, restoreFocus = true) {
+    if (!workspaceTour) return;
+    if (markSeen) {
+      try { localStorage.setItem(tourKey(), 'seen'); } catch {}
+    }
+    workspaceTour.card.remove();
+    workspaceTour.target?.classList.remove('workspace-tour-target');
+    workspaceTour = null;
+    if (restoreFocus) $('#workspace-tour-button').focus();
+  }
+
+  function renderWorkspaceTour() {
+    const tour = workspaceTour;
+    const step = tour.steps[tour.index];
+    tour.step = step;
+    tour.target?.classList.remove('workspace-tour-target');
+    const button = state.view === step.view ? $('#app-content .page-head h1') :
+      step.view === 'announcements' ? $('#announcements-button') : $(`#app-nav [data-view="${step.view}"]`);
+    const frame = button?.getBoundingClientRect();
+    tour.target = frame?.width && frame.right > 0 && frame.left >= 0 && frame.top >= 0 && frame.bottom < innerHeight
+      ? button : null;
+    tour.target?.classList.add('workspace-tour-target');
+    tour.card.innerHTML = `<div class="workspace-tour-step">${navIcon(step.view)} Step ${tour.index + 1} of ${tour.steps.length}</div><h2 id="workspace-tour-title">${esc(step.title)}</h2><p>${esc(step.description)}</p><div class="workspace-tour-actions"><button type="button" class="row-button" data-tour="skip">Skip tour</button><button type="button" class="row-button" data-tour="open">Open section</button><button type="button" class="row-button primary" data-tour="next">${tour.index + 1 === tour.steps.length ? 'Done' : 'Next'}</button></div>`;
+    if (tour.focus) $('[data-tour="next"]', tour.card).focus({preventScroll:true});
+  }
+
+  function startWorkspaceTour(focus = true) {
+    if (state.me?.role !== 'student' || !state.me.id || workspaceTour) return;
+    $('#workspace-issue-panel')?.toggleAttribute('hidden', true);
+    $('#workspace-issue-button')?.setAttribute('aria-expanded','false');
+    const steps = workspaceTourSteps.filter(step => state.nav.some(([,view]) => view === step.view));
+    if (!steps.length) return;
+    const card = document.createElement('section');
+    card.className = 'workspace-tour-card';
+    card.setAttribute('aria-labelledby','workspace-tour-title');
+    workspaceTour = {card, steps, index: 0, focus};
+    document.body.append(card);
+    card.addEventListener('keydown', event => {
+      if (event.key === 'Escape') closeWorkspaceTour();
+    });
+    card.addEventListener('click', async event => {
+      const action = event.target.closest('[data-tour]')?.dataset.tour;
+      if (!workspaceTour || !action) return;
+      const tour = workspaceTour;
+      if (action === 'skip' || (action === 'next' && tour.index === tour.steps.length - 1)) return closeWorkspaceTour();
+      if (action === 'open') {
+        await navigate(tour.step.view);
+        if (workspaceTour === tour) renderWorkspaceTour();
+        return;
+      }
+      tour.index++;
+      tour.focus = true;
+      renderWorkspaceTour();
+    });
+    renderWorkspaceTour();
+  }
+
+  function issueForm(id) {
+    return `<form id="${id}" class="form-stack"><label class="field-label">Category<select class="field-input" name="category"><option>suspicious recruiter</option><option>misleading CTC</option><option>payment demand</option><option>inappropriate interview behaviour</option><option>fake job</option><option>offer discrepancy</option></select></label><label class="field-label">Describe what happened<textarea class="field-input" name="description" rows="5" minlength="5" maxlength="10000" required></textarea></label><label class="check-label"><input type="checkbox" name="confidential" checked> Keep this confidential to authorized placement administrators</label><button class="button button-primary">Submit report</button></form>`;
+  }
+
+  function submitIssueReport(fields) {
+    return api('/enterprise/incidents', {method:'POST', body:JSON.stringify({
+      category:fields.get('category'), description:fields.get('description').trim(), confidential:fields.has('confidential')
+    })});
+  }
+
+  function mountWorkspaceTools() {
+    const tour = $('#workspace-tour-button');
+    const announcements = $('#announcements-button');
+    const notifications = $('#notifications-button');
+    tour.innerHTML = `${navIcon('assistant')}<span class="workspace-tool-label">Tour</span>`;
+    announcements.innerHTML = `${navIcon('announcements')}<span class="workspace-tool-label">Announcements</span>`;
+    if (!$('.nav-icon', notifications)) notifications.insertAdjacentHTML('afterbegin',navIcon('notifications'));
+    if (state.me.role !== 'student' || $('#workspace-issue-button')) return;
+    const launcher = document.createElement('button');
+    launcher.type = 'button';
+    launcher.id = 'workspace-issue-button';
+    launcher.setAttribute('aria-expanded','false');
+    launcher.setAttribute('aria-controls','workspace-issue-panel');
+    launcher.innerHTML = `${navIcon('incidents')} Report an issue`;
+    const panel = document.createElement('section');
+    panel.id = 'workspace-issue-panel';
+    panel.hidden = true;
+    panel.setAttribute('aria-labelledby','workspace-issue-title');
+    panel.innerHTML = `<header><h2 id="workspace-issue-title">Report an issue</h2><button type="button" class="row-button" data-issue-minimize aria-label="Minimize issue report">−</button></header>${issueForm('workspace-issue-form')}<p class="workspace-issue-status" role="status"></p><button type="button" class="row-button" data-issue-history data-view="incidents">View my reports</button>`;
+    document.body.append(launcher, panel);
+    const setOpen = open => {
+      panel.hidden = !open;
+      launcher.setAttribute('aria-expanded', String(open));
+      (open ? $('[data-issue-minimize]',panel) : launcher).focus();
+    };
+    launcher.onclick = () => {
+      closeWorkspaceTour(false, false);
+      setOpen(panel.hidden);
+    };
+    $('[data-issue-minimize]',panel).onclick = () => setOpen(false);
+    $('[data-issue-history]',panel).onclick = () => setOpen(false);
+    panel.addEventListener('keydown', event => { if (event.key === 'Escape') setOpen(false); });
+    const form = $('#workspace-issue-form',panel);
+    form.onsubmit = async event => {
+      event.preventDefault();
+      const button = $('button[type="submit"], button:not([type])',form);
+      if (button.disabled) return;
+      const fields = new FormData(form);
+      const status = $('.workspace-issue-status',panel);
+      if (fields.get('description').trim().length < 5) { status.textContent = 'Describe what happened in at least five characters.'; return; }
+      button.disabled = true;
+      status.textContent = 'Submitting report…';
+      try {
+        await submitIssueReport(fields);
+        form.reset();
+        status.textContent = 'Report submitted. You can follow its status in My reports.';
+      } catch (error) {
+        status.textContent = error.message || 'The report could not be submitted. Please try again.';
+      } finally { button.disabled = false; }
+    };
+  }
+
   let bootWorkspaceCompleted = false;
   let bootWorkspaceInFlight = null;
 
-  function bootWorkspace() {
+  function bootWorkspace({ interactive = false } = {}) {
     if (bootWorkspaceCompleted) return Promise.resolve(true);
     if (bootWorkspaceInFlight) return bootWorkspaceInFlight;
     const run = (async () => {
@@ -419,7 +565,9 @@
     }
     const opensVideoCourse = state.me.role === 'student' && workspaceLink.get('view') === 'learning-hub'
       && workspaceLink.has('course');
+    mountWorkspaceTools();
     await navigate(opensVideoCourse ? 'learning-hub' : 'dashboard');
+    if (interactive && !opensVideoCourse && state.me.role === 'student' && !workspaceTourSeen()) startWorkspaceTour(false);
     return true;
     })();
     bootWorkspaceInFlight = run;
@@ -444,7 +592,7 @@
       if (bootWorkspaceInFlight) await bootWorkspaceInFlight.catch(() => false);
       state.token = session.access_token;
       bootWorkspaceCompleted = false;
-      if (!await bootWorkspace()) {
+      if (!await bootWorkspace({ interactive: true })) {
         showAuth('login');
         throw new Error('Your session could not be opened. Please try signing in again.');
       }
@@ -453,6 +601,7 @@
   });
 
   async function navigate(view) {
+    if (workspaceTour && view !== workspaceTour.step?.view) closeWorkspaceTour(false, false);
     const epoch = ++navigationEpoch;
     const premiumViews = new Set(['readiness','mock-interview','resume','documents','assistant']);
     if (state.me?.role === 'student' && state.studentAccess?.student_kind === 'independent' && premiumViews.has(view) && !state.studentAccess.premium_access) {
@@ -939,6 +1088,7 @@
       else if(a==='logout'){await fetch('/auth/logout',{method:'POST',credentials:'include'});state.token='';location.href='/';}
       else if(a==='reload-view')navigate(state.view);
       else if(a==='open-notifications')navigate('notifications');
+      else if(a==='start-workspace-tour')startWorkspaceTour();
       else if(a==='open-help-centre')window.open('/static/help.html','_blank','noopener');
       else if(a==='open-job-form')openJobForm();
       else if(a==='open-student-form')openStudentForm();
@@ -1048,8 +1198,8 @@
   document.addEventListener('submit',async e=>{
     const f=e.target; e.preventDefault(); const fd=new FormData(f); const obj=Object.fromEntries(fd.entries());
     try{
-      if(f.id==='login-form'){const data=await api('/auth/login-json',{method:'POST',body:JSON.stringify({email:obj.email,password:obj.password})},false);state.token=data.access_token;closeAuth();await bootWorkspace();toast('Signed in');}
-      else if(f.id==='signup-form'){const data={username:obj.username,email:obj.email,password:obj.password,role:'student',organization_slug:obj.organization_slug||null};const registration=await api('/auth/signup',{method:'POST',body:JSON.stringify(data)},false);if(registration.verification_required){f.reset();window.PlaceAIVerification.showPending(obj.email,registration.message);return;}const login=await api('/auth/login-json',{method:'POST',body:JSON.stringify({email:obj.email,password:obj.password})},false);state.token=login.access_token;closeAuth();await bootWorkspace();if(obj.full_name)await api('/students/profile',{method:'PUT',body:JSON.stringify({full_name:obj.full_name})});toast('Student account created');}
+      if(f.id==='login-form'){const data=await api('/auth/login-json',{method:'POST',body:JSON.stringify({email:obj.email,password:obj.password})},false);state.token=data.access_token;closeAuth();await bootWorkspace({ interactive: true });toast('Signed in');}
+      else if(f.id==='signup-form'){const data={username:obj.username,email:obj.email,password:obj.password,role:'student',organization_slug:obj.organization_slug||null};const registration=await api('/auth/signup',{method:'POST',body:JSON.stringify(data)},false);if(registration.verification_required){f.reset();window.PlaceAIVerification.showPending(obj.email,registration.message);return;}const login=await api('/auth/login-json',{method:'POST',body:JSON.stringify({email:obj.email,password:obj.password})},false);state.token=login.access_token;closeAuth();await bootWorkspace({ interactive: true });if(obj.full_name)await api('/students/profile',{method:'PUT',body:JSON.stringify({full_name:obj.full_name})});toast('Student account created');}
       else if(f.id==='forgot-form'){await api('/auth/forgot-password',{method:'POST',body:JSON.stringify({email:obj.email})},false);toast('Request accepted','If the account exists, reset instructions will be sent.');showAuth('login');}
       else if(f.id==='student-profile-form'){const num=(v)=>v!==''&&v!=null?Number(v):null;const customValues={};for(const [k,v] of Object.entries(obj)){if(k.startsWith('custom__')){customValues[k.slice(8)]=String(v??'');delete obj[k];}}const data={...obj,skills:String(obj.skills||'').split(',').map(x=>x.trim()).filter(Boolean),certifications:String(obj.certifications||'').split(',').map(x=>x.trim()).filter(Boolean),desired_roles:String(obj.desired_roles||'').split(',').map(x=>x.trim()).filter(Boolean),graduation_year:num(obj.graduation_year),current_semester:num(obj.current_semester),cgpa:num(obj.cgpa),tenth_percentage:num(obj.tenth_percentage),twelfth_percentage:num(obj.twelfth_percentage),diploma_percentage:num(obj.diploma_percentage),active_backlogs:num(obj.active_backlogs),historical_backlogs:num(obj.historical_backlogs),academic_gap_months:num(obj.academic_gap_months)};await api('/students/profile',{method:'PUT',body:JSON.stringify(data)});if(state.profile?.id&&Object.keys(customValues).length)await api(`/enterprise/custom-fields/values/${state.profile.id}`,{method:'PUT',body:JSON.stringify({values:customValues})});toast('Profile saved','Verified academic changes may appear under Profile approvals until your placement office reviews them.');navigate('profile');}
       else if(f.id==='recruiter-profile-form'){await api('/recruiters/profile',{method:'PUT',body:JSON.stringify(obj)});toast('Company profile saved');navigate('profile');}
@@ -1101,11 +1251,11 @@
       setPage('AI placement assistant','Role-aware intelligence');
       $('#app-content').innerHTML=`${pageHead('AI Placement Assistant','Ask questions using only your authorized PlaceAI context.')}<div class="assistant-layout"><section class="assistant-card"><div id="assistant-transcript" class="assistant-transcript"><div class="assistant-message system"><strong>PlaceAI Assistant</strong><p>Ask about eligible drives, application status, upcoming interviews, resume preparation or your next actions.</p></div></div><form id="assistant-form" class="assistant-input"><textarea name="message" rows="3" placeholder="Which drives am I eligible for, and what should I prepare next?" required></textarea><button class="button button-primary">Ask PlaceAI</button></form></section><aside class="panel prompt-library"><h2>Useful questions</h2>${['Which drives am I eligible for?','Why am I not eligible for a drive?','Which roles match my skills?','When is my next interview?','What should I improve before my next application?'].map(q=>`<button data-action="assistant-suggestion" data-value="${esc(q)}">${esc(q)}</button>`).join('')}</aside></div>`;
     } else if(view==='calendar'){
-      setPage('Placement calendar','Planning'); const events=await api('/enterprise/calendar'); $('#app-content').innerHTML=`${pageHead('Placement calendar','Registration deadlines, drives, interviews, announcements and joining dates in one timeline.')}${featurePanel('Upcoming placement events',`${events.length} scheduled item${events.length===1?'':'s'}.`,timeline(events))}`;
+      setPage('Placement calendar','Campus'); const events=await api('/enterprise/calendar'); $('#app-content').innerHTML=`${pageHead('Placement calendar','Registration deadlines, drives, interviews, announcements and joining dates in one timeline.')}${featurePanel('Upcoming placement events',`${events.length} scheduled item${events.length===1?'':'s'}.`,timeline(events))}`;
     } else if(view==='announcements'){
       setPage('Announcements','Updates'); const rows=await api('/enterprise/announcements'); $('#app-content').innerHTML=`${pageHead('Placement announcements','Official communication from your placement office.')}${rows.length?`<div class="announcement-list">${rows.map(a=>`<article class="announcement-card"><div><span class="priority-label priority-${esc(a.priority)}">${esc(a.priority)}</span><small>${fmtDate(a.created_at)}</small></div><h3>${esc(a.title)}</h3><p>${esc(a.body)}</p></article>`).join('')}</div>`:emptyState('AN','No announcements','Institution announcements targeted to your batch will appear here.')}`;
     } else if(view==='incidents'){
-      setPage('Report an issue','Placement safety'); const rows=await api('/enterprise/incidents'); $('#app-content').innerHTML=`${pageHead('Confidential incident reporting','Report suspicious recruiters, payment demands, misleading job information or offer discrepancies.')}<div class="two-panel"><form id="incident-form" class="form-panel"><h2>New confidential report</h2><label class="field-label">Category<select class="field-input" name="category"><option>suspicious recruiter</option><option>misleading CTC</option><option>payment demand</option><option>inappropriate interview behaviour</option><option>fake job</option><option>offer discrepancy</option></select></label><label class="field-label">Describe what happened<textarea class="field-input" name="description" rows="6" required></textarea></label><label class="check-label"><input type="checkbox" name="confidential" checked> Keep this confidential to authorized placement administrators</label><button class="button button-primary">Submit report</button></form>${featurePanel('Your reports','Status is visible only to you and authorized institution staff.',rows.length?`<div class="activity-list">${rows.map(x=>`<div class="activity-item"><span class="activity-icon">!</span><div><strong>${esc(x.category)}</strong><small>${esc(x.description.slice(0,100))}</small></div>${statusBadge(x.status)}</div>`).join('')}</div>`:emptyState('IR','No reports submitted','Your submitted incident reports will appear here.'))}</div>`;
+      setPage('Report an issue','Placement safety'); const rows=await api('/enterprise/incidents'); $('#app-content').innerHTML=`${pageHead('Confidential incident reporting','Report suspicious recruiters, payment demands, misleading job information or offer discrepancies.')}<div class="two-panel"><div class="form-panel"><h2>New confidential report</h2>${issueForm('incident-form')}</div>${featurePanel('Your reports','Status is visible only to you and authorized institution staff.',rows.length?`<div class="activity-list">${rows.map(x=>`<div class="activity-item"><span class="activity-icon">!</span><div><strong>${esc(x.category)}</strong><small>${esc(x.description.slice(0,100))}</small></div>${statusBadge(x.status)}</div>`).join('')}</div>`:emptyState('IR','No reports submitted','Your submitted incident reports will appear here.'))}</div>`;
     } else if(view==='approvals'){
       setPage('Profile approvals','Account'); const rows=await api('/enterprise/profile-change-requests'); $('#app-content').innerHTML=`${pageHead('Profile approval requests','Academic changes that require institution verification are tracked here.')}${rows.length?enterpriseTable(['Field','Current','Requested','Status','Requested'],rows.map(r=>`<tr><td>${esc(r.field_name.replaceAll('_',' '))}</td><td>${esc(r.old_value||'—')}</td><td>${esc(r.new_value||'—')}</td><td>${statusBadge(r.status)}</td><td>${fmtDate(r.created_at)}</td></tr>`).join('')):emptyState('PA','No profile changes pending','Changes to verified academic fields will appear here for review.')}`;
     }
@@ -1315,7 +1465,7 @@
       else if(f.id==='thread-attachment-form'){const file=$('#thread-attachment-file')?.files[0];if(!file)throw new Error('Choose a document first');const body=new FormData();body.append('file',file);const note=String(o.message||'').trim();await api(`/enterprise/communications/${o.thread_id}/attachments?message=${encodeURIComponent(note||'Shared a placement document.')}`,{method:'POST',body});toast('Document attached');await openThread(o.thread_id);}
       else if(f.id==='pipeline-stage-form'){await api(`/enterprise/drives/${o.drive_id}/pipeline`,{method:'POST',body:JSON.stringify({name:o.name,stage_type:o.stage_type})});toast('Pipeline stage added');await openPipeline(o.drive_id);}
       else if(f.id==='interview-evaluation-form'){const data={technical_knowledge:o.technical_knowledge?Number(o.technical_knowledge):null,communication:o.communication?Number(o.communication):null,problem_solving:o.problem_solving?Number(o.problem_solving):null,role_fit:o.role_fit?Number(o.role_fit):null,recommendation:o.recommendation,notes:o.notes};await api(`/enterprise/interviews/${o.interview_id}/evaluation`,{method:'PUT',body:JSON.stringify(data)});closeModal();toast('Human evaluation saved');navigate('interviews');}
-      else if(f.id==='incident-form'){await api('/enterprise/incidents',{method:'POST',body:JSON.stringify({category:o.category,description:o.description,confidential:fd.has('confidential')})});toast('Incident report submitted');navigate('incidents');}
+      else if(f.id==='incident-form'){await submitIssueReport(fd);toast('Incident report submitted');navigate('incidents');}
       else if(f.id==='notification-preferences-form'){await api('/enterprise/notification-preferences',{method:'PUT',body:JSON.stringify({in_app:fd.has('in_app'),email:fd.has('email'),whatsapp:fd.has('whatsapp'),sms:fd.has('sms'),high_priority_only_external:fd.has('high_priority_only_external')})});closeModal();toast('Notification preferences saved');}
     }catch(err){apiErrors.applyToForm(f,err);toast('Could not complete request',err.message,'error');}
   });

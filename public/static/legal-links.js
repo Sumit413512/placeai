@@ -4,7 +4,7 @@
   function loadProductionPolish() {
     if (window.__PLACEAI_PRODUCTION_POLISH_LOADED__ || document.querySelector('script[data-placeai-production-polish]')) return;
     const script = document.createElement('script');
-    script.src = '/static/production-polish.js';
+    script.src = '/static/production-polish.js?v=20261123-student-guidance1';
     script.defer = true;
     script.dataset.placeaiProductionPolish = '';
     document.head.appendChild(script);

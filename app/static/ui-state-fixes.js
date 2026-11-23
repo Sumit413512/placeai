@@ -172,7 +172,7 @@
   }
 
   function findNavButton(view) {
-    return [...document.querySelectorAll('#app-nav button[data-view]')]
+    return [...document.querySelectorAll('#app-nav button[data-view], .topbar-actions button[data-view]:not([hidden]), [data-issue-history]')]
       .find(item => item.dataset.view === view) || null;
   }
 
@@ -204,7 +204,7 @@
 
   function rememberActiveWorkspaceView() {
     if (restoringInitialView || !workspaceReady()) return;
-    const active = document.querySelector('#app-nav button.active[data-view]');
+    const active = document.querySelector('#app-nav button.active[data-view], .topbar-actions button.active[data-view]:not([hidden]), [data-issue-history].active');
     if (active) rememberView(active.dataset.view);
   }
 

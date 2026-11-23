@@ -9,7 +9,7 @@
   };
 
   const ROLE_SECONDARY_VIEWS = Object.freeze({
-    student: new Set(['documents','assistant','calendar','announcements','notifications','incidents','approvals','profile']),
+    student: new Set(['documents','assistant','approvals']),
     recruiter: new Set(['communications','analytics','assistant','notifications','profile']),
     institution_admin: new Set(['institution-access-requests','verification','attendance','calendar','announcements','communications','policies','custom-fields','incidents','reports','notifications','audit']),
     platform_admin: new Set()

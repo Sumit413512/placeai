@@ -185,3 +185,80 @@ def test_notifications_keep_dates_and_actions_readable(browser, width):
     assert button['height'] >= 44
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
     page.close()
+
+
+def test_student_guidance_topbar_and_minimizable_report(browser):
+    page = browser.new_page(viewport={'width': 390, 'height': 844})
+    page.add_init_script("localStorage.setItem('placeai.analytics.preference.v1','declined')")
+    signed_in = False
+    submitted = []
+
+    def respond(route):
+        path = route.request.url.split(BASE_URL, 1)[-1].split('?', 1)[0]
+        data = {}
+        if path in {'/auth/me', '/auth/refresh'} and not signed_in:
+            route.fulfill(status=401, json={})
+            return
+        if path == '/auth/me':
+            data = {'id': 'guidance-test', 'username': 'Tour student', 'role': 'student'}
+        elif path == '/billing/status':
+            data = {'student_kind': 'institution', 'premium_access': True}
+        elif path == '/enterprise/notifications':
+            data = {'items': [], 'unread': 2}
+        elif path == '/intelligence/student/actions':
+            data = {'actions': []}
+        elif path == '/students/dashboard':
+            data = {'profile_completion': 0, 'applications': 0}
+        elif path == '/enterprise/incidents' and route.request.method == 'POST':
+            submitted.append(route.request.post_data_json)
+            route.fulfill(status=201, json={'id': 'case-test', 'status': 'open'})
+            return
+        elif path in {'/students/jobs', '/students/applications', '/enterprise/custom-fields',
+                      '/enterprise/announcements', '/enterprise/incidents'}:
+            data = []
+        route.fulfill(json=data)
+
+    for prefix in ('auth', 'billing', 'students', 'intelligence', 'enterprise', 'ai'):
+        page.route(f'**/{prefix}/**', respond)
+    page.goto(BASE_URL, wait_until='networkidle')
+    signed_in = True
+    page.evaluate("() => window.PlaceAIAuth.completeSignIn({access_token:'synthetic-fixture-token'})")
+    tour = page.locator('.workspace-tour-card')
+    assert tour.get_by_role('heading', name='Set up your profile').is_visible()
+    tour.get_by_role('button', name='Open section').click()
+    page.get_by_role('heading', name='Student profile', exact=True).wait_for()
+    tour.get_by_role('button', name='Next').click()
+    assert tour.get_by_role('heading', name='Find the Learning Hub').is_visible()
+    tour.get_by_role('button', name='Skip tour').click()
+    assert tour.count() == 0
+    assert page.evaluate("localStorage.getItem('placeai.workspace-tour.v1.guidance-test')") == 'seen'
+    page.get_by_role('button', name='Workspace tour', exact=True).click()
+    assert tour.get_by_role('heading', name='Set up your profile').is_visible()
+    page.keyboard.press('Escape')
+    assert tour.count() == 0
+    assert page.locator('#app-nav [data-view="announcements"], #app-nav [data-view="notifications"]').count() == 0
+    assert page.locator('#notification-count').is_visible()
+    page.get_by_role('button', name='Announcements', exact=True).click()
+    page.get_by_role('heading', name='Placement announcements', exact=True).wait_for()
+    page.get_by_role('button', name='Notifications', exact=True).click()
+    page.get_by_role('heading', name='Notification centre', exact=True).wait_for()
+    assert page.locator('#app-nav [data-view="calendar"]').evaluate(
+        'el => {let prev=el.previousElementSibling;while(prev&&!prev.matches(".nav-group-label"))prev=prev.previousElementSibling;return prev.textContent}'
+    ) == 'Campus'
+
+    report = page.locator('#workspace-issue-panel')
+    launch = page.get_by_role('button', name='Report an issue', exact=True)
+    launch.click()
+    report.get_by_label('Describe what happened').fill('Test draft stays in the drawer.')
+    report.get_by_role('button', name='Minimize issue report').click()
+    assert report.is_hidden()
+    assert launch.get_attribute('aria-expanded') == 'false'
+    launch.click()
+    assert report.get_by_label('Describe what happened').input_value() == 'Test draft stays in the drawer.'
+    report.get_by_role('button', name='Submit report').click()
+    report.get_by_text('Report submitted.', exact=False).wait_for()
+    assert submitted == [{'category': 'suspicious recruiter', 'description': 'Test draft stays in the drawer.', 'confidential': True}]
+    report.get_by_role('button', name='View my reports').click()
+    page.get_by_role('heading', name='Confidential incident reporting', exact=True).wait_for()
+    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
+    page.close()

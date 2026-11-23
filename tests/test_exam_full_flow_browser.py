@@ -48,9 +48,13 @@ DEVICES = r"""() => {
   navigator.mediaDevices.getDisplayMedia=async()=>canvas.captureStream(5);
   Object.defineProperty(window.screen,'isExtended',{value:false});
   window.SpeechSynthesisUtterance=class {constructor(text){this.text=text;}};
-  window.spokenTexts=[];window.stallNarration=false;
+  window.spokenTexts=[];window.stallNarration=false;window.hrPhases=[];
   Object.defineProperty(window,'speechSynthesis',{value:{cancel(){},resume(){},speak(u){
-    spokenTexts.push(u.text);setTimeout(()=>u.onstart?.(),1);
+    spokenTexts.push(u.text);setTimeout(()=>{
+      u.onstart?.();
+      const interviewer=document.querySelector('.hr-interviewer');
+      if(interviewer)hrPhases.push(interviewer.dataset.phase);
+    },1);
     if(!stallNarration)setTimeout(()=>u.onend?.(),10);
   }}});
 }"""
@@ -114,6 +118,9 @@ def test_complete_exam_has_same_protection_and_real_recordings(browser, exams, l
             page.wait_for_function("qid => examTest.state.answerClip?.questionId===qid && examTest.state.answerClip.recorder.state==='recording'",arg=q["question_id"])
             assert page.locator("#spoken-mic-label").inner_text().lower()=="microphone on · listening"
             assert page.evaluate("examTest.state.answerClip.recorder.stream.getVideoTracks().length")==int(q["response_mode"]=="video")
+            if q["response_mode"] == "video":
+                expect(page.locator(".hr-interviewer")).to_have_attribute("data-phase", "listening")
+                expect(page.locator(".hr-interviewer-state")).to_have_text("Listening to your answer")
             page.wait_for_timeout(160)
             recorded.append(q["question_id"])
             page.evaluate("stallNarration=false")
@@ -142,6 +149,7 @@ def test_complete_exam_has_same_protection_and_real_recordings(browser, exams, l
             assert page.evaluate("examTest.state.mediaStream.getVideoTracks()[0].id")==camera
     expect(page.locator("#retry-analysis")).to_be_visible(timeout=15000)
     assert len(recorded)==12 and len(submitted)==1
+    assert "speaking" in page.evaluate("hrPhases")
     assert len(submitted[0]["answers"])==50
     engine=create_engine("sqlite:///"+str(local_server))
     with Session(engine) as db:

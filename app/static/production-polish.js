@@ -81,7 +81,8 @@
     const nav = document.querySelector('#app-nav');
     if (!shell || shell.classList.contains('hidden') || !nav) return;
 
-    const buttons = [...nav.querySelectorAll('button[data-view]')];
+    const buttons = [...nav.querySelectorAll('button[data-view]'),
+      ...document.querySelectorAll('.topbar-actions button[data-view]:not([hidden]), [data-issue-history]')];
     if (!buttons.length) return;
     const allowed = new Set(buttons.map(button => button.dataset.view).filter(Boolean));
     const role = (document.querySelector('#sidebar-user-role')?.textContent || '')
@@ -98,7 +99,7 @@
 
     const content = document.querySelector('#app-content');
     const dashboard = nav.querySelector('button[data-view="dashboard"]');
-    const active = nav.querySelector('button.active[data-view]');
+    const active = buttons.find(button => button.classList.contains('active'));
     const activeValid = Boolean(active?.dataset.view && allowed.has(active.dataset.view));
     const loading = Boolean(content?.querySelector('.loading-state'));
     const unsupportedLoadingView = loading && !activeValid;
