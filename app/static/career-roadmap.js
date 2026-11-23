@@ -73,15 +73,18 @@
     return list ? '<section class="roadmap-support-section"><h2>' + esc(title) + '</h2>' + list + '</section>' : '';
   }
 
-  // Supplementary notes stay compact on screen and remain available in exports.
+  // Print only the roadmap, starting with its simple one-page visual cover.
   let printExpandedNotes = [];
   window.addEventListener('beforeprint', () => {
-    printExpandedNotes = [...document.querySelectorAll('.roadmap-market-notes:not([open])')];
+    if (!root()?.querySelector('.roadmap-print-cover')) return;
+    document.body.classList.add('roadmap-printing');
+    printExpandedNotes = [...root().querySelectorAll('.roadmap-market-notes:not([open]), .roadmap-research-notes:not([open]), .roadmap-evidence:not([open])')];
     printExpandedNotes.forEach(details => { details.open = true; });
   });
   window.addEventListener('afterprint', () => {
     printExpandedNotes.forEach(details => { details.open = false; });
     printExpandedNotes = [];
+    document.body.classList.remove('roadmap-printing');
   });
 
   function phaseHtml(phase, esc) {
@@ -146,63 +149,68 @@
     const sources = Array.isArray(data.sources) ? data.sources : [];
     const targets = Array.isArray(market.target_roles) && market.target_roles.length ? market.target_roles : (Array.isArray(input.target_roles) ? input.target_roles : []);
     const target = targets[0] || data.title || 'Your target role';
+    const region = market.region || data.market_region || input.market_region || 'India';
     const currentSkills = new Set((Array.isArray(input.current_skills) ? input.current_skills : []).map(normalizeSkill));
     const priorityGaps = (Array.isArray(market.in_demand_skills) ? market.in_demand_skills : [])
-      .filter(skill => !currentSkills.has(normalizeSkill(skill)))
-      .slice(0, 8);
+      .filter(skill => !currentSkills.has(normalizeSkill(skill))).slice(0, 6);
     const firstPhase = phases[0] || {};
-    const firstProject = Array.isArray(firstPhase.projects) ? firstPhase.projects[0] : null;
     const marketSignals = Array.isArray(market.demand_signals) ? market.demand_signals.slice(0, 5) : [];
     const marketNotes = Array.isArray(market.market_notes) ? market.market_notes.slice(0, 4) : [];
+    const stat = (label, value, suffix) => '<div class="roadmap-cover-stat"><small>' + esc(label) + '</small><strong>' + esc(value) + '</strong><span>' + esc(suffix) + '</span></div>';
+    const phaseChart = phases.length ? phases.map((phase, index) =>
+      '<li class="roadmap-journey-node roadmap-journey-tone-' + (index % 4) + '"><span class="roadmap-journey-number">' +
+      esc(String(index + 1).padStart(2, '0')) + '</span><div><strong>' + esc(phase.name || 'Learning phase') +
+      '</strong><small>' + esc(phase.days || 0) + ' days</small></div></li>'
+    ).join('') : '<li class="roadmap-journey-empty">Your learning phases will appear here when your roadmap is ready.</li>';
 
-    return '<section class="roadmap-focus-panel">' +
-      '<div class="roadmap-focus-copy"><span class="section-kicker">YOUR NEXT MOVE</span><h2>' + esc(firstPhase.name || 'Start with your first learning phase') + '</h2>' +
-      '<p>' + esc(firstPhase.milestone || 'Follow the first phase, complete the practice tasks, and move forward only after you can demonstrate the milestone.') + '</p>' +
-      '<div class="roadmap-focus-actions"><span><strong>' + esc(firstPhase.days || '—') + '</strong> days in this phase</span>' +
-      (firstProject ? '<span><strong>1st project</strong> ' + esc(firstProject.title || 'Portfolio project') + '</span>' : '') + '</div></div>' +
-      '<div class="roadmap-target-card"><small>Target</small><strong>' + esc(target) + '</strong><span>' + esc(market.region || data.market_region || 'India') + '</span></div>' +
-    '</section>' +
-
-    '<div class="metric-grid roadmap-summary-grid">' +
-      '<article class="metric-card"><small>Total plan</small><strong>' + esc(data.estimated_days || '—') + '</strong><span>estimated days</span></article>' +
-      '<article class="metric-card"><small>Weekly pace</small><strong>' + esc(data.weekly_hours || '—') + '</strong><span>hours per week</span></article>' +
-      '<article class="metric-card"><small>Learning phases</small><strong>' + esc(phases.length) + '</strong><span>ordered milestones</span></article>' +
-      '<article class="metric-card"><small>Updated for market</small><strong>' + esc(market.as_of || 'Current') + '</strong><span>' + esc(market.region || data.market_region || 'selected region') + '</span></article>' +
-    '</div>' +
-
-    '<div class="two-panel roadmap-priority-grid">' +
-      '<section class="panel"><div class="panel-head"><div><h2>Skills to focus on next</h2><p>Skills to add for your target role.</p></div></div>' +
-        (priorityGaps.length ? '<div class="roadmap-chip-list">' + priorityGaps.map(skill => '<span>' + esc(skill) + '</span>').join('') + '</div>' : '<div class="note-box"><strong>You already cover the main listed skills.</strong><p>Use the project milestones below to prove depth and production ability.</p></div>') +
-      '</section>' +
-      '<section class="panel roadmap-market-panel"><div class="panel-head"><div><h2>Market signals</h2><p>Recent job listings informing your plan.</p></div></div>' +
-        listHtml(marketSignals, esc) +
-        (marketNotes.length ? '<details class="roadmap-market-notes"><summary>Research notes and limitations</summary>' + listHtml(marketNotes, esc) + '</details>' : '') +
-      '</section>' +
-    '</div>' +
-
-    '<section class="panel roadmap-learning-pattern"><div class="panel-head"><div><span class="section-kicker">HOW TO LEARN</span><h2>Your recommended learning rhythm</h2></div></div>' +
-      '<div class="roadmap-rhythm-grid">' +
-        '<div><small>Style</small><strong>' + esc(pattern.recommended_style || 'Structured project-based learning') + '</strong></div>' +
-        '<div><small>Weekly cycle</small><span>' + esc(pattern.weekly_cycle || 'Learn, practise, build and review every week.') + '</span></div>' +
-        '<div><small>Daily session</small><span>' + esc(pattern.daily_session || 'Use focused study blocks with hands-on practice.') + '</span></div>' +
-        '<div><small>Revision</small><span>' + esc(pattern.revision_strategy || 'Revisit weak skills through spaced practice and project refinement.') + '</span></div>' +
+    // One compact cover comes first on screen and occupies PDF page one.
+    const cover = '<section class="roadmap-print-cover" aria-label="Career roadmap at a glance">' +
+      '<div class="roadmap-cover-brand"><img src="/static/placeai-logo.webp" alt="PlaceAI" width="116" height="40"><span>' + esc(region) + ' · ' + esc(fmtDate(data.created_at)) + '</span></div>' +
+      '<div class="roadmap-cover-title"><span class="roadmap-eyebrow">YOUR PATH AT A GLANCE</span><h2>Your Career Roadmap</h2><p>Target role: <strong>' + esc(target) + '</strong></p></div>' +
+      '<div class="roadmap-cover-stats">' +
+        stat('Estimated duration', data.estimated_days || '—', 'days') +
+        stat('Study commitment', data.weekly_hours || '—', 'hours / week') +
+        stat('Learning milestones', phases.length, 'ordered phases') +
       '</div>' +
-    '</section>' +
+      '<div class="roadmap-journey-heading"><h3>Your journey, step by step</h3><span>Start → Learn → Build → Prepare</span></div>' +
+      '<ol class="roadmap-journey-map roadmap-journey-count-' + Math.min(12, phases.length) + '" aria-label="Roadmap overview">' + phaseChart + '</ol>' +
+      '<div class="roadmap-cover-bottom">' +
+        '<div class="roadmap-first-step"><span class="roadmap-eyebrow">START HERE</span><strong>' + esc(firstPhase.name || 'Choose your first milestone') + '</strong>' +
+          '<p>' + esc(firstPhase.milestone || 'Complete the first phase before moving to the next.') + '</p></div>' +
+        '<div class="roadmap-cover-skills"><span class="roadmap-eyebrow">SKILLS TO PRIORITIZE</span><div class="roadmap-cover-chips">' +
+          (priorityGaps.length ? priorityGaps.map(skill => '<span>' + esc(skill) + '</span>').join('') : '<span>Follow the project milestones</span>') +
+        '</div></div>' +
+      '</div>' +
+      '<div class="roadmap-cover-footer"><span>PlaceAI · Your personal learning plan</span><span>Detailed phase-by-phase guide follows →</span></div>' +
+    '</section>';
 
-    '<section class="roadmap-path-head"><div><span class="section-kicker">YOUR ROADMAP</span><h2>' + esc(data.title || 'Career Roadmap') + '</h2><p>Complete each phase in order. Every phase ends with something you can demonstrate, not just something you have watched or read.</p></div><span class="roadmap-generated">Updated ' + esc(fmtDate(data.created_at)) + '</span></section>' +
-    '<div class="roadmap-phase-map" aria-label="Roadmap phase chart">' + phases.map((phase,index) => '<div class="roadmap-phase-node roadmap-phase-node-' + (index % 4) + '"><span>' + esc(phase.phase || index + 1) + '</span><div><strong>' + esc(phase.name || 'Learning phase') + '</strong><small>' + esc(phase.days || 0) + ' days</small></div></div>').join('') + '</div>' +
-    '<div class="roadmap-phase-stack">' + phases.map(phase => phaseHtml(phase, esc)).join('') + '</div>' +
+    const learningRhythm = '<div class="roadmap-rhythm-grid">' +
+      '<div><small>Learning style</small><strong>' + esc(pattern.recommended_style || 'Structured, project-based learning') + '</strong></div>' +
+      '<div><small>Weekly cycle</small><span>' + esc(pattern.weekly_cycle || 'Learn, practise, build and review.') + '</span></div>' +
+      '<div><small>Daily session</small><span>' + esc(pattern.daily_session || 'Study in focused blocks, then practise.') + '</span></div>' +
+      '<div><small>Revision</small><span>' + esc(pattern.revision_strategy || 'Review weak skills as you progress.') + '</span></div>' +
+    '</div>';
 
-    '<div class="roadmap-support-grid">' +
-      supportingSection('Portfolio plan', roadmap.portfolio_plan, esc) +
-      supportingSection('Interview preparation', roadmap.interview_preparation, esc) +
-      supportingSection('Advanced next steps', roadmap.advanced_next_steps, esc) +
-    '</div>' +
-    ((data.disclaimer || roadmap.disclaimer) ? '<p class="roadmap-disclaimer">' + esc(data.disclaimer || roadmap.disclaimer) + '</p>' : '') +
-
-    '<details class="roadmap-evidence panel"><summary><span><strong>Market evidence used for this roadmap</strong><small>View the current sources behind the recommendations</small></span><span aria-hidden="true">+</span></summary>' +
-      '<div class="card-grid roadmap-source-grid">' + (sources.length ? sources.map(source => sourceHtml(source, esc)).join('') : '<p class="muted-copy">No source links are available for this saved roadmap.</p>') + '</div>' +
-    '</details>';
+    return cover +
+      '<section class="roadmap-detail-report" aria-label="Detailed career roadmap">' +
+        '<header class="roadmap-detail-intro"><span class="roadmap-eyebrow">PHASE-BY-PHASE PLAN</span><h2>Follow your plan, one step at a time</h2><p>For each phase, learn the key skills, build something practical and check the milestone before moving on.</p></header>' +
+        '<div class="roadmap-phase-stack">' + phases.map(phase => phaseHtml(phase, esc)).join('') + '</div>' +
+        '<details class="roadmap-research-notes panel"><summary><span><strong>Study rhythm and market insights</strong><small>Optional context behind your plan</small></span><span aria-hidden="true">+</span></summary>' +
+          '<div class="roadmap-research-body"><h3>Your recommended learning rhythm</h3>' + learningRhythm +
+            (marketSignals.length ? '<h3>Market signals</h3>' + listHtml(marketSignals, esc) : '') +
+            (marketNotes.length ? '<details class="roadmap-market-notes"><summary>Research notes and limitations</summary>' + listHtml(marketNotes, esc) + '</details>' : '') +
+          '</div>' +
+        '</details>' +
+        '<div class="roadmap-support-grid">' +
+          supportingSection('Portfolio plan', roadmap.portfolio_plan, esc) +
+          supportingSection('Interview preparation', roadmap.interview_preparation, esc) +
+          supportingSection('Advanced next steps', roadmap.advanced_next_steps, esc) +
+        '</div>' +
+        ((data.disclaimer || roadmap.disclaimer) ? '<p class="roadmap-disclaimer">' + esc(data.disclaimer || roadmap.disclaimer) + '</p>' : '') +
+        '<details class="roadmap-evidence panel"><summary><span><strong>Market evidence used</strong><small>Explore the sources behind this roadmap</small></span><span aria-hidden="true">+</span></summary>' +
+          '<div class="card-grid roadmap-source-grid">' + (sources.length ? sources.map(source => sourceHtml(source, esc)).join('') : '<p class="muted-copy">No source links are available for this saved roadmap.</p>') + '</div>' +
+        '</details>' +
+      '</section>';
   }
 
   async function render(context) {
@@ -212,12 +220,9 @@
     setContextAction();
 
     const status = await api('/roadmap/status');
-    const photo = '<img class="workspace-feature-photo" src="/static/workspace-roadmap.webp" alt="" width="800" height="533" decoding="async">';
+    const photo = '<section class="roadmap-photo-hero" aria-labelledby="roadmap-hero-title"><div class="roadmap-photo-copy"><span class="roadmap-hero-kicker">MAKE YOUR NEXT MOVE</span><h1 id="roadmap-hero-title">Your Career Roadmap</h1><div class="roadmap-hero-steps"><span>Plan</span><span>Learn</span><span>Build</span></div></div></section>';
     if (!status.allowed) {
-      root().innerHTML = '<div class="workspace-feature-heading">' + pageHead(
-        'AI Career Roadmap',
-        'A personalized, current-market learning plan built from your interests, target roles, existing skills and time commitment.'
-      ) + photo + '</div>' +
+      root().innerHTML = photo +
       '<div class="metric-grid">' +
         '<article class="metric-card"><small>Roadmap-only unlock</small><strong>₹' + esc(status.price_inr || 20) + '</strong><span>one-time feature access</span></article>' +
         '<article class="metric-card"><small>Free trial</small><strong>Not included</strong><span>The 3-day free trial cannot generate Career Roadmaps</span></article>' +
@@ -235,10 +240,7 @@
 
     let latest = null;
     if (status.latest_available) latest = await api('/roadmap/latest');
-    const page = '<div class="workspace-feature-heading">' + pageHead(
-      'AI Career Roadmap',
-      'Turn your target role into a clear sequence of skills, projects and milestones based on your profile and the current market.'
-    ) + photo + '</div>';
+    const page = photo;
     const editor = builderForm(esc, latest);
 
     if (latest) {
