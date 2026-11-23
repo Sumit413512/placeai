@@ -200,7 +200,7 @@ async def live_start(
     }
 
 
-@router.post("/end", dependencies=[Depends(student_ai_guard)])
+@router.post("/end")
 async def live_end(request: LiveEnd, current_user: User = Depends(require_student)):
     _verify_proof(request.session_proof, request.conversation_id, str(current_user.id))
     key, _, _ = _configuration()
