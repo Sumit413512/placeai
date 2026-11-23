@@ -179,8 +179,8 @@ def test_executable_coding_workspace_is_mirrored_and_cache_busted():
     js = _text("app/static/mock-interview.js")
     css = _text("app/static/mock-interview.css")
 
-    assert "mock-interview.css?v=20261124-feature-hero1" in html
-    assert "mock-interview.js?v=20261124-interviewer-call2" in html
+    assert "mock-interview.css?v=20261124-live-avatar1" in html
+    assert "mock-interview.js?v=20261124-live-avatar1" in html
     assert "code-workspace" in js
     assert "code-language" in js
     assert "run-code" in js
