@@ -457,16 +457,6 @@
   }
 
   document.addEventListener('click', event => {
-    const entry = event.target.closest('[data-workspace-role]');
-    if (entry) {
-      const role = entry.dataset.workspaceRole;
-      if (!Object.hasOwn(roles, role)) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      loginRole = createRole = role;
-      showView('login', entry);
-      return;
-    }
     const loginOpen = event.target.closest('[data-open-auth="login"]');
     if (loginOpen) {
       event.preventDefault();
@@ -535,19 +525,9 @@
   const observer = new MutationObserver(() => relabelPlatformNavigation());
 
   function init() {
-    const header = $('#marketing-site .site-header');
-    if (header && !$('#workspace-entry')) {
-      const signIn = header.querySelector('[data-open-auth="login"]');
-      if (signIn) {
-        signIn.insertAdjacentHTML('afterbegin', '<svg aria-hidden="true" focusable="false" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5M3 12h11m-4-4 4 4-4 4"/></svg>');
-      }
-      const strip = document.createElement('nav');
-      strip.id = 'workspace-entry';
-      strip.setAttribute('aria-label', 'Choose your PlaceAI workspace');
-      strip.innerHTML = '<strong>Your workspace</strong>' + roleOrder.map(key =>
-        '<button type="button" aria-haspopup="dialog" data-workspace-role="' + key + '">' + roles[key].label + '</button>'
-      ).join('');
-      header.after(strip);
+    const signIn = $('#marketing-site .site-header [data-open-auth="login"]');
+    if (signIn) {
+      signIn.insertAdjacentHTML('afterbegin', '<svg aria-hidden="true" focusable="false" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5M3 12h11m-4-4 4 4-4 4"/></svg>');
     }
     renderLogin();
     renderCreate();
