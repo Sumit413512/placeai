@@ -38,7 +38,7 @@ def test_readiness_evidence_and_document_vault_accessibility(browser, width):
     for pattern in ('**/auth/**', '**/students/**', '**/enterprise/**', '**/billing/**',
                     '**/ai/**', '**/intelligence/**'):
         page.route(pattern, response)
-    page.goto(BASE_URL + '/?view=readiness', wait_until='networkidle')
+    page.goto(BASE_URL + '/?view=readiness', wait_until='load')
     cards = page.locator('.readiness-component')
     cards.first.wait_for()
     assert cards.count() == 7
@@ -69,7 +69,7 @@ def test_readiness_evidence_and_document_vault_accessibility(browser, width):
     (output / f'readiness-{width}-metrics.json').write_text(json.dumps(metrics, indent=2), encoding='utf-8')
     page.screenshot(path=str(output / f'readiness-{width}.png'), full_page=True)
 
-    page.goto(BASE_URL + '/?view=documents', wait_until='networkidle')
+    page.goto(BASE_URL + '/?view=documents', wait_until='load')
     page.get_by_role('heading', name='Vault is empty', level=2).wait_for()
     assert page.locator('#app-content h1').count() == 1
     assert page.locator('#app-content h3').count() == 0
@@ -118,7 +118,7 @@ def test_readiness_score_stays_inside_circle_with_long_labels_and_large_text(bro
     for pattern in ('**/auth/**', '**/students/**', '**/enterprise/**', '**/billing/**',
                     '**/ai/**', '**/intelligence/**'):
         page.route(pattern, response)
-    page.goto(BASE_URL + '/?view=readiness', wait_until='networkidle')
+    page.goto(BASE_URL + '/?view=readiness', wait_until='load')
     ring = page.locator('.readiness-score')
     ring.wait_for()
     assert ring.inner_text().split() == [str(score), '/100']

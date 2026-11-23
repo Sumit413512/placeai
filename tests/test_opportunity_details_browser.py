@@ -39,7 +39,7 @@ def test_opportunity_detail_demo_and_application_flow(browser):
             applied.append(route.request.post_data_json); data = {"id": "application", "status": "applied"}
         route.fulfill(content_type='application/json', body=json.dumps(data))
     page.route(BASE_URL+'/**', api)
-    page.goto(BASE_URL, wait_until='networkidle')
+    page.goto(BASE_URL, wait_until='load')
     page.locator('#app-nav [data-view="opportunities"]').click()
     try:
         page.locator('#job-search').wait_for(timeout=8000)

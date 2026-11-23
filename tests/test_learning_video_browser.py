@@ -86,7 +86,7 @@ def test_video_learning_playback_practice_mobile_and_cleanup(video_browser):
         elif path.startswith('/learning-hub/video/'): data = course
         route.fulfill(json=data)
     page.route(BASE_URL+'/**', api)
-    page.goto(BASE_URL,wait_until='networkidle')
+    page.goto(BASE_URL,wait_until='load')
     page.locator('#app-nav [data-view="learning-hub"]').click()
     page.get_by_role('button',name='Video learning',exact=True).click()
     output = Path(__file__).resolve().parents[1] / 'work/ui-review'

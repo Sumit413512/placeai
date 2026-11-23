@@ -8,6 +8,8 @@ from test_browser_smoke import BASE_URL, ROOT, browser, local_server  # noqa: F4
 
 def test_real_proctor_model_loads_and_runs_inference(browser):
     page=browser.new_page()
+    page.route('https://fonts.googleapis.com/**',
+               lambda route: route.fulfill(content_type='text/css', body=''))
     script=(ROOT/'app/static/mock-interview.js').read_text(encoding='utf8')
     script=script.rsplit('})();',1)[0]+'window.proctorTest={state,ensureProctorModel};})();'
     page.route('**/static/mock-interview.js*',lambda route:route.fulfill(body=script,content_type='application/javascript'))

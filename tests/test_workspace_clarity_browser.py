@@ -43,7 +43,7 @@ def test_workspace_identity_and_navigation_remain_clear(browser, role):
                     '**/institutions/**', '**/platform/**', '**/billing/**', '**/ai/**',
                     '**/jobs/**', '**/intelligence/**', '**/learning-hub*'):
         page.route(pattern, api_response)
-    page.goto(BASE_URL, wait_until='networkidle')
+    page.goto(BASE_URL, wait_until='load')
     page.get_by_role('button', name='Essential only', exact=True).click()
     page.locator('#app-shell').wait_for(state='visible')
     assert page.locator('.workspace-welcome').inner_text() == 'Welcome, MIT account'
@@ -226,7 +226,7 @@ def test_student_guidance_topbar_and_minimizable_report(browser):
 
     for prefix in ('auth', 'billing', 'students', 'intelligence', 'enterprise', 'ai'):
         page.route(f'**/{prefix}/**', respond)
-    page.goto(BASE_URL, wait_until='networkidle')
+    page.goto(BASE_URL, wait_until='load')
     signed_in = True
     page.evaluate("() => window.PlaceAIAuth.completeSignIn({access_token:'synthetic-fixture-token'})")
     tour = page.locator('.workspace-tour-card')

@@ -27,7 +27,7 @@ def test_real_student_can_track_read_delete_restore_and_resume_notes(browser,loc
         db.add_all([book,roadmap]);db.commit();book_id=book.id
     page=browser.new_page(viewport={'width':1440,'height':1000})
     page.add_init_script("localStorage.setItem('placeai.analytics.preference.v1','declined')")
-    page.goto(BASE_URL,wait_until='networkidle')
+    page.goto(BASE_URL,wait_until='load')
     page.locator('.hero [data-open-auth="login"]').click()
     page.locator('#role-login-form input[name=email]').fill(email)
     page.locator('#role-login-form input[name=password]').fill(password)
@@ -96,7 +96,7 @@ def test_real_student_can_track_read_delete_restore_and_resume_notes(browser,loc
         page.set_viewport_size({'width':width,'height':900});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),width
     page.set_viewport_size({'width':1440,'height':1000})
     out=Path('../../outputs/placeai-study-20261024');out.mkdir(parents=True,exist_ok=True);page.screenshot(path=str(out/'local-study-tracker.png'),full_page=True)
-    page.reload(wait_until='networkidle');expect(page.locator('.study-plan>.panel-head')).to_contain_text('100%')
+    page.reload(wait_until='load');expect(page.locator('.study-plan>.panel-head')).to_contain_text('100%')
     expect(page.locator('#auth-overlay')).to_be_hidden()
     expect(page.get_by_role('region',name='This week',exact=True)).to_contain_text('1 lesson left')
     page.get_by_role('button',name='Open video learning',exact=True).click()

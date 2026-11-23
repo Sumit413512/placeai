@@ -23,7 +23,7 @@ def test_skipping_optional_authenticator_does_not_reveal_login_again(browser, ro
         else: data={'items':[],'summary':{},'actions':[]}
         route.fulfill(json=data)
     page.route(BASE_URL+'/**', api)
-    page.goto(BASE_URL,wait_until='networkidle')
+    page.goto(BASE_URL,wait_until='load')
     # The login form is dynamically rendered by access-portal.js, while the
     # optional MFA choice is installed by auth-protection.js. Wait for both
     # scripts before submitting, or the isolated browser test can race startup.
@@ -44,7 +44,7 @@ def test_skipping_optional_authenticator_does_not_reveal_login_again(browser, ro
     expect(page.locator('#app-content h1')).to_be_visible()
     expect(page.locator('#auth-overlay')).to_be_hidden()
     assert page.locator('.modal-overlay:not(.hidden), .password-rotation-overlay').count()==0
-    page.reload(wait_until='networkidle')
+    page.reload(wait_until='load')
     expect(page.locator('#app-shell')).to_be_visible()
     expect(page.locator('#auth-overlay')).to_be_hidden()
     page.close()

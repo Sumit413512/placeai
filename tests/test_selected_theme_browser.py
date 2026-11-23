@@ -3,7 +3,7 @@ from test_browser_smoke import BASE_URL, browser, local_server  # noqa: F401
 
 def test_selected_palette_survives_dynamic_styles_and_auth_dialog(browser):  # noqa: F811
     page = browser.new_page(viewport={"width": 390, "height": 844})
-    page.goto(BASE_URL, wait_until="networkidle")
+    page.goto(BASE_URL, wait_until="load")
     assert page.locator("body").evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(247, 245, 239)"
     sidebar = page.locator(".app-sidebar")
     assert "linear-gradient" in sidebar.evaluate("el => getComputedStyle(el).backgroundImage")
@@ -33,7 +33,7 @@ def test_selected_palette_survives_dynamic_styles_and_auth_dialog(browser):  # n
 def test_theme_covers_assessment_and_legal_pages_without_revealing_hidden_panels(browser):  # noqa: F811
     page = browser.new_page(viewport={"width": 390, "height": 844})
     for path in ("/privacy", "/terms", "/acceptable-use", "/static/contact.html", "/mock-interview?preview=1"):
-        page.goto(BASE_URL + path, wait_until="networkidle")
+        page.goto(BASE_URL + path, wait_until="load")
         assert page.locator("body").evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(247, 245, 239)"
         if path.startswith("/mock-interview"):
             assert (
@@ -78,7 +78,7 @@ def test_editorial_cards_and_footer_remain_readable_on_mobile_and_desktop(browse
     page = browser.new_page()
     for width in (390, 1440):
         page.set_viewport_size({"width": width, "height": 900})
-        page.goto(BASE_URL, wait_until="networkidle")
+        page.goto(BASE_URL, wait_until="load")
         footer = page.locator("#marketing-site .placeai-footer")
         footer.wait_for(state="visible")
         footer_bg = footer.evaluate("el => getComputedStyle(el).backgroundColor")
@@ -119,7 +119,7 @@ def test_homepage_header_leads_directly_to_hero_and_sign_in_keeps_roles(browser)
     page.add_init_script("localStorage.setItem('placeai.analytics.preference.v1', 'declined')")
     for width in (1440, 390):
         page.set_viewport_size({"width": width, "height": 850})
-        page.goto(BASE_URL, wait_until="networkidle")
+        page.goto(BASE_URL, wait_until="load")
         assert page.locator("#workspace-entry").count() == 0
         header = page.locator("#marketing-site .site-header").bounding_box()
         hero = page.locator("#marketing-site .home-hero-surface").bounding_box()

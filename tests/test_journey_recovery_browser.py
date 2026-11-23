@@ -32,7 +32,7 @@ def test_back_from_video_learning_uses_workspace_history_not_old_mock_page(brows
     page.go_forward()
     expect(page.locator('#learning-hub')).to_be_visible()
     expect(page).to_have_url(BASE_URL + '/?view=learning-hub')
-    page.reload(wait_until='networkidle')
+    page.reload(wait_until='load')
     expect(page.locator('#learning-hub')).to_be_visible()
     expect(page.locator('#auth-overlay')).to_be_hidden()
     context.close()

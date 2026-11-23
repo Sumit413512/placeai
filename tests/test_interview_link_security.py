@@ -42,7 +42,7 @@ def test_legacy_links_are_filtered_by_the_actual_reader(browser):  # noqa: F811
         elif path == "/enterprise/interviews": data = entries
         route.fulfill(json=data)
     page.route(BASE_URL + "/**", api)
-    page.goto(BASE_URL, wait_until="networkidle")
+    page.goto(BASE_URL, wait_until="load")
     page.locator('#app-nav [data-view="interviews"]').click()
     page.get_by_text("Valid meeting", exact=True).wait_for(state="visible")
     links = page.get_by_role("link", name="Join meeting", exact=True)
