@@ -1887,6 +1887,7 @@
   }
 
   async function startAssessment() {
+    if(window.PlaceAILiveInterview?.isActive()){toast('End the live AI interview before starting the secure assessment.','error');return;}
     if(state.assessmentActive || $('#start-assessment').disabled)return;
     if(!state.systemReady || !$('#consent-check').checked){toast('Complete all required secure checks first.','error');return;}
     const startButton=$('#start-assessment');
@@ -1913,7 +1914,7 @@
       toast(error.message || 'Full-screen permission is required to start the assessment.','error');
       return;
     }
-    state.assessmentActive=true;state.finishing=false;state.current=0;state.totalRemaining=TOTAL_SECONDS;state.sectionRemaining=0;state.integrityEvents=[];state.integrityWarnings=0;state.lastWarningAt=0;state.autoSubmittedIntegrity=false;state.integrityTerminationReason='';state.proctorVisionBusy=false;state.proctorModelBusy=false;state.faceMissStreak=0;state.multipleFaceStreak=0;state.phoneDetectionStreak=0;state.signalStreaks={candidate:0,multiple:0,phone:0};state.signalLastWarning={candidate:0,multiple:0,phone:0,monitor:0};
+    state.assessmentActive=true;window.PlaceAILiveInterview?.disableForAssessment();state.finishing=false;state.current=0;state.totalRemaining=TOTAL_SECONDS;state.sectionRemaining=0;state.integrityEvents=[];state.integrityWarnings=0;state.lastWarningAt=0;state.autoSubmittedIntegrity=false;state.integrityTerminationReason='';state.proctorVisionBusy=false;state.proctorModelBusy=false;state.faceMissStreak=0;state.multipleFaceStreak=0;state.phoneDetectionStreak=0;state.signalStreaks={candidate:0,multiple:0,phone:0};state.signalLastWarning={candidate:0,multiple:0,phone:0,monitor:0};
     document.body.classList.remove('integrity-critical');
     updateIntegrityWarningUI();
     document.body.classList.add('secure-assessment');
@@ -2817,6 +2818,7 @@
         $('#consent-check').closest('label').querySelector('span').textContent='I understand that this proctored practice assessment uses camera, microphone, screen sharing and browser monitoring for integrity signals reviewed by institution staff. I consent to sending my spoken answers, HR camera recordings and selected video frames to Groq for transcription and practice coaching, with Zero Data Retention enabled. PlaceAI keeps recordings private for 30 days for me and authorized institution staff. Speech-recognition and sampled-frame feedback cannot assess pronunciation or continuous-video behavior. All section results appear together after analysis finishes. These are practice insights for human review, not hiring decisions.';
       }
       state.candidateLabel=(state.me.full_name || state.me.username || 'Candidate').toUpperCase().slice(0,40);
+       window.PlaceAILiveInterview?.init(state.token);
       $('#auth-state').classList.add('hidden'); $('#setup-panel').classList.remove('hidden');
       await Promise.all([loadJobs(),loadHistory()]);
       const requestedResult=new URLSearchParams(location.search).get('result');
