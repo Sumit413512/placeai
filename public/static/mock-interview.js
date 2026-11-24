@@ -718,6 +718,30 @@
     cancelQuestionReading();
     const generation=state.narrationGeneration;
     state.readingQuestionId=q.question_id;
+    const avatarVideo = $('#module-hr-avatar');
+    if (record && avatarVideo && window.PlaceAIModuleHRAvatar) {
+      closeModuleAvatar();
+      const playback = window.PlaceAIModuleHRAvatar.play({
+        api, interviewId: state.session.interview_id, question: q, video: avatarVideo,
+        onSpeaking(speaking) {
+          if (state.narrationGeneration !== generation) return;
+          state.narrationSpeaking = speaking;
+          updateSpokenIndicator();
+        },
+      });
+      state.moduleAvatar = playback;
+      state.narrationCancel = playback.close;
+      let played = false;
+      try { await playback.finished; played = true; }
+      catch { playback.close(); }
+      if (state.narrationGeneration !== generation || !state.assessmentActive) return;
+      state.narrationCancel = null;
+      if (played) {
+        state.readingQuestionId = null;
+        await beginQuestionAnswer(q);
+        return;
+      }
+    }
     const spec=q.coding_spec || {};
     const examples=(spec.sample_tests || []).map((sample,i)=>'Example '+(i+1)+'. Input. '+sample.input+'. Expected output. '+sample.output).join(' ');
     const text=q.question+(q.options?.length?' Options. '+q.options.map((v,i)=>'Option '+(i+1)+'. '+v).join(' '):'')+' '+(spec.constraints || []).join('. ')+' '+examples+' '+(record?'Record your answer.':'You may answer now.');
@@ -981,12 +1005,18 @@
     finally{replacement?.getTracks().forEach(track=>track.stop());state.reconnectingMicrophone=false;button.disabled=false;updateSpokenIndicator();}
   }
 
-  function interviewerMarkup(videoAnswer) {
+  function closeModuleAvatar() {
+    state.moduleAvatar?.close();
+    state.moduleAvatar = null;
+  }
+
+  function interviewerMarkup(videoAnswer, moduleAvatar = false) {
     const camera = state.mediaStream?.getVideoTracks().some(track => track.readyState === 'live');
     return `<div class="interviewer-call${camera ? ' with-camera' : ''}">
       <figure class="hr-interviewer" data-phase="ready">
         <div class="hr-interviewer-frame"><img class="hr-interviewer-avatar"
-          src="/static/placeai-interviewer.webp" width="840" height="473" alt="" decoding="async"></div>
+          src="/static/placeai-interviewer.webp" width="840" height="473" alt="" decoding="async">${moduleAvatar ?
+          '<video id="module-hr-avatar" playsinline aria-label="Animated AI interviewer"></video>' : ''}</div>
         <figcaption class="hr-interviewer-copy"><strong>PlaceAI AI interviewer</strong>
           <span class="hr-interviewer-state" role="status">Ready to ask your question</span></figcaption>
       </figure>
@@ -1001,7 +1031,8 @@
     state.answerClip=null;
     const answerSeconds=Math.max(45,Math.min(150,Number(q.answer_time_seconds)||150));
     const answerWindow=answerSeconds%60===0?(answerSeconds/60)+' minute'+(answerSeconds===60?'':'s'):Math.floor(answerSeconds/60)+' min '+(answerSeconds%60)+' sec';
-    $('#answer-area').innerHTML=interviewerMarkup(q.response_mode==='video')+'<div class="answer-field"><strong>'+(q.response_mode==='video'?'HR camera and voice answer':'Spoken answer')+'</strong><p>Listen to the question, then answer aloud. This question has its own private recording with up to '+answerWindow+' of answer time.</p>'+spokenIndicatorMarkup(answerSeconds,q.response_mode==='video')+'<p id="spoken-answer-status" role="status">Reading question…</p><button id="start-spoken-answer" type="button" class="button secondary">Start answer now</button><button id="reconnect-answer-microphone" type="button" class="button secondary hidden">Reconnect microphone</button>'+'</div>';
+    const moduleAvatar = q.response_mode === 'video' && q.section === 'behavioral' && state.session?.module_hr_avatar;
+    $('#answer-area').innerHTML=interviewerMarkup(q.response_mode==='video',moduleAvatar)+'<div class="answer-field"><strong>'+(q.response_mode==='video'?'HR camera and voice answer':'Spoken answer')+'</strong><p>Listen to the question, then answer aloud. This question has its own private recording with up to '+answerWindow+' of answer time.</p>'+(moduleAvatar?'<p>Tavus reads the exam question. PlaceAI records your camera and microphone for your answer.</p>':'')+spokenIndicatorMarkup(answerSeconds,q.response_mode==='video')+'<p id="spoken-answer-status" role="status">Reading question…</p><button id="start-spoken-answer" type="button" class="button secondary">Start answer now</button><button id="reconnect-answer-microphone" type="button" class="button secondary hidden">Reconnect microphone</button>'+'</div>';
     const preview=$('#hr-answer-preview');if(preview){preview.srcObject=state.mediaStream;preview.play().catch(()=>{});}
     $('#start-spoken-answer').onclick=()=>beginQuestionAnswer(q);
     $('#reconnect-answer-microphone').onclick=()=>reconnectAnswerMicrophone(q);
@@ -1075,6 +1106,7 @@
   }
 
   function renderQuestion() {
+    closeModuleAvatar();
     const q=state.questions[state.current];
     if(!q) return;
     if(!(q.section in state.expandedSections)) state.expandedSections[q.section]=true;
@@ -2399,6 +2431,7 @@
 
   async function finishAssessment(auto) {
     cancelQuestionReading();
+    closeModuleAvatar();
     // Lock synchronously: expiry, device loss and a final click may arrive together.
     if(state.finishing || !state.assessmentActive)return;
     state.finishing=true;
@@ -2650,6 +2683,7 @@
   function resetAssessment() {
     (state.answerPlaybackUrls || []).forEach(url=>URL.revokeObjectURL(url));state.answerPlaybackUrls=[];
     cancelQuestionReading();
+    closeModuleAvatar();
     stopVoiceMeter();
     state.answerClip=null;
     state.analysisGeneration++;
@@ -2712,6 +2746,7 @@
     $('#setup-panel').scrollIntoView({behavior:'smooth',block:'start'});
   }
 
+  window.addEventListener('pagehide', closeModuleAvatar);
   $('#setup-form')?.addEventListener('submit',prepareAssessment);
   $('#run-check')?.addEventListener('click',runSystemCheck);
   $('#retry-proctor')?.addEventListener('click',()=>{void ensureProctorModel();});

@@ -14,23 +14,27 @@ import logging
 import os
 import re
 import time
+from datetime import timedelta
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from app import answer_recording, hr_video
 from app.ai_rate_limit import student_ai_guard
 from app.config import get_settings
 from app.database import get_db
 from app.rate_limit import enforce_rate_limit
 from app.dependencies import require_student
-from app.models import User
+from app.models import User, utcnow
 from app.student_entitlements import require_student_premium_access
+from app.trial_demo_access import is_trial_demo_job
 
 router = APIRouter(prefix="/mock-interview/live", tags=["Live AI Interview Practice"])
 logger = logging.getLogger("placeai.live_interview")
 PROVIDER_URL = "https://tavusapi.com/v2/conversations"
+PALS_URL = "https://tavusapi.com/v2/pals"
 SESSION_SECONDS = 600
 CONVERSATION_ID = re.compile(r"^[a-zA-Z0-9_-]{4,64}$")
 
@@ -73,6 +77,11 @@ def _room_url(value: str) -> str:
     ):
         raise HTTPException(502, "The live interview provider returned an unsafe meeting address.")
     return value
+
+
+def module_avatar_available(job) -> bool:
+    key, _, face = _configuration()
+    return bool(key and face and os.getenv("TAVUS_ASSESSMENT_PAL_ID", "").strip() and is_trial_demo_job(job))
 
 
 def _proof(conversation_id: str, user_id: str, expires_at: int) -> str:
@@ -213,6 +222,55 @@ async def live_start(
         "session_proof": _proof(cid, str(current_user.id), expiry),
         "expires_at": expiry,
         "max_minutes": SESSION_SECONDS // 60,
+    }
+
+
+@router.post("/assessment/{interview_id}/questions/{question_id}")
+async def module_avatar_start(
+    interview_id: str, question_id: int, response: Response, request: Request,
+    user: User = Depends(require_student), db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "no-store"
+    root, interview, question, _ = answer_recording.owned(db, user, interview_id, question_id)
+    if question.get("section") != "behavioral" or question["response_mode"] != "video" or not module_avatar_available(interview.job):
+        raise HTTPException(404, "Animated HR question playback is unavailable")
+    now = utcnow()
+    if (not root.exam_started_at or root.expires_at <= now or root.submission_json
+            or interview.overall_score is not None or root.exam_started_at + timedelta(minutes=hr_video.EXAM_MINUTES) <= now):
+        raise HTTPException(409, "This assessment is not active")
+    enforce_rate_limit(db, request, scope="ai:assessment-avatar", identifier=user.id,
+                       limit=8, window_seconds=3600, block_seconds=900, include_client_address=False)
+    key, _, face = _configuration()
+    pal_id = os.environ["TAVUS_ASSESSMENT_PAL_ID"].strip()
+    if not CONVERSATION_ID.fullmatch(pal_id):
+        raise HTTPException(503, "Animated HR question playback is misconfigured")
+    pal = await _provider("GET", f"{PALS_URL}/{pal_id}", key)
+    if pal.get("pipeline_mode") != "echo" or pal.get("greeting") or pal.get("dynamic_greeting"):
+        raise HTTPException(503, "Animated HR playback requires a silent Echo PAL")
+    payload = {
+        "pal_id": pal_id,
+        "face_id": face,
+        "conversation_name": "PlaceAI assessment question playback",
+        "dynamic_greeting": False,
+        "require_auth": True,
+        "max_participants": 2,
+        "properties": {
+            "max_call_duration": SESSION_SECONDS,
+            "participant_left_timeout": 10,
+            "participant_absent_timeout": 30,
+            "enable_recording": False,
+        },
+    }
+    result = await _provider("POST", PROVIDER_URL, key, payload=payload)
+    cid = str(result.get("conversation_id", ""))
+    token = str(result.get("meeting_token") or "")
+    if not CONVERSATION_ID.fullmatch(cid) or not token:
+        raise HTTPException(502, "The live video service did not return a private meeting.")
+    return {
+        "conversation_id": cid,
+        "conversation_url": _room_url(str(result.get("conversation_url", ""))),
+        "meeting_token": token,
+        "session_proof": _proof(cid, str(user.id), int(time.time()) + SESSION_SECONDS),
     }
 
 

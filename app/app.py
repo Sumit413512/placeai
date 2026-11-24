@@ -201,11 +201,12 @@ async def security_headers(request: Request, call_next):
         )
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' https://cdn.jsdelivr.net; "
+            "script-src 'self' https://cdn.jsdelivr.net https://c.daily.co; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data: https:; "
-            "connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com; "
+            "connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com https://*.daily.co wss://*.daily.co; "
+            "worker-src 'self' blob:; "
             "media-src 'self' blob:; "
             "frame-src https://tavus.daily.co; "
             "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"

@@ -169,3 +169,56 @@ def test_live_video_cannot_overlap_secure_proctored_assessment():
     assert "if(window.PlaceAILiveInterview?.isActive())" in js
     assert "End the live AI interview before starting the secure assessment" in js
     assert "isActive:()=>Boolean(session)" in live_js
+
+
+@pytest.mark.parametrize("section,mode,active,echo,expected", [
+    ("behavioral", "video", True, True, None),
+    ("resume", "audio", True, True, 404),
+    ("behavioral", "video", False, True, 409),
+    ("behavioral", "video", True, False, 503),
+])
+def test_module_avatar_starts_only_for_an_active_hr_question_with_a_silent_echo_pal(
+    monkeypatch, section, mode, active, echo, expected,
+):
+    import asyncio
+    from fastapi import Response
+    from app.models import utcnow
+    from datetime import timedelta
+
+    now = utcnow()
+    root = SimpleNamespace(exam_started_at=now if active else None, expires_at=now + timedelta(hours=1), submission_json=None)
+    interview = SimpleNamespace(overall_score=None, job=object())
+    question = {"section": section, "response_mode": mode, "question": "Tell us about a difficult team decision."}
+    monkeypatch.setattr(live.answer_recording, "owned", lambda *a: (root, interview, question, None))
+    monkeypatch.setattr(live, "is_trial_demo_job", lambda job: job is interview.job)
+    monkeypatch.setattr(live, "enforce_rate_limit", lambda *a, **kw: None)
+    monkeypatch.setenv("TAVUS_API_KEY", "test")
+    monkeypatch.setenv("TAVUS_FACE_ID", "r-test")
+    monkeypatch.setenv("TAVUS_ASSESSMENT_PAL_ID", "p-echo")
+    calls = []
+
+    async def provider(method, url, key, *, payload=None):
+        calls.append((method, payload))
+        if method == "GET":
+            return {"pipeline_mode": "echo" if echo else "full", "greeting": "", "dynamic_greeting": False}
+        return {"conversation_id": "conv-test", "meeting_token": "private-token", "conversation_url": "https://tavus.daily.co/test"}
+
+    monkeypatch.setattr(live, "_provider", provider)
+    response = Response()
+
+    def start():
+        return asyncio.run(live.module_avatar_start("interview-test", 42, response, None, SimpleNamespace(id="student"), None))
+
+    if expected is not None:
+        with pytest.raises(HTTPException) as error:
+            start()
+        assert error.value.status_code == expected
+        assert not any(method == "POST" for method, _ in calls)
+        return
+
+    assert start()["meeting_token"] == "private-token"
+    assert response.headers["cache-control"] == "no-store"
+    payload = calls[-1][1]
+    assert payload["require_auth"] and payload["max_participants"] == 2
+    assert payload["dynamic_greeting"] is False and payload["properties"]["enable_recording"] is False
+    assert "custom_greeting" not in payload and "conversational_context" not in payload
