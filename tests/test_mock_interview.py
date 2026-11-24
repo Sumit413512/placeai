@@ -369,11 +369,12 @@ def test_mock_assessment_security_headers_are_scoped_to_assessment_only():
     assert assessment.status_code == 200
     permissions = assessment.headers.get("permissions-policy", "")
     csp = assessment.headers.get("content-security-policy", "")
-    assert "camera=(self)" in permissions
-    assert "microphone=(self)" in permissions
+    assert 'camera=(self "https://tavus.daily.co")' in permissions
+    assert 'microphone=(self "https://tavus.daily.co")' in permissions
     assert "display-capture=(self)" in permissions
     assert "https://cdn.jsdelivr.net" in csp
     assert "https://storage.googleapis.com" in csp
+    assert "frame-src https://tavus.daily.co;" in csp
 
     home = client.get("/")
     home_permissions = home.headers.get("permissions-policy", "")
@@ -382,6 +383,8 @@ def test_mock_assessment_security_headers_are_scoped_to_assessment_only():
     assert "microphone=()" in home_permissions
     assert "https://cdn.jsdelivr.net" not in home_csp
     assert "https://storage.googleapis.com" not in home_csp
+    assert "https://tavus.daily.co" not in home_permissions
+    assert "https://tavus.daily.co" not in home_csp
 
 
 def test_mock_assessment_html_is_never_cached_across_releases():
