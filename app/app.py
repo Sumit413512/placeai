@@ -196,7 +196,8 @@ async def security_headers(request: Request, call_next):
     # on-device proctor runtime/model resources.
     if path == "/mock-interview":
         response.headers["Permissions-Policy"] = (
-            "camera=(self), microphone=(self), display-capture=(self), geolocation=()"
+            'camera=(self "https://tavus.daily.co"), microphone=(self "https://tavus.daily.co"), '
+            "display-capture=(self), geolocation=()"
         )
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
@@ -206,6 +207,7 @@ async def security_headers(request: Request, call_next):
             "img-src 'self' data: https:; "
             "connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com; "
             "media-src 'self' blob:; "
+            "frame-src https://tavus.daily.co; "
             "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
         )
     else:
