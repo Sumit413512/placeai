@@ -28,6 +28,7 @@ from app.config import get_settings
 from fastapi.responses import JSONResponse
 from app.placement_access import job_is_visible_to_student
 from app.routers.ai import PROMPT_GUARDRAIL, extract_json_from_response
+from app.routers.live_interview import module_avatar_available
 from app.student_entitlements import require_student_premium_access
 from app.trial_demo_access import enforce_trial_demo_start
 from app.zensar_practice import is_zensar_practice, company_label, build_questions, VERSION as ZENSAR_VERSION, NOTICE as ZENSAR_NOTICE
@@ -1156,6 +1157,7 @@ def start_mock_interview_v2(
         "job_title": job.title,
         "company_name": company_label(job),
         "practice_notice": ZENSAR_NOTICE if is_zensar_practice(job) else None,
+        "module_hr_avatar": body.mode == "assessment" and module_avatar_available(job),
         "focus": body.focus,
         "difficulty": body.difficulty,
         "mode": body.mode,
