@@ -526,10 +526,14 @@ body.secure-assessment .protected-question,body.secure-assessment .answer-option
 }
 .hr-interviewer-frame { overflow:hidden; background:#4c3933; }
 .interviewer-call .hr-interviewer-avatar,
+.interviewer-call #module-hr-avatar,
 .interviewer-call #hr-answer-preview {
   display:block; width:100%; height:auto; max-height:240px; aspect-ratio:16 / 9;
   margin:0; border:0; border-radius:0; object-fit:cover;
 }
+.interviewer-call #module-hr-avatar,
+.interviewer-call .has-live-avatar .hr-interviewer-avatar { display:none; }
+.interviewer-call .has-live-avatar #module-hr-avatar { display:block; }
 .interviewer-call #hr-answer-preview { transform:scaleX(-1); background:#292127; }
 .interviewer-call figcaption { display:grid; gap:3px; padding:9px 12px; overflow-wrap:anywhere; }
 .interviewer-call figcaption strong { font-size:.95rem; }
