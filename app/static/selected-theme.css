@@ -1882,15 +1882,15 @@ body :is(h1, h2, h3, h4, h5),
 }
 
 /* Full-width image banners: sharp HTML text, gentle right-aligned photos, no emoji artwork. */
-#app-shell .placeai-photo-hero{position:relative;isolation:isolate;display:flex;align-items:center;width:100%;min-height:clamp(255px,30vw,375px);margin:0 0 22px;overflow:hidden;border-radius:20px;border:1px solid #e7d3c0;background-color:#fae8d8;background-image:linear-gradient(90deg,#fff2e8 0%,#fff2e8fb 28%,#fff2e8ef 42%,#fff2e89c 60%,#fff2e800 80%),var(--feature-photo);background-repeat:no-repeat;background-size:cover,auto 115%;background-position:center,calc(100% + 10px) center;box-shadow:0 10px 30px #573a301a}
+#app-shell .placeai-photo-hero{position:relative;isolation:isolate;display:flex;align-items:center;width:100%;min-height:clamp(255px,30vw,375px);margin:0 0 22px;overflow:hidden;border-radius:20px;border:1px solid #e7d3c0;background-color:#fae8d8;background-image:linear-gradient(90deg,rgba(255,242,232,.97) 0%,rgba(255,242,232,.90) 27%,rgba(255,242,232,.68) 45%,rgba(255,242,232,.26) 65%,rgba(255,242,232,0) 83%),var(--feature-photo);background-repeat:no-repeat;background-size:cover,cover;background-position:center,center center;box-shadow:0 10px 30px #573a301a}
 #app-shell .placeai-study-photo{--feature-photo:url("/static/placeai-study-hero.webp")}
 #app-shell .placeai-learning-photo{--feature-photo:url("/static/placeai-learning-hero.webp")}
 #app-shell .placeai-photo-heading{position:relative;z-index:1;max-width:min(500px,58%);padding:clamp(22px,4vw,57px)}
 #app-shell .placeai-photo-heading h1{margin:0 0 16px;color:#522732;font-size:clamp(36px,4.4vw,60px);font-weight:840!important;letter-spacing:-.05em;line-height:1.08}
 #app-shell .placeai-photo-heading p{margin:0;color:#68413b;font-size:clamp(15px,1.5vw,18px);font-weight:650;line-height:1.5}
 #app-shell #learning-hub :is(.learning-field-help,.learning-video-card-meta,.learning-meta,.learning-library-row small){font-size:14px;line-height:1.55}
-@media(max-width:700px){#app-shell .placeai-photo-hero{min-height:255px;background-size:cover,auto 105%;background-position:center,calc(100% + 70px) center;background-image:linear-gradient(90deg,#fff2e8 0%,#fff2e8fc 24%,#fff2e8ec 47%,#fff2e889 68%,transparent 88%),var(--feature-photo)}#app-shell .placeai-photo-heading{max-width:69%;padding:22px}#app-shell .placeai-photo-heading h1{font-size:clamp(31px,7vw,45px)}#app-shell .placeai-photo-heading p{font-size:14px}}
-@media(max-width:400px){#app-shell .placeai-photo-hero{min-height:230px;background-position:center,calc(100% + 90px) center}#app-shell .placeai-photo-heading{max-width:76%;padding:16px}}
+@media(max-width:700px){#app-shell .placeai-photo-hero{min-height:255px;background-size:cover,cover;background-position:center,68% center;background-image:linear-gradient(90deg,rgba(255,242,232,.98) 0%,rgba(255,242,232,.94) 31%,rgba(255,242,232,.78) 54%,rgba(255,242,232,.38) 76%,rgba(255,242,232,0) 100%),var(--feature-photo)}#app-shell .placeai-photo-heading{max-width:69%;padding:22px}#app-shell .placeai-photo-heading h1{font-size:clamp(31px,7vw,45px)}#app-shell .placeai-photo-heading p{font-size:14px}}
+@media(max-width:400px){#app-shell .placeai-photo-hero{min-height:230px;background-position:center,72% center}#app-shell .placeai-photo-heading{max-width:76%;padding:16px}}
 
 
 /* Screen-readable microcopy; retain separately tuned A4 print measurements. */

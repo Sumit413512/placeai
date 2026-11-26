@@ -68,3 +68,11 @@ def test_footer_location_and_sign_in_trust_badges_are_mirrored():
     assert 'font-weight: 700 !important' in app_theme
     for label in ("Verified roles", "Institution data boundaries", "Privacy-first candidate access"):
         assert label in _text("app/templates/index.html")
+
+
+def test_student_feature_photo_hero_fills_banner_without_blank_side_panel():
+    theme = _text("app/static/selected-theme.css")
+    assert theme == _text("public/static/selected-theme.css")
+    assert "background-size:cover,cover" in theme
+    assert "background-size:cover,auto 115%" not in theme
+    assert "#app-shell .placeai-study-photo" in theme

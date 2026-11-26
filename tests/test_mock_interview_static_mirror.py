@@ -82,7 +82,7 @@ def test_mcq_interaction_and_expandable_navigator_contract():
     css = _text("app/static/mock-interview.css")
     js = _text("app/static/mock-interview.js")
 
-    assert "mock-interview.css?v=20261124-live-avatar1" in html
+    assert "mock-interview.css?v=20261127-photo-placement1" in html
     assert "mock-interview.js?v=20261124-live-avatar1" in html
     assert 'role="radiogroup"' in js
     assert 'role="radio"' in js
@@ -179,7 +179,7 @@ def test_executable_coding_workspace_is_mirrored_and_cache_busted():
     js = _text("app/static/mock-interview.js")
     css = _text("app/static/mock-interview.css")
 
-    assert "mock-interview.css?v=20261124-live-avatar1" in html
+    assert "mock-interview.css?v=20261127-photo-placement1" in html
     assert "mock-interview.js?v=20261124-live-avatar1" in html
     assert "code-workspace" in js
     assert "code-language" in js
@@ -242,3 +242,10 @@ def test_exam_start_keeps_ui_responsive_and_reduces_proctoring_work():
     assert "requestIdleCallback(run,{timeout:900})" in js
     assert "Starting assessment…" in js
     assert ".button.is-loading" in css
+
+
+def test_mock_interview_hero_photo_fills_banner_without_blank_side_panel():
+    css = _text("app/static/mock-interview.css")
+    assert "background-size:cover,cover" in css
+    assert "background-size:cover,auto 119%" not in css
+    assert "background-position:center,62% center" in css
