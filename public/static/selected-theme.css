@@ -2049,3 +2049,106 @@ body :is(h1, h2, h3, h4, h5),
     #marketing-site .hero-actions .button {width:100%;justify-content:center}
   }
 }
+
+/* Shared workspace refinement across roles. Presentation only: keep native
+   control semantics, role gating, table responsiveness and print rules intact. */
+@media screen {
+  #app-shell:not(.hidden) {
+    background:radial-gradient(ellipse at 95% 0%,rgba(201,142,99,.10),transparent 30rem),#f7f5ef!important;
+  }
+  #app-shell .app-nav button {font-size:14px!important;line-height:1.4;min-height:42px}
+  #app-shell .app-nav button.active {background:linear-gradient(110deg,#f1dfd0,#faf5ed)!important}
+  #app-shell .app-nav .nav-icon {color:#6b5144!important}
+  #app-shell .app-nav button.active .nav-icon {color:#8f3822!important}
+  #app-shell .nav-group-label {font-size:12px!important;letter-spacing:.045em}
+  #app-shell .page-head h1 {font-size:clamp(27px,3vw,36px)!important;line-height:1.18}
+  #app-shell .page-head p {color:#5f675f!important}
+  #app-shell .metric-card strong {font-weight:700!important;font-variant-numeric:tabular-nums;color:#242823!important}
+  #app-shell .metric-card small {font-weight:600!important}
+  #app-shell .metric-card .metric-symbol {color:#8f3822!important;background:#fff8ef!important}
+  #app-shell .workspace-shortcut {
+    border-radius:12px!important;background:#fffdf8!important;border-color:#ded6c8!important;
+  }
+  #app-shell .workspace-shortcut:hover {background:#faf1e7!important;border-color:#c6a58d!important}
+  #app-shell .workspace-shortcut .nav-icon {background:#f4e5d9!important;color:#8f3822!important}
+  #app-shell .workspace-shortcut-label {font-weight:650!important}
+  #app-shell .data-table th {background:#f3efe6!important;color:#514a41!important}
+  #app-shell .data-table tbody tr:hover {background:#fbf5eb!important}
+  #app-shell .data-table td {border-bottom-color:#ebe5dc}
+  #app-shell .empty-state {border-color:#d9cabb;background:#fffdf8}
+  #app-shell :is(.panel-head,.row-actions,.data-toolbar)>:is(button,a.button) {max-width:100%;white-space:normal}
+  #app-shell :is(.panel-head h2,.workspace-shortcuts>h2) {font-weight:700!important}
+  #app-shell :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea) {border-color:#cfc5b6}
+  #app-shell :is(.button,.row-button):not(.danger):not(:disabled):focus-visible {outline-color:#8f3822!important}
+  #auth-overlay .auth-form-panel {background:#fffdf8!important;color:#242823!important}
+  #auth-overlay .access-mode-row {background:#f0ebe2!important;border:1px solid #dfd6c8}
+  #auth-overlay .access-mode-row button {color:#625a50!important;min-height:42px;line-height:1.3}
+  #auth-overlay .access-mode-row button.is-active {background:#fffdf8!important;color:#853c29!important}
+  #auth-overlay .access-role-card {border-color:#dcd2c5!important;background:#fffdf8!important;color:#242823!important;border-radius:12px}
+  #auth-overlay .access-role-card:hover {border-color:#b58c73!important;box-shadow:0 5px 14px rgba(94,55,32,.09)!important}
+  #auth-overlay .access-role-card.is-selected {background:#f8e9dc!important;border-color:#a84a2c!important;box-shadow:inset 0 -3px #9c4c34!important}
+  #auth-overlay .access-role-card strong {color:#302b25!important}
+  #auth-overlay .access-role-card :is(span,em) {color:#61584f!important}
+  #auth-overlay .access-role-card.is-selected em {background:#f0d7c4!important;color:#77301f!important}
+  #auth-overlay .access-selection-summary {border-color:#ddd2c3!important;background:#f8f2e9!important}
+  #auth-overlay .access-role-dot {background:#9f3f24!important}
+  #auth-overlay .access-security-note {background:#f3f0e8!important;border-color:#ded5c6!important}
+  #auth-overlay .access-security-note strong {color:#4d493f!important}
+  #auth-overlay .form-stack :is(input,select,textarea) {border-color:#cfc5b6!important;border-radius:10px!important;background:#fff!important;color:#242823!important}
+  #auth-overlay :is(button,a,input,select,textarea):focus-visible {outline:2px solid #8f3822!important;outline-offset:3px}
+  #auth-overlay .form-stack :is(input,select,textarea):focus {border-color:#a84a2c!important;box-shadow:0 0 0 3px rgba(168,74,44,.12)!important}
+  #auth-overlay .text-button {color:#8f3822!important}
+  #auth-overlay .button-primary:not(:disabled) {background:linear-gradient(135deg,#b95832,#84321f)!important;color:#fff!important}
+  #app-shell .learning-mode-switch {background:#f0ebe2;border-color:#ded6c8}
+  #app-shell .learning-mode-switch [aria-pressed=true] {background:#fffdf8!important;color:#853c29!important}
+  #app-shell #learning-hub .learning-create-panel {border-top-color:#a84a2c;background:#fffdf8}
+  #app-shell #learning-hub .learning-library-item {background:#fffdf8;border-color:#ded6c8}
+  #app-shell #learning-hub .learning-library-item:hover {background:#faf1e7;border-color:#c6a58d}
+  #app-shell #learning-hub .learning-status[data-state="ready"] {background:#e4eee5;color:#2f6240}
+  #app-shell #learning-hub .learning-status[data-state="processing"] {background:#faedcf;color:#765017}
+  #app-shell :is(.learning-progress,.learning-video-card-progress>span) {background:#e9dfd2}
+  #app-shell :is(.learning-progress span,.learning-video-card-progress i) {background:linear-gradient(90deg,#b95832,#8f3822)}
+  #app-shell .learning-video-panel progress {accent-color:#9f3f24}
+  #app-shell .learning-video-card-art {background:linear-gradient(130deg,#f8e8db,#f2ecdc);border-bottom-color:#e5d4c4;color:#8f3822}
+  #app-shell #learning-hub .learning-video-course-card:hover {border-color:#c6a58d;box-shadow:0 8px 24px rgba(94,55,32,.10)!important}
+  #app-shell :is(.learning-video-course-facts,.learning-video-quality,.learning-video-syllabus summary) {background:#f7f2e9;border-color:#ded6c8}
+  #app-shell .learning-video-lessons>li>button[aria-current="step"] {background:#f7e8da;border-color:#c49a7b}
+  #app-shell .learning-video-lessons>li>button:hover:not(:disabled) {background:#fbf3e9}
+  #app-shell .learning-video-step {background:#efe5d8;color:#68483a}
+  #app-shell .learning-video-player {border-radius:12px;background:#242823}
+  #app-shell #learning-hub :is(.learning-chapter summary,.learning-chapter h3,.learning-chapter h4,.learning-diagram figcaption,.learning-context>summary,.learning-exercise summary) {color:#773a2a}
+  #app-shell #learning-hub :is(.learning-chapter pre,.learning-worked-example,.learning-comparison th) {background:#f7f2e9;border-color:#ded6c8}
+  #app-shell #learning-hub :is(a,summary,button,input,select,textarea):focus-visible {outline-color:#8f3822}
+  #app-shell .notes-focus-reader {border-color:#ded6c8;border-radius:14px;background:#fffdf8}
+  #app-shell .notes-focus-content {background:#fffdf8}
+  #app-shell .notes-reader-layout>nav {border-right-color:#ded6c8}
+  #app-shell .placeai-learning-photo {background:linear-gradient(115deg,#fff7ee 0%,#fff1e6 55%,#f3dac4 100%)!important;min-height:clamp(300px,32vw,410px);border-radius:22px}
+  #app-shell .placeai-learning-photo::before {
+    content:"";position:absolute;inset:0 0 0 auto;width:min(64%,690px);z-index:0;pointer-events:none;
+    background:url("/static/placeai-learning-hero.webp") right 48%/cover no-repeat;
+    -webkit-mask-image:linear-gradient(90deg,transparent,#000 27%);mask-image:linear-gradient(90deg,transparent,#000 27%);
+  }
+  #app-shell .placeai-learning-photo .placeai-photo-heading {width:53%;max-width:none;box-sizing:border-box;padding:clamp(24px,4vw,60px)}
+  #app-shell .placeai-learning-photo h1 {color:#242823!important;font-size:clamp(32px,4.2vw,60px)!important}
+  #app-shell .placeai-learning-photo p {color:#63483e!important;font-weight:500}
+  @media (prefers-reduced-motion:no-preference) {
+    #app-shell :is(.app-nav button,.workspace-shortcut,.learning-library-item,.learning-video-card-open,.learning-video-lessons button),#auth-overlay :is(.access-role-card,.access-mode-row button) {
+      transition:background-color .18s ease,border-color .18s ease,box-shadow .18s ease,color .18s ease,transform .18s ease;
+    }
+  }
+  @media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference) {
+    #app-shell .workspace-shortcut:hover {transform:translateY(-2px);box-shadow:0 8px 20px rgba(94,55,32,.09)}
+  }
+  @media (max-width:800px) {
+    #app-shell .placeai-learning-photo {flex-direction:column;align-items:stretch;min-height:0}
+    #app-shell .placeai-learning-photo::before {
+      position:relative;inset:auto;order:2;width:100%;height:clamp(210px,58vw,340px);
+      -webkit-mask-image:linear-gradient(180deg,transparent,#000 24%);mask-image:linear-gradient(180deg,transparent,#000 24%);
+    }
+    #app-shell .placeai-learning-photo .placeai-photo-heading {width:100%;order:1;padding:24px 22px 8px}
+    #app-shell .placeai-learning-photo h1 {font-size:clamp(30px,7vw,44px)!important}
+  }
+  @media (prefers-reduced-motion:reduce) {
+    #app-shell :is(.app-nav button,.workspace-shortcut,.learning-library-item,.learning-video-card-open,.learning-video-lessons button),#auth-overlay :is(.access-role-card,.access-mode-row button) {transition:none!important;transform:none!important}
+  }
+}

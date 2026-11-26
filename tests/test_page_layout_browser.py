@@ -154,6 +154,7 @@ def test_public_pages_fit_mobile_and_desktop(browser):
             footer = page.locator(".placeai-footer")
             footer.wait_for(state="visible")
             assert footer.locator("address.placeai-contact-location").inner_text() == "Pune, Maharashtra, India"
+            assert page.locator('script[src*="site-refresh.js"]').count() == 1
             assert footer.get_by_role("link", name="Open PlaceAI on LinkedIn").get_attribute("href") == "https://www.linkedin.com/company/placeai-in/"
         for width in (1440, 768, 390, 320):
             page.set_viewport_size({"width": width, "height": 1000})

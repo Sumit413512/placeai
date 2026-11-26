@@ -92,7 +92,8 @@
   }
 
   function loadScriptOnce(src, datasetKey) {
-    if ([...document.scripts].some(script => script.src === new URL(src, document.baseURI).href)) return;
+    const wanted = new URL(src, document.baseURI);
+    if ([...document.scripts].some(script => { if (!script.src) return false; const existing = new URL(script.src, document.baseURI); return existing.origin === wanted.origin && existing.pathname === wanted.pathname; })) return;
     const script = document.createElement('script');
     script.src = src;
     script.async = false;
