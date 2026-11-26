@@ -80,6 +80,8 @@ def test_every_workspace_page_remains_readable_and_operable(browser, layout_acco
             page.wait_for_url("**/mock-interview")
             root = page.locator("main.shell")
             root.locator("h1").wait_for(state="visible")
+            page.get_by_role("link", name="Explore practice options").click()
+            assert page.url.endswith("#practice-options")
         else:
             page.locator("#app-content .page-head, #app-content .roadmap-photo-hero, #app-content .placeai-photo-hero").first.wait_for(state="visible")
             root = page.locator("#app-content")

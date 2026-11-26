@@ -1920,14 +1920,92 @@ body :is(h1, h2, h3, h4, h5),
 }
 
 
-/* The Study Tracker photograph's small tabletop clock is preserved as a
-   feathered crop of the approved artwork, clear of the readable live heading. */
-@media (min-width:691px) {
-  #app-shell .placeai-study-photo::after {
-    content:"";position:absolute;z-index:0;pointer-events:none;
-    width:clamp(130px,17vw,225px);aspect-ratio:6/5;right:32%;bottom:0;
-    background:url("/static/placeai-study-clock-detail.webp") center/cover no-repeat;
-    -webkit-mask-image:radial-gradient(ellipse 68% 69% at 50% 57%,#000 55%,transparent 98%);
-    mask-image:radial-gradient(ellipse 68% 69% at 50% 57%,#000 55%,transparent 98%);
+
+
+/* Premium feature heroes: one continuous photograph, live headings and real actions.
+   The supplied art has old lettering at its left edge; fully mask that region
+   before feathering into the canvas. No independent clock/photo patch. */
+@media screen {
+  #app-shell .placeai-study-photo, main.shell .assessment-photo-hero {
+    position:relative;isolation:isolate;display:flex!important;align-items:center!important;
+    width:100%;box-sizing:border-box;min-height:clamp(300px,32vw,410px);
+    padding:0!important;gap:0!important;overflow:hidden;
+    border:1px solid #e7d4c3;border-radius:22px;
+    background:linear-gradient(115deg,#fff7ee 0%,#fff1e6 55%,#f3dac4 100%)!important;
+    box-shadow:0 12px 32px rgba(73,42,27,.09);
+  }
+  #app-shell .placeai-study-photo {--pa-hero-photo:url("/static/placeai-study-hero.webp")}
+  main.shell .assessment-photo-hero {--pa-hero-photo:url("/static/placeai-interview-hero.webp")}
+  #app-shell .placeai-study-photo::before, main.shell .assessment-photo-hero::before {
+    content:"";position:absolute;inset:0 0 0 auto;width:min(64%,690px);z-index:0;
+    background-image:var(--pa-hero-photo);background-size:cover;background-repeat:no-repeat;
+    background-position:right 48%;pointer-events:none;
+    -webkit-mask-image:linear-gradient(90deg,transparent 0%,transparent 11%,#000 31%);
+    mask-image:linear-gradient(90deg,transparent 0%,transparent 11%,#000 31%);
+  }
+  #app-shell .placeai-study-photo::after, main.shell .assessment-photo-hero::after {
+    content:none!important;
+  }
+  #app-shell .placeai-study-photo .placeai-photo-heading, main.shell .assessment-photo-hero .hero-copy {
+    position:relative;z-index:1;box-sizing:border-box;max-width:none!important;width:53%;
+    padding:clamp(24px,4vw,60px);min-width:0;
+  }
+  #app-shell .placeai-study-photo h1, main.shell .assessment-photo-hero h1 {
+    font-size:clamp(32px,4.2vw,60px)!important;line-height:1.08!important;
+    letter-spacing:-.045em!important;color:#242823!important;margin:0 0 14px!important;
+    overflow-wrap:break-word;
+  }
+  #app-shell .placeai-study-photo p, main.shell .assessment-photo-hero p {
+    color:#63483e!important;font-size:clamp(15px,1.35vw,18px)!important;
+    line-height:1.55!important;font-weight:500!important;margin:0!important;
+  }
+  .feature-hero-cta.button {
+    display:inline-flex!important;align-items:center;justify-content:center;gap:10px;
+    min-height:46px;max-width:100%;box-sizing:border-box;margin-top:24px;
+    padding:12px 19px!important;border-radius:11px!important;font-size:15px!important;
+    line-height:1.35!important;text-align:center;text-decoration:none!important;white-space:normal;
+  }
+  .feature-hero-cta::after {content:"";width:8px;height:8px;flex:none;border-top:2px solid currentColor;border-right:2px solid currentColor;transform:rotate(45deg)}
+  #practice-options, .study-target-settings {scroll-margin-block-start:100px}
+  :is(#marketing-site,#app-shell,main.shell) :is(button,a.button):focus-visible {
+    outline:3px solid #8b3520!important;outline-offset:3px!important;
+  }
+  :is(#marketing-site,#app-shell,main.shell) :is(button,a.button):not(:disabled):not([aria-disabled="true"]) {cursor:pointer}
+  @media (prefers-reduced-motion:no-preference) {
+    :is(#marketing-site,#app-shell,main.shell) :is(.button,.row-button) {
+      transition:transform 180ms ease,box-shadow 180ms ease,background-color 180ms ease,border-color 180ms ease,color 180ms ease;
+    }
+    :is(#marketing-site,#app-shell,main.shell) .feature-hero-cta:not(:disabled):not([aria-disabled="true"]):active {
+      transform:translateY(1px)!important;
+    }
+  }
+  @media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference) {
+    :is(#marketing-site,#app-shell,main.shell) .feature-hero-cta:not(:disabled):not([aria-disabled="true"]):hover {
+      transform:translateY(-2px)!important;
+      box-shadow:0 10px 24px rgba(126,47,29,.24)!important;
+    }
+  }
+  @media (max-width:800px) {
+    #app-shell .placeai-study-photo, main.shell .assessment-photo-hero {
+      display:flex!important;flex-direction:column;align-items:stretch!important;min-height:0;
+    }
+    #app-shell .placeai-study-photo::before, main.shell .assessment-photo-hero::before {
+      position:relative;inset:auto;order:2;width:100%;height:clamp(210px,58vw,340px);
+      background-position:right 49%;
+      -webkit-mask-image:linear-gradient(90deg,transparent 0%,transparent 11%,#000 28%),linear-gradient(180deg,transparent 0%,#000 24%);
+      -webkit-mask-composite:source-in;
+      mask-image:linear-gradient(90deg,transparent 0%,transparent 11%,#000 28%),linear-gradient(180deg,transparent 0%,#000 24%);
+      mask-composite:intersect;
+    }
+    #app-shell .placeai-study-photo .placeai-photo-heading, main.shell .assessment-photo-hero .hero-copy {
+      width:100%;order:1;padding:24px 22px 8px;
+    }
+    #app-shell .placeai-study-photo h1, main.shell .assessment-photo-hero h1 {
+      font-size:clamp(30px,7vw,44px)!important;
+    }
+    .feature-hero-cta.button {margin-top:18px}
+  }
+  @media (prefers-reduced-motion:reduce) {
+    :is(#marketing-site,#app-shell,main.shell) .feature-hero-cta {transition:none!important;transform:none!important}
   }
 }
