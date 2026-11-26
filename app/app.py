@@ -27,6 +27,7 @@ from app.database import (
 )
 from app.email_delivery import transactional_email_configured
 from app.public_surface import enhance_public_html, ORIGIN
+from app.preview_demo import seed_preview_demo_account
 from app.embedded_pages import (
     NOT_FOUND_HTML,
     ACCEPTABLE_USE_HTML,
@@ -70,6 +71,7 @@ async def lifespan(_: FastAPI):
     else:
         if settings.auto_create_schema:
             Base.metadata.create_all(bind=engine)
+        seed_preview_demo_account()
         if not settings.uses_database_file_storage:
             settings.upload_dir.mkdir(parents=True, exist_ok=True)
     if settings.is_production and not transactional_email_configured(settings):
