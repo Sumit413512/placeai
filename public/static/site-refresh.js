@@ -128,6 +128,7 @@
             <div class="placeai-footer-links">
               <a class="placeai-contact-link" href="mailto:${EMAIL}" aria-label="Email PlaceAI at ${EMAIL}"><span>✉</span><span>${EMAIL}</span></a>
               <a class="placeai-contact-link" href="${WEBSITE}" target="_self"><span>↗</span><span>www.placeai.in</span></a>
+              <p class="placeai-contact-link placeai-footer-location"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="9" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><strong>Pune, Maharashtra, India</strong></p>
               <a class="placeai-social-button" href="${LINKEDIN_URL}" target="_blank" rel="noopener noreferrer" aria-label="Open PlaceAI on LinkedIn">${linkedinIcon()}<span>Follow PlaceAI on LinkedIn</span></a>
             </div>
           </div>

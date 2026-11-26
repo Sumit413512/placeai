@@ -1931,3 +1931,33 @@ body :is(h1, h2, h3, h4, h5),
     mask-image:radial-gradient(ellipse 68% 69% at 50% 57%,#000 55%,transparent 98%);
   }
 }
+
+/* Public contact location and sign-in trust badges — scoped to these two surfaces. */
+#marketing-site .placeai-footer .placeai-footer-location {
+  display: flex; align-items: center; gap: 10px; margin: 0;
+  color: #fffaf1 !important; font-size: 15px !important; line-height: 1.5;
+}
+#marketing-site .placeai-footer .placeai-footer-location strong {
+  font-size: inherit; font-weight: 700 !important; overflow-wrap: anywhere;
+}
+#marketing-site .placeai-footer .placeai-footer-location svg {
+  width: 20px; height: 20px; flex: 0 0 20px; fill: none;
+}
+#auth-overlay .auth-brand-panel .auth-proof {
+  display: flex !important; flex-wrap: wrap; gap: 9px !important;
+  padding-top: 16px; border-top: 1px solid #cdbeb5;
+}
+#auth-overlay .auth-brand-panel .auth-proof > span {
+  display: inline-flex; align-items: center; gap: 8px;
+  max-width: 100%; min-width: 0; box-sizing: border-box;
+  padding: 9px 12px !important; border: 1px solid #b79a91 !important;
+  border-radius: 10px !important; background: #fff9f2 !important;
+  color: #542f38 !important; font-size: 14px !important;
+  font-weight: 700 !important; line-height: 1.45; white-space: normal;
+  overflow-wrap: anywhere;
+}
+#auth-overlay .auth-brand-panel .auth-proof > span::before {
+  content: "" !important; width: 9px; height: 5px; flex: 0 0 9px;
+  border-left: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg); margin: 0 !important;
+}
