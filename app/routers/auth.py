@@ -14,6 +14,7 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.email_delivery import send_transactional_email
 from app.models import AccountProtection, AuditEvent, Organization, RecruiterProfile, RefreshSession, StudentProfile, User, UserRole
+from app.preview_demo import PREVIEW_DEMO_EMAIL, preview_demo_enabled
 from app.telemetry_models import EmailDeliveryEvent
 from app.rate_limit import enforce_auth_limits, enforce_rate_limit
 from app.schemas import (
@@ -106,7 +107,11 @@ def _token_response(user: User, response: Response, db: Session, *, revoke_jti: 
 
 
 def _authenticate(email: str, password: str, db: Session) -> User:
-    user = db.query(User).filter(User.email == email.lower()).first()
+    normalized_email = email.lower()
+    if normalized_email == PREVIEW_DEMO_EMAIL and not preview_demo_enabled():
+        verify_password(password, _DUMMY_PASSWORD_HASH)
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+    user = db.query(User).filter(User.email == normalized_email).first()
     if not user:
         verify_password(password, _DUMMY_PASSWORD_HASH)
         raise HTTPException(status_code=401, detail="Incorrect email or password")
