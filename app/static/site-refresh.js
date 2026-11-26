@@ -121,11 +121,14 @@
               <a href="#recruiters">Recruiters</a>
               <a href="#preparation-lab">Preparation Lab</a>
               <a href="#security">Security</a>
+              <a href="/static/help.html">Help &amp; Support</a>
+              <a href="/static/contact.html">Contact</a>
             </div>
           </div>
           <div>
             <h3>Contact PlaceAI</h3>
             <div class="placeai-footer-links">
+              <address class="placeai-contact-link placeai-contact-location"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg><span>Pune, Maharashtra, India</span></address>
               <a class="placeai-contact-link" href="mailto:${EMAIL}" aria-label="Email PlaceAI at ${EMAIL}"><span>✉</span><span>${EMAIL}</span></a>
               <a class="placeai-contact-link" href="${WEBSITE}" target="_self"><span>↗</span><span>www.placeai.in</span></a>
               <a class="placeai-social-button" href="${LINKEDIN_URL}" target="_blank" rel="noopener noreferrer" aria-label="Open PlaceAI on LinkedIn">${linkedinIcon()}<span>Follow PlaceAI on LinkedIn</span></a>

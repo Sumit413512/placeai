@@ -150,6 +150,11 @@ def test_public_pages_fit_mobile_and_desktop(browser):
     for index, path in enumerate(paths):
         response = page.goto(BASE_URL+path, wait_until="load")
         assert response.status == (404 if path == "/404" else 200)
+        if path == "/":
+            footer = page.locator(".placeai-footer")
+            footer.wait_for(state="visible")
+            assert footer.locator("address.placeai-contact-location").inner_text() == "Pune, Maharashtra, India"
+            assert footer.get_by_role("link", name="Open PlaceAI on LinkedIn").get_attribute("href") == "https://www.linkedin.com/company/placeai-in/"
         for width in (1440, 768, 390, 320):
             page.set_viewport_size({"width": width, "height": 1000})
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"), (path, width)

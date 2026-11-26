@@ -2009,3 +2009,43 @@ body :is(h1, h2, h3, h4, h5),
     :is(#marketing-site,#app-shell,main.shell) .feature-hero-cta {transition:none!important;transform:none!important}
   }
 }
+
+/* Public site refinement: preserve warm canvas, existing wordmark and role actions. */
+@media screen {
+  #marketing-site .home-hero-surface {
+    background:radial-gradient(ellipse at 87% 15%,rgba(201,142,99,.12),transparent 47%),linear-gradient(180deg,#fffdf8 0%,#f7f3eb 75%,#fff 100%);
+  }
+  #marketing-site .hero-photo-card {border-radius:18px!important;overflow:hidden;box-shadow:0 16px 36px rgba(69,48,35,.10)!important}
+  #marketing-site .hero-actions .button {min-height:48px;white-space:normal;text-align:center}
+  #marketing-site .placeai-footer .placeai-footer-links {gap:12px}
+  #marketing-site .placeai-footer .placeai-contact-link {
+    display:flex;align-items:center;gap:12px;min-height:34px;margin:0;
+    font-style:normal;font-size:15px;line-height:1.55;
+  }
+  #marketing-site .placeai-footer .placeai-contact-link svg {
+    width:18px;height:18px;flex:0 0 18px;fill:none;stroke:currentColor;stroke-width:1.6;
+  }
+  #marketing-site .placeai-footer .placeai-contact-link span {overflow-wrap:anywhere;min-width:0}
+  #marketing-site .placeai-footer .placeai-social-button {
+    background:rgba(255,250,241,.07)!important;border-color:rgba(255,250,241,.35)!important;
+    border-radius:10px!important;min-height:46px;margin-top:4px;
+  }
+  #marketing-site .placeai-footer .placeai-social-button:hover {
+    background:rgba(255,250,241,.15)!important;
+  }
+  #marketing-site .placeai-footer .placeai-social-button:focus-visible {outline:2px solid #fffaf1!important;outline-offset:3px}
+  @media (prefers-reduced-motion:no-preference) {
+    #marketing-site :is(.hero-actions .button,.header-actions .button,.placeai-social-button) {
+      transition:transform .18s ease,box-shadow .18s ease,background-color .18s ease,border-color .18s ease;
+    }
+  }
+  @media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference) {
+    #marketing-site :is(.hero-actions .button,.header-actions .button,.placeai-social-button):hover:not(:disabled) {
+      transform:translateY(-2px)!important;box-shadow:0 8px 20px rgba(69,48,35,.16)!important;
+    }
+  }
+  @media (max-width:520px) {
+    #marketing-site .hero-actions {display:flex;flex-direction:column;align-items:stretch;gap:12px}
+    #marketing-site .hero-actions .button {width:100%;justify-content:center}
+  }
+}
