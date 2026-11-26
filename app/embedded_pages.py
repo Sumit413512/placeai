@@ -12,7 +12,7 @@ INDEX_HTML = '''<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Learn with video lessons, quizzes and notes, prepare with proctored mock assessments, and manage campus placements in one PlaceAI workspace.">
-  <meta name="theme-color" content="#2459c4">
+  <meta name="theme-color" content="#f8f3eb">
   <title>PlaceAI — Campus placement operations</title>
   <link rel="icon" type="image/png" sizes="96x96" href="/static/placeai-favicon-96.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -31,6 +31,7 @@ INDEX_HTML = '''<!doctype html>
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/static/privacy-preferences.css"><script src="/static/privacy-preferences.js" defer></script>
 <link rel="stylesheet" href="/static/selected-theme.css?v=20261127-photo-placement1">
+<link rel="stylesheet" href="/static/premium-preview.css?v=20261127-aureon-preview1">
   <link rel="stylesheet" href="/static/learning-hub.css?v=20261023-notes2">
 </head>
 <body>
@@ -84,6 +85,11 @@ INDEX_HTML = '''<!doctype html>
               <div class="hero-photo-composition"><img src="/static/placeai-hero-laptop.webp" alt="Illustrative student collaboration scene for the PlaceAI placement journey" loading="eager" fetchpriority="high" decoding="async" width="1672" height="941"><img class="hero-laptop-logo" src="/static/placeai-logo.svg" alt="" aria-hidden="true"></div>
               <figcaption><span>From preparation to placement</span><strong>One connected campus journey.</strong></figcaption>
             </figure>
+            <div class="premium-hero-microgrid" aria-label="PlaceAI connected workflow">
+              <div><span>Learn</span><strong>Lessons · quizzes · notes</strong></div>
+              <div><span>Prepare</span><strong>Roadmaps · study · interviews</strong></div>
+              <div><span>Place</span><strong>Eligibility · applications · offers</strong></div>
+            </div>
             <div class="production-surface-card hero-surface-card">
               <div>
                 <span class="surface-kicker">Your placement journey</span>
@@ -117,6 +123,50 @@ INDEX_HTML = '''<!doctype html>
         </div>
       </section>
 
+      <section class="premium-intelligence section-shell" aria-labelledby="premium-intelligence-title">
+        <div class="section-heading premium-section-heading">
+          <div><span class="section-kicker">Placement intelligence</span><h2 id="premium-intelligence-title">See the journey, not just the next task.</h2></div>
+          <p>PlaceAI brings preparation and placement activity into one readable operating view. The visuals below are illustrative; signed-in workspaces use each account's authorized records.</p>
+        </div>
+        <div class="premium-intelligence-grid">
+          <article class="premium-insight-card premium-ring-card">
+            <span class="premium-card-label">Readiness overview</span>
+            <div class="premium-ring-shell" aria-hidden="true"><div class="premium-ring-core">READINESS</div></div>
+            <p>Profile, learning, practice and application signals stay connected to the student record.</p>
+            <small class="premium-insight-note">Illustrative workspace visual</small>
+          </article>
+          <article class="premium-insight-card">
+            <span class="premium-card-label">Study rhythm</span>
+            <h3>Progress that is easy to scan.</h3>
+            <div class="premium-bars" aria-hidden="true">
+              <span style="--bar:38%" data-day="M"></span><span style="--bar:62%" data-day="T"></span><span style="--bar:82%" data-day="W"></span><span style="--bar:55%" data-day="T"></span><span style="--bar:72%" data-day="F"></span><span style="--bar:48%" data-day="S"></span><span style="--bar:66%" data-day="S"></span>
+            </div>
+            <p>Daily learning, notes, practice and roadmap work can be represented without turning the dashboard into a spreadsheet.</p>
+          </article>
+          <article class="premium-insight-card">
+            <span class="premium-card-label">Placement flow</span>
+            <h3>One record from profile to offer.</h3>
+            <div class="premium-flow" aria-hidden="true">
+              <div class="premium-flow-step"><b>01</b><strong>Profile</strong><span>Ready</span></div>
+              <div class="premium-flow-step"><b>02</b><strong>Prepare</strong><span>Active</span></div>
+              <div class="premium-flow-step"><b>03</b><strong>Apply</strong><span>Eligible</span></div>
+              <div class="premium-flow-step"><b>04</b><strong>Interview</strong><span>Tracked</span></div>
+              <div class="premium-flow-step"><b>05</b><strong>Offer</strong><span>Recorded</span></div>
+            </div>
+          </article>
+          <article class="premium-insight-card">
+            <span class="premium-card-label">Controlled access</span>
+            <h3>Different roles. Clear boundaries.</h3>
+            <div class="premium-control-grid">
+              <div><strong>Student</strong><span>Preparation and personal placement activity</span></div>
+              <div><strong>Institution</strong><span>Approved campus records and operations</span></div>
+              <div><strong>Recruiter</strong><span>Authorized opportunities and applicants</span></div>
+              <div><strong>Platform</strong><span>Setup, access review and governance</span></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section id="platform" class="section-shell value-section">
         <div class="section-heading">
           <div><span class="section-kicker">One operating layer</span><h2>Every placement workflow,<br>connected to the same record.</h2></div>
@@ -134,6 +184,24 @@ INDEX_HTML = '''<!doctype html>
         <div class="section-heading compact preparation-heading">
           <div><span class="section-kicker">Preparation Lab</span><h2>Student preparation, connected to placement.</h2></div>
           <p>Build skills, plan your study time and get ready for campus hiring in one student workspace.</p>
+        </div>
+        <div class="premium-feature-gallery" aria-label="PlaceAI feature previews">
+          <article class="premium-feature-card">
+            <figure class="premium-feature-media"><img src="/static/workspace-study-tracker.webp" alt="PlaceAI Study Tracker workspace preview" loading="lazy" decoding="async"></figure>
+            <div class="premium-feature-copy"><span>Study rhythm</span><h3>Study Tracker</h3><p>Goals, calendar activity and progress become a readable daily system instead of another checklist.</p><div class="premium-feature-tags"><span>Daily goals</span><span>Weekly targets</span><span>Progress view</span></div></div>
+          </article>
+          <article class="premium-feature-card">
+            <figure class="premium-feature-media"><img src="/static/workspace-mock-interview.webp" alt="PlaceAI mock interview workspace preview" loading="lazy" decoding="async"></figure>
+            <div class="premium-feature-copy"><span>Interview practice</span><h3>Mock Interview Coach</h3><p>Role-grounded practice, secure assessment flows and feedback sit in a focused interview workspace.</p><div class="premium-feature-tags"><span>Voice + video</span><span>Role based</span><span>Feedback</span></div></div>
+          </article>
+          <article class="premium-feature-card">
+            <figure class="premium-feature-media"><img src="/static/workspace-roadmap.webp" alt="PlaceAI AI Career Roadmap workspace preview" loading="lazy" decoding="async"></figure>
+            <div class="premium-feature-copy"><span>Career direction</span><h3>AI Career Roadmap</h3><p>Target roles, skills, projects and milestones are organized into a plan students can actually follow.</p><div class="premium-feature-tags"><span>Milestones</span><span>Projects</span><span>Role targets</span></div></div>
+          </article>
+          <article class="premium-feature-card">
+            <figure class="premium-feature-media"><img src="/static/opportunity-workplace.webp" alt="Professional workplace illustration for PlaceAI campus opportunities" loading="lazy" decoding="async"></figure>
+            <div class="premium-feature-copy"><span>Opportunity context</span><h3>Campus opportunities</h3><p>Eligibility, applications, interviews and offers stay connected to the same student and institution workflow.</p><div class="premium-feature-tags"><span>Eligibility</span><span>Applications</span><span>Offers</span></div></div>
+          </article>
         </div>
         <div class="preparation-grid">
           <article><div class="preparation-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z M10 9l5 3-5 3z"/></svg></div><h3>Video lessons and quizzes</h3><p>Follow structured courses with guided videos, captions, worked examples and lesson quizzes. Use readiness checks to see what to practise next.</p></article>
@@ -194,6 +262,18 @@ INDEX_HTML = '''<!doctype html>
         </div>
       </section>
 
+      <section class="premium-faq section-shell" aria-labelledby="premium-faq-title">
+        <div class="premium-faq-grid">
+          <div class="premium-faq-copy"><span class="section-kicker">Common questions</span><h2 id="premium-faq-title">Clear before you enter the workspace.</h2><p>PlaceAI keeps preparation, access and placement workflows explicit so students, institutions and recruiters know what the platform is doing.</p></div>
+          <div class="premium-faq-list">
+            <details><summary>Who can access student and institution data?</summary><p>Only authenticated accounts with the appropriate role and authorized institution scope can access protected placement records.</p></details>
+            <details><summary>Does AI replace placement-office or recruiter decisions?</summary><p>No. AI-assisted guidance supports preparation and analysis, while access approvals, hiring decisions and institutional controls remain human governed.</p></details>
+            <details><summary>How does student preparation connect to placements?</summary><p>Learning, study tracking, roadmap work, interview practice and application activity remain attached to the signed-in student journey instead of living in separate tools.</p></details>
+            <details><summary>Can institutions use PlaceAI without exposing their data publicly?</summary><p>Yes. Public visitors cannot browse student records, recruiter pipelines or institution operations; those surfaces remain behind authenticated role-aware access.</p></details>
+          </div>
+        </div>
+      </section>
+
       <section class="cta-section"><div class="section-shell cta-inner"><div><span>Need a PlaceAI workspace?</span><h2>Choose the correct role<br>and request controlled access.</h2></div><button class="button button-light button-large" data-open-access="request">Request access</button></div></section>
     </main>
 
@@ -248,14 +328,15 @@ INDEX_HTML = '''<!doctype html>
   <script src="/static/opportunities.js?v=20261021-detail1" defer></script>
   <link rel="stylesheet" href="/static/opportunities.css?v=20261021-detail1">
   <link rel="stylesheet" href="/static/learning-video.css?v=20261017-full-course4">
-  <link rel=\"stylesheet\" href=\"/static/array-readiness.css?v=2\">
-  <script src=\"/static/array-readiness.js?v=20261122-readiness3\" defer></script>
+  <link rel="stylesheet" href="/static/array-readiness.css?v=2">
+  <script src="/static/array-readiness.js?v=20261122-readiness3" defer></script>
   <script src="/static/learning-video.js?v=20261123-study-targets1" defer></script>
   <link rel="stylesheet" href="/static/study-tracker.css?v=20261124-learning-visual1">
 <link rel="stylesheet" href="/static/evidence-vault.css?v=20261024-zensar1">
   <script src="/static/study-tracker.js?v=20261124-learning-visual1" defer></script>
   <script src="/static/notes-reader.js?v=20261024-zensar1" defer></script>
   <script src="/static/learning-hub.js?v=20261124-learning-visual1" defer></script>
+  <script src="/static/premium-preview.js?v=20261127-aureon-preview1" defer></script>
 </body>
 </html>
 '''
@@ -305,7 +386,7 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="PlaceAI Secure Placement Assessment — role-aligned, proctored campus assessment with section controls, integrity monitoring and question-level performance analysis.">
-  <meta name="theme-color" content="#59416f">
+  <meta name="theme-color" content="#f8f3eb">
   <title>PlaceAI — Secure Placement Assessment</title>
   <link rel="icon" type="image/png" sizes="96x96" href="/static/placeai-favicon-96.png">
 <link rel="icon" type="image/svg+xml" href="/static/placeai-icon.svg">
@@ -327,6 +408,7 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
 <meta name="twitter:card" content="summary_large_image">
 <meta name="robots" content="noindex, nofollow">
 <link rel="stylesheet" href="/static/selected-theme.css?v=20261127-photo-placement1">
+<link rel="stylesheet" href="/static/premium-preview.css?v=20261127-aureon-preview1">
 </head>
 <body>
 <header class="topbar">
@@ -391,7 +473,7 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
     <div class="setup-layout">
       <div>
         <form id="setup-form" class="setup-form"><input type="hidden" value="15" data-legacy-practice-max aria-hidden="true"><input type="hidden" name="difficulty" value="mixed" aria-hidden="true">
-          <label>Target opportunity
+          <label>Assessment or target opportunity
             <select id="job-select" name="job_id" required><option value="">Loading opportunities…</option></select>
           </label>
           <div class="locked-setting">
@@ -422,12 +504,15 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
     </div>
   </section>
 
+  <section class="panel coach-method"><div class="coach-method-grid"><div><span class="step">Company preparation</span><h2>Choose TechNova or Zensar practice above.</h2><p>Both exams follow the same 50-question, 10-section proctored assessment with coding, spoken answers and HR video. The Zensar practice questions are authored by PlaceAI; this is not an official Zensar test or recruitment drive.</p></div><details><summary>How this assessment is scored</summary><p>Objective answers use server-held answer keys; coding uses execution checks. Spoken-answer coaching combines content correctness (70%), communication clarity (20%) and fluency (10%). These are practice estimates, not hiring decisions.</p><p>The full assessment weights technical fundamentals 20%, programming and coding 15% each, aptitude, reasoning and communication 10% each, resume defence 7%, behaviour and role alignment 5% each, and situational judgement 3%.</p><p>Saved recordings, transcripts and timestamped feedback support spoken-answer review. AI can make mistakes. Visual presence signals concern assessment integrity and do not prove competence or personality.</p><p>Answer windows are 60, 90 or 120 seconds based on question complexity. Check your microphone, camera and recording consent before starting. Provider delays never count as a completed report.</p></details></div></section>
+
   <section id="system-panel" class="panel hidden">
     <div class="panel-head">
       <div><span class="step">02 · Secure preflight</span><h2>System &amp; proctoring check</h2><p>Camera, microphone, entire-screen sharing, on-device proctoring, active presence and secure-browser controls must pass before the assessment can begin.</p></div>
       <span id="system-status-pill" class="status-pill neutral">Not checked</span>
     </div>
 
+    <p id="selected-assessment" class="disclaimer" aria-live="polite"></p>
     <div class="system-grid">
       <div>
         <div class="camera-card">
@@ -455,6 +540,10 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
       </div>
     </div>
 
+    <div class="proctor-download" aria-live="polite">
+      <p id="proctor-load-detail">The detector prepares before device checks. The exam timer stays stopped.</p>
+      <button id="retry-proctor" class="secondary" type="button">Prepare detector</button>
+    </div>
     <div class="consent-row">
       <label class="consent"><input id="consent-check" type="checkbox"><span>I understand that this proctored assessment uses camera, microphone, entire-screen sharing, full-screen/focus monitoring and on-device object detection for integrity signals. Confirmed warnings are recorded for institutional review. I consent to recording my spoken answers, including camera-and-microphone HR answers, and sending my face, voice and answers to Google Gemini for communication and answer-quality feedback. PlaceAI keeps recordings private for 30 days for me and authorized institution staff. Analysis can continue after submission; the complete result appears together after all sections are ready. This is practice feedback for human review.</span></label>
       <div class="system-actions"><button id="run-check" class="button secondary" type="button">Run system check</button><button id="start-assessment" class="button primary" type="button" disabled>Start proctored assessment</button></div>
@@ -671,10 +760,9 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
 
 <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 <script src="/static/api-errors.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.es2017.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js" defer></script>
 <script src="/static/mock-interview.js?v=20261124-live-avatar1" defer></script>
 <script src="/static/live-interview.js?v=20261124-live-avatar2" defer></script>
+  <script src="/static/premium-preview.js?v=20261127-aureon-preview1" defer></script>
 </body>
 </html>
 '''
