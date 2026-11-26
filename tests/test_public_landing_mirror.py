@@ -55,3 +55,16 @@ def test_public_landing_uses_plain_resume_spelling_and_minimal_hero():
     assert app_css == public_css
     assert "#marketing-site .eyebrow-dot" in app_css
     assert "display:none" in app_css
+
+
+def test_footer_location_and_sign_in_trust_badges_are_mirrored():
+    app_js = _text("app/static/site-refresh.js")
+    app_theme = _text("app/static/selected-theme.css")
+    assert app_js == _text("public/static/site-refresh.js")
+    assert app_theme == _text("public/static/selected-theme.css")
+    assert '<strong>Pune, Maharashtra, India</strong>' in app_js
+    assert 'placeai-footer-location' in app_js
+    assert '#auth-overlay .auth-brand-panel .auth-proof > span' in app_theme
+    assert 'font-weight: 700 !important' in app_theme
+    for label in ("Verified roles", "Institution data boundaries", "Privacy-first candidate access"):
+        assert label in _text("app/templates/index.html")
