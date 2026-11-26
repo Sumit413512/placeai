@@ -30,7 +30,7 @@ INDEX_HTML = '''<!doctype html>
 <meta property="og:image:alt" content="PlaceAI campus placement collaboration">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/static/privacy-preferences.css"><script src="/static/privacy-preferences.js" defer></script>
-<link rel="stylesheet" href="/static/selected-theme.css?v=20261126-contact-trust1">
+<link rel="stylesheet" href="/static/selected-theme.css?v=20261127-photo-placement1">
   <link rel="stylesheet" href="/static/learning-hub.css?v=20261023-notes2">
 </head>
 <body>
@@ -313,7 +313,7 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/api-errors.css">
-  <link rel="stylesheet" href="/static/mock-interview.css?v=20261124-live-avatar1">
+  <link rel="stylesheet" href="/static/mock-interview.css?v=20261127-photo-placement1">
   <link rel="stylesheet" href="/static/brand.css">
   <link rel="stylesheet" href="/static/ui-fixes.css">
 <link rel="canonical" href="https://www.placeai.in/mock-interview">
@@ -326,7 +326,7 @@ MOCK_INTERVIEW_HTML = '''<!doctype html>
 <meta property="og:image:alt" content="PlaceAI campus placement collaboration">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="robots" content="noindex, nofollow">
-<link rel="stylesheet" href="/static/selected-theme.css?v=20261111-warm2">
+<link rel="stylesheet" href="/static/selected-theme.css?v=20261127-photo-placement1">
 </head>
 <body>
 <header class="topbar">

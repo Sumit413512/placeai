@@ -23,4 +23,4 @@ def test_roadmap_visual_and_print_contract():
     assert (ROOT / "public/static/roadmap-board-hero.webp").is_file()
     for path in ("app/templates/index.html", "public/index.html", "app/embedded_pages.py"):
         # Roadmap styles remain bundled with the current versioned shared theme.
-        assert "selected-theme.css?v=20261126-contact-trust1" in (ROOT / path).read_text()
+        assert "selected-theme.css?v=20261127-photo-placement1" in (ROOT / path).read_text()
