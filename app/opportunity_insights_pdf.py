@@ -33,6 +33,7 @@ def render_guide(guide: dict) -> bytes:
         "sub": ParagraphStyle("Subheading", parent=body, fontName="Helvetica-Bold", spaceBefore=5,
                               keepWithNext=True),
         "muted": ParagraphStyle("Context", parent=body, textColor=MUTED),
+        "intro": ParagraphStyle("Introduction", parent=body, textColor=MUTED, keepWithNext=True),
     }
     story = []
 
@@ -78,13 +79,13 @@ def render_guide(guide: dict) -> bytes:
 
     section("3. Round-by-round preparation")
     add("Round order comes from the campus posting." if guide["published_rounds"] else
-        "Suggested practice sequence. Confirm the actual rounds with your placement office.", "muted")
+        "Suggested practice sequence. Confirm the actual rounds with your placement office.", "intro")
     for index, (name, steps) in enumerate(zip(guide["rounds"], prep.rounds, strict=True), 1):
         add(f"{index}. {name}", "sub")
         rows(steps)
 
     section("4. Practice questions and answer approaches")
-    add("Use these original practice questions to rehearse.", "muted")
+    add("Use these original practice questions to rehearse.", "intro")
     for item in prep.questions:
         add(item.question, "sub")
         add(item.approach)
