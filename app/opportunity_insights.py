@@ -46,27 +46,52 @@ def _terms(text: str) -> set[str]:
     return set(re.findall(r"[^\W_]+", text.casefold()))
 
 
+def _search_results(query: str, tavily_key: str, brave_key: str) -> tuple[list[dict], str]:
+    if tavily_key:
+        response = httpx.post(
+            "https://api.tavily.com/search",
+            json={
+                "query": query,
+                "topic": "general",
+                "country": "india",
+                "search_depth": "basic",
+                "auto_parameters": False,
+                "max_results": 12,
+                "include_answer": False,
+                "include_raw_content": False,
+            },
+            headers={"Authorization": f"Bearer {tavily_key}"},
+            timeout=5,
+        )
+        response.raise_for_status()
+        rows = response.json().get("results", [])
+        text_field = "content"
+    else:
+        response = httpx.get(
+            "https://api.search.brave.com/res/v1/web/search",
+            params={"q": query, "count": 12, "country": "IN", "search_lang": "en"},
+            headers={"X-Subscription-Token": brave_key, "Accept": "application/json"},
+            timeout=5,
+        )
+        response.raise_for_status()
+        rows = response.json().get("web", {}).get("results", [])
+        text_field = "description"
+    if not isinstance(rows, list):
+        raise ValueError("Search results must be a list.")
+    return rows, text_field
+
+
 def retrieve_evidence(company: str, role: str, website: str) -> tuple[list[dict], str]:
-    key = os.getenv("BRAVE_SEARCH_API_KEY", "").strip()
+    tavily_key = os.getenv("TAVILY_API_KEY", "").strip()
+    brave_key = os.getenv("BRAVE_SEARCH_API_KEY", "").strip()
     company_terms = _terms(company) - {"ltd", "limited", "pvt", "private", "inc", "llc"}
-    if not key or not company_terms:
+    if not (tavily_key or brave_key) or not company_terms:
         return [], "Public research was unavailable for this guide."
     company_host = _host(website)
     query = f'"{company.replace(chr(34), "")[:100]}" {role[:100]} careers interview experience assessment India'
     try:
-        response = httpx.get(
-            "https://api.search.brave.com/res/v1/web/search",
-            params={"q": query, "count": 12, "country": "IN", "search_lang": "en"},
-            headers={"X-Subscription-Token": key, "Accept": "application/json"},
-            timeout=5,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        rows = payload.get("web", {}).get("results", [])
+        rows, text_field = _search_results(query, tavily_key, brave_key)
     except (httpx.HTTPError, ValueError, TypeError, AttributeError):
-        return [], "Public research was temporarily unavailable."
-
-    if not isinstance(rows, list):
         return [], "Public research was temporarily unavailable."
 
     role_terms = _terms(role) - {"junior", "senior", "graduate", "i", "ii", "the", "and"}
@@ -79,7 +104,7 @@ def retrieve_evidence(company: str, role: str, website: str) -> tuple[list[dict]
         if not host or url in seen or len(url) > 600 or any(c.isspace() for c in url):
             continue
         title = _text(str(row.get("title", "")), 150)
-        excerpt = _text(str(row.get("description", "")), 320)
+        excerpt = _text(str(row.get(text_field) or ""), 320)
         if not title or not excerpt:
             continue
         words = _terms(f"{title} {excerpt}")

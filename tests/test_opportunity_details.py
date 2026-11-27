@@ -115,6 +115,7 @@ def test_insights_pdf_reuses_placement_visibility_and_published_rounds(opportuni
     def provider_unavailable(*args, **kwargs):
         raise HTTPException(503, "Provider unavailable")
 
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
     monkeypatch.delenv("BRAVE_SEARCH_API_KEY", raising=False)
     monkeypatch.setattr(opportunity_insights, "call_ai_text", provider_unavailable)
     h = opportunities
