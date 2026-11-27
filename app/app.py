@@ -472,7 +472,7 @@ def root(request: Request):
         '<link rel="stylesheet" href="/static/access-portal.css?v=20261123-home-header1">\n'
         '<link rel="stylesheet" href="/static/ui-fixes.css">\n'
         '<link rel="stylesheet" href="/static/account-security.css?v=20261123-role-pages1">\n'
-        '<link rel="stylesheet" href="/static/workspace-experience.css">\n'
+        '<link rel="stylesheet" href="/static/workspace-experience.css?v=20261127-role-prep1">\n'
         '<script src="/static/workspace-runtime.js?v=20261124-workspace-guide1" defer></script>\n'
         '<script src="/static/api-errors.js" defer></script>\n'
         '<script src="/static/auth-protection.js?v=20261123-mfa-layout1" defer></script>\n'

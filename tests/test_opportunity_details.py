@@ -102,3 +102,50 @@ def test_application_and_static_production_entries_share_the_new_view():
     assert '__PLACEAI_PRODUCTION_BOOTSTRAP__' in (root/'public/static/app.js').read_text(encoding='utf-8')
     for name in ('opportunities.js', 'opportunities.css', 'opportunity-workplace.webp', 'technova-demo.svg'):
         assert (root/'app/static'/name).read_bytes() == (root/'public/static'/name).read_bytes()
+
+
+def test_insights_pdf_reuses_placement_visibility_and_published_rounds(opportunities, monkeypatch):
+    from io import BytesIO
+
+    from pypdf import PdfReader
+    from fastapi import HTTPException
+
+    from app import opportunity_insights
+
+    def provider_unavailable(*args, **kwargs):
+        raise HTTPException(503, "Provider unavailable")
+
+    monkeypatch.delenv("BRAVE_SEARCH_API_KEY", raising=False)
+    monkeypatch.setattr(opportunity_insights, "call_ai_text", provider_unavailable)
+    h = opportunities
+    target = f"/students/jobs/{h.campus.id}/insights.pdf"
+
+    h.actor[0] = h.other
+    assert h.client.post(target).status_code == 404
+    assert h.client.post(f"/students/jobs/{h.pending.id}/insights.pdf").status_code == 404
+
+    h.actor[0] = h.owner
+    response = h.client.post(target)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["cache-control"] == "private, no-store"
+    pages = PdfReader(BytesIO(response.content)).pages
+    content = "\n".join(page.extract_text() for page in pages)
+    assert "Own campus role" in content
+    assert "Technical interview" in content
+    assert "Round order comes from the campus posting." in content
+    assert "Posting-based study guide" in content
+    assert "private-phone" not in content and "private-file" not in content
+
+
+def test_demo_insights_pdf_works_without_external_services(opportunities, monkeypatch):
+    from app import opportunity_insights
+
+    def external_call(*args, **kwargs):
+        pytest.fail("A fictional demo must not reach an external provider")
+
+    monkeypatch.setattr(opportunity_insights, "retrieve_evidence", external_call)
+    monkeypatch.setattr(opportunity_insights, "call_ai_text", external_call)
+    response = opportunities.client.get("/students/opportunity-demo/insights.pdf")
+    assert response.status_code == 200
+    assert response.content.startswith(b"%PDF")

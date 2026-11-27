@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field, ConfigDict, StrictBool
 from typing import Literal
 from sqlalchemy.orm import Session
@@ -320,6 +321,42 @@ def get_job_detail(job_id: str, current_user: User = Depends(require_student), d
     if not job_is_visible_to_student(profile, job, db):
         raise HTTPException(status_code=404, detail="Opportunity not found or no longer available")
     return opportunity_detail(job, profile, db)
+
+
+def _insights_pdf(opportunity: dict) -> Response:
+    from app.opportunity_insights import build_guide
+    from app.opportunity_insights_pdf import render_guide
+
+    content = render_guide(build_guide(opportunity))
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": 'attachment; filename="PlaceAI-interview-prep.pdf"',
+            "Cache-Control": "private, no-store",
+        },
+    )
+
+
+@router.post("/jobs/{job_id}/insights.pdf")
+def job_insights_pdf(
+    job_id: str,
+    request: Request,
+    current_user: User = Depends(require_student),
+    db: Session = Depends(get_db),
+):
+    opportunity = get_job_detail(job_id, current_user, db)
+    enforce_rate_limit(
+        db, request, scope="student:opportunity-insights", identifier=current_user.id,
+        limit=8, window_seconds=600, block_seconds=600, include_client_address=False,
+    )
+    student_ai_guard(request, current_user, db)
+    return _insights_pdf(opportunity)
+
+
+@router.get("/opportunity-demo/insights.pdf")
+def demo_insights_pdf(current_user: User = Depends(require_student)):
+    return _insights_pdf(opportunity_demo(current_user))
 
 
 @router.get("/drives", response_model=List[PlacementDriveOut])
