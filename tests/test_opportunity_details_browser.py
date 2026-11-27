@@ -1,10 +1,14 @@
 import json
 import os
+from io import BytesIO
 from pathlib import Path
 
 from playwright.sync_api import expect
+from pypdf import PdfReader
 from test_browser_smoke import BASE_URL, browser, local_server  # noqa: F401
 from app.opportunity_detail import demo_opportunity
+from app.opportunity_insights import build_guide
+from app.opportunity_insights_pdf import render_guide
 
 
 def test_opportunity_detail_demo_and_application_flow(browser):
@@ -21,6 +25,9 @@ def test_opportunity_detail_demo_and_application_flow(browser):
            "policy": {"allowed": True, "reasons": []}, "registration_notes": "Read the published description before applying.",
            "can_apply": True, "already_applied": False}
     applied = []; jobs = [job]; delayed = []; delay = [False]; requests = []
+    insight_requests = []
+    pdf = render_guide(build_guide(demo_opportunity()))
+
     def api(route):
         path = route.request.url.split(BASE_URL)[-1].split('?')[0]
         requests.append(path)
@@ -35,6 +42,13 @@ def test_opportunity_detail_demo_and_application_flow(browser):
             if delay[0]: delayed.append(route); return
             data = {**job, "already_applied": bool(applied), "can_apply": not applied}
         elif path == '/students/opportunity-demo': data = demo_opportunity()
+        elif path in {'/students/jobs/real-job/insights.pdf', '/students/opportunity-demo/insights.pdf'}:
+            insight_requests.append((path, route.request.method, route.request.headers.get('authorization')))
+            if len(insight_requests) == 1:
+                route.fulfill(status=503, json={"detail": "The guide is temporarily unavailable."})
+            else:
+                route.fulfill(content_type="application/pdf", body=pdf)
+            return
         elif path == '/students/jobs/real-job/apply':
             applied.append(route.request.post_data_json); data = {"id": "application", "status": "applied"}
         route.fulfill(content_type='application/json', body=json.dumps(data))
@@ -59,7 +73,26 @@ def test_opportunity_detail_demo_and_application_flow(browser):
         page.set_viewport_size({"width": width, "height": 1050})
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), width
         assert page.get_by_role('button', name='Apply now', exact=True).is_visible()
+        expect(page.get_by_role('button', name='Get insights PDF')).to_be_visible()
         assert page.locator('.privacy-settings-button').evaluate("el=>getComputedStyle(el).position") == 'static'
+    download_button = page.get_by_role('button', name='Get insights PDF')
+    download_button.click()
+    status = page.locator('.prep-status')
+    expect(status).to_be_visible()
+    expect(status).not_to_have_text('Preparing your guide…')
+    expect(download_button).to_be_enabled()
+    with page.expect_download() as file:
+        download_button.click()
+    download = file.value
+    assert download.suggested_filename == 'PlaceAI-Graduate-Software-Engineer-interview-prep.pdf'
+    content = Path(download.path()).read_bytes()
+    assert content == pdf
+    assert "Fictional demonstration" in PdfReader(BytesIO(content)).pages[0].extract_text()
+    expect(status).to_have_text('Your guide is ready.')
+    assert insight_requests == [
+        ('/students/jobs/real-job/insights.pdf', 'POST', 'Bearer local-opportunity-token'),
+        ('/students/jobs/real-job/insights.pdf', 'POST', 'Bearer local-opportunity-token'),
+    ]
     page.set_viewport_size({"width": 1600, "height": 1050})
     page.get_by_role('button', name='Apply now', exact=True).click()
     page.get_by_role('textbox', name='Cover note optional').fill('Interested in the published role')
@@ -75,6 +108,10 @@ def test_opportunity_detail_demo_and_application_flow(browser):
     expect(page.locator('.opportunity-heading h1')).to_contain_text('Demo')
     assert page.locator('.opportunity-logo img').get_attribute('src') == '/static/technova-demo.svg'
     assert page.locator('.opportunity-demo-notice').inner_text().startswith('TechNova is a fictional')
+    with page.expect_download() as demo_file:
+        page.get_by_role('button', name='Get insights PDF').click()
+    assert 'Demo' in demo_file.value.suggested_filename
+    assert insight_requests[-1] == ('/students/opportunity-demo/insights.pdf', 'GET', 'Bearer local-opportunity-token')
     expect(page.locator('.toast')).to_have_count(0, timeout=6000)
     directory = os.getenv('PLACEAI_OPPORTUNITY_SCREENSHOTS')
     if directory:
