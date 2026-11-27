@@ -34,7 +34,11 @@ def test_opportunity_detail_demo_and_application_flow(browser):
         if route.request.resource_type not in {"fetch", "xhr"}: route.continue_(); return
         data = {"items": [], "summary": {}, "actions": []}
         if path == '/auth/refresh': data = {"access_token": "local-opportunity-token"}
-        elif path == '/auth/me': data = {"id": "preview", "username": "Preview student", "role": "student", "email": "preview@example.invalid"}
+        elif path == '/auth/me':
+            if route.request.header_value('authorization') != 'Bearer local-opportunity-token':
+                route.fulfill(status=401, json={"detail": "Session refresh required."})
+                return
+            data = {"id": "preview", "username": "Preview student", "role": "student", "email": "preview@example.invalid"}
         elif path == '/billing/status': data = {"student_kind": "university", "premium_access": True}
         elif path == '/students/jobs': data = jobs
         elif path == '/students/applications': data = [{"id": "application", "job_id": "real-job", "job_title": job['title'], "company_name": job['company_name'], "status": "applied"}] if applied else []
@@ -43,7 +47,7 @@ def test_opportunity_detail_demo_and_application_flow(browser):
             data = {**job, "already_applied": bool(applied), "can_apply": not applied}
         elif path == '/students/opportunity-demo': data = demo_opportunity()
         elif path in {'/students/jobs/real-job/insights.pdf', '/students/opportunity-demo/insights.pdf'}:
-            insight_requests.append((path, route.request.method, route.request.headers.get('authorization')))
+            insight_requests.append((path, route.request.method, route.request.header_value('authorization')))
             if len(insight_requests) == 1:
                 route.fulfill(status=503, json={"detail": "The guide is temporarily unavailable."})
             else:
