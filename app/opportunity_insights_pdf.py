@@ -176,7 +176,7 @@ def render_guide(guide: dict) -> bytes:
     story.append(summary_table)
     story.append(Spacer(1, 15))
     if guide["demo"]:
-        add("This sample uses a fictional employer. It demonstrates the full preparation structure without claiming real company history.", "quote")
+        add("Fictional demonstration. This sample uses a fictional employer and shows the full preparation structure without claiming real company history.", "quote")
     elif not guide["tailored"]:
         add("Posting-based study guide. AI-tailored synthesis was unavailable, so PlaceAI used the safe preparation baseline.", "quote")
     else:
