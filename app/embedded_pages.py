@@ -245,8 +245,8 @@ INDEX_HTML = '''<!doctype html>
   </div>
 
   <script src="/static/app.js?v=20261124-workspace-guide1" defer></script>
-  <script src="/static/opportunities.js?v=20261021-detail1" defer></script>
-  <link rel="stylesheet" href="/static/opportunities.css?v=20261021-detail1">
+  <script src="/static/opportunities.js?v=20261127-role-prep1" defer></script>
+  <link rel="stylesheet" href="/static/opportunities.css?v=20261127-role-prep1">
   <link rel="stylesheet" href="/static/learning-video.css?v=20261017-full-course4">
   <link rel=\"stylesheet\" href=\"/static/array-readiness.css?v=2\">
   <script src=\"/static/array-readiness.js?v=20261122-readiness3\" defer></script>
